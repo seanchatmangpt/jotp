@@ -2,7 +2,7 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -109,9 +109,9 @@ public class RoutingPatternsDemo {
     System.out.println("  Shipping Service: " + shippingService.size() + " messages");
 
     // Cleanup
-    ProcessRegistry.unregister("order-service");
-    ProcessRegistry.unregister("payment-service");
-    ProcessRegistry.unregister("shipping-service");
+    ProcRegistry.unregister("order-service");
+    ProcRegistry.unregister("payment-service");
+    ProcRegistry.unregister("shipping-service");
   }
 
   /**
@@ -189,8 +189,8 @@ public class RoutingPatternsDemo {
     System.out.println("  All processed: " + allProcessed);
 
     // Cleanup
-    ProcessRegistry.unregister("audit-service");
-    ProcessRegistry.unregister("notification-service");
-    ProcessRegistry.unregister("analytics-service");
+    ProcRegistry.unregister("audit-service");
+    ProcRegistry.unregister("notification-service");
+    ProcRegistry.unregister("analytics-service");
   }
 }

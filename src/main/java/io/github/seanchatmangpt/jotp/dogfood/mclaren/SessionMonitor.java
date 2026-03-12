@@ -2,11 +2,11 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
 import java.util.function.Consumer;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
-import io.github.seanchatmangpt.jotp.ProcessMonitor.MonitorRef;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
 
 /**
- * Session and parameter process monitor — OTP {@code ProcessMonitor} (unilateral DOWN
+ * Session and parameter process monitor — OTP {@code ProcMonitor} (unilateral DOWN
  * notification) mapped to ATLAS session lifecycle observation.
  *
  * <p>In ATLAS, an analyst workstation or remote factory must detect when:
@@ -17,8 +17,8 @@ import io.github.seanchatmangpt.jotp.ProcessMonitor.MonitorRef;
  * </ul>
  *
  * <p>OTP's {@code erlang:monitor(process, Pid)} — implemented here as
- * {@link ProcessMonitor#monitor(Proc, Consumer)} — installs a unilateral DOWN callback. Unlike
- * {@link org.acme.ProcessLink}, a monitor does <em>not</em> crash the monitoring side if the
+ * {@link ProcMonitor#monitor(Proc, Consumer)} — installs a unilateral DOWN callback. Unlike
+ * {@link org.acme.ProcLink}, a monitor does <em>not</em> crash the monitoring side if the
  * target crashes. This is correct for display plugins and analytics dashboards: the dashboard
  * should survive a parameter process restart.
  *
@@ -65,7 +65,7 @@ public final class SessionMonitor {
      */
     public static MonitorRef<ParameterDataAccess.State, PdaMsg> watchParameter(
             Proc<ParameterDataAccess.State, PdaMsg> proc, Consumer<Throwable> downHandler) {
-        return ProcessMonitor.monitor(proc, downHandler);
+        return ProcMonitor.monitor(proc, downHandler);
     }
 
     /**
@@ -80,7 +80,7 @@ public final class SessionMonitor {
      */
     public static MonitorRef<RecorderProcess.RecorderState, Object> watchRecorder(
             RecorderProcess recorder, Consumer<Throwable> downHandler) {
-        return ProcessMonitor.monitor(recorder.proc(), downHandler);
+        return ProcMonitor.monitor(recorder.proc(), downHandler);
     }
 
     /**
@@ -92,6 +92,6 @@ public final class SessionMonitor {
      * @param ref the monitor reference to cancel
      */
     public static void cancel(MonitorRef<?, ?> ref) {
-        ProcessMonitor.demonitor(ref);
+        ProcMonitor.demonitor(ref);
     }
 }

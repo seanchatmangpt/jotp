@@ -43,8 +43,8 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 @DisplayName("Reactive Messaging Endpoint & Transformation Patterns")
 class ReactiveMessagingEndpointPatternsTest implements WithAssertions {
 
-    @BeforeEach void setUp() { org.acme.ProcessRegistry.reset(); }
-    @AfterEach void tearDown() { org.acme.ProcessRegistry.reset(); }
+    @BeforeEach void setUp() { org.acme.ProcRegistry.reset(); }
+    @AfterEach void tearDown() { org.acme.ProcRegistry.reset(); }
 
     @Nested
     @DisplayName("1. Channel Adapter Pattern")

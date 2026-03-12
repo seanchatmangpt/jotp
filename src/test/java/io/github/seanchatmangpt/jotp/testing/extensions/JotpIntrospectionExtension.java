@@ -18,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  *
  * <p>Supports introspection of all 15 JOTP primitives:
- * Proc, ProcRef, Supervisor, CrashRecovery, StateMachine, ProcessLink,
- * Parallel, ProcessMonitor, ProcessRegistry, ProcTimer, ExitSignal,
+ * Proc, ProcRef, Supervisor, CrashRecovery, StateMachine, ProcLink,
+ * Parallel, ProcMonitor, ProcRegistry, ProcTimer, ExitSignal,
  * ProcSys, ProcLib, EventManager
  */
 public class JotpIntrospectionExtension implements TestInstancePostProcessor, ParameterResolver {
@@ -63,7 +63,7 @@ public class JotpIntrospectionExtension implements TestInstancePostProcessor, Pa
     }
 
     /**
-     * Check if process is alive (using ProcessRegistry or direct check).
+     * Check if process is alive (using ProcRegistry or direct check).
      */
     public boolean isProcessAlive(Object processRef) {
       // Implementation would check process liveness

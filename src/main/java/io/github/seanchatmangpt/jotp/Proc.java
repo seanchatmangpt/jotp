@@ -79,7 +79,7 @@ public final class Proc<S, M> {
     /**
      * Callbacks fired on <em>any</em> termination — normal or abnormal. Argument is {@code null}
      * for a normal exit, or the {@link Throwable} exit reason for an abnormal one. Used by {@link
-     * ProcessMonitor} and {@link ProcessRegistry}.
+     * ProcMonitor} and {@link ProcRegistry}.
      */
     private final List<Consumer<Throwable>> terminationCallbacks = new CopyOnWriteArrayList<>();
 
@@ -228,7 +228,7 @@ public final class Proc<S, M> {
 
     /**
      * Register a callback to be invoked when this process terminates abnormally (unhandled
-     * exception). Called by {@link Supervisor} and {@link ProcessLink}.
+     * exception). Called by {@link Supervisor} and {@link ProcLink}.
      */
     public void addCrashCallback(Runnable cb) {
         crashCallbacks.add(cb);
@@ -236,14 +236,14 @@ public final class Proc<S, M> {
 
     /**
      * Register a callback fired when this process terminates for any reason. {@code null} reason
-     * means normal exit; non-null is the abnormal exit cause. Used by {@link ProcessMonitor} and
-     * {@link ProcessRegistry}.
+     * means normal exit; non-null is the abnormal exit cause. Used by {@link ProcMonitor} and
+     * {@link ProcRegistry}.
      */
     void addTerminationCallback(Consumer<Throwable> cb) {
         terminationCallbacks.add(cb);
     }
 
-    /** Remove a previously registered termination callback (for {@link ProcessMonitor#demonitor}). */
+    /** Remove a previously registered termination callback (for {@link ProcMonitor#demonitor}). */
     boolean removeTerminationCallback(Consumer<Throwable> cb) {
         return terminationCallbacks.remove(cb);
     }
@@ -263,7 +263,7 @@ public final class Proc<S, M> {
     }
 
     /**
-     * Interrupt this process and mark it as crashed — used by {@link ProcessLink} to deliver exit
+     * Interrupt this process and mark it as crashed — used by {@link ProcLink} to deliver exit
      * signals from a linked process when exit trapping is off.
      */
     void interruptAbnormally(Throwable reason) {

@@ -70,7 +70,7 @@ public @interface ProcessFixture {
   boolean captureMessages() default false;
 
   /**
-   * Register process in ProcessRegistry (default: false).
+   * Register process in ProcRegistry (default: false).
    *
    * @return true to auto-register
    */

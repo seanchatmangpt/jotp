@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.LongAdder;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessLink;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
+import io.github.seanchatmangpt.jotp.ProcLink;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
@@ -59,12 +59,12 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     // ── Utility Methods ───────────────────────────────────────────────────────────
@@ -214,12 +214,12 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
             // Link all processes
             for (int i = 1; i < depth; i++) {
-                ProcessLink.link(procs.get(i - 1), procs.get(i));
+                ProcLink.link(procs.get(i - 1), procs.get(i));
             }
 
             // Monitor the last process to detect cascade completion
             var lastProc = procs.get(depth - 1);
-            ProcessMonitor.monitor(lastProc, (down) -> deadCount.incrementAndGet());
+            ProcMonitor.monitor(lastProc, (down) -> deadCount.incrementAndGet());
 
             long start = System.nanoTime();
             procs.get(0).tell("boom");

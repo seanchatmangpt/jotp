@@ -51,7 +51,7 @@ public class PatternTestFixture<P> {
   }
 
   /**
-   * Register process in ProcessRegistry with given name.
+   * Register process in ProcRegistry with given name.
    */
   public PatternTestFixture<P> registerInRegistry(String registryName) {
     config.put("registerInRegistry", true);
@@ -97,7 +97,7 @@ public class PatternTestFixture<P> {
     for (var instance : createdInstances) {
       try {
         // Would call process termination / cleanup here
-        // e.g., ProcessRegistry.unregister(), process.terminate()
+        // e.g., ProcRegistry.unregister(), process.terminate()
       } catch (Exception e) {
         // Log but continue cleanup
       }
