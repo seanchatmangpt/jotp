@@ -77,15 +77,21 @@ import java.util.function.Supplier;
 public final class Application<S> {
 
     /**
-     * Interface for infrastructure components managed by the application lifecycle.
+     * Marker interface for infrastructure components managed by an {@code Application}.
      *
-     * <p>Components implementing this interface are started and stopped by the application.
+     * <p>Infrastructure components (e.g., {@code MessageBus}, {@code MetricsCollector}) implement
+     * this interface to participate in the application lifecycle via {@link #name()} and {@link
+     * #onStop(Application)}.
      */
     public interface Infrastructure {
-        /** Returns the name of this infrastructure component. */
+        /** The component name, used for registration and logging. */
         String name();
 
-        /** Called when the application stops; allows cleanup. */
+        /**
+         * Called when the owning application is stopping. Implementations should release resources.
+         *
+         * @param app the application that is stopping
+         */
         void onStop(Application<?> app);
     }
 
@@ -171,9 +177,11 @@ public final class Application<S> {
                         // START phase
                         phase = new ApplicationPhase.START();
 
-                        // Start supervisors (they manage their own children)
-                        for (var supervisor : supervisors) {
-                            // Supervisor is already running (started in builder), just track it
+                        // Supervisors auto-start their virtual thread on construction
+                        // (Supervisor.supervisorThread is started in Supervisor's constructor).
+                        // No explicit start call is needed here; this loop is intentionally empty
+                        // and exists only to document that supervisors are accounted for.
+                        for (var ignored : supervisors) { // NOSONAR: intentional no-op
                         }
 
                         // Transition to RUNNING

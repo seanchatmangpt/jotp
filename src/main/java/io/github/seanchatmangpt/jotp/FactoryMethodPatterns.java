@@ -114,6 +114,15 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleProcSpawn() {
+        // State and messages
+        record Counter(int value) {}
+
+        interface CounterMsg {
+            record Increment() implements CounterMsg {}
+
+            record Reset() implements CounterMsg {}
+        }
+
         // Spawn using factory (NOT: new Proc(...))
         Proc<Counter, CounterMsg> counter =
                 Proc.spawn(
@@ -236,6 +245,24 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleStateMachineCreate() {
+        interface LockState {
+            record Locked() implements LockState {}
+
+            record Open() implements LockState {}
+        }
+
+        interface LockEvent {
+            record PushButton(char digit) implements LockEvent {}
+
+            record Lock() implements LockEvent {}
+        }
+
+        record LockData(String entered, String code) {
+            LockData withEntered(String entered) {
+                return new LockData(entered, code);
+            }
+        }
+
         // Create state machine using factory (NOT: new StateMachine(...))
         StateMachine<LockState, LockEvent, LockData> sm =
                 StateMachine.create(
@@ -296,6 +323,12 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleEventManagerStart() {
+        interface LogEvent {
+            record ErrorEvent(String msg) implements LogEvent {}
+
+            record WarningEvent(String msg) implements LogEvent {}
+        }
+
         // Start event manager using factory (NOT: new EventManager(...))
         EventManager<LogEvent> manager = EventManager.start();
 
@@ -424,6 +457,12 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleCompleteIntegration() {
+        record Counter(int value) {}
+
+        interface CounterMsg {
+            record Increment() implements CounterMsg {}
+        }
+
         // 1. Create supervisor using factory
         Supervisor supervisor =
                 Supervisor.create(
@@ -436,12 +475,15 @@ public final class FactoryMethodPatterns {
                         new IntegrationCounter(0),
                         (state, msg) ->
                                 switch (msg) {
-                                    case IntegrationCounterMsg.Increment _ ->
-                                            new IntegrationCounter(state.value() + 1);
+                                    case CounterMsg.Increment _ -> new Counter(state.value() + 1);
                                 });
 
         // 3. Create event manager
-        EventManager<IntegrationEvent> events = EventManager.start();
+        interface Event {
+            record Processing() implements Event {}
+        }
+
+        EventManager<Event> events = EventManager.start();
 
         // 4. Run tasks in parallel
         var results = Parallel.all(List.of(() -> 1, () -> 2));
