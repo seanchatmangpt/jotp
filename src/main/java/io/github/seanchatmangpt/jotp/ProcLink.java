@@ -25,9 +25,9 @@ import java.util.function.BiFunction;
  * <p>Links are composable with {@link Supervisor}: a supervised child can also be linked to a peer
  * process. Both the supervisor's crash callback and the link's crash callback fire independently.
  */
-public final class ProcessLink {
+public final class ProcLink {
 
-    private ProcessLink() {}
+    private ProcLink() {}
 
     /**
      * Establish a bidirectional link between {@code a} and {@code b}.

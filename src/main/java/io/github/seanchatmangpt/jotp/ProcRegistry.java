@@ -25,9 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Registration is global (JVM-scoped, not per-supervisor). This matches OTP's single global name
  * table. For scoped name spaces, use separate {@code Map<String, Proc<?,?>>} instances.
  */
-public final class ProcessRegistry {
+public final class ProcRegistry {
 
-    private ProcessRegistry() {}
+    private ProcRegistry() {}
 
     private static final ConcurrentHashMap<String, Proc<?, ?>> REGISTRY = new ConcurrentHashMap<>();
 

@@ -130,8 +130,8 @@ public final class ServiceRouter<M> {
             return Optional.of(new ProcRef(selected.proc()));
         }
 
-        // Fall back to direct ProcessRegistry lookup
-        Proc<?, M> proc = (Proc<?, M>) ProcessRegistry.<Object, M>whereis(serviceName).orElse(null);
+        // Fall back to direct ProcRegistry lookup
+        Proc<?, M> proc = (Proc<?, M>) ProcRegistry.<Object, M>whereis(serviceName).orElse(null);
         return Optional.ofNullable(proc).map(ProcRef::new);
     }
 

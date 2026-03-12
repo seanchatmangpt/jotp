@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -200,8 +201,8 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     /**
      * Get the success value, or throw if this is a failure.
      *
-     * <p>If the failure value is a {@link Throwable}, it's wrapped in a {@link RuntimeException}
-     * and thrown. Otherwise, the failure value is converted to a string and thrown.
+     * <p>If the failure value is a {@link Throwable}, it is rethrown directly (without wrapping).
+     * Otherwise, the failure value is converted to a string and wrapped in a {@link RuntimeException}.
      *
      * @return the success value
      * @throws RuntimeException if this is a failure
@@ -212,10 +213,12 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
             case Ok<S, F>(var v) -> v;
             case Success<S, F>(var v) -> v;
             case Err<S, F>(var e) -> {
+                if (e instanceof RuntimeException re) throw re;
                 if (e instanceof Throwable t) throw new RuntimeException(t);
                 throw new RuntimeException(String.valueOf(e));
             }
             case Failure<S, F>(var e) -> {
+                if (e instanceof RuntimeException re) throw re;
                 if (e instanceof Throwable t) throw new RuntimeException(t);
                 throw new RuntimeException(String.valueOf(e));
             }
@@ -240,6 +243,73 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
             case Success<S, F>(var v) -> onSuccess.apply(v);
             case Err<S, F>(var e) -> onError.apply(e);
             case Failure<S, F>(var e) -> onError.apply(e);
+        };
+    }
+
+    /**
+     * Apply a side-effect action on success, without changing the result.
+     *
+     * <p>If this is a success, applies {@code action} to the value and returns the same result. If
+     * this is a failure, the action is not applied and the same failure is returned. This is useful
+     * for logging, auditing, or other side effects that should not change the railway flow.
+     *
+     * <p><strong>Example:</strong>
+     *
+     * <pre>{@code
+     * Result<Order, OrderError> result = Result.of(() -> validate(request))
+     *     .flatMap(valid -> Result.of(() -> calculatePrice(valid)))
+     *     .peek(order -> auditLog.add(order))
+     *     .peek(order -> metrics.recordOrder(order));
+     * }</pre>
+     *
+     * @param action the side-effect to apply if this is a success (must not be null)
+     * @return this same result unchanged
+     * @throws NullPointerException if {@code action} is null
+     */
+    default Result<S, F> peek(Consumer<? super S> action) {
+        return switch (this) {
+            case Ok<S, F>(var v) -> {
+                action.accept(v);
+                yield this;
+            }
+            case Success<S, F>(var v) -> {
+                action.accept(v);
+                yield this;
+            }
+            case Err<S, F> ignored -> this;
+            case Failure<S, F> ignored -> this;
+        };
+    }
+
+    /**
+     * Recover from a failure by applying a recovery function, returning a new Result.
+     *
+     * <p>If this is a success, returns the same success unchanged. If this is a failure, applies
+     * {@code handler} to the error value and returns the result of the handler. This is the
+     * failure-track equivalent of {@link #flatMap(Function)}, allowing you to recover from errors
+     * by producing a new {@code Result}.
+     *
+     * <p><strong>Example:</strong>
+     *
+     * <pre>{@code
+     * Result<Data, Exception> result = Result.of(() -> fetchData())
+     *     .recover(error -> {
+     *         logger.warn("Fetch failed, using cache: " + error.getMessage());
+     *         return Result.ok(loadFromCache());
+     *     });
+     * }</pre>
+     *
+     * @param handler function that transforms an error into a new Result (must not be null)
+     * @return the same result if success, or the result of applying handler to the error
+     * @throws NullPointerException if {@code handler} is null
+     */
+    @SuppressWarnings("unchecked")
+    default Result<S, F> recover(Function<? super F, ? extends Result<S, F>> handler) {
+        return switch (this) {
+            case Ok<S, F> ignored -> this;
+            case Success<S, F> ignored -> this;
+            case Err<S, F>(var e) -> handler.apply(e);
+            case Failure<S, F>(var e) -> handler.apply(e);
         };
     }
 }
