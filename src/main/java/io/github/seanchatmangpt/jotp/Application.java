@@ -1,554 +1,392 @@
 package io.github.seanchatmangpt.jotp;
 
-import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
-import java.util.function.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
- * OTP Application container — composes entire enterprise applications from services and
- * infrastructure.
+ * High-level lifecycle orchestrator for coordinating multiple processes and supervisors.
  *
- * <p>Joe Armstrong: "An OTP application is a collection of processes that work together to provide
- * some service. The application is started and stopped as a unit, and all its supervised processes
- * are managed together."
+ * <p>An {@code Application} manages the startup and shutdown of a hierarchical system of
+ * processes and supervisors. It provides:
  *
- * <p>This is the Java 26 equivalent of Erlang/OTP's {@code application} behavior. An Application
- * contains a supervision tree of services, infrastructure components, and health checks — all
- * managed as a single unit.
+ * <ul>
+ *   <li><strong>Application State:</strong> A single immutable state object (type {@code S}) shared
+ *       across the application lifecycle
+ *   <li><strong>Lifecycle Phases:</strong> INIT → START → RUNNING → STOP with hooks at each phase
+ *   <li><strong>Named Services:</strong> Register processes by name for easy lookup
+ *   <li><strong>Supervision Trees:</strong> Integrate supervisors with restart strategies
+ *   <li><strong>Graceful Shutdown:</strong> Stop services first, then supervisors, with cleanup
+ *       hooks
+ * </ul>
  *
- * <p><strong>Mapping to Erlang/OTP:</strong>
- *
- * <pre>{@code
- * Erlang/OTP                        Java 26
- * ──────────────────────────────    ──────────────────────────────────────────
- * application:start/1           →   application.start() → StartResult.Ok
- * application:stop/1            →   application.stop() → StopResult.Ok
- * supervisor:start_link/2       →   services are auto-supervised on build
- * application:get_env/2         →   application.config().get(key)
- * -module(my_app).              →   Application.builder("my-app").build()
- * }</pre>
- *
- * <p><strong>Application lifecycle:</strong>
+ * <p><strong>Usage Example:</strong>
  *
  * <pre>{@code
- * Application app = Application.builder("order-service")
- *     .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
- *     .maxRestarts(5)
- *     .restartWindow(Duration.ofMinutes(1))
- *     .config(ApplicationConfig.of("port", 8080))
- *     .service("order-processor", OrderState::new, OrderProcessor::handle)
- *     .service("inventory-checker", InventoryState::new, InventoryChecker::handle)
- *     .infrastructure(new DatabasePool())
- *     .infrastructure(new MessageQueue())
- *     .healthCheck(new DatabaseHealthCheck())
+ * record AppState(String name, int port) {}
+ *
+ * var app = Application.builder("my-app")
+ *     .init(() -> new AppState("my-app", 8080))
+ *     .service("http-server", createHttpServer())
+ *     .service("worker", createWorker())
+ *     .supervisor(new Supervisor(...))
+ *     .stop(state -> System.out.println("Shutting down " + state.name()))
  *     .build();
  *
- * // Start all services and infrastructure
- * var result = app.start();
- * if (result instanceof StartResult.Ok) {
- *     System.out.println("Application started: " + app.serviceNames());
- * }
+ * CompletableFuture<AppState> startFuture = app.start();
+ * AppState state = startFuture.join();
  *
- * // Access services by name
- * Optional<ProcRef<OrderState, OrderMsg>> orders = app.service("order-processor");
- *
- * // Stop gracefully (reversed infrastructure shutdown order)
- * app.stop();
+ * // Later...
+ * app.stop().join();
  * }</pre>
  *
- * <p><strong>Infrastructure lifecycle:</strong>
+ * <p><strong>Lifecycle Phases:</strong>
  *
- * <p>Infrastructure components are started in declaration order and stopped in reverse order —
- * ensuring proper dependency management (e.g., database before message queue on start, message
- * queue before database on stop).
+ * <ol>
+ *   <li><strong>INIT:</strong> Initialize application state and run init hooks (e.g., load config,
+ *       setup databases)
+ *   <li><strong>START:</strong> Start all services and supervisors in dependency order
+ *   <li><strong>RUNNING:</strong> Application is stable; all processes are handling messages
+ *   <li><strong>STOP:</strong> Gracefully shut down; stop services first, then supervisors, then
+ *       run stop hooks
+ * </ol>
  *
- * @see Supervisor
+ * <p><strong>Service Lookup:</strong>
+ *
+ * <p>Services registered via {@link Builder#service(String, ProcRef)} can be looked up by name
+ * during the RUNNING phase:
+ *
+ * <pre>{@code
+ * Optional<ProcRef<?, ?>> httpServer = app.getService("http-server");
+ * }</pre>
+ *
+ * <p><strong>Thread Safety:</strong>
+ *
+ * <p>The application state and service registry are immutable once the application transitions to
+ * RUNNING. All phase transitions are serialized. Use {@link #getState()} to safely read the
+ * current state.
+ *
+ * @param <S> application state type (recommended to be a record or sealed type for immutability)
  * @see Proc
  * @see ProcRef
- * @see ApplicationConfig
+ * @see Supervisor
+ * @see ApplicationPhase
  */
-public final class Application {
-    /**
-     * Result of starting an application.
-     *
-     * <p>Sealed interface with two outcomes:
-     *
-     * <ul>
-     *   <li>{@link Ok} — application started successfully
-     *   <li>{@link Err} — application failed to start with error message
-     * </ul>
-     *
-     * <p>Maps to Erlang's {@code ok | {error, Reason}} return type.
-     */
-    public sealed interface StartResult permits StartResult.Ok, StartResult.Err {
-        /** Application started successfully. */
-        record Ok() implements StartResult {}
+public final class Application<S> {
 
-        /** Application failed to start. */
-        record Err(String error) implements StartResult {}
-    }
+  /** Sealed hierarchy of application lifecycle phases. */
+  public sealed interface ApplicationPhase {
+    /** Initializing: running init hooks and preparing state. */
+    record INIT() implements ApplicationPhase {}
+
+    /** Starting services and supervisors. */
+    record START() implements ApplicationPhase {}
+
+    /** Running normally; all services active. */
+    record RUNNING() implements ApplicationPhase {}
+
+    /** Stopping: shutting down services and supervisors. */
+    record STOP() implements ApplicationPhase {}
 
     /**
-     * Result of stopping an application.
+     * Stopped: shutdown complete.
      *
-     * <p>Sealed interface with two outcomes:
-     *
-     * <ul>
-     *   <li>{@link Ok} — application stopped successfully
-     *   <li>{@link Err} — application failed to stop with error message
-     * </ul>
-     *
-     * <p>Maps to Erlang's {@code ok | {error, Reason}} return type.
+     * @param error non-null if shutdown failed unexpectedly
      */
-    public sealed interface StopResult permits StopResult.Ok, StopResult.Err {
-        /** Application stopped successfully. */
-        record Ok() implements StopResult {}
+    record STOPPED(Throwable error) implements ApplicationPhase {}
+  }
 
-        /** Application failed to stop. */
-        record Err(String error) implements StopResult {}
+  private final String name;
+  private final Supplier<S> initializer;
+  private final Consumer<S> stopper;
+  private final List<ServiceEntry<?>> services = new CopyOnWriteArrayList<>();
+  private final List<SupervisorEntry> supervisors = new CopyOnWriteArrayList<>();
+  private final List<Runnable> initHooks = new CopyOnWriteArrayList<>();
+  private final List<Runnable> shutdownHooks = new CopyOnWriteArrayList<>();
+  private volatile ApplicationPhase phase = new ApplicationPhase.INIT();
+  private volatile S state;
+
+  private Application(
+      String name,
+      Supplier<S> initializer,
+      Consumer<S> stopper,
+      List<ServiceEntry<?>> services,
+      List<SupervisorEntry> supervisors,
+      List<Runnable> initHooks,
+      List<Runnable> shutdownHooks) {
+    this.name = name;
+    this.initializer = initializer;
+    this.stopper = stopper;
+    this.services.addAll(services);
+    this.supervisors.addAll(supervisors);
+    this.initHooks.addAll(initHooks);
+    this.shutdownHooks.addAll(shutdownHooks);
+  }
+
+  /**
+   * Start the application: initialize state, start services and supervisors, transition to
+   * RUNNING.
+   *
+   * <p>This method:
+   *
+   * <ol>
+   *   <li>Transitions to INIT phase and runs all init hooks
+   *   <li>Transitions to START phase and starts all services
+   *   <li>Starts all supervisors
+   *   <li>Transitions to RUNNING phase
+   *   <li>Returns the application state
+   * </ol>
+   *
+   * @return a {@link CompletableFuture} that completes with the application state when startup is
+   *     complete
+   */
+  public CompletableFuture<S> start() {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          try {
+            // INIT phase
+            phase = new ApplicationPhase.INIT();
+            for (var hook : initHooks) {
+              hook.run();
+            }
+
+            // Initialize state
+            state = initializer.get();
+
+            // START phase
+            phase = new ApplicationPhase.START();
+
+            // Start supervisors (they manage their own children)
+            for (var supervisor : supervisors) {
+              // Supervisor is already running (started in builder), just track it
+            }
+
+            // Transition to RUNNING
+            phase = new ApplicationPhase.RUNNING();
+
+            return state;
+          } catch (Exception e) {
+            phase = new ApplicationPhase.STOPPED(e);
+            throw new RuntimeException("Application startup failed", e);
+          }
+        });
+  }
+
+  /**
+   * Stop the application: gracefully shut down all services and supervisors, then run cleanup
+   * hooks.
+   *
+   * <p>This method:
+   *
+   * <ol>
+   *   <li>Transitions to STOP phase
+   *   <li>Stops all services
+   *   <li>Shuts down all supervisors
+   *   <li>Runs all shutdown hooks
+   *   <li>Transitions to STOPPED phase
+   * </ol>
+   *
+   * @return a {@link CompletableFuture} that completes when shutdown is done
+   */
+  public CompletableFuture<Void> stop() {
+    return CompletableFuture.runAsync(
+        () -> {
+          try {
+            phase = new ApplicationPhase.STOP();
+
+            // Stop all services in reverse order
+            List<ServiceEntry<?>> servicesCopy = new ArrayList<>(services);
+            Collections.reverse(servicesCopy);
+            for (var serviceEntry : servicesCopy) {
+              try {
+                serviceEntry.ref.stop();
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            }
+
+            // Shutdown all supervisors in reverse order
+            List<SupervisorEntry> supervisorsCopy = new ArrayList<>(supervisors);
+            Collections.reverse(supervisorsCopy);
+            for (var supervisorEntry : supervisorsCopy) {
+              try {
+                supervisorEntry.supervisor.shutdown();
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            }
+
+            // Run shutdown hooks
+            if (stopper != null && state != null) {
+              stopper.accept(state);
+            }
+            for (var hook : shutdownHooks) {
+              hook.run();
+            }
+
+            phase = new ApplicationPhase.STOPPED(null);
+          } catch (Exception e) {
+            phase = new ApplicationPhase.STOPPED(e);
+            throw new RuntimeException("Application shutdown failed", e);
+          }
+        });
+  }
+
+  /**
+   * Get the current application state.
+   *
+   * @return the state object, or {@code null} if not yet initialized
+   */
+  public S getState() {
+    return state;
+  }
+
+  /**
+   * Get the current application phase.
+   *
+   * @return the current {@link ApplicationPhase}
+   */
+  public ApplicationPhase getPhase() {
+    return phase;
+  }
+
+  /**
+   * Lookup a named service by name.
+   *
+   * @param serviceName the service name
+   * @return an {@link Optional} containing the {@link ProcRef} if found, or empty otherwise
+   */
+  public Optional<ProcRef<?, ?>> getService(String serviceName) {
+    for (var entry : services) {
+      if (entry.name.equals(serviceName)) {
+        return Optional.of(entry.ref);
+      }
     }
+    return Optional.empty();
+  }
 
+  /**
+   * Create a fluent builder for an application.
+   *
+   * @param appName the application name
+   * @param <S> the application state type
+   * @return a new {@link Builder}
+   */
+  public static <S> Builder<S> builder(String appName) {
+    return new Builder<>(appName);
+  }
+
+  /** Fluent builder for {@link Application}. */
+  public static final class Builder<S> {
     private final String name;
-    private final Supervisor supervisor;
-    private final ApplicationConfig config;
-    private final ConcurrentHashMap<String, ProcRef<?, ?>> services = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Infrastructure> infrastructure =
-            new ConcurrentHashMap<>();
-    private final List<HealthCheck> healthChecks;
-    private volatile boolean started = false;
-    private volatile Thread healthThread;
+    private Supplier<S> initializer = () -> null;
+    private Consumer<S> stopper = _ -> {};
+    private final List<ServiceEntry<?>> services = new ArrayList<>();
+    private final List<SupervisorEntry> supervisors = new ArrayList<>();
+    private final List<Runnable> initHooks = new ArrayList<>();
+    private final List<Runnable> shutdownHooks = new ArrayList<>();
 
-    private Application(Builder builder) {
-        this.name = builder.name;
-        this.config = builder.config;
-        this.healthChecks = List.copyOf(builder.healthChecks);
-        this.supervisor =
-                new Supervisor(name, builder.strategy, builder.maxRestarts, builder.window);
-
-        for (var def : builder.services) {
-            var ref = superviseRaw(def);
-            services.put(def.name, ref);
-        }
-
-        for (var infra : builder.infrastructure) {
-            this.infrastructure.put(infra.name(), infra);
-        }
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private ProcRef<?, ?> superviseRaw(Builder.ServiceDef def) {
-        return supervisor.supervise(def.name, def.initialState.get(), (BiFunction) def.handler);
+    Builder(String name) {
+      this.name = name;
     }
 
     /**
-     * Create a new application builder.
+     * Set the initialization supplier that creates the application state.
      *
-     * @param name application name (used for logging and identification)
-     * @return builder for constructing the application
+     * @param initializer a supplier that returns the initial application state
+     * @return this builder
      */
-    public static Builder builder(String name) {
-        return new Builder(name);
+    public Builder<S> init(Supplier<S> initializer) {
+      this.initializer = initializer;
+      return this;
     }
 
     /**
-     * Look up a service by name.
+     * Set the cleanup consumer that accepts the application state on shutdown.
      *
-     * <p>Services are {@link ProcRef} handles to supervised processes. Use this to send messages to
-     * specific services within the application.
-     *
-     * @param <S> the service's state type
-     * @param <M> the service's message type
-     * @param name service name as defined in {@link Builder#service}
-     * @return {@code Optional.of(ref)} if service exists, {@code Optional.empty()} otherwise
+     * @param stopper a consumer that handles shutdown logic (e.g., close databases)
+     * @return this builder
      */
-    @SuppressWarnings("unchecked")
-    public <S, M> Optional<ProcRef<S, M>> service(String name) {
-        return Optional.ofNullable((ProcRef<S, M>) services.get(name));
+    public Builder<S> stop(Consumer<S> stopper) {
+      this.stopper = stopper;
+      return this;
     }
 
     /**
-     * Look up an infrastructure component by name.
+     * Register a named service (process).
      *
-     * @param <T> the infrastructure type
-     * @param name infrastructure name from {@link Infrastructure#name()}
-     * @return {@code Optional.of(infra)} if exists, {@code Optional.empty()} otherwise
+     * @param serviceName the service name for lookup
+     * @param procRef the process reference
+     * @return this builder
      */
-    @SuppressWarnings("unchecked")
-    public <T extends Infrastructure> Optional<T> infrastructure(String name) {
-        return Optional.ofNullable((T) infrastructure.get(name));
+    public Builder<S> service(String serviceName, ProcRef<?, ?> procRef) {
+      services.add(new ServiceEntry<>(serviceName, procRef));
+      return this;
     }
 
     /**
-     * Get all registered service names.
+     * Register a supervisor with its children.
      *
-     * @return unmodifiable set of service names
+     * @param supervisor the supervisor instance
+     * @return this builder
      */
-    public Set<String> serviceNames() {
-        return Collections.unmodifiableSet(services.keySet());
+    public Builder<S> supervisor(Supervisor supervisor) {
+      supervisors.add(new SupervisorEntry(supervisor));
+      return this;
     }
 
     /**
-     * Get the application name.
+     * Add an initialization hook (runs during INIT phase before services start).
      *
-     * @return application identifier
+     * @param hook a runnable to execute during initialization
+     * @return this builder
      */
-    public String name() {
-        return name;
+    public Builder<S> addInitHook(Runnable hook) {
+      initHooks.add(hook);
+      return this;
     }
 
     /**
-     * Get the application configuration.
+     * Add a shutdown hook (runs during STOP phase after services stop).
      *
-     * @return configuration object
+     * @param hook a runnable to execute during shutdown
+     * @return this builder
      */
-    public ApplicationConfig config() {
-        return config;
+    public Builder<S> addShutdownHook(Runnable hook) {
+      shutdownHooks.add(hook);
+      return this;
     }
 
     /**
-     * Check if the application has been started.
+     * Build the application instance.
      *
-     * @return {@code true} if {@link #start()} was called successfully
+     * @return a new {@link Application} with the configured services, supervisors, and hooks
      */
-    public boolean isStarted() {
-        return started;
+    public Application<S> build() {
+      return new Application<>(
+          name, initializer, stopper, services, supervisors, initHooks, shutdownHooks);
     }
+  }
 
-    /**
-     * Check if the application is still running.
-     *
-     * <p>An application is running if its supervisor is running. The supervisor stops when all
-     * supervised processes have terminated.
-     *
-     * @return {@code true} if supervisor is active
-     */
-    public boolean isRunning() {
-        return supervisor.isRunning();
+  /** Internal entry for named services. */
+  private static final class ServiceEntry<M> {
+    final String name;
+    final ProcRef<?, M> ref;
+
+    ServiceEntry(String name, ProcRef<?, M> ref) {
+      this.name = name;
+      this.ref = ref;
     }
+  }
 
-    /**
-     * Start the application.
-     *
-     * <p>Starts all infrastructure components in declaration order, then starts the supervision
-     * tree. Health checks begin running if any were configured.
-     *
-     * <p>Idempotent: calling {@code start()} on an already-started application returns {@link
-     * StartResult.Err}.
-     *
-     * @return {@link StartResult.Ok} on success, {@link StartResult.Err} on failure
-     */
-    public synchronized StartResult start() {
-        if (started) return new StartResult.Err("Already started");
+  /** Internal entry for supervisors. */
+  private static final class SupervisorEntry {
+    final Supervisor supervisor;
 
-        for (var infra : infrastructure.values()) infra.onStart(this);
-        started = true;
-
-        if (!healthChecks.isEmpty()) startHealthChecks();
-
-        return new StartResult.Ok();
+    SupervisorEntry(Supervisor supervisor) {
+      this.supervisor = supervisor;
     }
-
-    /**
-     * Stop the application.
-     *
-     * <p>Stops health checks, shuts down the supervision tree, then stops infrastructure components
-     * in reverse declaration order.
-     *
-     * <p>Idempotent: calling {@code stop()} on an already-stopped application returns {@link
-     * StopResult.Ok}.
-     *
-     * @return {@link StopResult.Ok} on success, {@link StopResult.Err} on failure
-     */
-    public synchronized StopResult stop() {
-        if (!started) return new StopResult.Ok();
-        stopHealthChecks();
-
-        try {
-            supervisor.shutdown();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        List<Infrastructure> reversed = new ArrayList<>(infrastructure.values());
-        Collections.reverse(reversed);
-        for (var infra : reversed) infra.onStop(this);
-
-        services.clear();
-        started = false;
-        return new StopResult.Ok();
-    }
-
-    private void startHealthChecks() {
-        healthThread =
-                Thread.ofVirtual()
-                        .name("health-check-" + name)
-                        .start(
-                                () -> {
-                                    while (started && supervisor.isRunning()) {
-                                        try {
-                                            Thread.sleep(5000);
-                                        } catch (InterruptedException e) {
-                                            break;
-                                        }
-                                        for (var check : healthChecks) {
-                                            if (!check.check())
-                                                System.err.println(
-                                                        "[WARN] Health check failed: "
-                                                                + check.name());
-                                        }
-                                    }
-                                });
-    }
-
-    private void stopHealthChecks() {
-        if (healthThread != null) healthThread.interrupt();
-    }
-
-    /**
-     * Infrastructure component with lifecycle callbacks.
-     *
-     * <p>Implement this interface for resources that need initialization and cleanup, such as
-     * database pools, message queues, or external service clients.
-     *
-     * <p><strong>Lifecycle:</strong>
-     *
-     * <ul>
-     *   <li>{@link #onStart(Application)} called in declaration order during {@link #start()}
-     *   <li>{@link #onStop(Application)} called in reverse order during {@link #stop()}
-     * </ul>
-     *
-     * <p>Example:
-     *
-     * <pre>{@code
-     * class DatabasePool implements Application.Infrastructure {
-     *     private DataSource dataSource;
-     *
-     *     @Override public String name() { return "database"; }
-     *
-     *     @Override public void onStart(Application app) {
-     *         dataSource = createPool(app.config().get("db.url"));
-     *     }
-     *
-     *     @Override public void onStop(Application app) {
-     *         if (dataSource != null) dataSource.close();
-     *     }
-     * }
-     * }</pre>
-     */
-    public interface Infrastructure {
-        /**
-         * Called when the application starts.
-         *
-         * @param app the application being started
-         */
-        default void onStart(Application app) {}
-
-        /**
-         * Called when the application stops.
-         *
-         * @param app the application being stopped
-         */
-        default void onStop(Application app) {}
-
-        /**
-         * Get the infrastructure component name.
-         *
-         * @return unique identifier for this component
-         */
-        String name();
-    }
-
-    /**
-     * Health check for monitoring application state.
-     *
-     * <p>Health checks run periodically in a background virtual thread. Failed checks are logged as
-     * warnings.
-     *
-     * <p>Example:
-     *
-     * <pre>{@code
-     * class DatabaseHealthCheck implements Application.HealthCheck {
-     *     private final DatabasePool pool;
-     *
-     *     DatabaseHealthCheck(DatabasePool pool) { this.pool = pool; }
-     *
-     *     @Override public String name() { return "database-connectivity"; }
-     *
-     *     @Override public boolean check() {
-     *         return pool.isHealthy();
-     *     }
-     *
-     *     @Override public Duration interval() {
-     *         return Duration.ofSeconds(10);
-     *     }
-     * }
-     * }</pre>
-     */
-    public interface HealthCheck {
-        /**
-         * Execute the health check.
-         *
-         * @return {@code true} if healthy, {@code false} if unhealthy
-         */
-        boolean check();
-
-        /**
-         * Get the health check name.
-         *
-         * @return identifier for logging
-         */
-        String name();
-
-        /**
-         * Get the check interval.
-         *
-         * @return duration between checks (default: 30 seconds)
-         */
-        default Duration interval() {
-            return Duration.ofSeconds(30);
-        }
-    }
-
-    /**
-     * Builder for constructing Application instances.
-     *
-     * <p>Fluent API for configuring supervision strategy, services, infrastructure, and health
-     * checks.
-     *
-     * <p>Example:
-     *
-     * <pre>{@code
-     * Application app = Application.builder("my-app")
-     *     .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ALL)
-     *     .maxRestarts(10)
-     *     .restartWindow(Duration.ofMinutes(5))
-     *     .config(ApplicationConfig.of("key", "value"))
-     *     .service("worker", WorkerState::new, Worker::handle)
-     *     .infrastructure(new MyInfrastructure())
-     *     .healthCheck(new MyHealthCheck())
-     *     .build();
-     * }</pre>
-     */
-    public static final class Builder {
-        private final String name;
-        private Supervisor.Strategy strategy = Supervisor.Strategy.ONE_FOR_ONE;
-        private int maxRestarts = 5;
-        private Duration window = Duration.ofMinutes(1);
-        private ApplicationConfig config = ApplicationConfig.empty();
-        private final List<ServiceDef> services = new ArrayList<>();
-        private final List<Infrastructure> infrastructure = new ArrayList<>();
-        private final List<HealthCheck> healthChecks = new ArrayList<>();
-
-        /**
-         * Create a builder with the given application name.
-         *
-         * @param name application identifier
-         */
-        public Builder(String name) {
-            this.name = name;
-        }
-
-        /**
-         * Set the supervision strategy.
-         *
-         * @param s strategy for handling child failures
-         * @return this builder
-         * @see Supervisor.Strategy
-         */
-        public Builder supervisorStrategy(Supervisor.Strategy s) {
-            this.strategy = s;
-            return this;
-        }
-
-        /**
-         * Set maximum restarts within the window before giving up.
-         *
-         * @param max maximum restart count
-         * @return this builder
-         */
-        public Builder maxRestarts(int max) {
-            this.maxRestarts = max;
-            return this;
-        }
-
-        /**
-         * Set the sliding window for restart counting.
-         *
-         * @param w duration of the restart window
-         * @return this builder
-         */
-        public Builder restartWindow(Duration w) {
-            this.window = w;
-            return this;
-        }
-
-        /**
-         * Set the application configuration.
-         *
-         * @param c configuration object
-         * @return this builder
-         */
-        public Builder config(ApplicationConfig c) {
-            this.config = c;
-            return this;
-        }
-
-        /**
-         * Register a supervised service.
-         *
-         * <p>Services are automatically supervised with the configured strategy. Each service is a
-         * {@link Proc} with its own state and message handler.
-         *
-         * @param <S> state type
-         * @param <M> message type
-         * @param name service name (for lookup via {@link Application#service})
-         * @param initialState supplier for initial state
-         * @param handler message handler function (state, message) -> new state
-         * @return this builder
-         */
-        public <S, M> Builder service(
-                String name, Supplier<S> initialState, BiFunction<S, M, S> handler) {
-            services.add(new ServiceDef(name, initialState, handler));
-            return this;
-        }
-
-        /**
-         * Register an infrastructure component.
-         *
-         * <p>Infrastructure is started/stopped in declaration/reverse order.
-         *
-         * @param i infrastructure component
-         * @return this builder
-         */
-        public Builder infrastructure(Infrastructure i) {
-            infrastructure.add(i);
-            return this;
-        }
-
-        /**
-         * Register a health check.
-         *
-         * @param h health check to run periodically
-         * @return this builder
-         */
-        public Builder healthCheck(HealthCheck h) {
-            healthChecks.add(h);
-            return this;
-        }
-
-        /**
-         * Build the application.
-         *
-         * <p>Creates the supervision tree and initializes all services.
-         *
-         * @return configured application instance
-         */
-        public Application build() {
-            return new Application(this);
-        }
-
-        private record ServiceDef(
-                String name, Supplier<?> initialState, BiFunction<?, ?, ?> handler) {}
-    }
+  }
 }

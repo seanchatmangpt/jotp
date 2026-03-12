@@ -1,0 +1,458 @@
+@startuml OTP28-Implementation-Roadmap
+
+!define TIER1 #[bold]#FF6B6B
+!define TIER2 #[bold]#4ECDC4
+!define TIER3 #[bold]#95E1D3
+!define EXISTING #[bold]#45B7D1
+!define HIGH_IMPACT "🔴 HIGH IMPACT"
+!define MED_IMPACT "🟡 MEDIUM IMPACT"
+!define LOW_IMPACT "🟢 LOW IMPACT"
+
+title OTP 28 Framework - 80/20 Implementation Coverage\nJava 26 Edition
+
+package "TIER 0: EXISTING OTP PRIMITIVES (15)" #EXISTING {
+    class "Proc<S,M>" as Proc {
+        Virtual thread mailbox
+        ask() / tell()
+        trapExits()
+        Crash callbacks
+    }
+
+    class "ProcRef<S,M>" as ProcRef {
+        Stable process handle
+        Survives restarts
+        Delegates to current Proc
+    }
+
+    class "Supervisor" as Supervisor {
+        ONE_FOR_ONE
+        ONE_FOR_ALL
+        REST_FOR_ONE
+        Restart window
+    }
+
+    class "StateMachine<S,E,D>" as StateMachine {
+        State/Event/Data separation
+        Pure transitions
+        Sealed Transition hierarchy
+    }
+
+    class "EventManager<E>" as EventManager {
+        Pub-sub pattern
+        Handler isolation
+        notify() / syncNotify()
+    }
+
+    class "ProcMonitor" as ProcMonitor {
+        Unilateral observation
+        DOWN notifications
+        Non-intrusive
+    }
+
+    class "ProcLink" as ProcLink {
+        Bilateral crash propagation
+        link() / spawnLink()
+    }
+
+    class "ProcRegistry" as ProcRegistry {
+        Global name table
+        register/whereis/unregister
+        Auto-cleanup
+    }
+
+    class "ProcTimer" as ProcTimer {
+        sendAfter / sendInterval
+        TimerRef handles
+    }
+
+    class "ProcLib" as ProcLib {
+        Startup handshake
+        startLink blocks until initAck
+        StartResult.Ok | Err
+    }
+
+    class "ProcSys" as ProcSys {
+        getState / suspend / resume
+        statistics (msgs in/out/queue)
+    }
+
+    class "ExitSignal" as ExitSignal {
+        Crash notification record
+        Delivered as mailbox message
+    }
+
+    class "CrashRecovery" as CrashRecovery {
+        "Let it crash" with retry
+        Isolated virtual threads
+        Result<T, Exception>
+    }
+
+    class "Parallel" as Parallel {
+        Structured fan-out
+        StructuredTaskScope
+        Fail-fast all-or-nothing
+    }
+
+    class "Result<T,E>" as Result {
+        Sealed Success/Failure
+        map/flatMap/fold/recover
+        Railway-oriented
+    }
+}
+
+package "TIER 0.5: RECENT ABSTRACTIONS (3)" #45B7D1 {
+    class "GenServer<S,M>" as GenServer_1 {
+        Call/Cast/Info messages
+        Handler callbacks
+        start() / cast() / call()
+    }
+
+    class "PoolSupervisor<T>" as PoolSupervisor_1 {
+        Worker pool pattern
+        Round-robin distribution
+        ask(task, timeout)
+    }
+
+    class "Application<S>" as Application_1 {
+        Lifecycle orchestrator
+        INIT→START→RUNNING→STOP
+        Service registry
+    }
+}
+
+package "TIER 1: IMMEDIATE PRODUCTION NEEDS (5)" #FF6B6B {
+
+    class "Behavior<S,M>" as Behavior {
+        callback interface {
+            handleCall(request: M, state: S): CallResult<S>
+            handleCast(request: M, state: S): S
+            handleInfo(info: Object, state: S): S
+        }
+        ----
+        HIGH_IMPACT: Callback-based alternative
+        EFFORT: LOW (adapter pattern)
+        COVERS: OOP-style handlers
+    }
+
+    class "RetryPolicy" as RetryPolicy {
+        sealed strategies:
+          ExponentialBackoff
+          FixedDelay
+          NoRetry
+        maxAttempts: int
+        baseDelay: Duration
+        maxDelay: Duration
+        jitter: boolean
+        ----
+        HIGH_IMPACT: Critical for resilience
+        EFFORT: MEDIUM (composition)
+        COVERS: Production retry patterns
+    }
+
+    class "CircuitBreaker<T>" as CircuitBreaker {
+        sealed Status:
+          CLOSED
+          OPEN
+          HALF_OPEN
+        supplier: Supplier<T>
+        failureThreshold: int
+        successThreshold: int
+        timeout: Duration
+        ----
+        HIGH_IMPACT: Prevents cascades
+        EFFORT: MEDIUM (state machine)
+        COVERS: Fault tolerance
+    }
+
+    class "BackpressureQueue<T>" as BackpressureQueue {
+        bounded: int
+        policy: DROP_OLDEST | REJECT_NEW
+        underlying: LinkedBlockingQueue<T>
+        ----
+        HIGH_IMPACT: Prevents OOM
+        EFFORT: LOW (wrapper)
+        COVERS: Memory safety
+    }
+
+    class "HealthCheck" as HealthCheck {
+        sealed Status:
+          HEALTHY
+          DEGRADED
+          UNHEALTHY
+        name: String
+        status: Status
+        message: String
+        timestamp: Instant
+        ----
+        HIGH_IMPACT: Observability
+        EFFORT: LOW (record)
+        COVERS: System health
+    }
+}
+
+package "TIER 2: MEDIUM-TERM PRODUCTION (5)" #4ECDC4 {
+
+    class "RateLimiter" as RateLimiter {
+        tokensPerSecond: double
+        maxBurst: int
+        blockingAcquire(tokens)
+        tryAcquire(tokens): boolean
+        ----
+        MEDIUM_IMPACT: Common need
+        EFFORT: MEDIUM (token bucket)
+        COVERS: API rate control
+    }
+
+    class "RequestContext" as RequestContext {
+        ScopedValue<Context> wrapper
+        requestId: String
+        userId: String
+        traceId: String
+        ----
+        MEDIUM_IMPACT: Observable vthreads
+        EFFORT: MEDIUM (ScopedValue)
+        COVERS: Context propagation
+    }
+
+    class "ChannelBuffer<T>" as ChannelBuffer {
+        capacity: int
+        send(T): void
+        recv(): T
+        close(): void
+        ----
+        MEDIUM_IMPACT: Familiar interface
+        EFFORT: MEDIUM (Go-style)
+        COVERS: Channel-based IPC
+    }
+
+    class "SupervisorBuilder" as SupervisorBuilder {
+        builder(name: String)
+        strategy(Strategy)
+        maxRestarts(int, Duration)
+        child(id, initial, handler)
+        ----
+        MEDIUM_IMPACT: Better DX
+        EFFORT: LOW (fluent API)
+        COVERS: Builder pattern
+    }
+
+    class "Metrics" as Metrics {
+        Counter
+        Gauge
+        Histogram
+        Timer
+        Integrated with ProcSys
+        ----
+        MEDIUM_IMPACT: Telemetry
+        EFFORT: MEDIUM (collectors)
+        COVERS: Observability
+    }
+}
+
+package "TIER 3: SPECIALIZED/OPTIONAL (5)" #95E1D3 {
+
+    class "GenServerBehavior" as GenServerBehavior {
+        Traditional Erlang callbacks
+        init() / terminate()
+        handle_call/cast/info
+        ----
+        LOW_IMPACT: Niche preference
+        EFFORT: MEDIUM (wrapper)
+        COVERS: Erlang familiarity
+    }
+
+    class "Saga<T>" as Saga {
+        Distributed transaction
+        Step1 → Step2 → Step3
+        Compensations on rollback
+        ----
+        LOW_IMPACT: Complex workflows
+        EFFORT: HIGH (orchestration)
+        COVERS: Multi-process txns
+    }
+
+    class "DistributedRegistry" as DistributedRegistry {
+        Multi-node clustering
+        Extends ProcRegistry
+        Remote whereis/register
+        ----
+        LOW_IMPACT: Clustering
+        EFFORT: HIGH (network)
+        COVERS: Multi-JVM systems
+    }
+
+    class "TransactionLog" as TransactionLog {
+        Event sourcing primitive
+        Append-only immutable log
+        Snapshot + replay
+        ----
+        LOW_IMPACT: Specialized pattern
+        EFFORT: MEDIUM (IO)
+        COVERS: Event sourcing
+    }
+
+    class "OtherPattern" as OtherPattern {
+        Future extensibility
+        Custom patterns
+        Domain-specific abstractions
+    }
+}
+
+'' === RELATIONSHIPS ===
+
+'' Tier 0 base relationships
+Proc --> ProcRef : "creates"
+Proc --> Result : "returns"
+Supervisor --> Proc : "supervises"
+Supervisor --> ProcRef : "manages"
+EventManager --> Proc : "notifies"
+ProcMonitor --> Proc : "observes"
+ProcLink --> Proc : "links"
+ProcRegistry --> Proc : "stores"
+ProcTimer --> Proc : "messages"
+ProcLib --> Proc : "initializes"
+ProcSys --> Proc : "introspects"
+CrashRecovery --> Result : "wraps"
+Parallel --> Proc : "coordinates"
+StateMachine --> Proc : "state logic"
+
+'' Tier 0.5 relationships
+GenServer_1 --> Proc : "wraps"
+GenServer_1 --> Result : "returns"
+PoolSupervisor_1 --> Supervisor : "supervises"
+PoolSupervisor_1 --> ProcRegistry : "discovers"
+Application_1 --> GenServer_1 : "orchestrates"
+Application_1 --> PoolSupervisor_1 : "manages"
+Application_1 --> Supervisor : "coordinates"
+
+'' Tier 1 relationships
+Behavior --> GenServer_1 : "replaces pattern matching"
+RetryPolicy --> CrashRecovery : "wraps"
+RetryPolicy --> Result : "returns"
+CircuitBreaker --> Supplier : "wraps"
+CircuitBreaker --> StateMachine : "state machine"
+BackpressureQueue --> Proc : "bounds"
+HealthCheck --> ProcSys : "augments statistics"
+
+'' Tier 2 relationships
+RateLimiter --> Parallel : "throttles"
+RequestContext --> Proc : "context in handlers"
+ChannelBuffer --> Proc : "async messaging"
+SupervisorBuilder --> Supervisor : "builds"
+Metrics --> ProcSys : "extends statistics"
+
+'' Tier 3 relationships
+GenServerBehavior --> Behavior : "extends"
+Saga --> Application_1 : "coordinates"
+DistributedRegistry --> ProcRegistry : "extends"
+TransactionLog --> EventManager : "logs events"
+
+note right of Behavior
+    Callback-based alternative to pattern matching
+    Users who prefer OOP style over sealed types
+    Adapts internally to GenServer<S,M>
+end note
+
+note right of RetryPolicy
+    Essential for production resilience
+    Exponential backoff + jitter (prevents thundering herd)
+    Works with CircuitBreaker for comprehensive fault tolerance
+end note
+
+note right of CircuitBreaker
+    CLOSED→OPEN→HALF_OPEN→CLOSED state machine
+    Prevents cascading failures
+    Auto-recovery after timeout or success threshold
+end note
+
+note right of BackpressureQueue
+    Prevents unbounded queue growth → OOM
+    Alternative mailbox implementation
+    Drop-oldest or reject policies
+end note
+
+note right of HealthCheck
+    Proactive system monitoring
+    Integrates with ProcSys for observability
+    Sealed Status prevents invalid states
+end note
+
+note right of RateLimiter
+    Token bucket algorithm
+    Blocking and non-blocking variants
+    Essential for API protection
+end note
+
+note right of RequestContext
+    Java 21+ ScopedValue wrapper
+    Vthread-safe (no ThreadLocal)
+    Context propagation across virtual threads
+end note
+
+note right of ChannelBuffer
+    Go-style channels for familiar interface
+    FIFO queue with backpressure
+    Alternative to ask()/tell() messaging
+end note
+
+note right of SupervisorBuilder
+    Fluent API for supervisor construction
+    Reduces boilerplate vs manual setup
+    Enables cleaner configuration
+end note
+
+note right of Metrics
+    Counter, Gauge, Histogram, Timer
+    Mirroring Erlang prometheus.erl
+    Integrates with ProcSys.statistics()
+end note
+
+note bottom of Behavior
+    TIER 1 IMPLEMENTATION ORDER
+    Priority: 1/5
+    Est. Lines: 200-300 (main + tests)
+end note
+
+note bottom of RetryPolicy
+    TIER 1 IMPLEMENTATION ORDER
+    Priority: 2/5
+    Est. Lines: 300-400 (main + tests)
+end note
+
+note bottom of CircuitBreaker
+    TIER 1 IMPLEMENTATION ORDER
+    Priority: 3/5
+    Est. Lines: 400-500 (main + tests)
+end note
+
+note bottom of BackpressureQueue
+    TIER 1 IMPLEMENTATION ORDER
+    Priority: 4/5
+    Est. Lines: 250-350 (main + tests)
+end note
+
+note bottom of HealthCheck
+    TIER 1 IMPLEMENTATION ORDER
+    Priority: 5/5
+    Est. Lines: 200-300 (main + tests)
+end note
+
+'' === LEGEND ===
+
+legend right
+    |< #FF6B6B >| **TIER 1** (Immediate 80/20): High ROI, immediate production value |
+    |< #4ECDC4 >| **TIER 2** (Medium-term): Specialized patterns, observability |
+    |< #95E1D3 >| **TIER 3** (Optional): Niche use cases, high complexity |
+    |< #45B7D1 >| **TIER 0.5** (Recent): Just-built abstractions |
+    |< #EXISTING >| **TIER 0** (Foundation): 15 OTP primitives |
+    | | |
+    | **80/20 Coverage**: Tier 0 + Tier 0.5 + Tier 1 = ~2,500 new LOC |
+    | **Full Coverage**: Add Tier 2 + Tier 3 = ~5,000 total new LOC |
+    | |
+    | **Impact Metrics**: |
+    | 🔴 HIGH = Blocks production use, fundamental |
+    | 🟡 MEDIUM = Nice-to-have, improves DX |
+    | 🟢 LOW = Specialized, optional |
+endlegend
+
+@enduml
