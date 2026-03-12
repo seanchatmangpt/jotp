@@ -111,21 +111,4 @@ module io.github.seanchatmangpt.jotp {
     // dogfood.mclaren excluded — pre-existing compile errors
     // dogfood.messaging excluded — pre-existing compile errors
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
-
-    // Enterprise Patterns
-    exports io.github.seanchatmangpt.jotp.enterprise.health;
-    exports io.github.seanchatmangpt.jotp.enterprise.backpressure;
-    exports io.github.seanchatmangpt.jotp.enterprise.recovery;
-    exports io.github.seanchatmangpt.jotp.enterprise.bulkhead;
-    exports io.github.seanchatmangpt.jotp.enterprise.multitenancy;
-    exports io.github.seanchatmangpt.jotp.enterprise.eventbus;
-    exports io.github.seanchatmangpt.jotp.enterprise.saga;
-
-    // Reactive Messaging Patterns (Vaughn Vernon port)
-    exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.routing;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.transformation;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.management;
 }
