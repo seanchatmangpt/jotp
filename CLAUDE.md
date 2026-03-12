@@ -2,69 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Proxy Setup (MUST DO FIRST)
+## Proxy & Java 26 Setup (Automatic via SessionStart hook)
 
-The build environment uses an egress proxy for network access. **Set up the proxy before any Maven commands.**
+The `.claude/setup.sh` script runs automatically on every session start and handles:
 
-### Option A: Direct proxy in settings.xml (simplest)
+1. **OpenJDK 26** — Downloads and installs to `/usr/lib/jvm/openjdk-26` if not present
+2. **mvnd 2.0.0-rc-3** — Downloads Maven Daemon if not present
+3. **Maven proxy** — Auto-generates `~/.m2/settings.xml` with proxy credentials extracted from `JAVA_TOOL_OPTIONS` or `https_proxy` environment variables
+4. **maven-proxy-v2.py bridge** — Starts if `https_proxy` env var is set
 
-Extract proxy credentials from `JAVA_TOOL_OPTIONS` and write `~/.m2/settings.xml`:
-
+No manual setup is needed. If the session start hook fails, run manually:
 ```bash
-# Extract proxy host/port/user/password from JAVA_TOOL_OPTIONS
-# Look for -Dhttps.proxyHost=X -Dhttps.proxyPort=Y -Dhttps.proxyUser=U -Dhttps.proxyPassword=P
-export PATH="/usr/bin:/usr/local/bin:$PATH"
-export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
-mkdir -p ~/.m2
-```
-
-Write `~/.m2/settings.xml` with the proxy credentials from `JAVA_TOOL_OPTIONS`:
-```xml
-<settings>
-  <proxies>
-    <proxy><id>egress-https</id><active>true</active><protocol>https</protocol>
-      <host>PROXY_HOST</host><port>PROXY_PORT</port>
-      <username>PROXY_USER</username>
-      <password>PROXY_PASSWORD</password>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
-    <proxy><id>egress-http</id><active>true</active><protocol>http</protocol>
-      <host>PROXY_HOST</host><port>PROXY_PORT</port>
-      <username>PROXY_USER</username>
-      <password>PROXY_PASSWORD</password>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
-  </proxies>
-</settings>
-```
-
-Replace `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASSWORD` with values from `JAVA_TOOL_OPTIONS` (look for `-Dhttps.proxyHost=...` etc).
-
-### Option B: Local proxy bridge (when `https_proxy` env var is set)
-
-If `https_proxy` is set in the environment, `maven-proxy-v2.py` bridges to it with auth:
-
-```bash
-python3 maven-proxy-v2.py &   # starts local proxy on 127.0.0.1:3128
-```
-
-Then configure Maven to use local proxy (`~/.m2/settings.xml`):
-```xml
-<settings>
-  <proxies>
-    <proxy><id>local</id><active>true</active><protocol>https</protocol>
-      <host>127.0.0.1</host><port>3128</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
-    <proxy><id>local-http</id><active>true</active><protocol>http</protocol>
-      <host>127.0.0.1</host><port>3128</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
-  </proxies>
-</settings>
-```
-
-If `https_proxy` is NOT set but `JAVA_TOOL_OPTIONS` contains proxy info, extract and set it first:
-```bash
-# Extract from JAVA_TOOL_OPTIONS and set https_proxy
-export https_proxy="http://USER:PASSWORD@HOST:PORT"
-python3 maven-proxy-v2.py &
+bash .claude/setup.sh
 ```
 
 ## Build Tool: mvnd (Maven Daemon, Maven 4) — REQUIRED
@@ -129,7 +78,7 @@ cd guard-system && cargo build --release
 
 ## Architecture
 
-**Java 26 JPMS library** (`io.github.seanchatmangpt.jotp` module) targeting Java 26 with preview features enabled (`--enable-preview`). JDK: GraalVM Community CE 25.0.2 (Java 26 EA builds required for Java 26 target).
+**Java 26 JPMS library** (`io.github.seanchatmangpt.jotp` module) targeting Java 26 with preview features enabled (`--enable-preview`). JDK: OpenJDK 26 (auto-installed by `.claude/setup.sh`).
 
 **Test separation:**
 - Unit tests: `*Test.java` — run by maven-surefire-plugin via `./mvnw test`
