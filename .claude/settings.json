@@ -12,7 +12,7 @@
   },
   "env": {
     "JAVA_HOME": "/usr/lib/jvm/openjdk-26",
-    "PATH": "/usr/lib/jvm/openjdk-26/bin:/root/.mvnd/mvnd-2.0.0-rc-3/bin:/opt/mvnd2/bin:/usr/local/bin:${PATH}"
+    "PATH": "/usr/lib/jvm/openjdk-26/bin:/root/.mvnd/mvnd-2.0.0-rc-3/bin:/opt/mvnd2/bin:/root/.cargo/bin:/usr/local/bin:${PATH}"
   },
   "hooks": {
     "SessionStart": [
@@ -35,7 +35,7 @@
           },
           {
             "type": "command",
-            "command": "export PATH=/usr/lib/jvm/openjdk-26/bin:/root/.mvnd/mvnd-2.0.0-rc-3/bin:/opt/mvnd2/bin:/usr/local/bin:$PATH && cd /home/user/jotp && echo \"$CLAUDE_TOOL_INPUT\" | bash .claude/hooks/simple-guards.sh"
+            "command": "export PATH=/usr/lib/jvm/openjdk-26/bin:/root/.mvnd/mvnd-2.0.0-rc-3/bin:/opt/mvnd2/bin:/root/.cargo/bin:/usr/local/bin:$PATH && cd /home/user/jotp && echo \"$CLAUDE_TOOL_INPUT\" | bash .claude/hooks/simple-guards.sh"
           }
         ]
       }
