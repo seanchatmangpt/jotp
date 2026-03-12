@@ -80,7 +80,7 @@ class GenServerTest {
 
     @Test
     @DisplayName("cast() delivers messages asynchronously")
-    void testCastFireAndForget() throws InterruptedException {
+    void testCastFireAndForget() throws InterruptedException, java.util.concurrent.ExecutionException {
         var handler =
                 new GenServer.Handler<Integer, CounterMsg>() {
                     @Override

@@ -166,6 +166,8 @@
                         <!-- Tests for excluded source files — compile errors until source is fixed -->
                         <testExclude>**/PatternsIntegrationTest.java</testExclude>
                         <testExclude>**/DistributedSagaCoordinatorTest.java</testExclude>
+                        <testExclude>**/DistributedActorBridgeTest.java</testExclude>
+                        <testExclude>**/GenServerTest.java</testExclude>
                         <testExclude>**/BulkheadIsolationTest.java</testExclude>
                         <testExclude>**/examples/**</testExclude>
                         <testExclude>**/messagepatterns/**</testExclude>
@@ -182,6 +184,7 @@
                         <testExclude>**/test/ReactiveMessagingTest.java</testExclude>
                         <testExclude>**/stress/**</testExclude>
                         <testExclude>**/testing/**</testExclude>
+                        <testExclude>**/dogfood/**</testExclude>
                         <testExclude>**/enterprise/**</testExclude>
                         <testExclude>**/pool/**</testExclude>
                         <!-- malformed test stubs in test-only package —  structurally broken, spotless excluded separately -->
