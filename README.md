@@ -4,7 +4,7 @@
 
 **JOTP** is a production-ready Java 26 framework implementing all 15 OTP (Erlang/OTP) primitives, bringing battle-tested concurrency patterns and fault tolerance to the JVM.
 
-**🌐 [View Full Documentation](https://github.com/seanchatmangpt/jotp/docs)**
+**📚 [View Full Documentation](docs/)**
 
 ## Core Capabilities
 
@@ -42,7 +42,7 @@ Add JOTP to your `pom.xml`:
 <dependency>
     <groupId>io.github.seanchatmangpt</groupId>
     <artifactId>jotp</artifactId>
-    <version>1.0.0</version>
+    <version>1.0</version>
 </dependency>
 ```
 
@@ -58,8 +58,8 @@ sealed interface CounterMsg permits Increment, Reset {}
 record Increment() implements CounterMsg {}
 record Reset() implements CounterMsg {}
 
-// 2. Spawn a lightweight process using Proc.spawn()
-Proc<Counter, CounterMsg> counter = Proc.spawn(
+// 2. Create and start a lightweight process
+Proc<Counter, CounterMsg> counter = new Proc<>(
     new Counter(0),
     (state, msg) -> switch (msg) {
         case Increment _ -> new Counter(state.value() + 1);
