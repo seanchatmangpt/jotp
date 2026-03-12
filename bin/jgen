@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# =============================================================================
+# jgen — Java Code Generation CLI
+# Wraps ggen (seanchatmangpt/ggen) for Java 26 code generation
+# =============================================================================
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GGEN_CONFIG="$PROJECT_ROOT/ggen.toml"
+TEMPLATES_DIR="$PROJECT_ROOT/templates/java"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat <<'EOF'
+jgen — Java 26 Code Generation Engine (powered by ggen)
+
+USAGE:
+    jgen generate -t <template> -n <name> -p <package> [options]
+
+OPTIONS:
+    -t, --template <name>     Template to render (e.g. core/record)
+    -p, --package <pkg>       Target Java package (e.g., com.example)
+    -o, --output <dir>        Output directory (default: src/main/java)
+    -n, --name <name>         Type name for generation
+    --dry-run                 Show what would be generated without writing
+    -v, --verbose             Verbose output
+    -h, --help                Show this help
+
+EXAMPLES:
+    jgen generate -t core/record -n Person -p com.example.model
+    jgen generate -t concurrency/virtual-thread -n Worker -p com.example
+    jgen generate -t patterns/strategy-functional -n TextTransform -p com.example
+    jgen generate -t error-handling/result-railway -n Result -p com.example
+
+TEMPLATE CATEGORIES:
+    core/           Language features (records, sealed types, patterns, etc.)
+    concurrency/    Virtual threads, structured concurrency, scoped values
+    patterns/       Design patterns (builder, factory, strategy, etc.)
+    api/            API modernization (HttpClient, java.time, NIO.2, etc.)
+    modules/        JPMS module declarations
+    testing/        JUnit 5, jqwik, AssertJ, ArchUnit, etc.
+    error-handling/ Result<T,E>, Optional, functional error handling
+    build/          Maven POM, Spotless, CI/CD
+    security/       Crypto, encapsulation, validation
+EOF
+}
+
+check_ggen() {
+    if ! command -v ggen &>/dev/null; then
+        echo -e "${RED}Error: ggen is not installed.${NC}"
+        echo "Install via: cargo install ggen-cli --features paas,ai"
+        echo "  or: brew install seanchatmangpt/ggen/ggen"
+        exit 1
+    fi
+}
+
+cmd_generate() {
+    local template=""
+    local package=""
+    local output="src/main/java"
+    local name=""
+    local dry_run=false
+    local verbose=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--template) template="$2"; shift 2 ;;
+            -p|--package)  package="$2"; shift 2 ;;
+            -o|--output)   output="$2"; shift 2 ;;
+            -n|--name)     name="$2"; shift 2 ;;
+            --dry-run)     dry_run=true; shift ;;
+            -v|--verbose)  verbose=true; shift ;;
+            *) echo -e "${RED}Unknown option: $1${NC}"; usage; exit 1 ;;
+        esac
+    done
+
+    if [[ -z "$template" ]]; then
+        echo -e "${RED}Error: --template is required${NC}"
+        echo "Usage: jgen generate -t <template> -n <name> -p <package>"
+        exit 1
+    fi
+
+    local template_file="$TEMPLATES_DIR/$template.tera"
+    if [[ ! -f "$template_file" ]]; then
+        echo -e "${RED}Error: Template not found: $template_file${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Generating from template: ${template}${NC}"
+    [[ -n "$name" ]]    && echo -e "  Name:    ${GREEN}${name}${NC}"
+    [[ -n "$package" ]] && echo -e "  Package: ${GREEN}${package}${NC}"
+    echo -e "  Output:  ${GREEN}${output}${NC}"
+
+    if $dry_run; then
+        echo -e "\n${YELLOW}[DRY RUN] Would generate:${NC}"
+        if [[ -n "$package" ]]; then
+            local pkg_dir="${output}/$(echo "$package" | tr '.' '/')"
+            echo "  $pkg_dir/${name}.java"
+        else
+            echo "  ${output}/${name}.java"
+        fi
+        return 0
+    fi
+
+    cd "$PROJECT_ROOT"
+    GGEN_TEMPLATE="$template" \
+    GGEN_NAME="$name" \
+    GGEN_PACKAGE="$package" \
+    GGEN_OUTPUT="$output" \
+    ggen sync
+
+    echo -e "${GREEN}Generation complete.${NC}"
+}
+
+# =============================================================================
+# Main dispatch
+# =============================================================================
+
+if [[ $# -lt 1 ]]; then
+    usage
+    exit 0
+fi
+
+# ggen is the sole engine — nothing works without it
+check_ggen
+
+case "$1" in
+    generate)  shift; cmd_generate "$@" ;;
+    -h|--help) usage ;;
+    *)
+        echo -e "${RED}Unknown command: $1${NC}"
+        usage
+        exit 1
+        ;;
+esac
