@@ -29,36 +29,37 @@ import java.util.UUID;
  */
 public record IdempotencyKey(String value) {
 
-  /** Compact constructor that validates the value is non-null and non-blank. */
-  public IdempotencyKey {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException("IdempotencyKey value must be non-null and non-blank");
+    /** Compact constructor that validates the value is non-null and non-blank. */
+    public IdempotencyKey {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    "IdempotencyKey value must be non-null and non-blank");
+        }
     }
-  }
 
-  /**
-   * Creates a new random UUID-based idempotency key.
-   *
-   * <p>Each call generates a cryptographically random UUID, suitable for use as a unique operation
-   * identifier across distributed systems and JVM restarts.
-   *
-   * @return a new {@code IdempotencyKey} with a random UUID value
-   */
-  public static IdempotencyKey generate() {
-    return new IdempotencyKey(UUID.randomUUID().toString());
-  }
+    /**
+     * Creates a new random UUID-based idempotency key.
+     *
+     * <p>Each call generates a cryptographically random UUID, suitable for use as a unique
+     * operation identifier across distributed systems and JVM restarts.
+     *
+     * @return a new {@code IdempotencyKey} with a random UUID value
+     */
+    public static IdempotencyKey generate() {
+        return new IdempotencyKey(UUID.randomUUID().toString());
+    }
 
-  /**
-   * Wraps an existing key string as an {@code IdempotencyKey}.
-   *
-   * <p>Use this when reconstructing a key received from a caller (e.g., from an HTTP header or
-   * message envelope) to participate in deduplication.
-   *
-   * @param value the existing key string; must be non-null and non-blank
-   * @return an {@code IdempotencyKey} wrapping the given value
-   * @throws IllegalArgumentException if {@code value} is null or blank
-   */
-  public static IdempotencyKey of(String value) {
-    return new IdempotencyKey(value);
-  }
+    /**
+     * Wraps an existing key string as an {@code IdempotencyKey}.
+     *
+     * <p>Use this when reconstructing a key received from a caller (e.g., from an HTTP header or
+     * message envelope) to participate in deduplication.
+     *
+     * @param value the existing key string; must be non-null and non-blank
+     * @return an {@code IdempotencyKey} wrapping the given value
+     * @throws IllegalArgumentException if {@code value} is null or blank
+     */
+    public static IdempotencyKey of(String value) {
+        return new IdempotencyKey(value);
+    }
 }
