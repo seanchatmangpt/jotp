@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.messaging.system;
 
-import static org.awaitility.Awaitility.await;
-
 import io.github.seanchatmangpt.jotp.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -200,7 +198,7 @@ class DeadLetterChannelTest implements WithAssertions {
                                         case OrderMsg.Order order -> {
                                             if (order.amount() < 0) {
                                                 throw new IllegalArgumentException(
-                                                    "Negative amount: " + order.amount());
+                                                        "Negative amount: " + order.amount());
                                             }
                                             counter.incrementAndGet();
                                         }

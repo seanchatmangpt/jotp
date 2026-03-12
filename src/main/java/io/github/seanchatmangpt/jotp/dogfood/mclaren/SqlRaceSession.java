@@ -1,8 +1,8 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
-import java.time.Instant;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.StateMachine.Transition;
+import java.time.Instant;
 
 /**
  * SQL Race session state machine — OTP {@code gen_statem} mapped to McLaren ATLAS session
@@ -51,9 +51,9 @@ public final class SqlRaceSession {
     /**
      * Create and start a new SQL Race session.
      *
-     * <p>The session begins in {@link SqlRaceSessionState.Initializing} — no channels or
-     * parameters are committed yet. The first event must be a
-     * {@link SqlRaceSessionEvent.Configure} to transition to {@link SqlRaceSessionState.Live}.
+     * <p>The session begins in {@link SqlRaceSessionState.Initializing} — no channels or parameters
+     * are committed yet. The first event must be a {@link SqlRaceSessionEvent.Configure} to
+     * transition to {@link SqlRaceSessionState.Live}.
      *
      * @param identifier human-readable session name (e.g. {@code "Bahrain_FP2_Car1_2025-03-01"})
      * @return running session state machine
@@ -61,10 +61,11 @@ public final class SqlRaceSession {
     public static SqlRaceSession create(String identifier) {
         var key = SqlRaceSessionKey.newKey(identifier);
         var initial = SqlRaceSessionData.empty(key, identifier);
-        var machine = new StateMachine<>(
-                new SqlRaceSessionState.Initializing(),
-                initial,
-                SqlRaceSession::transition);
+        var machine =
+                new StateMachine<>(
+                        new SqlRaceSessionState.Initializing(),
+                        initial,
+                        SqlRaceSession::transition);
         return new SqlRaceSession(machine);
     }
 
@@ -146,16 +147,14 @@ public final class SqlRaceSession {
     // ---------------------------------------------------------------------------
 
     private static Transition<SqlRaceSessionState, SqlRaceSessionData> transition(
-            SqlRaceSessionState state,
-            SqlRaceSessionEvent event,
-            SqlRaceSessionData data) {
+            SqlRaceSessionState state, SqlRaceSessionEvent event, SqlRaceSessionData data) {
         return switch (state) {
             case SqlRaceSessionState.Initializing ignored -> handleInitializing(event, data);
             case SqlRaceSessionState.Live ignored -> handleLive(event, data);
             case SqlRaceSessionState.Closing ignored -> handleClosing(event, data);
             case SqlRaceSessionState.Closed ignored ->
-                // Terminal state — any event stops the machine
-                Transition.stop("session already closed");
+                    // Terminal state — any event stops the machine
+                    Transition.stop("session already closed");
         };
     }
 
@@ -169,8 +168,8 @@ public final class SqlRaceSession {
                 yield Transition.nextState(new SqlRaceSessionState.Live(), next);
             }
             default ->
-                // Any other event while Initializing: keep state, ignore
-                Transition.keepState(data);
+                    // Any other event while Initializing: keep state, ignore
+                    Transition.keepState(data);
         };
     }
 
@@ -178,20 +177,20 @@ public final class SqlRaceSession {
             SqlRaceSessionEvent event, SqlRaceSessionData data) {
         return switch (event) {
             case SqlRaceSessionEvent.AddLap(var lap) ->
-                // session.Laps.Add(lap) — keep_state, update data
-                Transition.keepState(data.withLap(lap));
+                    // session.Laps.Add(lap) — keep_state, update data
+                    Transition.keepState(data.withLap(lap));
 
             case SqlRaceSessionEvent.AddDataItem(var item) ->
-                // session.Items.Add(item) — keep_state, update data
-                Transition.keepState(data.withDataItem(item));
+                    // session.Items.Add(item) — keep_state, update data
+                    Transition.keepState(data.withDataItem(item));
 
             case SqlRaceSessionEvent.SessionSaved ignored ->
-                // Archive flush triggered: move to Closing
-                Transition.nextState(new SqlRaceSessionState.Closing(), data);
+                    // Archive flush triggered: move to Closing
+                    Transition.nextState(new SqlRaceSessionState.Closing(), data);
 
             case SqlRaceSessionEvent.Close ignored ->
-                // clientSession.Close() — stop the gen_statem immediately
-                Transition.stop("session closed by request");
+                    // clientSession.Close() — stop the gen_statem immediately
+                    Transition.stop("session closed by request");
 
             default -> Transition.keepState(data);
         };

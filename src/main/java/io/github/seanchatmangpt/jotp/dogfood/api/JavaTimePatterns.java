@@ -68,8 +68,7 @@ public final class JavaTimePatterns {
     // =========================================================================
 
     /** Creates a date-time suitable for local events (no timezone). */
-    public static LocalDateTime createDateTime(
-            int year, int month, int day, int hour, int minute) {
+    public static LocalDateTime createDateTime(int year, int month, int day, int hour, int minute) {
         return LocalDateTime.of(year, month, day, hour, minute);
     }
 

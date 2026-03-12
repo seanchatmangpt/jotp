@@ -11,11 +11,12 @@ import java.util.UUID;
  * Runnable example demonstrating Vaughn Vernon's DocumentMessage pattern with JOTP.
  *
  * <p>This example shows how to:
+ *
  * <ul>
- *   <li>Wrap domain entities as self-contained messages</li>
- *   <li>Serialize complex data structures to bytes</li>
- *   <li>Deserialize documents back to typed objects</li>
- *   <li>Transfer domain objects across process boundaries</li>
+ *   <li>Wrap domain entities as self-contained messages
+ *   <li>Serialize complex data structures to bytes
+ *   <li>Deserialize documents back to typed objects
+ *   <li>Transfer domain objects across process boundaries
  * </ul>
  *
  * <p>Joe Armstrong: "A message is best thought of as a copy of data, not a reference."
@@ -24,12 +25,12 @@ public final class DocumentMessageExample {
 
     // Domain records for this example
     record Customer(String id, String name, String email) implements Serializable {}
+
     record Order(String orderId, String customerId, String product, double amount)
             implements Serializable {}
 
     record DocumentStoreState(
-            java.util.Map<String, byte[]> documents,
-            List<String> receivedDocuments)
+            java.util.Map<String, byte[]> documents, List<String> receivedDocuments)
             implements Serializable {
         static DocumentStoreState empty() {
             return new DocumentStoreState(
@@ -47,35 +48,45 @@ public final class DocumentMessageExample {
 
         // Create a document store process
         Supervisor supervisor =
-                Supervisor.builder()
-                        .name("document-store-supervisor")
-                        .startStrategy(Supervisor.StartStrategy.ONE_FOR_ONE)
-                        .build();
+                new Supervisor(
+                        "document-store-supervisor",
+                        Supervisor.Strategy.ONE_FOR_ONE,
+                        5,
+                        java.time.Duration.ofSeconds(60));
 
         // Handler for document store messages
-        var storeHandler =
-                (DocumentStoreState state, DocumentStoreMsg<?> msg) -> {
-                    DocumentMessage<?> docMsg = msg.docMsg();
-                    System.out.println(
-                            "✓ Document Store received: "
-                                    + docMsg.documentType()
-                                    + " (ID: " + docMsg.messageId() + ")");
+        java.util.function.BiFunction<DocumentStoreState, DocumentStoreMsg<?>, DocumentStoreState>
+                storeHandler =
+                        (DocumentStoreState state, DocumentStoreMsg<?> msg) -> {
+                            DocumentMessage<?> docMsg = msg.docMsg();
+                            System.out.println(
+                                    "✓ Document Store received: "
+                                            + docMsg.documentType()
+                                            + " (ID: "
+                                            + docMsg.messageId()
+                                            + ")");
 
-                    // Store the serialized document
-                    String docKey = docMsg.documentType() + "-" + UUID.randomUUID().toString().substring(0, 8);
-                    state.documents.put(docKey, docMsg.documentBytes());
-                    state.receivedDocuments.add(docKey);
+                            // Store the serialized document
+                            String docKey =
+                                    docMsg.documentType()
+                                            + "-"
+                                            + UUID.randomUUID().toString().substring(0, 8);
+                            state.documents.put(docKey, docMsg.documentBytes());
+                            state.receivedDocuments.add(docKey);
 
-                    System.out.println(
-                            "  Stored as: " + docKey
-                                    + " (" + docMsg.documentBytes().length + " bytes)");
+                            System.out.println(
+                                    "  Stored as: "
+                                            + docKey
+                                            + " ("
+                                            + docMsg.documentBytes().length
+                                            + " bytes)");
 
-                    return state;
-                };
+                            return state;
+                        };
 
         // Spawn document store process
         ProcRef<DocumentStoreState, DocumentStoreMsg<?>> documentStore =
-                supervisor.spawn("document-store", DocumentStoreState.empty(), storeHandler);
+                supervisor.supervise("document-store", DocumentStoreState.empty(), storeHandler);
 
         System.out.println("1. DOCUMENT STORE PROCESS SPAWNED");
         System.out.println("   - Service ready to receive serialized domain entities\n");
@@ -84,12 +95,10 @@ public final class DocumentMessageExample {
         System.out.println("2. CREATING DOMAIN ENTITIES");
 
         Customer customer1 = new Customer("CUST-001", "Alice Johnson", "alice@example.com");
-        System.out.println(
-                "   A. Customer: " + customer1.name() + " (" + customer1.email() + ")");
+        System.out.println("   A. Customer: " + customer1.name() + " (" + customer1.email() + ")");
 
         Order order1 = new Order("ORD-001", customer1.id(), "Premium Widget", 199.99);
-        System.out.println(
-                "   B. Order: " + order1.product() + " ($" + order1.amount() + ")\n");
+        System.out.println("   B. Order: " + order1.product() + " ($" + order1.amount() + ")\n");
 
         // Create and send document messages
         System.out.println("3. WRAPPING ENTITIES AS DOCUMENT MESSAGES");
@@ -124,7 +133,8 @@ public final class DocumentMessageExample {
         System.out.println("      - ID: " + restoredCustomer.id());
         System.out.println("      - Name: " + restoredCustomer.name());
         System.out.println("      - Email: " + restoredCustomer.email());
-        System.out.println("      - Matches original: " + customer1.equals(restoredCustomer) + "\n");
+        System.out.println(
+                "      - Matches original: " + customer1.equals(restoredCustomer) + "\n");
 
         Order restoredOrder = orderDocMsg.document("Order", Order.class);
         System.out.println("   B. Deserialized order:");
@@ -159,8 +169,7 @@ public final class DocumentMessageExample {
         System.out.println("7. DOCUMENT MESSAGE PROPERTIES");
         System.out.println("   A. Customer document type: " + customerDocMsg.documentType());
         System.out.println("   B. Order document type: " + orderDocMsg.documentType());
-        System.out.println(
-                "   C. Byte serialization is independent of runtime class loading");
+        System.out.println("   C. Byte serialization is independent of runtime class loading");
         System.out.println("   D. Each document has unique message ID for tracking\n");
 
         // Cleanup

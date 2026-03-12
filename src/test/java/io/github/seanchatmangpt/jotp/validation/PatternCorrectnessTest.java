@@ -4,23 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.CrashRecovery;
 import io.github.seanchatmangpt.jotp.Parallel;
+import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.Result;
+import io.github.seanchatmangpt.jotp.dogfood.api.JavaTimePatterns;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.ScopedValuePatterns;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.StructuredTaskScopePatterns;
 import io.github.seanchatmangpt.jotp.dogfood.core.GathererPatterns;
 import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns;
-import io.github.seanchatmangpt.jotp.dogfood.api.JavaTimePatterns;
-import org.assertj.core.api.WithAssertions;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-
 import java.time.LocalDate;
-import java.time.ZonedDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +21,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
 /**
  * Formal behavioral contract tests for ggen-generated Java development patterns.
@@ -35,8 +32,8 @@ import java.util.function.Function;
  * <p>Thesis claim: <em>ggen generates Java patterns without any loss in capability</em>.
  *
  * <p>This class verifies the behavioral contracts (laws) that each pattern must satisfy —
- * independent of implementation details. A pattern has no capability loss if and only if all of
- * its contracts hold.
+ * independent of implementation details. A pattern has no capability loss if and only if all of its
+ * contracts hold.
  *
  * <h2>Contracts verified:</h2>
  *
@@ -97,10 +94,12 @@ class PatternCorrectnessTest implements WithAssertions {
             AtomicInteger callCount = new AtomicInteger(0);
             RuntimeException cause = new RuntimeException("test");
             Result<Integer, RuntimeException> failure = Result.failure(cause);
-            Result<String, RuntimeException> mapped = failure.map(x -> {
-                callCount.incrementAndGet();
-                return x.toString();
-            });
+            Result<String, RuntimeException> mapped =
+                    failure.map(
+                            x -> {
+                                callCount.incrementAndGet();
+                                return x.toString();
+                            });
             assertThat(callCount.get()).isZero();
             assertThat(mapped).isInstanceOf(Result.Failure.class);
         }
@@ -108,10 +107,11 @@ class PatternCorrectnessTest implements WithAssertions {
         @Test
         @DisplayName("Railway: success chain produces final value")
         void successChain() {
-            Result<Integer, Exception> result = Result.<Integer, Exception>of(() -> 1)
-                    .map(x -> x + 1)
-                    .map(x -> x * 3)
-                    .map(x -> x - 1);
+            Result<Integer, Exception> result =
+                    Result.<Integer, Exception>of(() -> 1)
+                            .map(x -> x + 1)
+                            .map(x -> x * 3)
+                            .map(x -> x - 1);
             assertThat(result.<Integer>fold(x -> x, _ -> -1)).isEqualTo(5);
         }
 
@@ -119,11 +119,21 @@ class PatternCorrectnessTest implements WithAssertions {
         @DisplayName("Railway: first failure short-circuits all subsequent maps")
         void failureShortCircuits() {
             AtomicInteger mapCount = new AtomicInteger(0);
-            Result<Integer, Exception> result = Result.<Integer, Exception>of(() -> {
-                        throw new RuntimeException("fail");
-                    })
-                    .map(x -> { mapCount.incrementAndGet(); return x + 1; })
-                    .map(x -> { mapCount.incrementAndGet(); return x * 2; });
+            Result<Integer, Exception> result =
+                    Result.<Integer, Exception>of(
+                                    () -> {
+                                        throw new RuntimeException("fail");
+                                    })
+                            .map(
+                                    x -> {
+                                        mapCount.incrementAndGet();
+                                        return x + 1;
+                                    })
+                            .map(
+                                    x -> {
+                                        mapCount.incrementAndGet();
+                                        return x * 2;
+                                    });
             assertThat(mapCount.get()).isZero();
             assertThat(result).isInstanceOf(Result.Err.class);
         }
@@ -142,18 +152,20 @@ class PatternCorrectnessTest implements WithAssertions {
         void fifoOrdering() throws Exception {
             var received = new ArrayList<Integer>();
             var latch = new CountDownLatch(1000);
-            var actor = new Proc<List<Integer>, Integer>(
-                    received,
-                    (state, msg) -> {
-                        state.add(msg);
-                        latch.countDown();
-                        return state;
-                    });
+            var actor =
+                    new Proc<List<Integer>, Integer>(
+                            received,
+                            (state, msg) -> {
+                                state.add(msg);
+                                latch.countDown();
+                                return state;
+                            });
             for (int i = 0; i < 1000; i++) actor.tell(i);
             latch.await();
             actor.stop();
-            assertThat(received).containsExactlyElementsOf(
-                    java.util.stream.IntStream.range(0, 1000).boxed().toList());
+            assertThat(received)
+                    .containsExactlyElementsOf(
+                            java.util.stream.IntStream.range(0, 1000).boxed().toList());
         }
 
         @Test
@@ -161,13 +173,14 @@ class PatternCorrectnessTest implements WithAssertions {
         void noMessageLoss() throws Exception {
             var counter = new AtomicInteger(0);
             var latch = new CountDownLatch(500);
-            var actor = new Proc<Integer, Void>(
-                    0,
-                    (state, _) -> {
-                        counter.incrementAndGet();
-                        latch.countDown();
-                        return state + 1;
-                    });
+            var actor =
+                    new Proc<Integer, Void>(
+                            0,
+                            (state, _) -> {
+                                counter.incrementAndGet();
+                                latch.countDown();
+                                return state + 1;
+                            });
             for (int i = 0; i < 500; i++) actor.tell(null);
             latch.await();
             actor.stop();
@@ -266,7 +279,8 @@ class PatternCorrectnessTest implements WithAssertions {
         void userBoundInsideScopeOnly() {
             assertThat(ScopedValuePatterns.CURRENT_USER.isBound()).isFalse();
             var captured = new AtomicReference<String>();
-            ScopedValuePatterns.handleAsUser("alice", () -> captured.set(ScopedValuePatterns.currentUser()));
+            ScopedValuePatterns.handleAsUser(
+                    "alice", () -> captured.set(ScopedValuePatterns.currentUser()));
             assertThat(captured.get()).isEqualTo("alice");
             assertThat(ScopedValuePatterns.CURRENT_USER.isBound()).isFalse();
         }
@@ -294,20 +308,23 @@ class PatternCorrectnessTest implements WithAssertions {
         @DisplayName("withRequestContext: all three values bound and accessible")
         void requestContextAllValuesBound() throws Exception {
             var ctx = new ScopedValuePatterns.RequestContext("user1", "trace-abc", "tenant-42");
-            var result = ScopedValuePatterns.withRequestContext(
-                    ctx,
-                    () -> ScopedValuePatterns.currentUser()
-                            + "|"
-                            + ScopedValuePatterns.TRACE_ID.get()
-                            + "|"
-                            + ScopedValuePatterns.TENANT_ID.get());
+            var result =
+                    ScopedValuePatterns.withRequestContext(
+                            ctx,
+                            () ->
+                                    ScopedValuePatterns.currentUser()
+                                            + "|"
+                                            + ScopedValuePatterns.TRACE_ID.get()
+                                            + "|"
+                                            + ScopedValuePatterns.TENANT_ID.get());
             assertThat(result).isEqualTo("user1|trace-abc|tenant-42");
         }
 
         @Test
         @DisplayName("currentUserOrDefault: returns default when not bound")
         void defaultWhenNotBound() {
-            assertThat(ScopedValuePatterns.currentUserOrDefault("anonymous")).isEqualTo("anonymous");
+            assertThat(ScopedValuePatterns.currentUserOrDefault("anonymous"))
+                    .isEqualTo("anonymous");
         }
 
         @Test
@@ -328,15 +345,21 @@ class PatternCorrectnessTest implements WithAssertions {
         @Test
         @DisplayName("describe: all 4 payment variants produce non-null output")
         void allVariantsHandled() {
-            var payments = List.of(
-                    PatternMatchingPatterns.Payment.CreditCard.class,
-                    PatternMatchingPatterns.Payment.BankTransfer.class,
-                    PatternMatchingPatterns.Payment.CryptoPay.class,
-                    PatternMatchingPatterns.Payment.Voucher.class);
+            var payments =
+                    List.of(
+                            PatternMatchingPatterns.Payment.CreditCard.class,
+                            PatternMatchingPatterns.Payment.BankTransfer.class,
+                            PatternMatchingPatterns.Payment.CryptoPay.class,
+                            PatternMatchingPatterns.Payment.Voucher.class);
 
-            var card = new PatternMatchingPatterns.Payment.CreditCard("4111111111111111", "Alice", 123, 5000);
-            var bank = new PatternMatchingPatterns.Payment.BankTransfer("DE89370400440532013000", "COBADEFFXXX", "Alice");
-            var crypto = new PatternMatchingPatterns.Payment.CryptoPay("1A2b3C4d5E6f7G8h", "BTC", 0.5);
+            var card =
+                    new PatternMatchingPatterns.Payment.CreditCard(
+                            "4111111111111111", "Alice", 123, 5000);
+            var bank =
+                    new PatternMatchingPatterns.Payment.BankTransfer(
+                            "DE89370400440532013000", "COBADEFFXXX", "Alice");
+            var crypto =
+                    new PatternMatchingPatterns.Payment.CryptoPay("1A2b3C4d5E6f7G8h", "BTC", 0.5);
             var voucher = new PatternMatchingPatterns.Payment.Voucher("SAVE20", 20.0, true);
 
             for (var p : List.of(card, bank, crypto, voucher)) {
@@ -349,9 +372,21 @@ class PatternCorrectnessTest implements WithAssertions {
         @Test
         @DisplayName("riskLevel: credit card limit thresholds correct")
         void riskLevelThresholds() {
-            assertThat(PatternMatchingPatterns.riskLevel(new PatternMatchingPatterns.Payment.CreditCard("x", "y", 0, 500))).isEqualTo("LOW");
-            assertThat(PatternMatchingPatterns.riskLevel(new PatternMatchingPatterns.Payment.CreditCard("x", "y", 0, 5000))).isEqualTo("MEDIUM");
-            assertThat(PatternMatchingPatterns.riskLevel(new PatternMatchingPatterns.Payment.CreditCard("x", "y", 0, 20000))).isEqualTo("HIGH");
+            assertThat(
+                            PatternMatchingPatterns.riskLevel(
+                                    new PatternMatchingPatterns.Payment.CreditCard(
+                                            "x", "y", 0, 500)))
+                    .isEqualTo("LOW");
+            assertThat(
+                            PatternMatchingPatterns.riskLevel(
+                                    new PatternMatchingPatterns.Payment.CreditCard(
+                                            "x", "y", 0, 5000)))
+                    .isEqualTo("MEDIUM");
+            assertThat(
+                            PatternMatchingPatterns.riskLevel(
+                                    new PatternMatchingPatterns.Payment.CreditCard(
+                                            "x", "y", 0, 20000)))
+                    .isEqualTo("HIGH");
         }
 
         @Test
@@ -393,8 +428,8 @@ class PatternCorrectnessTest implements WithAssertions {
             // Friday → Monday (skip Sat, Sun)
             var friday = LocalDate.of(2026, 3, 6); // Known Friday
             var next = JavaTimePatterns.nextBusinessDay(friday);
-            assertThat(next.getDayOfWeek()).isNotIn(
-                    java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY);
+            assertThat(next.getDayOfWeek())
+                    .isNotIn(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY);
             assertThat(next).isEqualTo(LocalDate.of(2026, 3, 9)); // Monday
         }
 
@@ -454,9 +489,7 @@ class PatternCorrectnessTest implements WithAssertions {
         @Test
         @DisplayName("runBoth: results match both task outcomes")
         void runBothCorrect() throws Exception {
-            var result = StructuredTaskScopePatterns.runBoth(
-                    () -> "hello",
-                    () -> 42);
+            var result = StructuredTaskScopePatterns.runBoth(() -> "hello", () -> 42);
             assertThat(result.first()).isEqualTo("hello");
             assertThat(result.second()).isEqualTo(42);
         }
@@ -472,9 +505,13 @@ class PatternCorrectnessTest implements WithAssertions {
         @Test
         @DisplayName("raceForFirst: returns some successful result")
         void raceForFirstReturnsResult() throws Exception {
-            var tasks = List.of(
-                    (java.util.concurrent.Callable<String>) () -> "fast",
-                    () -> { Thread.sleep(50); return "slow"; });
+            var tasks =
+                    List.of(
+                            (java.util.concurrent.Callable<String>) () -> "fast",
+                            () -> {
+                                Thread.sleep(50);
+                                return "slow";
+                            });
             var winner = StructuredTaskScopePatterns.raceForFirst(tasks);
             assertThat(winner).isNotNull().isIn("fast", "slow");
         }
@@ -483,21 +520,25 @@ class PatternCorrectnessTest implements WithAssertions {
         @DisplayName("fanOut: propagates failure (any task failing cancels all)")
         void fanOutPropagatesFailure() {
             var items = List.of(1, 2, 3);
-            assertThatThrownBy(() -> StructuredTaskScopePatterns.fanOut(
-                    items,
-                    x -> {
-                        if (x == 2) throw new RuntimeException("task failed");
-                        return x;
-                    }))
+            assertThatThrownBy(
+                            () ->
+                                    StructuredTaskScopePatterns.fanOut(
+                                            items,
+                                            x -> {
+                                                if (x == 2)
+                                                    throw new RuntimeException("task failed");
+                                                return x;
+                                            }))
                     .isInstanceOf(Exception.class);
         }
 
         @Test
         @DisplayName("Parallel.all: preserves result ordering for 10 tasks")
         void parallelAllOrdering() {
-            var tasks = java.util.stream.IntStream.range(0, 10)
-                    .<java.util.function.Supplier<Integer>>mapToObj(i -> () -> i)
-                    .toList();
+            var tasks =
+                    java.util.stream.IntStream.range(0, 10)
+                            .<java.util.function.Supplier<Integer>>mapToObj(i -> () -> i)
+                            .toList();
             var result = Parallel.all(tasks);
             assertThat(result).isInstanceOf(Result.Success.class);
             result.fold(
@@ -529,19 +570,26 @@ class PatternCorrectnessTest implements WithAssertions {
         @DisplayName("retry: succeeds after N-1 failures (eventual success)")
         void eventualSuccess() {
             var attempts = new AtomicInteger(0);
-            var result = CrashRecovery.retry(3, () -> {
-                if (attempts.incrementAndGet() < 3) throw new RuntimeException("not yet");
-                return "done";
-            });
+            var result =
+                    CrashRecovery.retry(
+                            3,
+                            () -> {
+                                if (attempts.incrementAndGet() < 3)
+                                    throw new RuntimeException("not yet");
+                                return "done";
+                            });
             assertThat(result).isInstanceOf(Result.Ok.class);
         }
 
         @Test
         @DisplayName("retry: returns Failure after maxAttempts exhausted")
         void failureAfterMaxAttempts() {
-            var result = CrashRecovery.retry(3, () -> {
-                throw new RuntimeException("always fails");
-            });
+            var result =
+                    CrashRecovery.retry(
+                            3,
+                            () -> {
+                                throw new RuntimeException("always fails");
+                            });
             assertThat(result).isInstanceOf(Result.Err.class);
         }
 
@@ -549,10 +597,12 @@ class PatternCorrectnessTest implements WithAssertions {
         @DisplayName("retry: each attempt is thread-isolated (virtual thread)")
         void attemptsAreThreadIsolated() throws Exception {
             var threadIds = new java.util.concurrent.CopyOnWriteArrayList<Long>();
-            CrashRecovery.retry(3, () -> {
-                threadIds.add(Thread.currentThread().threadId());
-                throw new RuntimeException("fail");
-            });
+            CrashRecovery.retry(
+                    3,
+                    () -> {
+                        threadIds.add(Thread.currentThread().threadId());
+                        throw new RuntimeException("fail");
+                    });
             // All attempts used virtual threads (may reuse thread IDs but are logically isolated)
             assertThat(threadIds).hasSize(3);
         }

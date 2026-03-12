@@ -1,7 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -43,7 +42,8 @@ public final class TurtleParser {
     }
 
     /** Extracted module from Turtle specification. */
-    public record ModuleSpec(String uri, String name, String packageName, List<PatternSpec> patterns) {
+    public record ModuleSpec(
+            String uri, String name, String packageName, List<PatternSpec> patterns) {
 
         public ModuleSpec {
             Objects.requireNonNull(uri, "uri must not be null");
@@ -102,8 +102,11 @@ public final class TurtleParser {
         Objects.requireNonNull(patterns, "patterns must not be null");
 
         // Build dependency graph
-        var patternMap = patterns.stream()
-                .collect(Collectors.toMap(p -> p.name(), p -> p, (a, b) -> a, LinkedHashMap::new));
+        var patternMap =
+                patterns.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        p -> p.name(), p -> p, (a, b) -> a, LinkedHashMap::new));
 
         var result = new ArrayList<PatternSpec>();
         var visited = new LinkedHashSet<String>();
@@ -189,8 +192,7 @@ public final class TurtleParser {
 
         // Check for basic Turtle syntax elements
         var hasPrefix = content.contains("@prefix") || content.contains("@base");
-        var hasTriples = content.lines()
-                .anyMatch(line -> line.trim().matches("^[a-zA-Z]+:.*"));
+        var hasTriples = content.lines().anyMatch(line -> line.trim().matches("^[a-zA-Z]+:.*"));
 
         if (!hasPrefix && !hasTriples) {
             throw new MalformedTurtleException(
@@ -277,15 +279,16 @@ public final class TurtleParser {
             if (line.matches("^eip:\\w+\\s+a\\s+eip:\\w+.*")) {
                 // Save previous pattern if exists
                 if (currentUri != null && currentTemplate != null) {
-                    patterns.add(new PatternSpec(
-                            currentUri,
-                            currentName != null ? currentName : currentUri,
-                            currentCategory,
-                            currentTemplate,
-                            currentPrimitive,
-                            currentComplexity,
-                            currentIntent,
-                            List.copyOf(currentDeps)));
+                    patterns.add(
+                            new PatternSpec(
+                                    currentUri,
+                                    currentName != null ? currentName : currentUri,
+                                    currentCategory,
+                                    currentTemplate,
+                                    currentPrimitive,
+                                    currentComplexity,
+                                    currentIntent,
+                                    List.copyOf(currentDeps)));
                 }
 
                 // Start new pattern
@@ -319,15 +322,16 @@ public final class TurtleParser {
 
         // Don't forget the last pattern
         if (currentUri != null && currentTemplate != null) {
-            patterns.add(new PatternSpec(
-                    currentUri,
-                    currentName != null ? currentName : currentUri,
-                    currentCategory,
-                    currentTemplate,
-                    currentPrimitive,
-                    currentComplexity,
-                    currentIntent,
-                    List.copyOf(currentDeps)));
+            patterns.add(
+                    new PatternSpec(
+                            currentUri,
+                            currentName != null ? currentName : currentUri,
+                            currentCategory,
+                            currentTemplate,
+                            currentPrimitive,
+                            currentComplexity,
+                            currentIntent,
+                            List.copyOf(currentDeps)));
         }
 
         return patterns;
@@ -374,7 +378,12 @@ public final class TurtleParser {
             if (trimmed.contains("a jproj:Module")) {
                 if (currentModule != null && currentModuleName != null) {
                     var patterns = modulePatterns.getOrDefault(currentModule, List.of());
-                    modules.add(new ModuleSpec(currentModule, currentModuleName, currentModulePackage, patterns));
+                    modules.add(
+                            new ModuleSpec(
+                                    currentModule,
+                                    currentModuleName,
+                                    currentModulePackage,
+                                    patterns));
                 }
                 currentModule = extractSubject(trimmed);
                 currentModuleName = null;
@@ -388,10 +397,19 @@ public final class TurtleParser {
                     currentModulePackage = extractStringValue(trimmed);
                 } else if (trimmed.contains("jproj:usesPattern")) {
                     var patternRef = extractPatternRef(trimmed);
-                    var patterns = modulePatterns.computeIfAbsent(currentModule, k -> new ArrayList<>());
+                    var patterns =
+                            modulePatterns.computeIfAbsent(currentModule, k -> new ArrayList<>());
                     // Add placeholder pattern - would need to resolve from ontology
-                    patterns.add(new PatternSpec(
-                            patternRef, patternRef, null, "messaging/" + patternRef + ".tera", null, 1, null, List.of()));
+                    patterns.add(
+                            new PatternSpec(
+                                    patternRef,
+                                    patternRef,
+                                    null,
+                                    "messaging/" + patternRef + ".tera",
+                                    null,
+                                    1,
+                                    null,
+                                    List.of()));
                 }
             }
         }
@@ -399,7 +417,9 @@ public final class TurtleParser {
         // Final module
         if (currentModule != null && currentModuleName != null) {
             var patterns = modulePatterns.getOrDefault(currentModule, List.of());
-            modules.add(new ModuleSpec(currentModule, currentModuleName, currentModulePackage, patterns));
+            modules.add(
+                    new ModuleSpec(
+                            currentModule, currentModuleName, currentModulePackage, patterns));
         }
 
         return new ProjectSpec(
@@ -424,7 +444,8 @@ public final class TurtleParser {
         }
 
         if (visiting.contains(pattern.name())) {
-            throw new IllegalStateException("Circular dependency detected involving: " + pattern.name());
+            throw new IllegalStateException(
+                    "Circular dependency detected involving: " + pattern.name());
         }
 
         visiting.add(pattern.name());

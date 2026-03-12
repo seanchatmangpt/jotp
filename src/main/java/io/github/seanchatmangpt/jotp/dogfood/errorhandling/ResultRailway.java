@@ -14,8 +14,7 @@ import java.util.function.Supplier;
  * @param <T> the success value type
  * @param <E> the error value type
  */
-public sealed interface ResultRailway<T, E>
-        permits ResultRailway.Success, ResultRailway.Failure {
+public sealed interface ResultRailway<T, E> permits ResultRailway.Success, ResultRailway.Failure {
 
     record Success<T, E>(T value) implements ResultRailway<T, E> {}
 

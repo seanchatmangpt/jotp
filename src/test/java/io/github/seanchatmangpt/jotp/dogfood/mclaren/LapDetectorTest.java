@@ -50,8 +50,9 @@ class LapDetectorTest implements WithAssertions {
     void gpsBeaconTransitionsOutLapToFlyingLap() {
         detector = LapDetector.start();
 
-        detector.call(new LapDetector.LapEvent.GpsBeaconCrossed(
-                1_000_000_000L, 26.0325, 50.5106)); // Bahrain S/F GPS coords
+        detector.call(
+                new LapDetector.LapEvent.GpsBeaconCrossed(
+                        1_000_000_000L, 26.0325, 50.5106)); // Bahrain S/F GPS coords
 
         assertThat(detector.state()).isInstanceOf(LapDetector.LapState.FlyingLap.class);
     }
@@ -77,11 +78,11 @@ class LapDetectorTest implements WithAssertions {
     @Test
     void inLapBeaconCyclesBackToOutLap() {
         detector = LapDetector.start();
-        detector.call(new LapDetector.LapEvent.BeaconCrossed(1_000_000_000L));  // → FlyingLap
+        detector.call(new LapDetector.LapEvent.BeaconCrossed(1_000_000_000L)); // → FlyingLap
         detector.call(new LapDetector.LapEvent.BeaconCrossed(91_000_000_000L)); // → InLap
 
-        var data = detector.call(
-                new LapDetector.LapEvent.BeaconCrossed(185_000_000_000L)); // → OutLap
+        var data =
+                detector.call(new LapDetector.LapEvent.BeaconCrossed(185_000_000_000L)); // → OutLap
 
         assertThat(detector.state()).isInstanceOf(LapDetector.LapState.OutLap.class);
         assertThat(data.completedLaps()).hasSize(3);
@@ -102,8 +103,10 @@ class LapDetectorTest implements WithAssertions {
         detector.call(new LapDetector.LapEvent.BeaconCrossed(base + lapDuration)); // Lap 1 done
         detector.call(new LapDetector.LapEvent.BeaconCrossed(base + 2 * lapDuration)); // Lap 2
         detector.call(new LapDetector.LapEvent.BeaconCrossed(base + 3 * lapDuration)); // Lap 3
-        var data = detector.call(
-                new LapDetector.LapEvent.BeaconCrossed(base + 4 * lapDuration)); // InLap done
+        var data =
+                detector.call(
+                        new LapDetector.LapEvent.BeaconCrossed(
+                                base + 4 * lapDuration)); // InLap done
 
         // After full stint: OutLap + Lap1 + Lap2 + Lap3 + InLap = 5 total
         // Actually: OutLap→Flying→InLap cycle:
@@ -126,8 +129,8 @@ class LapDetectorTest implements WithAssertions {
     void manualTriggerInOutLapAppendsNamedLap() {
         detector = LapDetector.start();
 
-        var data = detector.call(new LapDetector.LapEvent.ManualLapTrigger(
-                500_000_000L, "PitExit"));
+        var data =
+                detector.call(new LapDetector.LapEvent.ManualLapTrigger(500_000_000L, "PitExit"));
 
         assertThat(detector.state()).isInstanceOf(LapDetector.LapState.OutLap.class);
         assertThat(data.completedLaps()).hasSize(1);
@@ -141,8 +144,9 @@ class LapDetectorTest implements WithAssertions {
         detector = LapDetector.start();
         detector.call(new LapDetector.LapEvent.BeaconCrossed(1_000_000_000L)); // → FlyingLap
 
-        var data = detector.call(new LapDetector.LapEvent.ManualLapTrigger(
-                91_000_000_000L, "EngineerLap"));
+        var data =
+                detector.call(
+                        new LapDetector.LapEvent.ManualLapTrigger(91_000_000_000L, "EngineerLap"));
 
         // Manual trigger in flying lap: countForFastestLap = true
         var lap = data.completedLaps().getLast();

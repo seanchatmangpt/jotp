@@ -1,10 +1,10 @@
 package io.github.seanchatmangpt.jotp.doctest;
 
+import io.github.seanchatmangpt.jotp.ProcRef;
+import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.Supervisor;
 import org.assertj.core.api.WithAssertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
@@ -41,9 +41,7 @@ class SupervisorDocIT implements WithAssertions {
             """)
     @Test
     void oneForOne_normalOperation() throws Exception {
-        var sup =
-                new Supervisor(
-                        Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+        var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
         ProcRef<Integer, String> worker = sup.supervise("w1", 0, (s, m) -> s + 1);
         worker.tell("a");
         Integer state = worker.ask("sync").get(5, TimeUnit.SECONDS);
@@ -61,9 +59,7 @@ class SupervisorDocIT implements WithAssertions {
     @Test
     void oneForOne_restartsCrashedChild() throws Exception {
         AtomicInteger restarts = new AtomicInteger();
-        var sup =
-                new Supervisor(
-                        Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+        var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
         ProcRef<Integer, String> worker =
                 sup.supervise(
                         "crasher",
@@ -79,9 +75,7 @@ class SupervisorDocIT implements WithAssertions {
         worker.tell("crash");
 
         // Supervisor restarts the child; ProcRef transparently redirects
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .until(() -> restarts.get() >= 1);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> restarts.get() >= 1);
 
         // After restart, the process is running again with fresh state
         Integer state = worker.ask("ping").get(5, TimeUnit.SECONDS);
@@ -98,9 +92,7 @@ class SupervisorDocIT implements WithAssertions {
                     + "sibling group is worse than a clean group restart.")
     @Test
     void oneForAll_restartsAllChildren() throws Exception {
-        var sup =
-                new Supervisor(
-                        Supervisor.Strategy.ONE_FOR_ALL, 3, Duration.ofSeconds(60));
+        var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ALL, 3, Duration.ofSeconds(60));
         ProcRef<Integer, String> w1 = sup.supervise("w1", 10, (s, m) -> s + 1);
         ProcRef<Integer, String> w2 = sup.supervise("w2", 20, (s, m) -> s + 2);
         ProcRef<Integer, String> crasher =
@@ -143,11 +135,8 @@ class SupervisorDocIT implements WithAssertions {
                     + "Useful when later children depend on earlier ones (startup order matters).")
     @Test
     void restForOne_restartsFromCrashPointOnward() throws Exception {
-        var sup =
-                new Supervisor(
-                        Supervisor.Strategy.REST_FOR_ONE, 5, Duration.ofSeconds(60));
-        ProcRef<Integer, String> stable =
-                sup.supervise("stable", 100, (s, m) -> s + 1);
+        var sup = new Supervisor(Supervisor.Strategy.REST_FOR_ONE, 5, Duration.ofSeconds(60));
+        ProcRef<Integer, String> stable = sup.supervise("stable", 100, (s, m) -> s + 1);
         ProcRef<Integer, String> crasher =
                 sup.supervise(
                         "crasher",
@@ -156,8 +145,7 @@ class SupervisorDocIT implements WithAssertions {
                             if ("crash".equals(m)) throw new RuntimeException("boom");
                             return s;
                         });
-        ProcRef<Integer, String> dependent =
-                sup.supervise("dependent", 200, (s, m) -> s + 1);
+        ProcRef<Integer, String> dependent = sup.supervise("dependent", 200, (s, m) -> s + 1);
 
         // Accumulate state in all three
         stable.tell("inc");
@@ -197,9 +185,7 @@ class SupervisorDocIT implements WithAssertions {
                     throw new RuntimeException("always crashes");
                 });
 
-        Awaitility.await()
-                .atMost(10, TimeUnit.SECONDS)
-                .until(() -> crashCount.get() >= 2);
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).until(() -> crashCount.get() >= 2);
 
         // Supervisor has exceeded restart intensity — it shuts down
         assertThat(crashCount.get()).isGreaterThanOrEqualTo(2);

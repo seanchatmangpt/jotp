@@ -156,9 +156,10 @@ class InputValidationTest implements WithAssertions {
 
     @Test
     void validator_valid_whenAllChecksPass() {
-        var result = InputValidation.Validator.<String>of()
-                .check("field", true, "must be true")
-                .validate(() -> "ok");
+        var result =
+                InputValidation.Validator.<String>of()
+                        .check("field", true, "must be true")
+                        .validate(() -> "ok");
 
         assertThat(result.isValid()).isTrue();
         assertThat(result).isInstanceOf(InputValidation.ValidationResult.Valid.class);
@@ -168,10 +169,11 @@ class InputValidationTest implements WithAssertions {
 
     @Test
     void validator_invalid_whenAnyCheckFails() {
-        var result = InputValidation.Validator.<String>of()
-                .check("name", false, "must not be empty")
-                .check("age", true, "ok")
-                .validate(() -> "unreachable");
+        var result =
+                InputValidation.Validator.<String>of()
+                        .check("name", false, "must not be empty")
+                        .check("age", true, "ok")
+                        .validate(() -> "unreachable");
 
         assertThat(result.isValid()).isFalse();
         assertThat(result).isInstanceOf(InputValidation.ValidationResult.Invalid.class);
@@ -182,11 +184,12 @@ class InputValidationTest implements WithAssertions {
 
     @Test
     void validator_accumulatesMultipleErrors() {
-        var result = InputValidation.Validator.<String>of()
-                .requireNonBlank("name", "")
-                .requireNonNull("email", null)
-                .check("age", false, "invalid age")
-                .validate(() -> "unreachable");
+        var result =
+                InputValidation.Validator.<String>of()
+                        .requireNonBlank("name", "")
+                        .requireNonNull("email", null)
+                        .check("age", false, "invalid age")
+                        .validate(() -> "unreachable");
 
         var errors = ((InputValidation.ValidationResult.Invalid<String>) result).errors();
         assertThat(errors).hasSize(3);
@@ -194,19 +197,19 @@ class InputValidationTest implements WithAssertions {
 
     @Test
     void validator_validateOrThrow_throwsOnErrors() {
-        assertThatThrownBy(() ->
-                InputValidation.Validator.<String>of()
-                        .check("x", false, "bad")
-                        .validateOrThrow(() -> "ok"))
+        assertThatThrownBy(
+                        () ->
+                                InputValidation.Validator.<String>of()
+                                        .check("x", false, "bad")
+                                        .validateOrThrow(() -> "ok"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Validation failed");
     }
 
     @Test
     void validationResult_map_transformsValidValue() {
-        var result = InputValidation.Validator.<String>of()
-                .check("x", true, "ok")
-                .validate(() -> "42");
+        var result =
+                InputValidation.Validator.<String>of().check("x", true, "ok").validate(() -> "42");
         var mapped = result.map(Integer::parseInt);
         assertThat(mapped.isValid()).isTrue();
     }
@@ -217,8 +220,9 @@ class InputValidationTest implements WithAssertions {
         var folded = valid.fold(String::length, errors -> -1);
         assertThat(folded).isEqualTo(5);
 
-        var invalid = new InputValidation.ValidationResult.Invalid<String>(
-                List.of(new InputValidation.ValidationError("f", "bad")));
+        var invalid =
+                new InputValidation.ValidationResult.Invalid<String>(
+                        List.of(new InputValidation.ValidationError("f", "bad")));
         var foldedErr = invalid.fold(String::length, errors -> errors.size());
         assertThat(foldedErr).isEqualTo(1);
     }

@@ -12,9 +12,9 @@ import java.util.function.Consumer;
  *
  * <p>Generated from {@code templates/java/messaging/pub-sub.tera}.
  *
- * <p>Implements topic-based publish-subscribe messaging. Publishers send messages to topics,
- * and all subscribers to that topic receive the message. This enables loose coupling between
- * components in distributed systems.
+ * <p>Implements topic-based publish-subscribe messaging. Publishers send messages to topics, and
+ * all subscribers to that topic receive the message. This enables loose coupling between components
+ * in distributed systems.
  *
  * <p><strong>Pattern contracts validated:</strong>
  *
@@ -106,9 +106,7 @@ public final class PubSubPatterns<T> {
         return new ArrayList<>(topicSubscribers.keySet());
     }
 
-    /**
-     * Clears all subscribers from all topics.
-     */
+    /** Clears all subscribers from all topics. */
     public void clear() {
         topicSubscribers.clear();
     }

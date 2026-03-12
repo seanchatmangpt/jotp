@@ -1,7 +1,7 @@
 package io.github.seanchatmangpt.jotp.test;
 
-import java.util.concurrent.TimeUnit;
 import io.github.seanchatmangpt.jotp.Proc;
+import java.util.concurrent.TimeUnit;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 

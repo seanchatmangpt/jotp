@@ -1,18 +1,19 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
  * Result type — sealed interface for success/failure outcomes (railway-oriented programming).
  *
- * <p>Joe Armstrong: "In Erlang, we don't throw exceptions across process boundaries.
- * We return {@code {ok, Value}} or {@code {error, Reason}}. This forces the caller to
- * handle both cases explicitly."
+ * <p>Joe Armstrong: "In Erlang, we don't throw exceptions across process boundaries. We return
+ * {@code {ok, Value}} or {@code {error, Reason}}. This forces the caller to handle both cases
+ * explicitly."
  *
- * <p>This is the Java 26 equivalent of Erlang/OTP's tagged tuples. Instead of throwing
- * exceptions that propagate invisibly up the call stack, operations return a {@code Result}
- * that the caller must pattern-match on — making error handling explicit and composable.
+ * <p>This is the Java 26 equivalent of Erlang/OTP's tagged tuples. Instead of throwing exceptions
+ * that propagate invisibly up the call stack, operations return a {@code Result} that the caller
+ * must pattern-match on — making error handling explicit and composable.
  *
  * <p><strong>Mapping to Erlang:</strong>
  *
@@ -27,9 +28,9 @@ import java.util.function.Supplier;
  *
  * <p><strong>Railway-oriented programming:</strong>
  *
- * <p>Think of success and failure as two parallel tracks. Operations on the success track
- * ({@link #map}, {@link #flatMap}) are skipped if the result is already on the failure track.
- * This lets you chain operations without nested if-statements:
+ * <p>Think of success and failure as two parallel tracks. Operations on the success track ({@link
+ * #map}, {@link #flatMap}) are skipped if the result is already on the failure track. This lets you
+ * chain operations without nested if-statements:
  *
  * <pre>{@code
  * Result<Order, OrderError> result = Result.of(() -> validate(request))
@@ -52,7 +53,8 @@ import java.util.function.Supplier;
  * <p>Both conventions are equivalent; use whichever reads better in context.
  *
  * @param <S> success type — the value carried on success
- * @param <F> failure type — the error carried on failure (often {@code Exception} or a sealed error hierarchy)
+ * @param <F> failure type — the error carried on failure (often {@code Exception} or a sealed error
+ *     hierarchy)
  * @see CrashRecovery
  * @see Parallel
  */
@@ -76,7 +78,9 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
      * @param value the success value
      * @return {@code Ok(value)}
      */
-    static <S, F> Result<S, F> ok(S value) { return new Ok<>(value); }
+    static <S, F> Result<S, F> ok(S value) {
+        return new Ok<>(value);
+    }
 
     /**
      * Create a failed result.
@@ -84,7 +88,9 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
      * @param error the error value
      * @return {@code Err(error)}
      */
-    static <S, F> Result<S, F> err(F error) { return new Err<>(error); }
+    static <S, F> Result<S, F> err(F error) {
+        return new Err<>(error);
+    }
 
     // Aliases for convenience
     /**
@@ -93,7 +99,9 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
      * @param value the success value
      * @return {@code Success(value)}
      */
-    static <S, F> Result<S, F> success(S value) { return new Success<>(value); }
+    static <S, F> Result<S, F> success(S value) {
+        return new Success<>(value);
+    }
 
     /**
      * Alias for {@link #err(Object)} — more explicit naming.
@@ -101,13 +109,15 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
      * @param error the error value
      * @return {@code Failure(error)}
      */
-    static <S, F> Result<S, F> failure(F error) { return new Failure<>(error); }
+    static <S, F> Result<S, F> failure(F error) {
+        return new Failure<>(error);
+    }
 
     /**
      * Wrap a supplier that may throw — converts exceptions to {@code Err}.
      *
-     * <p>This is the bridge between Java's exception-based APIs and railway-oriented
-     * programming. Any exception thrown by {@code supplier} becomes an {@code Err}.
+     * <p>This is the bridge between Java's exception-based APIs and railway-oriented programming.
+     * Any exception thrown by {@code supplier} becomes an {@code Err}.
      *
      * @param supplier the operation to execute
      * @return {@code Ok(value)} if successful, {@code Err(exception)} if an exception was thrown
@@ -122,19 +132,25 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     }
 
     /** Returns {@code true} if this is a successful result. */
-    default boolean isSuccess() { return this instanceof Ok<S, F> || this instanceof Success<S, F>; }
+    default boolean isSuccess() {
+        return this instanceof Ok<S, F> || this instanceof Success<S, F>;
+    }
 
     /** Returns {@code true} if this is a failed result. */
-    default boolean isError() { return this instanceof Err<S, F> || this instanceof Failure<S, F>; }
+    default boolean isError() {
+        return this instanceof Err<S, F> || this instanceof Failure<S, F>;
+    }
 
     /** Alias for {@link #isError()}. */
-    default boolean isFailure() { return isError(); }
+    default boolean isFailure() {
+        return isError();
+    }
 
     /**
      * Transform the success value — railway "map" operation.
      *
-     * <p>If this is a success, applies {@code mapper} to the value and returns the new result.
-     * If this is a failure, returns the same failure unchanged (short-circuits).
+     * <p>If this is a success, applies {@code mapper} to the value and returns the new result. If
+     * this is a failure, returns the same failure unchanged (short-circuits).
      *
      * @param mapper transformation function
      * @return new result with transformed value, or the same failure
@@ -151,8 +167,8 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     /**
      * Chain operations that return Results — railway "flatMap" operation.
      *
-     * <p>If this is a success, applies {@code mapper} to get the next result.
-     * If this is a failure, returns the same failure unchanged (short-circuits).
+     * <p>If this is a success, applies {@code mapper} to get the next result. If this is a failure,
+     * returns the same failure unchanged (short-circuits).
      *
      * @param mapper function returning the next result
      * @return result from mapper, or the same failure
@@ -185,9 +201,8 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     /**
      * Get the success value, or throw if this is a failure.
      *
-     * <p>If the failure value is a {@link Throwable}, it's wrapped in a
-     * {@link RuntimeException} and thrown. Otherwise, the failure value
-     * is converted to a string and thrown.
+     * <p>If the failure value is a {@link Throwable}, it is rethrown directly (without wrapping).
+     * Otherwise, the failure value is converted to a string and wrapped in a {@link RuntimeException}.
      *
      * @return the success value
      * @throws RuntimeException if this is a failure
@@ -198,10 +213,12 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
             case Ok<S, F>(var v) -> v;
             case Success<S, F>(var v) -> v;
             case Err<S, F>(var e) -> {
+                if (e instanceof RuntimeException re) throw re;
                 if (e instanceof Throwable t) throw new RuntimeException(t);
                 throw new RuntimeException(String.valueOf(e));
             }
             case Failure<S, F>(var e) -> {
+                if (e instanceof RuntimeException re) throw re;
                 if (e instanceof Throwable t) throw new RuntimeException(t);
                 throw new RuntimeException(String.valueOf(e));
             }
@@ -211,21 +228,88 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     /**
      * Fold both outcomes into a single value — "eliminator" for the Result type.
      *
-     * <p>Handles both success and failure cases, returning a unified type.
-     * This is the pattern-matching equivalent of {@code match} in Rust or
-     * {@code either} in Haskell.
+     * <p>Handles both success and failure cases, returning a unified type. This is the
+     * pattern-matching equivalent of {@code match} in Rust or {@code either} in Haskell.
      *
      * @param onSuccess function to apply on success
      * @param onError function to apply on failure
      * @return result of applying the appropriate function
      */
     @SuppressWarnings("unchecked")
-    default <T> T fold(Function<? super S, ? extends T> onSuccess, Function<? super F, ? extends T> onError) {
+    default <T> T fold(
+            Function<? super S, ? extends T> onSuccess, Function<? super F, ? extends T> onError) {
         return switch (this) {
             case Ok<S, F>(var v) -> onSuccess.apply(v);
             case Success<S, F>(var v) -> onSuccess.apply(v);
             case Err<S, F>(var e) -> onError.apply(e);
             case Failure<S, F>(var e) -> onError.apply(e);
+        };
+    }
+
+    /**
+     * Apply a side-effect action on success, without changing the result.
+     *
+     * <p>If this is a success, applies {@code action} to the value and returns the same result. If
+     * this is a failure, the action is not applied and the same failure is returned. This is useful
+     * for logging, auditing, or other side effects that should not change the railway flow.
+     *
+     * <p><strong>Example:</strong>
+     *
+     * <pre>{@code
+     * Result<Order, OrderError> result = Result.of(() -> validate(request))
+     *     .flatMap(valid -> Result.of(() -> calculatePrice(valid)))
+     *     .peek(order -> auditLog.add(order))
+     *     .peek(order -> metrics.recordOrder(order));
+     * }</pre>
+     *
+     * @param action the side-effect to apply if this is a success (must not be null)
+     * @return this same result unchanged
+     * @throws NullPointerException if {@code action} is null
+     */
+    default Result<S, F> peek(Consumer<? super S> action) {
+        return switch (this) {
+            case Ok<S, F>(var v) -> {
+                action.accept(v);
+                yield this;
+            }
+            case Success<S, F>(var v) -> {
+                action.accept(v);
+                yield this;
+            }
+            case Err<S, F> ignored -> this;
+            case Failure<S, F> ignored -> this;
+        };
+    }
+
+    /**
+     * Recover from a failure by applying a recovery function, returning a new Result.
+     *
+     * <p>If this is a success, returns the same success unchanged. If this is a failure, applies
+     * {@code handler} to the error value and returns the result of the handler. This is the
+     * failure-track equivalent of {@link #flatMap(Function)}, allowing you to recover from errors
+     * by producing a new {@code Result}.
+     *
+     * <p><strong>Example:</strong>
+     *
+     * <pre>{@code
+     * Result<Data, Exception> result = Result.of(() -> fetchData())
+     *     .recover(error -> {
+     *         logger.warn("Fetch failed, using cache: " + error.getMessage());
+     *         return Result.ok(loadFromCache());
+     *     });
+     * }</pre>
+     *
+     * @param handler function that transforms an error into a new Result (must not be null)
+     * @return the same result if success, or the result of applying handler to the error
+     * @throws NullPointerException if {@code handler} is null
+     */
+    @SuppressWarnings("unchecked")
+    default Result<S, F> recover(Function<? super F, ? extends Result<S, F>> handler) {
+        return switch (this) {
+            case Ok<S, F> ignored -> this;
+            case Success<S, F> ignored -> this;
+            case Err<S, F>(var e) -> handler.apply(e);
+            case Failure<S, F>(var e) -> handler.apply(e);
         };
     }
 }

@@ -2,28 +2,8 @@ package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.LongAdder;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
 import io.github.seanchatmangpt.jotp.EventManager;
-import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.DataStatusType.Good;
@@ -35,9 +15,17 @@ import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Sample;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.SessionId;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.SessionState;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Timestamp;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAdder;
 import org.assertj.core.api.WithAssertions;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -48,24 +36,26 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 /**
  * Stress tests for McLaren Atlas API → JOTP Message Patterns.
  *
- * <p>Validates theoretical baselines from phd-thesis-atlas-message-patterns.md
- * with actual throughput measurements.
+ * <p>Validates theoretical baselines from phd-thesis-atlas-message-patterns.md with actual
+ * throughput measurements.
  *
  * <h2>Proven Baselines (Inherited)</h2>
+ *
  * <ul>
- *   <li>Message Channel: 30.1M msg/s</li>
- *   <li>Event Fanout: 1.1B events/s</li>
- *   <li>Request-Reply: 78K roundtrip/s</li>
- *   <li>Competing Consumers: 2.2M consume/s</li>
+ *   <li>Message Channel: 30.1M msg/s
+ *   <li>Event Fanout: 1.1B events/s
+ *   <li>Request-Reply: 78K roundtrip/s
+ *   <li>Competing Consumers: 2.2M consume/s
  * </ul>
  *
  * <h2>Theoretical Atlas Baselines</h2>
+ *
  * <ul>
- *   <li>Session.Open: 2M+ cmd/s</li>
- *   <li>WriteSample: 100M+ events/s</li>
- *   <li>GetParameters: 78K+ rt/s</li>
- *   <li>FileSession.Save: 50K+ saves/s</li>
- *   <li>Display.Update: 1M+ updates/s</li>
+ *   <li>Session.Open: 2M+ cmd/s
+ *   <li>WriteSample: 100M+ events/s
+ *   <li>GetParameters: 78K+ rt/s
+ *   <li>FileSession.Save: 50K+ saves/s
+ *   <li>Display.Update: 1M+ updates/s
  * </ul>
  */
 @Timeout(180)
@@ -78,21 +68,21 @@ class AtlasAPIStressTest implements WithAssertions {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // SQLRaceAPI baselines (derived from proven JOTP baselines)
-    static final double SESSION_OPEN_BASELINE = 2_000_000.0;        // Command Message
-    static final double WRITE_SAMPLE_BASELINE = 100_000_000.0;      // Event Message (1% of fanout)
-    static final double GET_PARAMETERS_BASELINE = 78_000.0;         // Request-Reply
-    static final double CREATE_LAP_BASELINE = 500_000.0;            // Correlation ID
-    static final double GET_STATISTICS_BASELINE = 100_000.0;        // Document Message
+    static final double SESSION_OPEN_BASELINE = 2_000_000.0; // Command Message
+    static final double WRITE_SAMPLE_BASELINE = 100_000_000.0; // Event Message (1% of fanout)
+    static final double GET_PARAMETERS_BASELINE = 78_000.0; // Request-Reply
+    static final double CREATE_LAP_BASELINE = 500_000.0; // Correlation ID
+    static final double GET_STATISTICS_BASELINE = 100_000.0; // Document Message
 
     // FileSessionAPI baselines
-    static final double FILE_SAVE_BASELINE = 50_000.0;              // Claim Check (I/O limited)
-    static final double FILE_LOAD_BASELINE = 100_000.0;             // Content Filter
-    static final double FILE_STREAM_BASELINE = 1_000_000.0;         // Message Sequence
+    static final double FILE_SAVE_BASELINE = 50_000.0; // Claim Check (I/O limited)
+    static final double FILE_LOAD_BASELINE = 100_000.0; // Content Filter
+    static final double FILE_STREAM_BASELINE = 1_000_000.0; // Message Sequence
 
     // DisplayAPI baselines
-    static final double DISPLAY_UPDATE_BASELINE = 1_000_000.0;      // Event-Driven Consumer
-    static final double PLUGIN_INIT_BASELINE = 10_000.0;            // Service Activator
-    static final double TOOLWINDOW_CREATE_BASELINE = 100_000.0;     // Message Bus
+    static final double DISPLAY_UPDATE_BASELINE = 1_000_000.0; // Event-Driven Consumer
+    static final double PLUGIN_INIT_BASELINE = 10_000.0; // Service Activator
+    static final double TOOLWINDOW_CREATE_BASELINE = 100_000.0; // Message Bus
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // BASELINE VALIDATION HELPER
@@ -100,16 +90,17 @@ class AtlasAPIStressTest implements WithAssertions {
 
     void assertBaseline(String metric, double actual, double baseline) {
         double ratio = actual / baseline;
-        System.out.printf("[%s] actual=%,.0f baseline=%,.0f ratio=%.2fx%n",
-            metric, actual, baseline, ratio);
+        System.out.printf(
+                "[%s] actual=%,.0f baseline=%,.0f ratio=%.2fx%n", metric, actual, baseline, ratio);
 
         // Use 50% of baseline as minimum to account for test environment variance
         // (thesis baselines are conservative production targets)
         double minimumThreshold = baseline * 0.5;
         assertThat(actual)
-            .as("%s: actual=%,.0f should meet baseline of %,.0f (minimum %.0f)"
-                .formatted(metric, actual, baseline, minimumThreshold))
-            .isGreaterThan(minimumThreshold);
+                .as(
+                        "%s: actual=%,.0f should meet baseline of %,.0f (minimum %.0f)"
+                                .formatted(metric, actual, baseline, minimumThreshold))
+                .isGreaterThan(minimumThreshold);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -130,16 +121,21 @@ class AtlasAPIStressTest implements WithAssertions {
             }
 
             record SessionState(SessionId currentId, int openCount) {
-                static SessionState initial() { return new SessionState(null, 0); }
+                static SessionState initial() {
+                    return new SessionState(null, 0);
+                }
             }
 
-            var session = new Proc<>(SessionState.initial(), (SessionState s, Object msg) -> {
-                if (msg instanceof SessionCmd.Open open) {
-                    processed.incrementAndGet();
-                    return new SessionState(open.id(), s.openCount() + 1);
-                }
-                return s;
-            });
+            var session =
+                    new Proc<>(
+                            SessionState.initial(),
+                            (SessionState s, Object msg) -> {
+                                if (msg instanceof SessionCmd.Open open) {
+                                    processed.incrementAndGet();
+                                    return new SessionState(open.id(), s.openCount() + 1);
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 10_000; i++) {
@@ -160,8 +156,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[Session.Open] %d commands in %.2f ms = %,.0f cmd/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[Session.Open] %d commands in %.2f ms = %,.0f cmd/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("Session.Open", throughput, SESSION_OPEN_BASELINE);
 
@@ -205,8 +202,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = expectedDeliveries * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[WriteSample] events=%d handlers=%d deliveries=%d in %.2f ms = %,.0f deliveries/s%n",
-                events, handlerCount, expectedDeliveries, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[WriteSample] events=%d handlers=%d deliveries=%d in %.2f ms = %,.0f deliveries/s%n",
+                    events, handlerCount, expectedDeliveries, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("WriteSample", throughput, WRITE_SAMPLE_BASELINE);
 
@@ -216,16 +214,21 @@ class AtlasAPIStressTest implements WithAssertions {
         @Test
         @DisplayName("Session.GetParameters: 78K+ round-trips/second — thesis baseline")
         void getParameters_78KRoundTripsPerSecond() throws Exception {
-            var params = List.of(
-                new ParameterSpec(new ParameterId("ENGINE_RPM"), "Engine RPM", 0, 15000, "rpm"),
-                new ParameterSpec(new ParameterId("BRAKE_TEMP"), "Brake Temp", 0, 1200, "C")
-            );
+            var params =
+                    List.of(
+                            new ParameterSpec(
+                                    new ParameterId("ENGINE_RPM"), "Engine RPM", 0, 15000, "rpm"),
+                            new ParameterSpec(
+                                    new ParameterId("BRAKE_TEMP"), "Brake Temp", 0, 1200, "C"));
 
             record SessionState(List<ParameterSpec> parameters) {
-                static SessionState initial(List<ParameterSpec> p) { return new SessionState(p); }
+                static SessionState initial(List<ParameterSpec> p) {
+                    return new SessionState(p);
+                }
             }
 
-            var session = new Proc<>(SessionState.initial(params), (SessionState s, Object msg) -> s);
+            var session =
+                    new Proc<>(SessionState.initial(params), (SessionState s, Object msg) -> s);
 
             // Warmup
             for (int i = 0; i < 1_000; i++) {
@@ -243,8 +246,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[GetParameters] %d round-trips in %.2f ms = %,.0f rt/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[GetParameters] %d round-trips in %.2f ms = %,.0f rt/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("GetParameters", throughput, GET_PARAMETERS_BASELINE);
 
@@ -258,22 +262,27 @@ class AtlasAPIStressTest implements WithAssertions {
             var processed = new AtomicInteger(0);
 
             record LapState(List<LapNumber> laps) {
-                static LapState initial() { return new LapState(new ArrayList<>()); }
+                static LapState initial() {
+                    return new LapState(new ArrayList<>());
+                }
             }
 
             interface LapMsg {
                 record Create(LapNumber lap, Timestamp beacon) implements LapMsg {}
             }
 
-            var lapManager = new Proc<>(LapState.initial(), (LapState s, Object msg) -> {
-                if (msg instanceof LapMsg.Create create) {
-                    processed.incrementAndGet();
-                    var newLaps = new ArrayList<>(s.laps());
-                    newLaps.add(create.lap());
-                    return new LapState(newLaps);
-                }
-                return s;
-            });
+            var lapManager =
+                    new Proc<>(
+                            LapState.initial(),
+                            (LapState s, Object msg) -> {
+                                if (msg instanceof LapMsg.Create create) {
+                                    processed.incrementAndGet();
+                                    var newLaps = new ArrayList<>(s.laps());
+                                    newLaps.add(create.lap());
+                                    return new LapState(newLaps);
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 10_000; i++) {
@@ -294,8 +303,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[CreateLap] %d lap correlations in %.2f ms = %,.0f corr/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[CreateLap] %d lap correlations in %.2f ms = %,.0f corr/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("CreateLap", throughput, CREATE_LAP_BASELINE);
 
@@ -306,16 +316,24 @@ class AtlasAPIStressTest implements WithAssertions {
         @DisplayName("Session.GetStatistics: 100K+ document queries/second — thesis baseline")
         void getStatistics_100KDocumentQueriesPerSecond() throws Exception {
             record Stats(int sampleCount, int lapCount, double avgValue) {
-                static Stats initial() { return new Stats(0, 0, 0.0); }
+                static Stats initial() {
+                    return new Stats(0, 0, 0.0);
+                }
             }
 
-            var stats = new Proc<>(Stats.initial(), (Stats s, Object msg) -> {
-                if (msg instanceof Sample sample) {
-                    return new Stats(s.sampleCount() + 1, s.lapCount(),
-                        (s.avgValue() * s.sampleCount() + sample.rawValue()) / (s.sampleCount() + 1));
-                }
-                return s;
-            });
+            var stats =
+                    new Proc<>(
+                            Stats.initial(),
+                            (Stats s, Object msg) -> {
+                                if (msg instanceof Sample sample) {
+                                    return new Stats(
+                                            s.sampleCount() + 1,
+                                            s.lapCount(),
+                                            (s.avgValue() * s.sampleCount() + sample.rawValue())
+                                                    / (s.sampleCount() + 1));
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 1_000; i++) {
@@ -333,8 +351,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[GetStatistics] %d document queries in %.2f ms = %,.0f queries/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[GetStatistics] %d document queries in %.2f ms = %,.0f queries/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("GetStatistics", throughput, GET_STATISTICS_BASELINE);
 
@@ -358,22 +377,32 @@ class AtlasAPIStressTest implements WithAssertions {
             record ClaimCheck(SessionId id, String location, int checksum) {}
 
             record FileStoreState(Map<SessionId, ClaimCheck> claims) {
-                static FileStoreState initial() { return new FileStoreState(new HashMap<>()); }
+                static FileStoreState initial() {
+                    return new FileStoreState(new HashMap<>());
+                }
             }
 
             interface FileCmd {
                 record Save(SessionId id, int checksum) implements FileCmd {}
             }
 
-            var fileStore = new Proc<>(FileStoreState.initial(), (FileStoreState s, Object msg) -> {
-                if (msg instanceof FileCmd.Save save) {
-                    processed.incrementAndGet();
-                    var newClaims = new HashMap<>(s.claims());
-                    newClaims.put(save.id(), new ClaimCheck(save.id(), "/path/" + save.id(), save.checksum()));
-                    return new FileStoreState(newClaims);
-                }
-                return s;
-            });
+            var fileStore =
+                    new Proc<>(
+                            FileStoreState.initial(),
+                            (FileStoreState s, Object msg) -> {
+                                if (msg instanceof FileCmd.Save save) {
+                                    processed.incrementAndGet();
+                                    var newClaims = new HashMap<>(s.claims());
+                                    newClaims.put(
+                                            save.id(),
+                                            new ClaimCheck(
+                                                    save.id(),
+                                                    "/path/" + save.id(),
+                                                    save.checksum()));
+                                    return new FileStoreState(newClaims);
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 5_000; i++) {
@@ -394,8 +423,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[FileSave] %d claim checks in %.2f ms = %,.0f saves/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[FileSave] %d claim checks in %.2f ms = %,.0f saves/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("FileSave", throughput, FILE_SAVE_BASELINE);
 
@@ -408,22 +438,27 @@ class AtlasAPIStressTest implements WithAssertions {
             var processed = new AtomicInteger(0);
 
             record FileStoreState(Map<SessionId, String> cache) {
-                static FileStoreState initial() { return new FileStoreState(new HashMap<>()); }
+                static FileStoreState initial() {
+                    return new FileStoreState(new HashMap<>());
+                }
             }
 
             interface LoadCmd {
                 record Load(SessionId id, String filter) implements LoadCmd {}
             }
 
-            var fileStore = new Proc<>(FileStoreState.initial(), (FileStoreState s, Object msg) -> {
-                if (msg instanceof LoadCmd.Load load) {
-                    processed.incrementAndGet();
-                    var newCache = new HashMap<>(s.cache());
-                    newCache.put(load.id(), "filtered:" + load.filter());
-                    return new FileStoreState(newCache);
-                }
-                return s;
-            });
+            var fileStore =
+                    new Proc<>(
+                            FileStoreState.initial(),
+                            (FileStoreState s, Object msg) -> {
+                                if (msg instanceof LoadCmd.Load load) {
+                                    processed.incrementAndGet();
+                                    var newCache = new HashMap<>(s.cache());
+                                    newCache.put(load.id(), "filtered:" + load.filter());
+                                    return new FileStoreState(newCache);
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 10_000; i++) {
@@ -444,8 +479,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[FileLoad] %d filtered loads in %.2f ms = %,.0f loads/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[FileLoad] %d filtered loads in %.2f ms = %,.0f loads/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("FileLoad", throughput, FILE_LOAD_BASELINE);
 
@@ -460,16 +496,22 @@ class AtlasAPIStressTest implements WithAssertions {
             record StreamBatch(int seqNum, int itemCount) {}
 
             record StreamState(int nextSeq, int totalItems) {
-                static StreamState initial() { return new StreamState(0, 0); }
+                static StreamState initial() {
+                    return new StreamState(0, 0);
+                }
             }
 
-            var streamer = new Proc<>(StreamState.initial(), (StreamState s, Object msg) -> {
-                if (msg instanceof StreamBatch batch) {
-                    processed.addAndGet(batch.itemCount());
-                    return new StreamState(s.nextSeq() + 1, s.totalItems() + batch.itemCount());
-                }
-                return s;
-            });
+            var streamer =
+                    new Proc<>(
+                            StreamState.initial(),
+                            (StreamState s, Object msg) -> {
+                                if (msg instanceof StreamBatch batch) {
+                                    processed.addAndGet(batch.itemCount());
+                                    return new StreamState(
+                                            s.nextSeq() + 1, s.totalItems() + batch.itemCount());
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 10_000; i++) {
@@ -492,8 +534,9 @@ class AtlasAPIStressTest implements WithAssertions {
             int totalItems = batches * itemsPerBatch;
             double throughput = totalItems * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[FileStream] batches=%d items/batch=%d total=%d in %.2f ms = %,.0f items/s%n",
-                batches, itemsPerBatch, totalItems, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[FileStream] batches=%d items/batch=%d total=%d in %.2f ms = %,.0f items/s%n",
+                    batches, itemsPerBatch, totalItems, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("FileStream", throughput, FILE_STREAM_BASELINE);
 
@@ -516,25 +559,31 @@ class AtlasAPIStressTest implements WithAssertions {
 
             interface DisplayEvent {
                 record RpmUpdate(int value) implements DisplayEvent {}
+
                 record TempUpdate(int wheel, double temp) implements DisplayEvent {}
             }
 
             record DisplayState(int rpm, Map<Integer, Double> temps) {
-                static DisplayState initial() { return new DisplayState(0, new HashMap<>()); }
+                static DisplayState initial() {
+                    return new DisplayState(0, new HashMap<>());
+                }
             }
 
-            var display = new Proc<>(DisplayState.initial(), (DisplayState s, Object msg) -> {
-                if (msg instanceof DisplayEvent.RpmUpdate rpm) {
-                    processed.incrementAndGet();
-                    return new DisplayState(rpm.value(), s.temps());
-                } else if (msg instanceof DisplayEvent.TempUpdate temp) {
-                    processed.incrementAndGet();
-                    var newTemps = new HashMap<>(s.temps());
-                    newTemps.put(temp.wheel(), temp.temp());
-                    return new DisplayState(s.rpm(), newTemps);
-                }
-                return s;
-            });
+            var display =
+                    new Proc<>(
+                            DisplayState.initial(),
+                            (DisplayState s, Object msg) -> {
+                                if (msg instanceof DisplayEvent.RpmUpdate rpm) {
+                                    processed.incrementAndGet();
+                                    return new DisplayState(rpm.value(), s.temps());
+                                } else if (msg instanceof DisplayEvent.TempUpdate temp) {
+                                    processed.incrementAndGet();
+                                    var newTemps = new HashMap<>(s.temps());
+                                    newTemps.put(temp.wheel(), temp.temp());
+                                    return new DisplayState(s.rpm(), newTemps);
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 10_000; i++) {
@@ -555,8 +604,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[DisplayUpdate] %d updates in %.2f ms = %,.0f updates/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[DisplayUpdate] %d updates in %.2f ms = %,.0f updates/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("DisplayUpdate", throughput, DISPLAY_UPDATE_BASELINE);
 
@@ -570,21 +620,30 @@ class AtlasAPIStressTest implements WithAssertions {
 
             interface PluginCmd {
                 record Initialize(String name) implements PluginCmd {}
+
                 record Start() implements PluginCmd {}
             }
 
             record PluginState(String name, boolean initialized) {
-                static PluginState initial() { return new PluginState(null, false); }
+                static PluginState initial() {
+                    return new PluginState(null, false);
+                }
             }
 
-            var sup = new Supervisor("plugin-stress-sv", Strategy.ONE_FOR_ONE, 1000, Duration.ofMinutes(5));
-            var plugin = sup.supervise("plugin", PluginState.initial(), (PluginState s, Object msg) -> {
-                if (msg instanceof PluginCmd.Initialize init) {
-                    processed.incrementAndGet();
-                    return new PluginState(init.name(), true);
-                }
-                return s;
-            });
+            var sup =
+                    new Supervisor(
+                            "plugin-stress-sv", Strategy.ONE_FOR_ONE, 1000, Duration.ofMinutes(5));
+            var plugin =
+                    sup.supervise(
+                            "plugin",
+                            PluginState.initial(),
+                            (PluginState s, Object msg) -> {
+                                if (msg instanceof PluginCmd.Initialize init) {
+                                    processed.incrementAndGet();
+                                    return new PluginState(init.name(), true);
+                                }
+                                return s;
+                            });
 
             // Warmup
             for (int i = 0; i < 1_000; i++) {
@@ -605,8 +664,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[PluginInit] %d activations in %.2f ms = %,.0f activations/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[PluginInit] %d activations in %.2f ms = %,.0f activations/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("PluginInit", throughput, PLUGIN_INIT_BASELINE);
 
@@ -627,18 +687,23 @@ class AtlasAPIStressTest implements WithAssertions {
             toolBus.addHandler(e -> deliveries.increment());
 
             record ToolWindowState(Map<String, String> windows) {
-                static ToolWindowState initial() { return new ToolWindowState(new HashMap<>()); }
+                static ToolWindowState initial() {
+                    return new ToolWindowState(new HashMap<>());
+                }
             }
 
-            var toolManager = new Proc<>(ToolWindowState.initial(), (ToolWindowState s, Object msg) -> {
-                if (msg instanceof ToolWindowEvent.Created created) {
-                    processed.incrementAndGet();
-                    var newWindows = new HashMap<>(s.windows());
-                    newWindows.put(created.windowId(), created.title());
-                    return new ToolWindowState(newWindows);
-                }
-                return s;
-            });
+            var toolManager =
+                    new Proc<>(
+                            ToolWindowState.initial(),
+                            (ToolWindowState s, Object msg) -> {
+                                if (msg instanceof ToolWindowEvent.Created created) {
+                                    processed.incrementAndGet();
+                                    var newWindows = new HashMap<>(s.windows());
+                                    newWindows.put(created.windowId(), created.title());
+                                    return new ToolWindowState(newWindows);
+                                }
+                                return s;
+                            });
 
             toolBus.addHandler(toolManager::tell);
 
@@ -662,8 +727,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[ToolWindowCreate] %d creates in %.2f ms = %,.0f creates/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[ToolWindowCreate] %d creates in %.2f ms = %,.0f creates/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("ToolWindowCreate", throughput, TOOLWINDOW_CREATE_BASELINE);
 
@@ -686,20 +752,29 @@ class AtlasAPIStressTest implements WithAssertions {
             var processed = new AtomicInteger(0);
 
             // SQLRace: Session
-            var session = new Proc<>(0, (Integer s, Sample msg) -> {
-                return s + 1;
-            });
+            var session =
+                    new Proc<>(
+                            0,
+                            (Integer s, Sample msg) -> {
+                                return s + 1;
+                            });
 
             // FileSession: Auto-save
-            var fileStore = new Proc<>(0, (Integer s, Sample msg) -> {
-                return s + 1;
-            });
+            var fileStore =
+                    new Proc<>(
+                            0,
+                            (Integer s, Sample msg) -> {
+                                return s + 1;
+                            });
 
             // Display: Update
-            var display = new Proc<>(0, (Integer s, Sample msg) -> {
-                processed.incrementAndGet();
-                return s + 1;
-            });
+            var display =
+                    new Proc<>(
+                            0,
+                            (Integer s, Sample msg) -> {
+                                processed.incrementAndGet();
+                                return s + 1;
+                            });
 
             // Event bus connecting all three
             var telemetryBus = EventManager.<Sample>start();
@@ -732,8 +807,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[FullPipeline] %d samples through 3 APIs in %.2f ms = %,.0f samples/s%n",
-                iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[FullPipeline] %d samples through 3 APIs in %.2f ms = %,.0f samples/s%n",
+                    iterations, elapsed / 1_000_000.0, throughput);
 
             // Cross-pipeline baseline: should handle at least 500K/s
             assertBaseline("FullPipeline", throughput, 500_000.0);
@@ -756,18 +832,22 @@ class AtlasAPIStressTest implements WithAssertions {
 
             // Start competing consumers
             for (int i = 0; i < consumerCount; i++) {
-                var consumer = Thread.ofVirtual().start(() -> {
-                    while (running.get()) {
-                        try {
-                            var sample = queue.poll(10, TimeUnit.MILLISECONDS);
-                            if (sample != null) {
-                                processed.increment();
-                            }
-                        } catch (InterruptedException e) {
-                            break;
-                        }
-                    }
-                });
+                var consumer =
+                        Thread.ofVirtual()
+                                .start(
+                                        () -> {
+                                            while (running.get()) {
+                                                try {
+                                                    var sample =
+                                                            queue.poll(10, TimeUnit.MILLISECONDS);
+                                                    if (sample != null) {
+                                                        processed.increment();
+                                                    }
+                                                } catch (InterruptedException e) {
+                                                    break;
+                                                }
+                                            }
+                                        });
                 consumers.add(consumer);
             }
 
@@ -792,8 +872,9 @@ class AtlasAPIStressTest implements WithAssertions {
             var elapsed = System.nanoTime() - start;
             double throughput = iterations * 1_000_000_000.0 / elapsed;
 
-            System.out.printf("[CompetingConsumers] consumers=%d messages=%d in %.2f ms = %,.0f consume/s%n",
-                consumerCount, iterations, elapsed / 1_000_000.0, throughput);
+            System.out.printf(
+                    "[CompetingConsumers] consumers=%d messages=%d in %.2f ms = %,.0f consume/s%n",
+                    consumerCount, iterations, elapsed / 1_000_000.0, throughput);
 
             assertBaseline("CompetingConsumers", throughput, 2_000_000.0);
 

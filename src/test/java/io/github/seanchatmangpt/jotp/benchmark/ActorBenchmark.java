@@ -1,6 +1,8 @@
 package io.github.seanchatmangpt.jotp.benchmark;
 
 import io.github.seanchatmangpt.jotp.Proc;
+import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -12,12 +14,7 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
-import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * JMH benchmarks for the Actor pattern.
@@ -51,11 +48,17 @@ public class ActorBenchmark {
         echoActor = new Proc<>(0, (_, msg) -> msg);
         rawQueue = new LinkedTransferQueue<>();
         // Consumer thread for raw queue baseline
-        Thread.ofVirtual().start(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                try { rawQueue.take(); } catch (InterruptedException e) { break; }
-            }
-        });
+        Thread.ofVirtual()
+                .start(
+                        () -> {
+                            while (!Thread.currentThread().isInterrupted()) {
+                                try {
+                                    rawQueue.take();
+                                } catch (InterruptedException e) {
+                                    break;
+                                }
+                            }
+                        });
     }
 
     @TearDown(Level.Iteration)

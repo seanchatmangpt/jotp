@@ -7,17 +7,19 @@ import java.util.Optional;
 /**
  * Application configuration holder — OTP's {@code application:get_env/2} in Java.
  *
- * <p>Joe Armstrong: "Configuration should be external to the code. OTP applications
- * read their configuration from the application environment at startup."
+ * <p>Joe Armstrong: "Configuration should be external to the code. OTP applications read their
+ * configuration from the application environment at startup."
  *
  * <p>Provides hierarchical configuration with:
+ *
  * <ul>
- *   <li>Type-safe accessors with defaults</li>
- *   <li>Environment variable interpolation</li>
- *   <li>Immutable snapshot semantics</li>
+ *   <li>Type-safe accessors with defaults
+ *   <li>Environment variable interpolation
+ *   <li>Immutable snapshot semantics
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * ApplicationConfig config = ApplicationConfig.create()
  *     .environment("production")

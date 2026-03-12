@@ -9,8 +9,8 @@ import java.util.function.Consumer;
  * <p>Enterprise Integration Pattern: <em>Message Router</em> (EIP §8.1). A basic routing component
  * that directs messages to destinations based on routing logic (round-robin, alternating, etc.).
  *
- * <p>Erlang analog: a {@code gen_server} maintaining an internal counter or routing state, selecting
- * the next destination deterministically.
+ * <p>Erlang analog: a {@code gen_server} maintaining an internal counter or routing state,
+ * selecting the next destination deterministically.
  *
  * <p>Ported from Vaughn Vernon's Reactive Messaging Patterns (Scala/Akka). In the original, {@code
  * AlternatingRouter} alternates between two processors.

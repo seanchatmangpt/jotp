@@ -9,19 +9,21 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Health checker — OTP-style health monitoring with configurable checks.
  *
- * <p>Joe Armstrong: "In Erlang, supervisors monitor processes and restart them
- * when they fail. Health checks are the proactive version — check before failure."
+ * <p>Joe Armstrong: "In Erlang, supervisors monitor processes and restart them when they fail.
+ * Health checks are the proactive version — check before failure."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Liveness probes</b> — Is the service running?</li>
- *   <li><b>Readiness probes</b> — Is the service ready to accept traffic?</li>
- *   <li><b>Dependency checks</b> — Are required dependencies healthy?</li>
- *   <li><b>Custom checks</b> — Application-specific health logic</li>
- *   <li><b>Aggregated status</b> — Overall health from all checks</li>
+ *   <li><b>Liveness probes</b> — Is the service running?
+ *   <li><b>Readiness probes</b> — Is the service ready to accept traffic?
+ *   <li><b>Dependency checks</b> — Are required dependencies healthy?
+ *   <li><b>Custom checks</b> — Application-specific health logic
+ *   <li><b>Aggregated status</b> — Overall health from all checks
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * HealthChecker checker = HealthChecker.builder()
  *     .check("database", () -> database.isConnected(), Duration.ofSeconds(5))
@@ -64,10 +66,7 @@ public final class HealthChecker implements Application.Infrastructure {
     }
 
     /** Overall health status. */
-    public record Status(
-            HealthStatus overall,
-            Map<String, CheckResult> checks,
-            Instant timestamp) {
+    public record Status(HealthStatus overall, Map<String, CheckResult> checks, Instant timestamp) {
 
         public boolean isHealthy() {
             return overall == HealthStatus.HEALTHY || overall == HealthStatus.DEGRADED;
@@ -97,8 +96,9 @@ public final class HealthChecker implements Application.Infrastructure {
 
     private HealthChecker(String name) {
         this.name = name;
-        this.executor = Executors.newSingleThreadScheduledExecutor(r ->
-                Thread.ofVirtual().name("health-check-" + name).unstarted(r));
+        this.executor =
+                Executors.newSingleThreadScheduledExecutor(
+                        r -> Thread.ofVirtual().name("health-check-" + name).unstarted(r));
     }
 
     // ── Factory methods ──────────────────────────────────────────────────────────
@@ -126,56 +126,50 @@ public final class HealthChecker implements Application.Infrastructure {
             return this;
         }
 
-        /**
-         * Add a health check.
-         */
+        /** Add a health check. */
         public Builder check(String name, Check check, Duration timeout) {
             this.checks.put(name, check);
             this.timeouts.put(name, timeout);
             return this;
         }
 
-        /**
-         * Add a simple boolean health check.
-         */
+        /** Add a simple boolean health check. */
         public Builder check(String name, SimpleCheck check, Duration timeout) {
-            this.checks.put(name, () -> {
-                Instant start = Instant.now();
-                try {
-                    boolean healthy = check.check();
-                    Duration duration = Duration.between(start, Instant.now());
-                    return new CheckResult(
-                            name,
-                            healthy ? HealthStatus.HEALTHY : HealthStatus.UNHEALTHY,
-                            healthy ? "OK" : "Check failed",
-                            Instant.now(),
-                            duration,
-                            Map.of());
-                } catch (Exception e) {
-                    Duration duration = Duration.between(start, Instant.now());
-                    return new CheckResult(
-                            name,
-                            HealthStatus.UNHEALTHY,
-                            e.getMessage(),
-                            Instant.now(),
-                            duration,
-                            Map.of("error", e.getClass().getName()));
-                }
-            });
+            this.checks.put(
+                    name,
+                    () -> {
+                        Instant start = Instant.now();
+                        try {
+                            boolean healthy = check.check();
+                            Duration duration = Duration.between(start, Instant.now());
+                            return new CheckResult(
+                                    name,
+                                    healthy ? HealthStatus.HEALTHY : HealthStatus.UNHEALTHY,
+                                    healthy ? "OK" : "Check failed",
+                                    Instant.now(),
+                                    duration,
+                                    Map.of());
+                        } catch (Exception e) {
+                            Duration duration = Duration.between(start, Instant.now());
+                            return new CheckResult(
+                                    name,
+                                    HealthStatus.UNHEALTHY,
+                                    e.getMessage(),
+                                    Instant.now(),
+                                    duration,
+                                    Map.of("error", e.getClass().getName()));
+                        }
+                    });
             this.timeouts.put(name, timeout);
             return this;
         }
 
-        /**
-         * Add a liveness check (is the service running?).
-         */
+        /** Add a liveness check (is the service running?). */
         public Builder liveness(SimpleCheck check) {
             return check("liveness", check, Duration.ofSeconds(5));
         }
 
-        /**
-         * Add a readiness check (is the service ready for traffic?).
-         */
+        /** Add a readiness check (is the service ready for traffic?). */
         public Builder readiness(SimpleCheck check) {
             return check("readiness", check, Duration.ofSeconds(10));
         }
@@ -190,35 +184,32 @@ public final class HealthChecker implements Application.Infrastructure {
 
     // ── Check registration ───────────────────────────────────────────────────────
 
-    /**
-     * Register a health check.
-     */
+    /** Register a health check. */
     public void registerCheck(String name, Check check, Duration timeout) {
         checks.put(name, check);
         timeouts.put(name, timeout);
     }
 
-    /**
-     * Register a simple health check.
-     */
+    /** Register a simple health check. */
     public void registerCheck(String name, SimpleCheck check, Duration timeout) {
-        registerCheck(name, () -> {
-            Instant start = Instant.now();
-            boolean healthy = check.check();
-            Duration duration = Duration.between(start, Instant.now());
-            return new CheckResult(
-                    name,
-                    healthy ? HealthStatus.HEALTHY : HealthStatus.UNHEALTHY,
-                    healthy ? "OK" : "Check failed",
-                    Instant.now(),
-                    duration,
-                    Map.of());
-        }, timeout);
+        registerCheck(
+                name,
+                () -> {
+                    Instant start = Instant.now();
+                    boolean healthy = check.check();
+                    Duration duration = Duration.between(start, Instant.now());
+                    return new CheckResult(
+                            name,
+                            healthy ? HealthStatus.HEALTHY : HealthStatus.UNHEALTHY,
+                            healthy ? "OK" : "Check failed",
+                            Instant.now(),
+                            duration,
+                            Map.of());
+                },
+                timeout);
     }
 
-    /**
-     * Remove a health check.
-     */
+    /** Remove a health check. */
     public void unregisterCheck(String name) {
         checks.remove(name);
         timeouts.remove(name);
@@ -226,9 +217,7 @@ public final class HealthChecker implements Application.Infrastructure {
 
     // ── Health check execution ───────────────────────────────────────────────────
 
-    /**
-     * Run all health checks and return aggregated status.
-     */
+    /** Run all health checks and return aggregated status. */
     public Status checkStatus() {
         Map<String, CheckResult> results = checkAll();
 
@@ -239,9 +228,7 @@ public final class HealthChecker implements Application.Infrastructure {
         return status;
     }
 
-    /**
-     * Run a single health check by name.
-     */
+    /** Run a single health check by name. */
     public Optional<CheckResult> checkOne(String name) {
         Check check = checks.get(name);
         if (check == null) return Optional.empty();
@@ -250,44 +237,46 @@ public final class HealthChecker implements Application.Infrastructure {
         Instant start = Instant.now();
 
         try {
-            CompletableFuture<CheckResult> future = CompletableFuture.supplyAsync(() -> {
-                try {
-                    return check.check();
-                } catch (Exception e) {
-                    return new CheckResult(
+            CompletableFuture<CheckResult> future =
+                    CompletableFuture.supplyAsync(
+                            () -> {
+                                try {
+                                    return check.check();
+                                } catch (Exception e) {
+                                    return new CheckResult(
+                                            name,
+                                            HealthStatus.UNHEALTHY,
+                                            e.getMessage(),
+                                            Instant.now(),
+                                            Duration.between(start, Instant.now()),
+                                            Map.of("error", e.getClass().getName()));
+                                }
+                            });
+
+            CheckResult result = future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return Optional.of(result);
+        } catch (TimeoutException e) {
+            return Optional.of(
+                    new CheckResult(
+                            name,
+                            HealthStatus.UNHEALTHY,
+                            "Check timed out after " + timeout,
+                            Instant.now(),
+                            timeout,
+                            Map.of("timeout", true)));
+        } catch (Exception e) {
+            return Optional.of(
+                    new CheckResult(
                             name,
                             HealthStatus.UNHEALTHY,
                             e.getMessage(),
                             Instant.now(),
                             Duration.between(start, Instant.now()),
-                            Map.of("error", e.getClass().getName()));
-                }
-            });
-
-            CheckResult result = future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            return Optional.of(result);
-        } catch (TimeoutException e) {
-            return Optional.of(new CheckResult(
-                    name,
-                    HealthStatus.UNHEALTHY,
-                    "Check timed out after " + timeout,
-                    Instant.now(),
-                    timeout,
-                    Map.of("timeout", true)));
-        } catch (Exception e) {
-            return Optional.of(new CheckResult(
-                    name,
-                    HealthStatus.UNHEALTHY,
-                    e.getMessage(),
-                    Instant.now(),
-                    Duration.between(start, Instant.now()),
-                    Map.of("error", e.getClass().getName())));
+                            Map.of("error", e.getClass().getName())));
         }
     }
 
-    /**
-     * Run all health checks.
-     */
+    /** Run all health checks. */
     public Map<String, CheckResult> checkAll() {
         Map<String, CheckResult> results = new LinkedHashMap<>();
 
@@ -298,9 +287,7 @@ public final class HealthChecker implements Application.Infrastructure {
         return results;
     }
 
-    /**
-     * Get the last known status.
-     */
+    /** Get the last known status. */
     public Optional<Status> lastStatus() {
         return Optional.ofNullable(lastStatus.get());
     }
@@ -325,7 +312,8 @@ public final class HealthChecker implements Application.Infrastructure {
         return HealthStatus.DEGRADED;
     }
 
-    // ── Health check interface (not implementing Application.HealthCheck) ───────────────────────────────────
+    // ── Health check interface (not implementing Application.HealthCheck)
+    // ───────────────────────────────────
 
     public String name() {
         return name;

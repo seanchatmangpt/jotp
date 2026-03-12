@@ -44,11 +44,10 @@ import org.junit.jupiter.api.extension.TestWatcher;
  * }
  * }</pre>
  *
- * <p>Output is written to {@code target/site/doctester/<ClassName>.html} and an index is
- * maintained at {@code target/site/doctester/index.html}.
+ * <p>Output is written to {@code target/site/doctester/<ClassName>.html} and an index is maintained
+ * at {@code target/site/doctester/index.html}.
  */
-public final class DocTestExtension
-        implements BeforeAllCallback, AfterAllCallback, TestWatcher {
+public final class DocTestExtension implements BeforeAllCallback, AfterAllCallback, TestWatcher {
 
     // ── Per-class state stored via the store ────────────────────────────────────
 
@@ -94,8 +93,7 @@ public final class DocTestExtension
     @Override
     public void afterAll(ExtensionContext ctx) throws Exception {
         @SuppressWarnings("unchecked")
-        List<DocEntry> entries =
-                (List<DocEntry>) ctx.getStore(NS).get(KEY, List.class);
+        List<DocEntry> entries = (List<DocEntry>) ctx.getStore(NS).get(KEY, List.class);
 
         if (entries == null || entries.isEmpty()) return;
 
@@ -123,14 +121,15 @@ public final class DocTestExtension
         Method method = ctx.getTestMethod().orElse(null);
         if (method == null) return;
 
-        var entry = new DocEntry(
-                ctx.getDisplayName(),
-                status,
-                method.getAnnotation(DocSection.class),
-                method.getAnnotation(DocNote.class),
-                method.getAnnotation(DocCode.class),
-                method.getAnnotation(DocWarning.class),
-                cause);
+        var entry =
+                new DocEntry(
+                        ctx.getDisplayName(),
+                        status,
+                        method.getAnnotation(DocSection.class),
+                        method.getAnnotation(DocNote.class),
+                        method.getAnnotation(DocCode.class),
+                        method.getAnnotation(DocWarning.class),
+                        cause);
         entries.add(entry);
     }
 
@@ -153,7 +152,7 @@ public final class DocTestExtension
                             + " content=\"width=device-width, initial-scale=1\">");
             w.println(
                     "  <link rel=\"stylesheet\""
-                        + " href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\">");
+                            + " href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\">");
             w.printf("  <title>%s — jOTP DocTest</title>%n", escape(title));
             w.println("  <style>");
             w.println("    body { padding: 2rem; }");
@@ -168,8 +167,9 @@ public final class DocTestExtension
                     "<div class=\"container\">%n<h1>%s</h1>%n"
                             + "<p class=\"text-muted\">Generated %s · jOTP DocTest</p>%n",
                     escape(title), Instant.now());
-            w.println("<a href=\"index.html\" class=\"btn btn-sm btn-outline-secondary mb-3\">"
-                    + "← All docs</a>");
+            w.println(
+                    "<a href=\"index.html\" class=\"btn btn-sm btn-outline-secondary mb-3\">"
+                            + "← All docs</a>");
 
             // Group by section
             Map<String, List<DocEntry>> sections = new LinkedHashMap<>();
@@ -181,19 +181,17 @@ public final class DocTestExtension
             for (Map.Entry<String, List<DocEntry>> sec : sections.entrySet()) {
                 w.printf("<h2 class=\"mt-4\">%s</h2>%n", escape(sec.getKey()));
                 for (DocEntry e : sec.getValue()) {
-                    String cssClass = switch (e.status()) {
-                        case "PASSED" -> "test-passed";
-                        case "FAILED" -> "test-failed";
-                        default -> "test-disabled";
-                    };
-                    w.printf("<div class=\"card mb-3 %s\">%n<div class=\"card-body\">%n",
-                            cssClass);
+                    String cssClass =
+                            switch (e.status()) {
+                                case "PASSED" -> "test-passed";
+                                case "FAILED" -> "test-failed";
+                                default -> "test-disabled";
+                            };
+                    w.printf("<div class=\"card mb-3 %s\">%n<div class=\"card-body\">%n", cssClass);
                     w.printf(
                             "<h5 class=\"card-title\">%s "
                                     + "<span class=\"badge bg-%s\">%s</span></h5>%n",
-                            escape(e.displayName()),
-                            badgeBg(e.status()),
-                            e.status());
+                            escape(e.displayName()), badgeBg(e.status()), e.status());
 
                     if (e.note() != null) {
                         w.printf("<p>%s</p>%n", escape(e.note().value()));
@@ -232,8 +230,8 @@ public final class DocTestExtension
             w.println("<!DOCTYPE html><html lang=\"en\"><head>");
             w.println(
                     "<meta charset=\"UTF-8\">"
-                        + "<link rel=\"stylesheet\""
-                        + " href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\">");
+                            + "<link rel=\"stylesheet\""
+                            + " href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\">");
             w.println("<title>jOTP DocTest Index</title></head>");
             w.println("<body><div class=\"container\" style=\"padding:2rem\">");
             w.println("<h1>jOTP DocTest</h1>");
@@ -241,8 +239,7 @@ public final class DocTestExtension
             w.println("<ul class=\"list-group\">");
             for (Map.Entry<String, String> doc : generatedDocs.entrySet()) {
                 w.printf(
-                        "<li class=\"list-group-item\">"
-                                + "<a href=\"%s\">%s</a></li>%n",
+                        "<li class=\"list-group-item\">" + "<a href=\"%s\">%s</a></li>%n",
                         escape(doc.getValue()), escape(doc.getKey()));
             }
             w.println("</ul></div></body></html>");

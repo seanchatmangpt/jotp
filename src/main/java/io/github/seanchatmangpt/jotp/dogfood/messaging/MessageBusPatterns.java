@@ -68,14 +68,15 @@ public final class MessageBusPatterns<T> {
             var future = new CompletableFuture<Void>();
             futures.add(future);
             Thread.ofVirtual()
-                    .start(() -> {
-                        try {
-                            handler.accept(message);
-                            future.complete(null);
-                        } catch (Exception e) {
-                            future.completeExceptionally(e);
-                        }
-                    });
+                    .start(
+                            () -> {
+                                try {
+                                    handler.accept(message);
+                                    future.complete(null);
+                                } catch (Exception e) {
+                                    future.completeExceptionally(e);
+                                }
+                            });
         }
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
@@ -104,9 +105,7 @@ public final class MessageBusPatterns<T> {
         return subscribers.size();
     }
 
-    /**
-     * Clears all subscribers from this bus.
-     */
+    /** Clears all subscribers from this bus. */
     public void clear() {
         subscribers.clear();
     }

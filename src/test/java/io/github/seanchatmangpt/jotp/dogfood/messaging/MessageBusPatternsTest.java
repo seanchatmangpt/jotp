@@ -109,14 +109,15 @@ class MessageBusPatternsTest implements WithAssertions {
     @Test
     void publishSync_waitsForAllHandlers() throws Exception {
         List<String> received = new ArrayList<>();
-        bus.subscribe(msg -> {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            received.add(msg);
-        });
+        bus.subscribe(
+                msg -> {
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    received.add(msg);
+                });
         bus.subscribe(msg -> received.add(msg));
 
         bus.publishSync("delayed");
@@ -142,14 +143,16 @@ class MessageBusPatternsTest implements WithAssertions {
         List<String> notifications = new ArrayList<>();
 
         // Audit subscriber
-        orderBus.subscribe(event -> auditLog.add("AUDIT: " + event.orderId() + " -> " + event.status()));
+        orderBus.subscribe(
+                event -> auditLog.add("AUDIT: " + event.orderId() + " -> " + event.status()));
 
         // Notification subscriber
-        orderBus.subscribe(event -> {
-            if ("COMPLETED".equals(event.status())) {
-                notifications.add("NOTIFY: Order " + event.orderId() + " is complete!");
-            }
-        });
+        orderBus.subscribe(
+                event -> {
+                    if ("COMPLETED".equals(event.status())) {
+                        notifications.add("NOTIFY: Order " + event.orderId() + " is complete!");
+                    }
+                });
 
         // Publish events
         orderBus.publishSync(new OrderEvent("ORD-001", "CREATED"));
@@ -170,17 +173,19 @@ class MessageBusPatternsTest implements WithAssertions {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        eventBus.subscribe(event -> {
-            if ("ERROR".equals(event.type())) {
-                errors.add(event.message());
-            }
-        });
+        eventBus.subscribe(
+                event -> {
+                    if ("ERROR".equals(event.type())) {
+                        errors.add(event.message());
+                    }
+                });
 
-        eventBus.subscribe(event -> {
-            if ("WARNING".equals(event.type())) {
-                warnings.add(event.message());
-            }
-        });
+        eventBus.subscribe(
+                event -> {
+                    if ("WARNING".equals(event.type())) {
+                        warnings.add(event.message());
+                    }
+                });
 
         eventBus.publishSync(new SystemEvent("INFO", "System started"));
         eventBus.publishSync(new SystemEvent("WARNING", "Disk space low"));

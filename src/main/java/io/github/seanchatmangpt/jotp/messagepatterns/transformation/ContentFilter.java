@@ -33,11 +33,14 @@ public final class ContentFilter<A, B> {
      */
     public ContentFilter(Function<A, B> filterFunction, Consumer<B> destination) {
         this.filterFunction = filterFunction;
-        this.proc = new Proc<>(null, (state, msg) -> {
-            B filtered = filterFunction.apply(msg);
-            destination.accept(filtered);
-            return state;
-        });
+        this.proc =
+                new Proc<>(
+                        null,
+                        (state, msg) -> {
+                            B filtered = filterFunction.apply(msg);
+                            destination.accept(filtered);
+                            return state;
+                        });
     }
 
     /** Filter and forward a message. */
@@ -51,7 +54,7 @@ public final class ContentFilter<A, B> {
     }
 
     /** Stop the filter. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

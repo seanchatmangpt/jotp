@@ -18,8 +18,8 @@ import java.util.stream.Collectors;
  * chains templates (e.g., record + sealed-interface + strategy + tests) and resolves dependencies
  * between them, producing a complete, tested feature in one shot.
  *
- * <p>Supports messaging patterns via {@link #messagingPipeline(String, List)} and
- * {@link #projectFromTurtle(Path)} for Turtle-driven project generation.
+ * <p>Supports messaging patterns via {@link #messagingPipeline(String, List)} and {@link
+ * #projectFromTurtle(Path)} for Turtle-driven project generation.
  */
 public final class TemplateCompositionEngine {
 
@@ -94,8 +94,9 @@ public final class TemplateCompositionEngine {
             public Success {
                 Objects.requireNonNull(featureName, "featureName must not be null");
                 generatedFiles = List.copyOf(generatedFiles);
-                resolvedVariables = java.util.Collections.unmodifiableSequencedMap(
-                        new LinkedHashMap<>(resolvedVariables));
+                resolvedVariables =
+                        java.util.Collections.unmodifiableSequencedMap(
+                                new LinkedHashMap<>(resolvedVariables));
             }
         }
 
@@ -116,7 +117,8 @@ public final class TemplateCompositionEngine {
      * @param templatesRoot path to the directory containing {@code java/} template tree
      */
     public TemplateCompositionEngine(Path templatesRoot) {
-        this.templatesRoot = Objects.requireNonNull(templatesRoot, "templatesRoot must not be null");
+        this.templatesRoot =
+                Objects.requireNonNull(templatesRoot, "templatesRoot must not be null");
     }
 
     /**
@@ -130,18 +132,21 @@ public final class TemplateCompositionEngine {
         for (var ref : recipe.templates()) {
             var templateFile = templatesRoot.resolve(ref.templatePath());
             if (!Files.isRegularFile(templateFile)) {
-                errors.add("Template not found: %s (expected at %s)".formatted(
-                        ref.category() + "/" + ref.name(), templateFile));
+                errors.add(
+                        "Template not found: %s (expected at %s)"
+                                .formatted(ref.category() + "/" + ref.name(), templateFile));
             }
         }
 
         // Phase 2: validate declared dependencies reference templates in this recipe
-        var templateKeys = recipe.templates().stream()
-                .map(t -> t.category() + "/" + t.name())
-                .collect(Collectors.toSet());
+        var templateKeys =
+                recipe.templates().stream()
+                        .map(t -> t.category() + "/" + t.name())
+                        .collect(Collectors.toSet());
         for (var dep : recipe.dependencies()) {
             if (!templateKeys.contains(dep)) {
-                errors.add("Dependency '%s' does not match any template in the recipe".formatted(dep));
+                errors.add(
+                        "Dependency '%s' does not match any template in the recipe".formatted(dep));
             }
         }
 
@@ -166,9 +171,8 @@ public final class TemplateCompositionEngine {
         }
 
         // Phase 4: compute the ordered list of files that would be generated
-        var generatedFiles = recipe.templates().stream()
-                .map(ref -> outputFilePath(ref, sharedContext))
-                .toList();
+        var generatedFiles =
+                recipe.templates().stream().map(ref -> outputFilePath(ref, sharedContext)).toList();
 
         return new CompositionResult.Success(recipe.name(), generatedFiles, resolvedVars);
     }
@@ -186,7 +190,8 @@ public final class TemplateCompositionEngine {
 
         return new FeatureRecipe(
                 entityName + "Crud",
-                "Full CRUD feature for " + entityName
+                "Full CRUD feature for "
+                        + entityName
                         + " with record, repository, service, DTO, and tests",
                 List.of(
                         new TemplateRef("core", "record", vars),
@@ -231,7 +236,8 @@ public final class TemplateCompositionEngine {
 
         return new FeatureRecipe(
                 name + "Service",
-                "Service layer for " + name
+                "Service layer for "
+                        + name
                         + " with strategy pattern, sealed error handling, and tests",
                 List.of(
                         new TemplateRef("patterns", "service-layer", vars),
@@ -250,25 +256,28 @@ public final class TemplateCompositionEngine {
      * Creates a reliable messaging pipeline: Resequencer -> Content-Based Router -> Dead Letter.
      *
      * <p>This is a complete EIP pattern chain for reliable message processing with:
+     *
      * <ul>
-     *   <li>Resequencer - reorders out-of-sequence messages</li>
-     *   <li>Content-Based Router - routes by message content</li>
-     *   <li>Dead Letter Channel - handles failed messages</li>
-     *   <li>Domain Types - canonical message types</li>
-     *   <li>Tests - messaging pattern tests</li>
+     *   <li>Resequencer - reorders out-of-sequence messages
+     *   <li>Content-Based Router - routes by message content
+     *   <li>Dead Letter Channel - handles failed messages
+     *   <li>Domain Types - canonical message types
+     *   <li>Tests - messaging pattern tests
      * </ul>
      *
      * @param domain the domain name (e.g., "Telemetry", "Order")
      * @param messageTypes list of message type names
      */
-    public static FeatureRecipe reliableMessagingPipeline(String domain, List<String> messageTypes) {
+    public static FeatureRecipe reliableMessagingPipeline(
+            String domain, List<String> messageTypes) {
         Objects.requireNonNull(domain, "domain must not be null");
         Objects.requireNonNull(messageTypes, "messageTypes must not be null");
         var pkg = "io.github.seanchatmangpt.jotp." + domain.toLowerCase() + ".messaging";
-        var vars = Map.of(
-                "name", domain,
-                "package", pkg,
-                "message_type", domain + "Msg");
+        var vars =
+                Map.of(
+                        "name", domain,
+                        "package", pkg,
+                        "message_type", domain + "Msg");
 
         return new FeatureRecipe(
                 domain + "ReliableMessaging",
@@ -292,10 +301,11 @@ public final class TemplateCompositionEngine {
     public static FeatureRecipe eventDrivenMessaging(String domain) {
         Objects.requireNonNull(domain, "domain must not be null");
         var pkg = "io.github.seanchatmangpt.jotp." + domain.toLowerCase() + ".messaging";
-        var vars = Map.of(
-                "name", domain,
-                "package", pkg,
-                "message_type", domain + "Msg");
+        var vars =
+                Map.of(
+                        "name", domain,
+                        "package", pkg,
+                        "message_type", domain + "Msg");
 
         return new FeatureRecipe(
                 domain + "EventDriven",
@@ -318,10 +328,11 @@ public final class TemplateCompositionEngine {
     public static FeatureRecipe supervisedMessaging(String domain) {
         Objects.requireNonNull(domain, "domain must not be null");
         var pkg = "io.github.seanchatmangpt.jotp." + domain.toLowerCase() + ".messaging";
-        var vars = Map.of(
-                "name", domain,
-                "package", pkg,
-                "message_type", domain + "Msg");
+        var vars =
+                Map.of(
+                        "name", domain,
+                        "package", pkg,
+                        "message_type", domain + "Msg");
 
         return new FeatureRecipe(
                 domain + "SupervisedMessaging",
@@ -344,10 +355,11 @@ public final class TemplateCompositionEngine {
     public static FeatureRecipe orchestrationMessaging(String domain) {
         Objects.requireNonNull(domain, "domain must not be null");
         var pkg = "io.github.seanchatmangpt.jotp." + domain.toLowerCase() + ".messaging";
-        var vars = Map.of(
-                "name", domain,
-                "package", pkg,
-                "message_type", domain + "Msg");
+        var vars =
+                Map.of(
+                        "name", domain,
+                        "package", pkg,
+                        "message_type", domain + "Msg");
 
         return new FeatureRecipe(
                 domain + "Orchestration",
@@ -365,8 +377,8 @@ public final class TemplateCompositionEngine {
     /**
      * Creates a messaging feature from a Turtle specification file.
      *
-     * <p>Reads the Turtle file, extracts patterns, resolves dependencies,
-     * and creates a feature recipe with all required templates.
+     * <p>Reads the Turtle file, extracts patterns, resolves dependencies, and creates a feature
+     * recipe with all required templates.
      *
      * @param turtleFile path to the .ttl specification file
      */
@@ -382,10 +394,11 @@ public final class TemplateCompositionEngine {
         for (var pattern : resolved) {
             var category = pattern.category() != null ? pattern.category() : "messaging";
             var templateName = extractTemplateName(pattern.template());
-            var vars = Map.of(
-                    "name", pattern.name().replaceAll("\\s+", ""),
-                    "package", "io.github.seanchatmangpt.jotp.messaging",
-                    "message_type", "Object");
+            var vars =
+                    Map.of(
+                            "name", pattern.name().replaceAll("\\s+", ""),
+                            "package", "io.github.seanchatmangpt.jotp.messaging",
+                            "message_type", "Object");
 
             templates.add(new TemplateRef(category, templateName, vars));
 
@@ -397,9 +410,13 @@ public final class TemplateCompositionEngine {
         }
 
         // Add test template
-        templates.add(new TemplateRef("testing", "messaging-test", Map.of(
-                "name", "Generated",
-                "package", "io.github.seanchatmangpt.jotp.messaging.test")));
+        templates.add(
+                new TemplateRef(
+                        "testing",
+                        "messaging-test",
+                        Map.of(
+                                "name", "Generated",
+                                "package", "io.github.seanchatmangpt.jotp.messaging.test")));
 
         return new FeatureRecipe(
                 "TurtleMessaging",
@@ -411,8 +428,8 @@ public final class TemplateCompositionEngine {
     /**
      * Creates a complete project from a Turtle specification file.
      *
-     * <p>Reads the Turtle file, extracts project structure and patterns,
-     * and creates a comprehensive feature recipe for the entire project.
+     * <p>Reads the Turtle file, extracts project structure and patterns, and creates a
+     * comprehensive feature recipe for the entire project.
      *
      * @param turtleFile path to the .ttl specification file
      */
@@ -424,9 +441,15 @@ public final class TemplateCompositionEngine {
         var deps = new ArrayList<String>();
 
         // Add module-info template
-        templates.add(new TemplateRef("modules", "module-info", Map.of(
-                "module_name", project.name().replace("-", "."),
-                "exports", project.groupId() + "." + project.name())));
+        templates.add(
+                new TemplateRef(
+                        "modules",
+                        "module-info",
+                        Map.of(
+                                "module_name",
+                                project.name().replace("-", "."),
+                                "exports",
+                                project.groupId() + "." + project.name())));
 
         // Add patterns from all modules
         for (var module : project.modules()) {
@@ -440,10 +463,14 @@ public final class TemplateCompositionEngine {
         }
 
         // Add build templates
-        templates.add(new TemplateRef("build", "pom-java26", Map.of(
-                "project_name", project.name(),
-                "group_id", project.groupId(),
-                "version", project.version())));
+        templates.add(
+                new TemplateRef(
+                        "build",
+                        "pom-java26",
+                        Map.of(
+                                "project_name", project.name(),
+                                "group_id", project.groupId(),
+                                "version", project.version())));
 
         return new FeatureRecipe(
                 project.name(),
@@ -466,15 +493,16 @@ public final class TemplateCompositionEngine {
     }
 
     /**
-     * Derives the output file path for a template reference. The path encodes category and
-     * template name, qualified by entity/service name from variables.
+     * Derives the output file path for a template reference. The path encodes category and template
+     * name, qualified by entity/service name from variables.
      */
     private String outputFilePath(TemplateRef ref, Map<String, String> context) {
-        var qualifiedName = java.util.stream.Stream.of("entity_name", "name", "service_name")
-                .filter(context::containsKey)
-                .findFirst()
-                .map(context::get)
-                .orElse("Generated");
+        var qualifiedName =
+                java.util.stream.Stream.of("entity_name", "name", "service_name")
+                        .filter(context::containsKey)
+                        .findFirst()
+                        .map(context::get)
+                        .orElse("Generated");
 
         var suffix = deriveSuffix(ref);
         var pkgPath = context.getOrDefault("package", "org.acme").replace('.', '/');
@@ -488,57 +516,62 @@ public final class TemplateCompositionEngine {
      */
     private String deriveSuffix(TemplateRef ref) {
         return switch (ref.category()) {
-            case "core" -> switch (ref.name()) {
-                case "record" -> "";
-                case "sealed-interface" -> "Error";
-                case "sealed-class" -> "Type";
-                default -> capitalize(ref.name());
-            };
-            case "patterns" -> switch (ref.name()) {
-                case "repository-generic" -> "Repository";
-                case "service-layer" -> "Service";
-                case "dto-record" -> "Dto";
-                case "value-object-record" -> "Value";
-                case "builder-record" -> "Builder";
-                case "strategy-functional" -> "Strategy";
-                case "factory-sealed" -> "Factory";
-                default -> capitalize(ref.name());
-            };
-            case "messaging" -> switch (ref.name()) {
-                case "message-bus" -> "Bus";
-                case "content-based-router" -> "Router";
-                case "dead-letter-channel" -> "DeadLetter";
-                case "wire-tap" -> "WireTap";
-                case "routing-slip" -> "RoutingSlip";
-                case "process-manager" -> "ProcessManager";
-                case "correlation-identifier" -> "Correlation";
-                case "pub-sub" -> "PubSub";
-                case "scatter-gather" -> "ScatterGather";
-                case "supervision-storm" -> "Supervisor";
-                case "control-bus" -> "ControlBus";
-                case "domain-types" -> "Domain";
-                case "canonical-message" -> "Message";
-                case "resequencer" -> "Resequencer";
-                case "service-activator" -> "Activator";
-                case "idempotent-receiver" -> "Idempotent";
-                case "durable-subscriber" -> "DurableSubscriber";
-                case "datatype-channel" -> "Channel";
-                default -> capitalize(ref.name());
-            };
-            case "testing" -> switch (ref.name()) {
-                case "junit5-test", "junit5-nested", "junit5-parameterized" -> "Test";
-                case "property-based-jqwik" -> "PropertyTest";
-                case "archunit-rules" -> "ArchTest";
-                case "integration-test" -> "IT";
-                case "assertj-assertions" -> "Assertions";
-                case "instancio-data" -> "DataFactory";
-                case "messaging-test" -> "MessagingTest";
-                default -> capitalize(ref.name()) + "Test";
-            };
-            case "error-handling" -> switch (ref.name()) {
-                case "result-railway" -> "Result";
-                default -> capitalize(ref.name());
-            };
+            case "core" ->
+                    switch (ref.name()) {
+                        case "record" -> "";
+                        case "sealed-interface" -> "Error";
+                        case "sealed-class" -> "Type";
+                        default -> capitalize(ref.name());
+                    };
+            case "patterns" ->
+                    switch (ref.name()) {
+                        case "repository-generic" -> "Repository";
+                        case "service-layer" -> "Service";
+                        case "dto-record" -> "Dto";
+                        case "value-object-record" -> "Value";
+                        case "builder-record" -> "Builder";
+                        case "strategy-functional" -> "Strategy";
+                        case "factory-sealed" -> "Factory";
+                        default -> capitalize(ref.name());
+                    };
+            case "messaging" ->
+                    switch (ref.name()) {
+                        case "message-bus" -> "Bus";
+                        case "content-based-router" -> "Router";
+                        case "dead-letter-channel" -> "DeadLetter";
+                        case "wire-tap" -> "WireTap";
+                        case "routing-slip" -> "RoutingSlip";
+                        case "process-manager" -> "ProcessManager";
+                        case "correlation-identifier" -> "Correlation";
+                        case "pub-sub" -> "PubSub";
+                        case "scatter-gather" -> "ScatterGather";
+                        case "supervision-storm" -> "Supervisor";
+                        case "control-bus" -> "ControlBus";
+                        case "domain-types" -> "Domain";
+                        case "canonical-message" -> "Message";
+                        case "resequencer" -> "Resequencer";
+                        case "service-activator" -> "Activator";
+                        case "idempotent-receiver" -> "Idempotent";
+                        case "durable-subscriber" -> "DurableSubscriber";
+                        case "datatype-channel" -> "Channel";
+                        default -> capitalize(ref.name());
+                    };
+            case "testing" ->
+                    switch (ref.name()) {
+                        case "junit5-test", "junit5-nested", "junit5-parameterized" -> "Test";
+                        case "property-based-jqwik" -> "PropertyTest";
+                        case "archunit-rules" -> "ArchTest";
+                        case "integration-test" -> "IT";
+                        case "assertj-assertions" -> "Assertions";
+                        case "instancio-data" -> "DataFactory";
+                        case "messaging-test" -> "MessagingTest";
+                        default -> capitalize(ref.name()) + "Test";
+                    };
+            case "error-handling" ->
+                    switch (ref.name()) {
+                        case "result-railway" -> "Result";
+                        default -> capitalize(ref.name());
+                    };
             default -> capitalize(ref.name());
         };
     }

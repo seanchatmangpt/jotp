@@ -13,9 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * Tests for Routing patterns ported from Vaughn Vernon's Reactive Messaging Patterns.
- */
+/** Tests for Routing patterns ported from Vaughn Vernon's Reactive Messaging Patterns. */
 @DisplayName("Routing Patterns")
 class RoutingPatternsTest implements WithAssertions {
 
@@ -31,10 +29,11 @@ class RoutingPatternsTest implements WithAssertions {
             var typeA = new CopyOnWriteArrayList<Order>();
             var typeB = new CopyOnWriteArrayList<Order>();
 
-            var router = ContentBasedRouter.<Order>builder()
-                    .when(o -> o.type().equals("A"), typeA::add)
-                    .when(o -> o.type().equals("B"), typeB::add)
-                    .build();
+            var router =
+                    ContentBasedRouter.<Order>builder()
+                            .when(o -> o.type().equals("A"), typeA::add)
+                            .when(o -> o.type().equals("B"), typeB::add)
+                            .build();
 
             router.route(new Order("1", "A"));
             router.route(new Order("2", "B"));
@@ -49,10 +48,11 @@ class RoutingPatternsTest implements WithAssertions {
         void otherwise() {
             var fallback = new CopyOnWriteArrayList<Order>();
 
-            var router = ContentBasedRouter.<Order>builder()
-                    .when(o -> o.type().equals("A"), o -> {})
-                    .otherwise(fallback::add)
-                    .build();
+            var router =
+                    ContentBasedRouter.<Order>builder()
+                            .when(o -> o.type().equals("A"), o -> {})
+                            .otherwise(fallback::add)
+                            .build();
 
             router.route(new Order("1", "unknown"));
             assertThat(fallback).hasSize(1);
@@ -131,13 +131,14 @@ class RoutingPatternsTest implements WithAssertions {
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<Double>();
 
-            var aggregator = new Aggregator<Quote, String, Double>(
-                    Quote::rfqId,
-                    quotes -> quotes.stream().mapToDouble(Quote::price).min().orElse(0),
-                    best -> {
-                        result.set(best);
-                        latch.countDown();
-                    });
+            var aggregator =
+                    new Aggregator<Quote, String, Double>(
+                            Quote::rfqId,
+                            quotes -> quotes.stream().mapToDouble(Quote::price).min().orElse(0),
+                            best -> {
+                                result.set(best);
+                                latch.countDown();
+                            });
 
             aggregator.expect("rfq-1", 3);
             aggregator.addPart(new Quote("rfq-1", 100.0));
@@ -160,10 +161,12 @@ class RoutingPatternsTest implements WithAssertions {
             var latch = new CountDownLatch(3);
             var received = new CopyOnWriteArrayList<String>();
 
-            var resequencer = new Resequencer<String>(msg -> {
-                received.add(msg);
-                latch.countDown();
-            });
+            var resequencer =
+                    new Resequencer<String>(
+                            msg -> {
+                                received.add(msg);
+                                latch.countDown();
+                            });
 
             // Send out of order: 2, 0, 1
             resequencer.submit(new Resequencer.Sequenced<>("c1", 2, 3, "third"));
@@ -183,11 +186,12 @@ class RoutingPatternsTest implements WithAssertions {
         @Test
         @DisplayName("executes steps in sequence")
         void sequentialSteps() {
-            var slip = RoutingSlip.<String>builder()
-                    .step("decrypt", s -> s.replace("(encrypted)", ""))
-                    .step("authenticate", s -> s.replace("(cert)", ""))
-                    .step("trim", String::trim)
-                    .build();
+            var slip =
+                    RoutingSlip.<String>builder()
+                            .step("decrypt", s -> s.replace("(encrypted)", ""))
+                            .step("authenticate", s -> s.replace("(cert)", ""))
+                            .step("trim", String::trim)
+                            .build();
 
             String result = slip.execute("(encrypted) Hello (cert) ");
             assertThat(result).isEqualTo("Hello");
@@ -203,12 +207,13 @@ class RoutingPatternsTest implements WithAssertions {
         @Test
         @DisplayName("scatters request and gathers responses")
         void scatterGather() {
-            var sg = ScatterGather.<String, Integer>builder()
-                    .addHandler(s -> s.length())
-                    .addHandler(s -> s.hashCode())
-                    .addHandler(s -> 42)
-                    .timeout(Duration.ofSeconds(5))
-                    .build();
+            var sg =
+                    ScatterGather.<String, Integer>builder()
+                            .addHandler(s -> s.length())
+                            .addHandler(s -> s.hashCode())
+                            .addHandler(s -> 42)
+                            .timeout(Duration.ofSeconds(5))
+                            .build();
 
             List<Integer> results = sg.scatterAndGather("test");
             assertThat(results).hasSize(3);
@@ -226,7 +231,7 @@ class RoutingPatternsTest implements WithAssertions {
             var dest1 = new CopyOnWriteArrayList<String>();
             var dest2 = new CopyOnWriteArrayList<String>();
 
-            var router = new MessageRouter<>(dest1::add, dest2::add);
+            var router = new MessageRouter<String>(dest1::add, dest2::add);
 
             router.route("a");
             router.route("b");

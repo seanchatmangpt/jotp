@@ -41,12 +41,15 @@ public final class ContentEnricher<T, R, U> {
             Consumer<U> destination) {
         this.resourceLookup = resourceLookup;
         this.enrichFunction = enrichFunction;
-        this.proc = new Proc<>(null, (state, msg) -> {
-            R resource = resourceLookup.apply(msg);
-            U enriched = enrichFunction.apply(msg, resource);
-            destination.accept(enriched);
-            return state;
-        });
+        this.proc =
+                new Proc<>(
+                        null,
+                        (state, msg) -> {
+                            R resource = resourceLookup.apply(msg);
+                            U enriched = enrichFunction.apply(msg, resource);
+                            destination.accept(enriched);
+                            return state;
+                        });
     }
 
     /** Enrich and forward a message. */
@@ -61,7 +64,7 @@ public final class ContentEnricher<T, R, U> {
     }
 
     /** Stop the enricher. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

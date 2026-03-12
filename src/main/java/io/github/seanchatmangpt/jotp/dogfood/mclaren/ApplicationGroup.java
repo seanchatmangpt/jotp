@@ -30,10 +30,10 @@ import java.util.List;
  * config.AddGroup(appGroup);
  * }</pre>
  *
- * @param identifier               unique ECU / subsystem name (e.g. {@code "Chassis"})
- * @param name                     display name (often equals the identifier)
+ * @param identifier unique ECU / subsystem name (e.g. {@code "Chassis"})
+ * @param name display name (often equals the identifier)
  * @param parameterGroupIdentifiers list of {@link ParameterGroup} identifiers owned by this group
- * @param supportsRda              whether this group participates in Real-time Data Acquisition
+ * @param supportsRda whether this group participates in Real-time Data Acquisition
  */
 public record ApplicationGroup(
         String identifier,
@@ -57,7 +57,7 @@ public record ApplicationGroup(
      * Convenience factory for an RDA-enabled application group.
      *
      * @param identifier ECU name
-     * @param groupIds   parameter groups owned by this ECU
+     * @param groupIds parameter groups owned by this ECU
      * @return application group with {@code supportsRda = true}
      */
     public static ApplicationGroup rda(String identifier, String... groupIds) {

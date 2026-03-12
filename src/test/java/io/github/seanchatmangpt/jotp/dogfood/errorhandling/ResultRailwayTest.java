@@ -36,9 +36,11 @@ class ResultRailwayTest implements WithAssertions {
 
     @Test
     void of_capturesException() {
-        var r = ResultRailway.<Integer, RuntimeException>of(() -> {
-            throw new IllegalStateException("boom");
-        });
+        var r =
+                ResultRailway.<Integer, RuntimeException>of(
+                        () -> {
+                            throw new IllegalStateException("boom");
+                        });
         assertThat(r.isFailure()).isTrue();
         assertThat((Throwable) ((ResultRailway.Failure<Integer, ?>) r).error())
                 .isInstanceOf(IllegalStateException.class)
@@ -80,23 +82,26 @@ class ResultRailwayTest implements WithAssertions {
 
     @Test
     void flatMap_chainsSuccess() {
-        var r = ResultRailway.<String, String>success("42")
-                .flatMap(s -> ResultRailway.success(Integer.parseInt(s)));
+        var r =
+                ResultRailway.<String, String>success("42")
+                        .flatMap(s -> ResultRailway.success(Integer.parseInt(s)));
         assertThat(r.isSuccess()).isTrue();
         assertThat(((ResultRailway.Success<Integer, ?>) r).value()).isEqualTo(42);
     }
 
     @Test
     void flatMap_shortCircuitsOnFailure() {
-        var r = ResultRailway.<String, String>failure("no")
-                .flatMap(s -> ResultRailway.success(Integer.parseInt(s)));
+        var r =
+                ResultRailway.<String, String>failure("no")
+                        .flatMap(s -> ResultRailway.success(Integer.parseInt(s)));
         assertThat(r.isFailure()).isTrue();
     }
 
     @Test
     void flatMap_propagatesInnerFailure() {
-        var r = ResultRailway.<String, String>success("abc")
-                .flatMap(s -> ResultRailway.failure("inner error"));
+        var r =
+                ResultRailway.<String, String>success("abc")
+                        .flatMap(s -> ResultRailway.failure("inner error"));
         assertThat(r.isFailure()).isTrue();
         assertThat(((ResultRailway.Failure<?, String>) r).error()).isEqualTo("inner error");
     }
@@ -105,15 +110,13 @@ class ResultRailwayTest implements WithAssertions {
 
     @Test
     void fold_appliesSuccessBranch() {
-        var result = ResultRailway.<String, String>success("hello")
-                .fold(String::length, e -> -1);
+        var result = ResultRailway.<String, String>success("hello").fold(String::length, e -> -1);
         assertThat(result).isEqualTo(5);
     }
 
     @Test
     void fold_appliesFailureBranch() {
-        var result = ResultRailway.<String, String>failure("err")
-                .fold(String::length, e -> -1);
+        var result = ResultRailway.<String, String>failure("err").fold(String::length, e -> -1);
         assertThat(result).isEqualTo(-1);
     }
 
@@ -135,16 +138,18 @@ class ResultRailwayTest implements WithAssertions {
 
     @Test
     void recoverWith_returnsSuccessAsIs() {
-        var r = ResultRailway.<String, String>success("ok")
-                .recoverWith(e -> ResultRailway.success("recovered"));
+        var r =
+                ResultRailway.<String, String>success("ok")
+                        .recoverWith(e -> ResultRailway.success("recovered"));
         assertThat(r.isSuccess()).isTrue();
         assertThat(((ResultRailway.Success<String, ?>) r).value()).isEqualTo("ok");
     }
 
     @Test
     void recoverWith_replacesFailureWithNewResult() {
-        var r = ResultRailway.<String, String>failure("err")
-                .recoverWith(e -> ResultRailway.success("recovered"));
+        var r =
+                ResultRailway.<String, String>failure("err")
+                        .recoverWith(e -> ResultRailway.success("recovered"));
         assertThat(r.isSuccess()).isTrue();
         assertThat(((ResultRailway.Success<String, ?>) r).value()).isEqualTo("recovered");
     }
@@ -189,8 +194,7 @@ class ResultRailwayTest implements WithAssertions {
 
     @Test
     void orElse_returnsValueOnSuccess() {
-        assertThat(ResultRailway.<String, String>success("ok").orElse("fallback"))
-                .isEqualTo("ok");
+        assertThat(ResultRailway.<String, String>success("ok").orElse("fallback")).isEqualTo("ok");
     }
 
     @Test
@@ -230,23 +234,27 @@ class ResultRailwayTest implements WithAssertions {
 
     @Test
     void railwayChain_shortCircuitsOnFirstFailure() {
-        var result = ResultRailway.<String, String>success("  42  ")
-                .map(String::strip)
-                .flatMap(s -> s.matches("\\d+")
-                        ? ResultRailway.success(Integer.parseInt(s))
-                        : ResultRailway.failure("not a number"))
-                .map(n -> n * 2)
-                .fold(n -> "result=" + n, e -> "error=" + e);
+        var result =
+                ResultRailway.<String, String>success("  42  ")
+                        .map(String::strip)
+                        .flatMap(
+                                s ->
+                                        s.matches("\\d+")
+                                                ? ResultRailway.success(Integer.parseInt(s))
+                                                : ResultRailway.failure("not a number"))
+                        .map(n -> n * 2)
+                        .fold(n -> "result=" + n, e -> "error=" + e);
 
         assertThat(result).isEqualTo("result=84");
     }
 
     @Test
     void railwayChain_propagatesFailureToEnd() {
-        var result = ResultRailway.<String, String>success("abc")
-                .flatMap(s -> ResultRailway.failure("not a number"))
-                .map(n -> n + "!")  // should not run
-                .fold(v -> "ok", e -> "failed: " + e);
+        var result =
+                ResultRailway.<String, String>success("abc")
+                        .flatMap(s -> ResultRailway.failure("not a number"))
+                        .map(n -> n + "!") // should not run
+                        .fold(v -> "ok", e -> "failed: " + e);
 
         assertThat(result).isEqualTo("failed: not a number");
     }

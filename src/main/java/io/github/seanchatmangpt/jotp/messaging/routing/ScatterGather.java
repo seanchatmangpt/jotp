@@ -4,11 +4,9 @@ import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Result;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 /**
@@ -105,27 +103,33 @@ public class ScatterGather<Req, Rep, S, M> {
                                                                             .join();
 
                                                             // Check if reply is successful
-                                                            return switch (reply.result) {
+                                                            return switch (reply.result()) {
                                                                 case Result.Ok<Rep, String> ok ->
-                                                                        ok.value;
-                                                                case Result.Success<Rep, String> success ->
-                                                                        success.value;
+                                                                        ok.value();
+                                                                case Result.Success<Rep, String>
+                                                                                success ->
+                                                                        success.value();
                                                                 case Result.Err<Rep, String> err ->
                                                                         throw new RuntimeException(
                                                                                 "Recipient error: "
                                                                                         + err
-                                                                                                .error);
-                                                                case Result.Failure<Rep, String> failure ->
+                                                                                                .error());
+                                                                case Result.Failure<Rep, String>
+                                                                                failure ->
                                                                         throw new RuntimeException(
                                                                                 "Recipient error: "
                                                                                         + failure
-                                                                                                .error);
+                                                                                                .error());
                                                             };
-                                                        } catch (java.util.concurrent.TimeoutException
-                                                                e) {
-                                                            throw new RuntimeException(
-                                                                    "Reply timeout", e);
                                                         } catch (Exception e) {
+                                                            if (e.getCause()
+                                                                    instanceof
+                                                                    java.util.concurrent
+                                                                                    .TimeoutException
+                                                                            te) {
+                                                                throw new RuntimeException(
+                                                                        "Reply timeout", te);
+                                                            }
                                                             throw new RuntimeException(
                                                                     "Reply failed", e);
                                                         }
@@ -154,7 +158,9 @@ public class ScatterGather<Req, Rep, S, M> {
      * @return aggregated result
      */
     public <Agg> Agg collectWith(
-            List<Rep> replies, Agg identity, java.util.function.BiFunction<Agg, Rep, Agg> aggregator) {
+            List<Rep> replies,
+            Agg identity,
+            java.util.function.BiFunction<Agg, Rep, Agg> aggregator) {
         var result = identity;
         for (Rep reply : replies) {
             result = aggregator.apply(result, reply);

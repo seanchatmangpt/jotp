@@ -2,16 +2,15 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcessRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcRegistry;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,7 @@ import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 
 /**
- * Armstrong's registry race condition stress tests — breaking points of {@link ProcRegistry}.
+ * Armstrong's registry race condition stress tests — breaking points of {@link ProcessRegistry}.
  *
  * <p>Joe Armstrong: <em>"A global name registry is a shared mutable resource. Every concurrent
  * access is a potential race. The question is not whether races occur but whether they corrupt
@@ -33,8 +32,8 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  *       Exactly one must win; all others must get {@code IllegalStateException}. Zero silent
  *       overwrites.
  *   <li><b>Deregister-then-reregister race</b> — process A dies (auto-deregisters) while process B
- *       races to claim the same name. The two-arg {@code ConcurrentHashMap.remove(name, proc)}
- *       must prevent B from removing A's entry by mistake.
+ *       races to claim the same name. The two-arg {@code ConcurrentHashMap.remove(name, proc)} must
+ *       prevent B from removing A's entry by mistake.
  *   <li><b>Property: registered() count is always ≤ total live processes</b> — the registry must
  *       never hold a reference to a dead process. Verified by killing processes and checking.
  *   <li><b>Auto-deregister under crash storm</b> — 500 registered processes crash simultaneously;
@@ -45,7 +44,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * </ol>
  */
 @Timeout(30)
-@Execution(ExecutionMode.SAME_THREAD)  // Isolate from parallel tests due to global ProcRegistry
+@Execution(ExecutionMode.SAME_THREAD) // Isolate from parallel tests due to global ProcessRegistry
 class RegistryRaceStressTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Noop, Msg.Crash {
@@ -63,7 +62,7 @@ class RegistryRaceStressTest implements WithAssertions {
 
     @BeforeEach
     void resetRegistry() {
-        ProcRegistry.reset();
+        ProcessRegistry.reset();
     }
 
     // ── 1. Registration stampede — only one winner ────────────────────────
@@ -71,10 +70,10 @@ class RegistryRaceStressTest implements WithAssertions {
     /**
      * <b>Breaking point: lost-update race in register().</b>
      *
-     * <p>ConcurrentHashMap.putIfAbsent() guarantees atomicity. But we verify this empirically:
-     * with N threads all calling {@code register("race", proc_i)}, exactly one must return
-     * successfully. If any two succeed, the registry has silently overwritten a name — a critical
-     * safety violation in OTP (two processes believing they own the same name).
+     * <p>ConcurrentHashMap.putIfAbsent() guarantees atomicity. But we verify this empirically: with
+     * N threads all calling {@code register("race", proc_i)}, exactly one must return successfully.
+     * If any two succeed, the registry has silently overwritten a name — a critical safety
+     * violation in OTP (two processes believing they own the same name).
      */
     @Test
     void registrationStampede_exactlyOneWinner() throws Exception {
@@ -95,7 +94,7 @@ class RegistryRaceStressTest implements WithAssertions {
                                     () -> {
                                         try {
                                             latch.await();
-                                            ProcRegistry.register("stampede-race", proc);
+                                            ProcessRegistry.register("stampede-race", proc);
                                             successCount.incrementAndGet();
                                         } catch (InterruptedException e) {
                                             Thread.currentThread().interrupt();
@@ -108,19 +107,18 @@ class RegistryRaceStressTest implements WithAssertions {
         latch.countDown(); // fire all simultaneously
         for (var t : threads) t.join(5000);
 
-        assertThat(successCount.get())
-                .as("exactly one registration must succeed")
-                .isEqualTo(1);
+        assertThat(successCount.get()).as("exactly one registration must succeed").isEqualTo(1);
 
         // Cleanup
-        ProcRegistry.unregister("stampede-race");
-        procs.forEach(p -> {
-            try {
-                p.stop();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
+        ProcessRegistry.unregister("stampede-race");
+        procs.forEach(
+                p -> {
+                    try {
+                        p.stop();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
     }
 
     // ── 2. Auto-deregister under crash storm ──────────────────────────────
@@ -131,7 +129,7 @@ class RegistryRaceStressTest implements WithAssertions {
      * <p>Each process registers a unique name, then crashes. The termination callback must reliably
      * deregister the name using the two-arg {@code remove(name, proc)} to prevent phantom entries.
      *
-     * <p>After all crashes, {@code ProcRegistry.registered()} must be empty.
+     * <p>After all crashes, {@code ProcessRegistry.registered()} must be empty.
      */
     @Test
     void crashStorm_500registeredProcesses_registryEmptyAfter() throws Exception {
@@ -141,13 +139,14 @@ class RegistryRaceStressTest implements WithAssertions {
         // Register all processes with unique names
         for (int i = 0; i < count; i++) {
             Proc<Integer, Msg> proc = new Proc<>(0, RegistryRaceStressTest::handle);
-            ProcRegistry.register("stress-" + i, proc);
+            ProcessRegistry.register("stress-" + i, proc);
             procs.add(proc);
         }
 
-        assertThat(ProcRegistry.registered().stream()
-                        .filter(n -> n.startsWith("stress-"))
-                        .count())
+        assertThat(
+                        ProcessRegistry.registered().stream()
+                                .filter(n -> n.startsWith("stress-"))
+                                .count())
                 .as("stress entries registered")
                 .isEqualTo(count);
 
@@ -175,15 +174,14 @@ class RegistryRaceStressTest implements WithAssertions {
         // Registry must be empty — all auto-deregistered
         // Give more time for the termination callbacks to complete (500 concurrent crashes)
         await().atMost(Duration.ofSeconds(5))
-                .until(() -> {
-                    var registered = ProcRegistry.registered();
-                    return registered.stream().noneMatch(n -> n.startsWith("stress-"));
-                });
+                .until(
+                        () -> {
+                            var registered = ProcessRegistry.registered();
+                            return registered.stream().noneMatch(n -> n.startsWith("stress-"));
+                        });
 
         var remaining =
-                ProcRegistry.registered().stream()
-                        .filter(n -> n.startsWith("stress-"))
-                        .toList();
+                ProcessRegistry.registered().stream().filter(n -> n.startsWith("stress-")).toList();
         assertThat(remaining).as("phantom registry entries after crash storm").isEmpty();
     }
 
@@ -197,24 +195,24 @@ class RegistryRaceStressTest implements WithAssertions {
      * reference (two-arg remove bug).
      */
     @Property(tries = 50)
-    void registeredSet_neverContainsDeadProcesses(
-            @ForAll @IntRange(min = 1, max = 30) int count) throws Exception {
+    void registeredSet_neverContainsDeadProcesses(@ForAll @IntRange(min = 1, max = 30) int count)
+            throws Exception {
         var names = new ArrayList<String>(count);
 
         for (int i = 0; i < count; i++) {
             String name = "prop-" + System.nanoTime() + "-" + i;
             Proc<Integer, Msg> proc = new Proc<>(0, RegistryRaceStressTest::handle);
-            ProcRegistry.register(name, proc);
+            ProcessRegistry.register(name, proc);
             names.add(name);
             proc.stop(); // graceful stop → terminationCallback fires → auto-deregister
         }
 
         // Allow deregister callbacks to propagate
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> names.stream().allMatch(n -> ProcRegistry.whereis(n).isEmpty()));
+                .until(() -> names.stream().allMatch(n -> ProcessRegistry.whereis(n).isEmpty()));
 
         for (String name : names) {
-            assertThat(ProcRegistry.whereis(name))
+            assertThat(ProcessRegistry.whereis(name))
                     .as("dead process '%s' must not be in registry", name)
                     .isEmpty();
         }
@@ -225,12 +223,12 @@ class RegistryRaceStressTest implements WithAssertions {
     /**
      * <b>Breaking point: stale read during concurrent register/die cycle.</b>
      *
-     * <p>Rapid cycle: register name → kill process (auto-deregister) → new process registers
-     * same name. At no point should {@code whereis()} return the dead process. It may transiently
-     * return empty (between unregister and re-register), but never a dead process.
+     * <p>Rapid cycle: register name → kill process (auto-deregister) → new process registers same
+     * name. At no point should {@code whereis()} return the dead process. It may transiently return
+     * empty (between unregister and re-register), but never a dead process.
      *
-     * <p>This tests whether the termination callback executes atomically enough that a reader
-     * never sees a process reference whose thread has already exited.
+     * <p>This tests whether the termination callback executes atomically enough that a reader never
+     * sees a process reference whose thread has already exited.
      */
     @Test
     void whereis_duringChurn_neverReturnsDeadProcess() throws Exception {
@@ -245,14 +243,14 @@ class RegistryRaceStressTest implements WithAssertions {
                         .start(
                                 () -> {
                                     while (stop.getCount() > 0) {
-                                        ProcRegistry.whereis(name)
+                                        ProcessRegistry.whereis(name)
                                                 .ifPresent(
                                                         proc -> {
                                                             // A true zombie: dead proc still in
                                                             // registry (not just a stale reference
                                                             // obtained before process died).
                                                             if (!proc.thread().isAlive()
-                                                                    && ProcRegistry.whereis(name)
+                                                                    && ProcessRegistry.whereis(name)
                                                                             .map(r -> r == proc)
                                                                             .orElse(false)) {
                                                                 badReads.incrementAndGet();
@@ -266,16 +264,16 @@ class RegistryRaceStressTest implements WithAssertions {
         for (int i = 0; i < cycles; i++) {
             Proc<Integer, Msg> proc = new Proc<>(0, RegistryRaceStressTest::handle);
             try {
-                ProcRegistry.register(name, proc);
+                ProcessRegistry.register(name, proc);
             } catch (IllegalStateException e) {
                 // Previous auto-deregister not yet complete; wait briefly
                 await().atMost(Duration.ofMillis(100))
-                        .until(() -> ProcRegistry.whereis(name).isEmpty());
-                ProcRegistry.register(name, proc);
+                        .until(() -> ProcessRegistry.whereis(name).isEmpty());
+                ProcessRegistry.register(name, proc);
             }
             proc.stop(); // triggers auto-deregister
             await().atMost(Duration.ofMillis(500))
-                    .until(() -> ProcRegistry.whereis(name).isEmpty());
+                    .until(() -> ProcessRegistry.whereis(name).isEmpty());
         }
 
         stop.countDown();
@@ -292,8 +290,8 @@ class RegistryRaceStressTest implements WithAssertions {
      * <b>Breaking point: ConcurrentHashMap read consistency under high write rate.</b>
      *
      * <p>50 readers continuously calling whereis() while 50 writers register/unregister different
-     * names. Readers must never throw ConcurrentModificationException or see corrupted state
-     * (e.g. wrong process type). This verifies ConcurrentHashMap's linearisability guarantee.
+     * names. Readers must never throw ConcurrentModificationException or see corrupted state (e.g.
+     * wrong process type). This verifies ConcurrentHashMap's linearisability guarantee.
      */
     @Test
     void heavyConcurrentReadWrite_neverThrows() throws Exception {
@@ -315,7 +313,7 @@ class RegistryRaceStressTest implements WithAssertions {
                                     try {
                                         Proc<Integer, Msg> proc =
                                                 new Proc<>(0, RegistryRaceStressTest::handle);
-                                        ProcRegistry.register(name, proc);
+                                        ProcessRegistry.register(name, proc);
                                         proc.stop();
                                     } catch (Exception e) {
                                         errors.incrementAndGet();
@@ -332,9 +330,9 @@ class RegistryRaceStressTest implements WithAssertions {
                             () -> {
                                 while (done.getCount() > 0) {
                                     try {
-                                        var all = ProcRegistry.registered();
+                                        var all = ProcessRegistry.registered();
                                         for (String name : all) {
-                                            ProcRegistry.whereis(name); // just must not throw
+                                            ProcessRegistry.whereis(name); // just must not throw
                                         }
                                     } catch (Exception e) {
                                         errors.incrementAndGet();
@@ -346,8 +344,6 @@ class RegistryRaceStressTest implements WithAssertions {
         Thread.sleep(durationMs);
         done.countDown();
 
-        assertThat(errors.get())
-                .as("concurrent registry read/write errors")
-                .isZero();
+        assertThat(errors.get()).as("concurrent registry read/write errors").isZero();
     }
 }

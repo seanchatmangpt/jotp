@@ -1,9 +1,8 @@
 package io.github.seanchatmangpt.jotp.messaging.routing;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Result;
-import java.time.Duration;
+import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,10 +10,9 @@ import java.util.List;
 /**
  * Runnable example: Invoice workflow using Routing Slip.
  *
- * <p>Scenario: An invoice message flows through a series of processing steps:
- * validation → approval → payment → archive. Each step is a process with its own
- * state and logic. The invoice carries a routing slip (list of next steps) that guides its
- * journey.
+ * <p>Scenario: An invoice message flows through a series of processing steps: validation → approval
+ * → payment → archive. Each step is a process with its own state and logic. The invoice carries a
+ * routing slip (list of next steps) that guides its journey.
  *
  * <p>Features demonstrated:
  *
@@ -111,11 +109,15 @@ public class RoutingSlipExample {
 
                 // Simulate approval logic
                 if (invoice.amount() > 10000) {
-                    System.out.println("[Approver] HIGH VALUE: Requires manual approval ($"
-                            + invoice.amount() + ")");
+                    System.out.println(
+                            "[Approver] HIGH VALUE: Requires manual approval ($"
+                                    + invoice.amount()
+                                    + ")");
                 } else {
-                    System.out.println("[Approver] AUTO-APPROVED: Within spending limit ($"
-                            + invoice.amount() + ")");
+                    System.out.println(
+                            "[Approver] AUTO-APPROVED: Within spending limit ($"
+                                    + invoice.amount()
+                                    + ")");
                 }
 
                 try {
@@ -148,8 +150,11 @@ public class RoutingSlipExample {
 
                 // Simulate payment logic
                 String confirmationId = "PAY-" + System.currentTimeMillis();
-                System.out.println("[Payment] PAYMENT INITIATED: " + confirmationId + " for $"
-                        + invoice.amount());
+                System.out.println(
+                        "[Payment] PAYMENT INITIATED: "
+                                + confirmationId
+                                + " for $"
+                                + invoice.amount());
 
                 try {
                     Thread.sleep(400); // Simulate payment processing
@@ -180,8 +185,10 @@ public class RoutingSlipExample {
                 System.out.println("[Archive] Processing invoice " + invoice.invoiceId());
 
                 // Simulate archival
-                System.out.println("[Archive] STORED: Invoice archived with " + invoice
-                        .auditLog().size() + " audit entries");
+                System.out.println(
+                        "[Archive] STORED: Invoice archived with "
+                                + invoice.auditLog().size()
+                                + " audit entries");
                 invoice.auditLog().forEach(entry -> System.out.println("  " + entry));
 
                 try {
@@ -208,26 +215,43 @@ public class RoutingSlipExample {
     public static void main(String[] args) throws InterruptedException {
         System.out.println("=== Routing Slip Example: Invoice Workflow ===\n");
 
-        // Create workflow processes
-        var validator =
-                new Proc<>(
-                        new ProcessState("Validator", 0), RoutingSlipExample::validatorHandler);
-        var approver =
-                new Proc<>(new ProcessState("Approver", 0), RoutingSlipExample::approverHandler);
-        var payment =
-                new Proc<>(new ProcessState("Payment", 0), RoutingSlipExample::paymentHandler);
-        var archive =
-                new Proc<>(new ProcessState("Archive", 0), RoutingSlipExample::archiveHandler);
+        // Create workflow processes via Supervisor (which creates ProcRef internally)
+        var supervisor =
+                new Supervisor(
+                        Supervisor.Strategy.ONE_FOR_ONE, 5, java.time.Duration.ofSeconds(60));
 
-        // Create process references
         @SuppressWarnings("unchecked")
-        var validatorRef = (ProcRef<ProcessState, Object>) (ProcRef) new ProcRef<>(validator);
+        var validatorRef =
+                (ProcRef<ProcessState, Object>)
+                        (ProcRef<?, ?>)
+                                supervisor.supervise(
+                                        "validator",
+                                        new ProcessState("Validator", 0),
+                                        RoutingSlipExample::validatorHandler);
         @SuppressWarnings("unchecked")
-        var approverRef = (ProcRef<ProcessState, Object>) (ProcRef) new ProcRef<>(approver);
+        var approverRef =
+                (ProcRef<ProcessState, Object>)
+                        (ProcRef<?, ?>)
+                                supervisor.supervise(
+                                        "approver",
+                                        new ProcessState("Approver", 0),
+                                        RoutingSlipExample::approverHandler);
         @SuppressWarnings("unchecked")
-        var paymentRef = (ProcRef<ProcessState, Object>) (ProcRef) new ProcRef<>(payment);
+        var paymentRef =
+                (ProcRef<ProcessState, Object>)
+                        (ProcRef<?, ?>)
+                                supervisor.supervise(
+                                        "payment",
+                                        new ProcessState("Payment", 0),
+                                        RoutingSlipExample::paymentHandler);
         @SuppressWarnings("unchecked")
-        var archiveRef = (ProcRef<ProcessState, Object>) (ProcRef) new ProcRef<>(archive);
+        var archiveRef =
+                (ProcRef<ProcessState, Object>)
+                        (ProcRef<?, ?>)
+                                supervisor.supervise(
+                                        "archive",
+                                        new ProcessState("Archive", 0),
+                                        RoutingSlipExample::archiveHandler);
 
         System.out.println("Created workflow processes:");
         System.out.println("  1. Validator");
@@ -254,14 +278,11 @@ public class RoutingSlipExample {
         System.out.println("Processing invoices with routing slip:\n");
 
         // Create routing slip: validator -> approver -> payment -> archive
-        var slip =
-                List.of(validatorRef, approverRef, paymentRef, archiveRef);
+        var slip = List.of(validatorRef, approverRef, paymentRef, archiveRef);
 
         // Invoice 1: standard path
         System.out.println("--- Invoice 1 (5000.0) ---");
-        var msgWithSlip1 =
-                RoutingSlip.withSlip(
-                        new WorkflowMessage.ProcessInvoice(invoice1), slip);
+        var msgWithSlip1 = RoutingSlip.withSlip(new WorkflowMessage.ProcessInvoice(invoice1), slip);
 
         System.out.println("Routing slip has " + msgWithSlip1.remainingHops() + " hops:");
         msgWithSlip1.slip().forEach(ref -> System.out.println("  -> " + ref));
@@ -269,34 +290,29 @@ public class RoutingSlipExample {
 
         // Execute slip (fire-and-forget)
         var result1 = RoutingSlip.executeSlip(msgWithSlip1);
-        System.out.println("Slip execution result: "
-                + (result1 instanceof Result.Ok ? "SUCCESS" : "FAILED"));
+        System.out.println(
+                "Slip execution result: " + (result1 instanceof Result.Ok ? "SUCCESS" : "FAILED"));
 
         Thread.sleep(2000); // Wait for async processing
 
         System.out.println("\n--- Invoice 2 (15000.0) ---");
-        var msgWithSlip2 =
-                RoutingSlip.withSlip(
-                        new WorkflowMessage.ProcessInvoice(invoice2), slip);
+        var msgWithSlip2 = RoutingSlip.withSlip(new WorkflowMessage.ProcessInvoice(invoice2), slip);
         var result2 = RoutingSlip.executeSlip(msgWithSlip2);
-        System.out.println("Slip execution result: "
-                + (result2 instanceof Result.Ok ? "SUCCESS" : "FAILED"));
+        System.out.println(
+                "Slip execution result: " + (result2 instanceof Result.Ok ? "SUCCESS" : "FAILED"));
 
         Thread.sleep(2000); // Wait for async processing
 
         System.out.println("\n--- Statistics ---");
-        validator.tell(new WorkflowMessage.Stats());
-        approver.tell(new WorkflowMessage.Stats());
-        payment.tell(new WorkflowMessage.Stats());
-        archive.tell(new WorkflowMessage.Stats());
+        validatorRef.tell(new WorkflowMessage.Stats());
+        approverRef.tell(new WorkflowMessage.Stats());
+        paymentRef.tell(new WorkflowMessage.Stats());
+        archiveRef.tell(new WorkflowMessage.Stats());
 
         Thread.sleep(500);
 
         System.out.println("\nShutting down workflow...");
-        validator.stop();
-        approver.stop();
-        payment.stop();
-        archive.stop();
+        supervisor.shutdown();
 
         System.out.println("Done.");
     }

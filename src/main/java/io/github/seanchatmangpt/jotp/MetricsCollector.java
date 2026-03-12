@@ -4,25 +4,26 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.DoubleAdder;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Supplier;
 
 /**
  * Metrics collector — OTP-style telemetry for observability.
  *
- * <p>Joe Armstrong: "In production systems, you need visibility. Observability
- * is not optional — metrics tell you what's happening right now."
+ * <p>Joe Armstrong: "In production systems, you need visibility. Observability is not optional —
+ * metrics tell you what's happening right now."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Counters</b> — Monotonically increasing values (requests, errors)</li>
- *   <li><b>Gauges</b> — Point-in-time values (queue depth, memory)</li>
- *   <li><b>Histograms</b> — Distribution of values (latency, size)</li>
- *   <li><b>Timers</b> — Duration measurements with percentiles</li>
+ *   <li><b>Counters</b> — Monotonically increasing values (requests, errors)
+ *   <li><b>Gauges</b> — Point-in-time values (queue depth, memory)
+ *   <li><b>Histograms</b> — Distribution of values (latency, size)
+ *   <li><b>Timers</b> — Duration measurements with percentiles
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * MetricsCollector metrics = MetricsCollector.create("telemetry-service");
  *
@@ -48,52 +49,75 @@ import java.util.function.Supplier;
 public final class MetricsCollector implements Application.Infrastructure {
 
     /** Metric type enumeration. */
-    public enum MetricType { COUNTER, GAUGE, HISTOGRAM, TIMER }
+    public enum MetricType {
+        COUNTER,
+        GAUGE,
+        HISTOGRAM,
+        TIMER
+    }
 
     /** Metric metadata. */
-    public record MetricInfo(String name, MetricType type, String description, Map<String, String> tags) {}
+    public record MetricInfo(
+            String name, MetricType type, String description, Map<String, String> tags) {}
 
     // ── Metric interfaces ────────────────────────────────────────────────────────
 
     /** Counter metric — monotonically increasing value. */
     public interface Counter {
         void increment();
+
         void increment(long delta);
+
         long count();
+
         void reset();
     }
 
     /** Gauge metric — point-in-time value. */
     public interface Gauge {
         void set(double value);
+
         double value();
     }
 
     /** Histogram metric — distribution of values. */
     public interface Histogram {
         void record(long value);
+
         long count();
+
         double mean();
+
         long min();
+
         long max();
+
         double percentile(double p);
     }
 
     /** Timer metric — duration measurement. */
     public interface Timer {
         TimerContext start();
+
         void record(Duration duration);
+
         long count();
+
         Duration mean();
+
         Duration min();
+
         Duration max();
+
         Duration percentile(double p);
     }
 
     /** Timer context for try-with-resources. */
     public interface TimerContext extends AutoCloseable {
         Duration stop();
-        @Override void close();
+
+        @Override
+        void close();
     }
 
     // ── Internal implementations ─────────────────────────────────────────────────
@@ -101,10 +125,25 @@ public final class MetricsCollector implements Application.Infrastructure {
     private static final class CounterImpl implements Counter {
         private final LongAdder adder = new LongAdder();
 
-        @Override public void increment() { adder.increment(); }
-        @Override public void increment(long delta) { adder.add(delta); }
-        @Override public long count() { return adder.sum(); }
-        @Override public void reset() { adder.reset(); }
+        @Override
+        public void increment() {
+            adder.increment();
+        }
+
+        @Override
+        public void increment(long delta) {
+            adder.add(delta);
+        }
+
+        @Override
+        public long count() {
+            return adder.sum();
+        }
+
+        @Override
+        public void reset() {
+            adder.reset();
+        }
     }
 
     private static final class GaugeImpl implements Gauge {
@@ -115,8 +154,15 @@ public final class MetricsCollector implements Application.Infrastructure {
             this.supplier = supplier;
         }
 
-        @Override public void set(double value) { this.value = value; }
-        @Override public double value() { return supplier != null ? supplier.get() : value; }
+        @Override
+        public void set(double value) {
+            this.value = value;
+        }
+
+        @Override
+        public double value() {
+            return supplier != null ? supplier.get() : value;
+        }
     }
 
     private static final class HistogramImpl implements Histogram {
@@ -146,13 +192,26 @@ public final class MetricsCollector implements Application.Infrastructure {
             }
         }
 
-        @Override public long count() { return count.sum(); }
-        @Override public double mean() {
+        @Override
+        public long count() {
+            return count.sum();
+        }
+
+        @Override
+        public double mean() {
             long c = count.sum();
             return c > 0 ? (double) sum.sum() / c : 0;
         }
-        @Override public long min() { return min == Long.MAX_VALUE ? 0 : min; }
-        @Override public long max() { return max == Long.MIN_VALUE ? 0 : max; }
+
+        @Override
+        public long min() {
+            return min == Long.MAX_VALUE ? 0 : min;
+        }
+
+        @Override
+        public long max() {
+            return max == Long.MIN_VALUE ? 0 : max;
+        }
 
         @Override
         public double percentile(double p) {
@@ -195,12 +254,35 @@ public final class MetricsCollector implements Application.Infrastructure {
             };
         }
 
-        @Override public void record(Duration duration) { histogram.record(duration.toMillis()); }
-        @Override public long count() { return histogram.count(); }
-        @Override public Duration mean() { return Duration.ofMillis((long) histogram.mean()); }
-        @Override public Duration min() { return Duration.ofMillis(histogram.min()); }
-        @Override public Duration max() { return Duration.ofMillis(histogram.max()); }
-        @Override public Duration percentile(double p) { return Duration.ofMillis((long) histogram.percentile(p)); }
+        @Override
+        public void record(Duration duration) {
+            histogram.record(duration.toMillis());
+        }
+
+        @Override
+        public long count() {
+            return histogram.count();
+        }
+
+        @Override
+        public Duration mean() {
+            return Duration.ofMillis((long) histogram.mean());
+        }
+
+        @Override
+        public Duration min() {
+            return Duration.ofMillis(histogram.min());
+        }
+
+        @Override
+        public Duration max() {
+            return Duration.ofMillis(histogram.max());
+        }
+
+        @Override
+        public Duration percentile(double p) {
+            return Duration.ofMillis((long) histogram.percentile(p));
+        }
     }
 
     // ── Metrics collector state ───────────────────────────────────────────────────
@@ -254,98 +336,96 @@ public final class MetricsCollector implements Application.Infrastructure {
 
     // ── Metric registration ──────────────────────────────────────────────────────
 
-    /**
-     * Get or create a counter.
-     */
+    /** Get or create a counter. */
     public Counter counter(String name) {
-        return counters.computeIfAbsent(name, k -> {
-            metadata.put(k, new MetricInfo(k, MetricType.COUNTER, "", Map.of()));
-            return new CounterImpl();
-        });
+        return counters.computeIfAbsent(
+                name,
+                k -> {
+                    metadata.put(k, new MetricInfo(k, MetricType.COUNTER, "", Map.of()));
+                    return new CounterImpl();
+                });
     }
 
-    /**
-     * Get or create a counter with tags.
-     */
+    /** Get or create a counter with tags. */
     public Counter counter(String name, Map<String, String> tags) {
         String key = name + tags.toString();
-        return counters.computeIfAbsent(key, k -> {
-            metadata.put(k, new MetricInfo(name, MetricType.COUNTER, "", tags));
-            return new CounterImpl();
-        });
+        return counters.computeIfAbsent(
+                key,
+                k -> {
+                    metadata.put(k, new MetricInfo(name, MetricType.COUNTER, "", tags));
+                    return new CounterImpl();
+                });
     }
 
-    /**
-     * Get or create a gauge with a supplier.
-     */
+    /** Get or create a gauge with a supplier. */
     public Gauge gauge(String name, Supplier<Double> supplier) {
-        return gauges.computeIfAbsent(name, k -> {
-            metadata.put(k, new MetricInfo(k, MetricType.GAUGE, "", Map.of()));
-            return new GaugeImpl(supplier);
-        });
+        return gauges.computeIfAbsent(
+                name,
+                k -> {
+                    metadata.put(k, new MetricInfo(k, MetricType.GAUGE, "", Map.of()));
+                    return new GaugeImpl(supplier);
+                });
     }
 
-    /**
-     * Get or create a gauge without supplier (manual updates).
-     */
+    /** Get or create a gauge without supplier (manual updates). */
     public Gauge gauge(String name) {
         return gauge(name, null);
     }
 
-    /**
-     * Get or create a histogram.
-     */
+    /** Get or create a histogram. */
     public Histogram histogram(String name) {
-        return histograms.computeIfAbsent(name, k -> {
-            metadata.put(k, new MetricInfo(k, MetricType.HISTOGRAM, "", Map.of()));
-            return new HistogramImpl(histogramMaxSamples);
-        });
+        return histograms.computeIfAbsent(
+                name,
+                k -> {
+                    metadata.put(k, new MetricInfo(k, MetricType.HISTOGRAM, "", Map.of()));
+                    return new HistogramImpl(histogramMaxSamples);
+                });
     }
 
-    /**
-     * Get or create a timer.
-     */
+    /** Get or create a timer. */
     public Timer timer(String name) {
-        return timers.computeIfAbsent(name, k -> {
-            metadata.put(k, new MetricInfo(k, MetricType.TIMER, "", Map.of()));
-            return new TimerImpl(histogramMaxSamples);
-        });
+        return timers.computeIfAbsent(
+                name,
+                k -> {
+                    metadata.put(k, new MetricInfo(k, MetricType.TIMER, "", Map.of()));
+                    return new TimerImpl(histogramMaxSamples);
+                });
     }
 
     // ── Snapshot ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Get a snapshot of all metrics.
-     */
+    /** Get a snapshot of all metrics. */
     public Map<String, Object> snapshot() {
         Map<String, Object> snap = new LinkedHashMap<>();
 
         counters.forEach((name, counter) -> snap.put(name, counter.count()));
         gauges.forEach((name, gauge) -> snap.put(name, gauge.value()));
 
-        histograms.forEach((name, hist) -> {
-            Map<String, Object> histData = new LinkedHashMap<>();
-            histData.put("count", hist.count());
-            histData.put("mean", hist.mean());
-            histData.put("min", hist.min());
-            histData.put("max", hist.max());
-            histData.put("p50", hist.percentile(50));
-            histData.put("p95", hist.percentile(95));
-            histData.put("p99", hist.percentile(99));
-            snap.put(name, histData);
-        });
+        histograms.forEach(
+                (name, hist) -> {
+                    Map<String, Object> histData = new LinkedHashMap<>();
+                    histData.put("count", hist.count());
+                    histData.put("mean", hist.mean());
+                    histData.put("min", hist.min());
+                    histData.put("max", hist.max());
+                    histData.put("p50", hist.percentile(50));
+                    histData.put("p95", hist.percentile(95));
+                    histData.put("p99", hist.percentile(99));
+                    snap.put(name, histData);
+                });
 
-        timers.forEach((name, timer) -> {
-            Map<String, Object> timerData = new LinkedHashMap<>();
-            timerData.put("count", timer.count());
-            timerData.put("mean_ms", timer.mean().toMillis());
-            timerData.put("min_ms", timer.min().toMillis());
-            timerData.put("max_ms", timer.max().toMillis());
-            timerData.put("p50_ms", timer.percentile(50).toMillis());
-            timerData.put("p95_ms", timer.percentile(95).toMillis());
-            timerData.put("p99_ms", timer.percentile(99).toMillis());
-            snap.put(name, timerData);
-        });
+        timers.forEach(
+                (name, timer) -> {
+                    Map<String, Object> timerData = new LinkedHashMap<>();
+                    timerData.put("count", timer.count());
+                    timerData.put("mean_ms", timer.mean().toMillis());
+                    timerData.put("min_ms", timer.min().toMillis());
+                    timerData.put("max_ms", timer.max().toMillis());
+                    timerData.put("p50_ms", timer.percentile(50).toMillis());
+                    timerData.put("p95_ms", timer.percentile(95).toMillis());
+                    timerData.put("p99_ms", timer.percentile(99).toMillis());
+                    snap.put(name, timerData);
+                });
 
         return snap;
     }
@@ -353,29 +433,26 @@ public final class MetricsCollector implements Application.Infrastructure {
     // ── Infrastructure lifecycle ─────────────────────────────────────────────────
 
     @Override
-    public String name() { return name; }
+    public String name() {
+        return name;
+    }
 
     // ── Global registry ──────────────────────────────────────────────────────────
 
-    private static final ConcurrentHashMap<String, MetricsCollector> REGISTRY = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, MetricsCollector> REGISTRY =
+            new ConcurrentHashMap<>();
 
-    /**
-     * Register a metrics collector.
-     */
+    /** Register a metrics collector. */
     public static void register(MetricsCollector collector) {
         REGISTRY.put(collector.name, collector);
     }
 
-    /**
-     * Get a registered collector by name.
-     */
+    /** Get a registered collector by name. */
     public static MetricsCollector get(String name) {
         return REGISTRY.get(name);
     }
 
-    /**
-     * Get the default collector.
-     */
+    /** Get the default collector. */
     public static MetricsCollector getDefault() {
         return REGISTRY.computeIfAbsent("default", k -> create());
     }

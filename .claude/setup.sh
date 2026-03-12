@@ -63,6 +63,21 @@ if [ ! -L /usr/local/bin/mvnd ] || [ "$(readlink /usr/local/bin/mvnd)" != "${MVN
   echo "/usr/local/bin/mvnd -> ${MVND_BIN}"
 fi
 
+# ── /opt/jdk symlink (mvnd native binary has /opt/jdk hardcoded as fallback)
+if [ ! -L /opt/jdk ] || [ "$(readlink /opt/jdk)" != "${JDK26_HOME}" ]; then
+  mkdir -p /opt
+  ln -sf "${JDK26_HOME}" /opt/jdk
+  echo "/opt/jdk -> ${JDK26_HOME}"
+fi
+
+# ── ~/.m2/mvnd.properties — point mvnd daemon at JDK 26 ───────────────────
+MVND_PROPS="${HOME}/.m2/mvnd.properties"
+if [ ! -f "${MVND_PROPS}" ] || ! grep -q "^java.home=" "${MVND_PROPS}" 2>/dev/null; then
+  mkdir -p "${HOME}/.m2"
+  echo "java.home=${JDK26_HOME}" > "${MVND_PROPS}"
+  echo "Wrote ${MVND_PROPS}: java.home=${JDK26_HOME}"
+fi
+
 # ── Maven Proxy Setup ─────────────────────────────────────────────────────
 # Auto-configure ~/.m2/settings.xml from JAVA_TOOL_OPTIONS proxy settings
 # or from https_proxy/http_proxy environment variables.

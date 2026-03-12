@@ -1,13 +1,13 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
-import java.util.function.Consumer;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcMonitor;
-import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
+import io.github.seanchatmangpt.jotp.ProcessMonitor;
+import io.github.seanchatmangpt.jotp.ProcessMonitor.MonitorRef;
+import java.util.function.Consumer;
 
 /**
- * Session and parameter process monitor — OTP {@code ProcMonitor} (unilateral DOWN
- * notification) mapped to ATLAS session lifecycle observation.
+ * Session and parameter process monitor — OTP {@code ProcessMonitor} (unilateral DOWN notification)
+ * mapped to ATLAS session lifecycle observation.
  *
  * <p>In ATLAS, an analyst workstation or remote factory must detect when:
  *
@@ -16,11 +16,11 @@ import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
  *   <li>The live session recorder disconnects from the data server
  * </ul>
  *
- * <p>OTP's {@code erlang:monitor(process, Pid)} — implemented here as
- * {@link ProcMonitor#monitor(Proc, Consumer)} — installs a unilateral DOWN callback. Unlike
- * {@link org.acme.ProcLink}, a monitor does <em>not</em> crash the monitoring side if the
- * target crashes. This is correct for display plugins and analytics dashboards: the dashboard
- * should survive a parameter process restart.
+ * <p>OTP's {@code erlang:monitor(process, Pid)} — implemented here as {@link
+ * ProcessMonitor#monitor(Proc, Consumer)} — installs a unilateral DOWN callback. Unlike {@link
+ * org.acme.ProcessLink}, a monitor does <em>not</em> crash the monitoring side if the target
+ * crashes. This is correct for display plugins and analytics dashboards: the dashboard should
+ * survive a parameter process restart.
  *
  * <p>Real Erlang equivalent:
  *
@@ -59,39 +59,39 @@ public final class SessionMonitor {
      *
      * <p>The monitoring side is NOT affected — this is a unilateral observation, not a link.
      *
-     * @param proc        the parameter process to monitor
+     * @param proc the parameter process to monitor
      * @param downHandler callback invoked on termination
      * @return a {@link MonitorRef} that can be passed to {@link #cancel}
      */
     public static MonitorRef<ParameterDataAccess.State, PdaMsg> watchParameter(
             Proc<ParameterDataAccess.State, PdaMsg> proc, Consumer<Throwable> downHandler) {
-        return ProcMonitor.monitor(proc, downHandler);
+        return ProcessMonitor.monitor(proc, downHandler);
     }
 
     /**
      * Watch a recorder process for DOWN events.
      *
-     * <p>Useful for ATLAS display plugins that need to show a "disconnected" banner when the
-     * data server connection is lost.
+     * <p>Useful for ATLAS display plugins that need to show a "disconnected" banner when the data
+     * server connection is lost.
      *
-     * @param recorder    the recorder process to monitor
+     * @param recorder the recorder process to monitor
      * @param downHandler callback invoked on termination
      * @return a {@link MonitorRef} that can be cancelled
      */
     public static MonitorRef<RecorderProcess.RecorderState, Object> watchRecorder(
             RecorderProcess recorder, Consumer<Throwable> downHandler) {
-        return ProcMonitor.monitor(recorder.proc(), downHandler);
+        return ProcessMonitor.monitor(recorder.proc(), downHandler);
     }
 
     /**
      * Cancel a previously installed monitor — mirrors {@code erlang:demonitor(Ref)}.
      *
-     * <p>After cancellation the {@code downHandler} will not be invoked even if the target
-     * process subsequently terminates.
+     * <p>After cancellation the {@code downHandler} will not be invoked even if the target process
+     * subsequently terminates.
      *
      * @param ref the monitor reference to cancel
      */
     public static void cancel(MonitorRef<?, ?> ref) {
-        ProcMonitor.demonitor(ref);
+        ProcessMonitor.demonitor(ref);
     }
 }

@@ -11,8 +11,8 @@ import java.util.function.Consumer;
  * Competing-consumers dispatcher: a single input channel served by a pool of worker virtual
  * threads, each racing to process the next available message.
  *
- * <p>Enterprise Integration Pattern: <em>Competing Consumers</em> (EIP §10.2). Erlang analog:
- * a supervisor tree of identical worker processes all registered to the same name or receiving from
+ * <p>Enterprise Integration Pattern: <em>Competing Consumers</em> (EIP §10.2). Erlang analog: a
+ * supervisor tree of identical worker processes all registered to the same name or receiving from
  * the same coordinator — the OTP "worker pool" topology. Each message is processed by exactly one
  * worker; workers compete for available messages.
  *
@@ -145,7 +145,8 @@ public final class MessageDispatcher<T> implements MessageChannel<T> {
 
         /** Build the {@link MessageDispatcher}. */
         public MessageDispatcher<T> build() {
-            if (workers.isEmpty()) throw new IllegalStateException("At least one worker is required");
+            if (workers.isEmpty())
+                throw new IllegalStateException("At least one worker is required");
             return new MessageDispatcher<>(workers);
         }
     }

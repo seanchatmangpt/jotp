@@ -1,8 +1,7 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
-import java.util.List;
-
 import io.github.seanchatmangpt.jotp.dogfood.innovation.LivingDocGenerator.DocElement;
+import java.util.List;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,8 +11,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Tests for {@link LivingDocGenerator} — the living documentation generator.
  *
- * <p>Validates regex-based parsing of records, sealed types, modules, methods, and packages, as well
- * as Markdown rendering of the extracted {@link DocElement} hierarchy.
+ * <p>Validates regex-based parsing of records, sealed types, modules, methods, and packages, as
+ * well as Markdown rendering of the extracted {@link DocElement} hierarchy.
  */
 @DisplayName("LivingDocGenerator")
 class LivingDocGeneratorTest implements WithAssertions {
@@ -43,10 +42,11 @@ class LivingDocGeneratorTest implements WithAssertions {
 
             List<DocElement> elements = generator.parseSource(source);
 
-            var records = elements.stream()
-                    .filter(DocElement.RecordDoc.class::isInstance)
-                    .map(DocElement.RecordDoc.class::cast)
-                    .toList();
+            var records =
+                    elements.stream()
+                            .filter(DocElement.RecordDoc.class::isInstance)
+                            .map(DocElement.RecordDoc.class::cast)
+                            .toList();
 
             assertThat(records).hasSize(1);
             assertThat(records.getFirst().name()).isEqualTo("Person");
@@ -66,10 +66,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var records = elements.stream()
-                    .filter(DocElement.RecordDoc.class::isInstance)
-                    .map(DocElement.RecordDoc.class::cast)
-                    .toList();
+            var records =
+                    elements.stream()
+                            .filter(DocElement.RecordDoc.class::isInstance)
+                            .map(DocElement.RecordDoc.class::cast)
+                            .toList();
 
             assertThat(records).hasSize(1);
             assertThat(records.getFirst().components()).hasSize(2);
@@ -90,10 +91,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var records = elements.stream()
-                    .filter(DocElement.RecordDoc.class::isInstance)
-                    .map(DocElement.RecordDoc.class::cast)
-                    .toList();
+            var records =
+                    elements.stream()
+                            .filter(DocElement.RecordDoc.class::isInstance)
+                            .map(DocElement.RecordDoc.class::cast)
+                            .toList();
 
             assertThat(records).hasSize(1);
             assertThat(records.getFirst().javadoc()).isEqualTo("Represents an address.");
@@ -117,10 +119,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var sealedTypes = elements.stream()
-                    .filter(DocElement.SealedTypeDoc.class::isInstance)
-                    .map(DocElement.SealedTypeDoc.class::cast)
-                    .toList();
+            var sealedTypes =
+                    elements.stream()
+                            .filter(DocElement.SealedTypeDoc.class::isInstance)
+                            .map(DocElement.SealedTypeDoc.class::cast)
+                            .toList();
 
             assertThat(sealedTypes).hasSize(1);
             assertThat(sealedTypes.getFirst().name()).isEqualTo("Shape");
@@ -139,10 +142,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var sealedTypes = elements.stream()
-                    .filter(DocElement.SealedTypeDoc.class::isInstance)
-                    .map(DocElement.SealedTypeDoc.class::cast)
-                    .toList();
+            var sealedTypes =
+                    elements.stream()
+                            .filter(DocElement.SealedTypeDoc.class::isInstance)
+                            .map(DocElement.SealedTypeDoc.class::cast)
+                            .toList();
 
             assertThat(sealedTypes).hasSize(1);
             assertThat(sealedTypes.getFirst().name()).isEqualTo("Expr");
@@ -161,10 +165,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var sealedTypes = elements.stream()
-                    .filter(DocElement.SealedTypeDoc.class::isInstance)
-                    .map(DocElement.SealedTypeDoc.class::cast)
-                    .toList();
+            var sealedTypes =
+                    elements.stream()
+                            .filter(DocElement.SealedTypeDoc.class::isInstance)
+                            .map(DocElement.SealedTypeDoc.class::cast)
+                            .toList();
 
             assertThat(sealedTypes).hasSize(1);
             assertThat(sealedTypes.getFirst().name()).isEqualTo("Result");
@@ -193,17 +198,16 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var modules = elements.stream()
-                    .filter(DocElement.ModuleDoc.class::isInstance)
-                    .map(DocElement.ModuleDoc.class::cast)
-                    .toList();
+            var modules =
+                    elements.stream()
+                            .filter(DocElement.ModuleDoc.class::isInstance)
+                            .map(DocElement.ModuleDoc.class::cast)
+                            .toList();
 
             assertThat(modules).hasSize(1);
             assertThat(modules.getFirst().name()).isEqualTo("org.acme");
-            assertThat(modules.getFirst().exports())
-                    .containsExactly("org.acme", "org.acme.util");
-            assertThat(modules.getFirst().requires())
-                    .containsExactly("java.base", "java.logging");
+            assertThat(modules.getFirst().exports()).containsExactly("org.acme", "org.acme.util");
+            assertThat(modules.getFirst().requires()).containsExactly("java.base", "java.logging");
         }
 
         @Test
@@ -217,10 +221,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var modules = elements.stream()
-                    .filter(DocElement.ModuleDoc.class::isInstance)
-                    .map(DocElement.ModuleDoc.class::cast)
-                    .toList();
+            var modules =
+                    elements.stream()
+                            .filter(DocElement.ModuleDoc.class::isInstance)
+                            .map(DocElement.ModuleDoc.class::cast)
+                            .toList();
 
             assertThat(modules).hasSize(1);
             assertThat(modules.getFirst().requires()).isEmpty();
@@ -249,10 +254,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var methods = elements.stream()
-                    .filter(DocElement.MethodDoc.class::isInstance)
-                    .map(DocElement.MethodDoc.class::cast)
-                    .toList();
+            var methods =
+                    elements.stream()
+                            .filter(DocElement.MethodDoc.class::isInstance)
+                            .map(DocElement.MethodDoc.class::cast)
+                            .toList();
 
             assertThat(methods).hasSize(1);
             assertThat(methods.getFirst().name()).isEqualTo("add");
@@ -274,10 +280,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var methods = elements.stream()
-                    .filter(DocElement.MethodDoc.class::isInstance)
-                    .map(DocElement.MethodDoc.class::cast)
-                    .toList();
+            var methods =
+                    elements.stream()
+                            .filter(DocElement.MethodDoc.class::isInstance)
+                            .map(DocElement.MethodDoc.class::cast)
+                            .toList();
 
             assertThat(methods).hasSize(1);
             assertThat(methods.getFirst().name()).isEqualTo("format");
@@ -302,10 +309,11 @@ class LivingDocGeneratorTest implements WithAssertions {
                     """;
 
             List<DocElement> elements = generator.parseSource(source);
-            var packages = elements.stream()
-                    .filter(DocElement.PackageDoc.class::isInstance)
-                    .map(DocElement.PackageDoc.class::cast)
-                    .toList();
+            var packages =
+                    elements.stream()
+                            .filter(DocElement.PackageDoc.class::isInstance)
+                            .map(DocElement.PackageDoc.class::cast)
+                            .toList();
 
             assertThat(packages).hasSize(1);
             assertThat(packages.getFirst().name()).isEqualTo("org.acme.dogfood.innovation");
@@ -328,12 +336,13 @@ class LivingDocGeneratorTest implements WithAssertions {
         @Test
         @DisplayName("should generate markdown with record table")
         void shouldGenerateRecordMarkdown() {
-            var record = new DocElement.RecordDoc(
-                    "Person",
-                    List.of(
-                            new DocElement.Component("String", "name"),
-                            new DocElement.Component("int", "age")),
-                    "A person entity.");
+            var record =
+                    new DocElement.RecordDoc(
+                            "Person",
+                            List.of(
+                                    new DocElement.Component("String", "name"),
+                                    new DocElement.Component("int", "age")),
+                            "A person entity.");
 
             String md = generator.generateMarkdown(List.of(record));
 
@@ -347,8 +356,12 @@ class LivingDocGeneratorTest implements WithAssertions {
         @Test
         @DisplayName("should generate markdown for sealed type")
         void shouldGenerateSealedTypeMarkdown() {
-            var sealed = new DocElement.SealedTypeDoc(
-                    "Shape", "interface", List.of("Circle", "Square"), "A geometric shape.");
+            var sealed =
+                    new DocElement.SealedTypeDoc(
+                            "Shape",
+                            "interface",
+                            List.of("Circle", "Square"),
+                            "A geometric shape.");
 
             String md = generator.generateMarkdown(List.of(sealed));
 
@@ -362,10 +375,9 @@ class LivingDocGeneratorTest implements WithAssertions {
         @Test
         @DisplayName("should generate markdown for module")
         void shouldGenerateModuleMarkdown() {
-            var module = new DocElement.ModuleDoc(
-                    "org.acme",
-                    List.of("org.acme", "org.acme.api"),
-                    List.of("java.base"));
+            var module =
+                    new DocElement.ModuleDoc(
+                            "org.acme", List.of("org.acme", "org.acme.api"), List.of("java.base"));
 
             String md = generator.generateMarkdown(List.of(module));
 
@@ -380,12 +392,13 @@ class LivingDocGeneratorTest implements WithAssertions {
         @Test
         @DisplayName("should generate markdown for method")
         void shouldGenerateMethodMarkdown() {
-            var method = new DocElement.MethodDoc(
-                    "calculate",
-                    "double",
-                    List.of(new DocElement.Component("int", "x")),
-                    List.of("public", "static"),
-                    "Calculates a value.");
+            var method =
+                    new DocElement.MethodDoc(
+                            "calculate",
+                            "double",
+                            List.of(new DocElement.Component("int", "x")),
+                            List.of("public", "static"),
+                            "Calculates a value.");
 
             String md = generator.generateMarkdown(List.of(method));
 
@@ -494,8 +507,8 @@ class LivingDocGeneratorTest implements WithAssertions {
         @Test
         @DisplayName("RecordDoc should defensively copy components list")
         void recordDocShouldDefensivelyCopy() {
-            var mutableList = new java.util.ArrayList<>(
-                    List.of(new DocElement.Component("String", "name")));
+            var mutableList =
+                    new java.util.ArrayList<>(List.of(new DocElement.Component("String", "name")));
             var rec = new DocElement.RecordDoc("Foo", mutableList, null);
             mutableList.clear();
             assertThat(rec.components()).hasSize(1);
@@ -517,7 +530,8 @@ class LivingDocGeneratorTest implements WithAssertions {
         @DisplayName("handles unbalanced angle brackets in generic types")
         void handlesUnbalancedBrackets() {
             // Source with unbalanced generic brackets (malformed but should not crash)
-            var source = """
+            var source =
+                    """
                     package io.github.seanchatmangpt.jotp;
                     public record Container(Map<String, List<Map<Integer, String>>> items) {}
                     """;
@@ -530,7 +544,8 @@ class LivingDocGeneratorTest implements WithAssertions {
         @Test
         @DisplayName("handles deeply nested generics")
         void handlesDeeplyNestedGenerics() {
-            var source = """
+            var source =
+                    """
                     package io.github.seanchatmangpt.jotp;
                     public record Complex(
                         Map<String, List<Map<Integer, Map<String, Optional<CompletableFuture<String>>>>>> data
@@ -539,11 +554,12 @@ class LivingDocGeneratorTest implements WithAssertions {
 
             var elements = generator.parseSource(source);
 
-            var record = elements.stream()
-                    .filter(e -> e instanceof DocElement.RecordDoc)
-                    .map(e -> (DocElement.RecordDoc) e)
-                    .findFirst()
-                    .orElseThrow();
+            var record =
+                    elements.stream()
+                            .filter(e -> e instanceof DocElement.RecordDoc)
+                            .map(e -> (DocElement.RecordDoc) e)
+                            .findFirst()
+                            .orElseThrow();
 
             assertThat(record.components()).hasSize(1);
         }

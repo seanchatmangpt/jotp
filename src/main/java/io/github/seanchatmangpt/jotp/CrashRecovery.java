@@ -17,11 +17,40 @@ public final class CrashRecovery {
 
     /**
      * Attempt {@code supplier} up to {@code maxAttempts} times, each in an isolated virtual thread.
-     * Returns the first {@code Success}, or a {@code Failure} containing the last exception if all
-     * attempts are exhausted.
      *
-     * <p>Armstrong principle: processes share nothing — each virtual thread is a fresh "process"
-     * with no state carried over from a previous crash.
+     * <p>Returns the first {@code Success}, or a {@code Failure} containing the last exception if
+     * all attempts are exhausted.
+     *
+     * <p>Armstrong principle: "Processes share nothing" — each virtual thread is a fresh "process"
+     * with no state carried over from a previous crash. Use this for resilient single-task
+     * execution; use {@link Supervisor} for persistent process management.
+     *
+     * <p><b>Usage Example:</b>
+     *
+     * <pre>{@code
+     * var result = CrashRecovery.retry(3, () -> {
+     *     var response = http.get("https://api.example.com/data");
+     *     if (response.status() >= 500) {
+     *         throw new RuntimeException("Server error");
+     *     }
+     *     return response.body();
+     * });
+     *
+     * switch (result) {
+     *     case Result.Success(var body) -> System.out.println("Got: " + body);
+     *     case Result.Failure(var ex) -> System.err.println("Failed after 3 attempts: " + ex);
+     * }
+     * }</pre>
+     *
+     * @param <T> result type
+     * @param maxAttempts maximum number of attempts (must be >= 1)
+     * @param supplier work to attempt (runs in a fresh virtual thread each time)
+     * @return {@code Success} with the first successful result, or {@code Failure} with the last
+     *     exception if all attempts fail
+     * @throws NullPointerException if {@code supplier} is null
+     * @throws IllegalArgumentException if {@code maxAttempts < 1}
+     * @see Supervisor for persistent process supervision and automatic restart
+     * @see Result for handling success/failure
      */
     public static <T> Result<T, Exception> retry(int maxAttempts, Supplier<T> supplier) {
         if (maxAttempts < 1) {

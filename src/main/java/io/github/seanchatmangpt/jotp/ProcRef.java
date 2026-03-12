@@ -19,7 +19,7 @@ public final class ProcRef<S, M> {
 
     private volatile Proc<S, M> delegate;
 
-    ProcRef(Proc<S, M> initial) {
+    public ProcRef(Proc<S, M> initial) {
         this.delegate = initial;
     }
 
@@ -52,5 +52,16 @@ public final class ProcRef<S, M> {
      */
     public void stop() throws InterruptedException {
         delegate.stop();
+    }
+
+    /**
+     * Returns the underlying {@link Proc} delegate.
+     *
+     * <p>Primarily intended for monitoring infrastructure (e.g. {@code ProcessMonitor}) that
+     * requires a direct {@code Proc} reference. Prefer {@link #tell} / {@link #ask} for normal
+     * message-passing use.
+     */
+    public Proc<S, M> proc() {
+        return delegate;
     }
 }

@@ -1,37 +1,29 @@
 package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.awaitility.Awaitility.await;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
-import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.AnalysisResult;
-import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.DataStatusType;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.DataStatusType.Good;
-import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.DataStatusType.InvalidData;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.DataStatusType.OutOfRange;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.ParameterId;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.ParameterSpec;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.QueryState;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Sample;
-import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.SessionId;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Timestamp;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -43,11 +35,11 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 /**
  * McLaren Atlas SQL Race Foundation Patterns with JOTP.
  *
- * <p>Tests Vaughn Vernon's Enterprise Integration Patterns applied to race telemetry:
- * Message Bus, Datatype Channels, Durable Subscriber, Service Activator, Idempotent Receiver.
+ * <p>Tests Vaughn Vernon's Enterprise Integration Patterns applied to race telemetry: Message Bus,
+ * Datatype Channels, Durable Subscriber, Service Activator, Idempotent Receiver.
  *
- * <p>Domain: SessionId (correlation), Timestamp (nanos), ParameterId (sensor channel),
- * Sample (raw 16-bit reading with status), DataStatusType (Good | OutOfRange | InvalidData).
+ * <p>Domain: SessionId (correlation), Timestamp (nanos), ParameterId (sensor channel), Sample (raw
+ * 16-bit reading with status), DataStatusType (Good | OutOfRange | InvalidData).
  *
  * @see AtlasDomain for shared domain types
  */
@@ -126,14 +118,14 @@ class AtlasFoundationPatternsIT implements WithAssertions {
 
             var paramId = new ParameterId("ENGINE_RPM");
             for (int i = 0; i < 50; i++) {
-                sampleChannel.tell(new Sample(paramId, new Timestamp(i), (short) (i % 100), new Good()));
+                sampleChannel.tell(
+                        new Sample(paramId, new Timestamp(i), (short) (i % 100), new Good()));
             }
 
             await().atMost(Duration.ofSeconds(2)).until(() -> processed.get() == 50);
 
             // Use type-safe QueryState instead of awkward Sample with timestamp -1
-            var state = sampleChannel.ask(new QueryState.Full())
-                    .get(2, TimeUnit.SECONDS);
+            var state = sampleChannel.ask(new QueryState.Full()).get(2, TimeUnit.SECONDS);
             assertThat(state.samples()).hasSize(50);
 
             sampleChannel.stop();
@@ -162,7 +154,8 @@ class AtlasFoundationPatternsIT implements WithAssertions {
             // Publisher sends messages faster than consumer processes
             var paramId = new ParameterId("TIRE_TEMP_FL");
             for (int i = 0; i < 30; i++) {
-                subscriber.tell(new Sample(paramId, new Timestamp(i), (short) (20 + i), new Good()));
+                subscriber.tell(
+                        new Sample(paramId, new Timestamp(i), (short) (20 + i), new Good()));
             }
 
             // All messages are queued (durable) - mailbox doesn't drop
@@ -247,7 +240,9 @@ class AtlasFoundationPatternsIT implements WithAssertions {
             var validCount = new AtomicInteger(0);
             var invalidCount = new AtomicInteger(0);
 
-            var spec = new ParameterSpec(new ParameterId("BRAKE_TEMP"), "Brake Temperature", 0, 1200, "C");
+            var spec =
+                    new ParameterSpec(
+                            new ParameterId("BRAKE_TEMP"), "Brake Temperature", 0, 1200, "C");
 
             // Service activator that validates samples against spec
             var validatingActivator =
@@ -265,9 +260,12 @@ class AtlasFoundationPatternsIT implements WithAssertions {
                                 return s + 1;
                             });
 
-            validatingActivator.tell(new Sample(spec.id(), new Timestamp(0), (short) 500, new Good()));
-            validatingActivator.tell(new Sample(spec.id(), new Timestamp(1), (short) 1500, new OutOfRange(0, 1200)));
-            validatingActivator.tell(new Sample(spec.id(), new Timestamp(2), (short) 800, new Good()));
+            validatingActivator.tell(
+                    new Sample(spec.id(), new Timestamp(0), (short) 500, new Good()));
+            validatingActivator.tell(
+                    new Sample(spec.id(), new Timestamp(1), (short) 1500, new OutOfRange(0, 1200)));
+            validatingActivator.tell(
+                    new Sample(spec.id(), new Timestamp(2), (short) 800, new Good()));
 
             await().atMost(Duration.ofSeconds(2))
                     .until(() -> validCount.get() == 2 && invalidCount.get() == 1);
@@ -347,7 +345,8 @@ class AtlasFoundationPatternsIT implements WithAssertions {
                     new Proc<>(
                             ConcurrentState.initial(),
                             (ConcurrentState s, Sample msg) -> {
-                                if (s.processed().putIfAbsent(msg.timestamp().nanos(), true) == null) {
+                                if (s.processed().putIfAbsent(msg.timestamp().nanos(), true)
+                                        == null) {
                                     uniqueCount.incrementAndGet();
                                     return new ConcurrentState(s.processed(), s.count() + 1);
                                 }
@@ -379,7 +378,9 @@ class AtlasFoundationPatternsIT implements WithAssertions {
 
         @Test
         void fullTelemetryIngestionPipeline() throws Exception {
-            var sup = new Supervisor("foundation-sv", Strategy.ONE_FOR_ONE, 100, Duration.ofMinutes(5));
+            var sup =
+                    new Supervisor(
+                            "foundation-sv", Strategy.ONE_FOR_ONE, 100, Duration.ofMinutes(5));
 
             // Message bus for telemetry distribution
             var bus = EventManager.<Sample>start();
@@ -390,11 +391,13 @@ class AtlasFoundationPatternsIT implements WithAssertions {
 
             bus.addHandler(
                     s -> {
-                        if (s.parameterId().id().startsWith("BRAKE")) brakeSamples.incrementAndGet();
+                        if (s.parameterId().id().startsWith("BRAKE"))
+                            brakeSamples.incrementAndGet();
                     });
             bus.addHandler(
                     s -> {
-                        if (s.parameterId().id().startsWith("ENGINE")) engineSamples.incrementAndGet();
+                        if (s.parameterId().id().startsWith("ENGINE"))
+                            engineSamples.incrementAndGet();
                     });
 
             // Service activator - processes and publishes to bus
@@ -418,7 +421,12 @@ class AtlasFoundationPatternsIT implements WithAssertions {
             // Send telemetry
             for (int i = 0; i < 50; i++) {
                 activator.tell(new Sample(brakeParam, new Timestamp(i), (short) i, new Good()));
-                activator.tell(new Sample(engineParam, new Timestamp(i + 1000), (short) (i * 100), new Good()));
+                activator.tell(
+                        new Sample(
+                                engineParam,
+                                new Timestamp(i + 1000),
+                                (short) (i * 100),
+                                new Good()));
             }
 
             // Duplicates (retransmissions)
@@ -427,9 +435,11 @@ class AtlasFoundationPatternsIT implements WithAssertions {
             }
 
             await().atMost(Duration.ofSeconds(5))
-                    .until(() -> processed.get() == 100
-                            && brakeSamples.get() == 50
-                            && engineSamples.get() == 50);
+                    .until(
+                            () ->
+                                    processed.get() == 100
+                                            && brakeSamples.get() == 50
+                                            && engineSamples.get() == 50);
 
             bus.stop();
             sup.shutdown();

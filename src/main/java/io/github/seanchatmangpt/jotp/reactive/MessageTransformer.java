@@ -1,7 +1,7 @@
 package io.github.seanchatmangpt.jotp.reactive;
 
-import java.util.function.Function;
 import io.github.seanchatmangpt.jotp.Result;
+import java.util.function.Function;
 
 /**
  * Type-safe message transformer: converts messages from type {@code A} to type {@code B} and
@@ -68,7 +68,8 @@ public final class MessageTransformer<A, B> implements MessageChannel<A> {
     /**
      * Create a transformer that routes failed transformations to an error channel.
      *
-     * @param transform the mapping function; exceptions are caught and routed to {@code errorChannel}
+     * @param transform the mapping function; exceptions are caught and routed to {@code
+     *     errorChannel}
      * @param downstream channel for successfully transformed messages
      * @param errorChannel channel for messages whose transformation threw an exception
      * @param <A> input type

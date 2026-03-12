@@ -17,9 +17,9 @@ import java.util.UUID;
  *     connectionString, sessionKey, sessIdentifier, DateTime.Now, "Session");
  * }</pre>
  *
- * @param guid       UUID that uniquely identifies this session across databases and file copies
- * @param identifier human-readable session name set by the engineer
- *                   (e.g. {@code "Bahrain_FP2_Car1_2025-03-01"})
+ * @param guid UUID that uniquely identifies this session across databases and file copies
+ * @param identifier human-readable session name set by the engineer (e.g. {@code
+ *     "Bahrain_FP2_Car1_2025-03-01"})
  */
 public record SqlRaceSessionKey(String guid, String identifier) {
 

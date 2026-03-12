@@ -16,33 +16,25 @@ public final class VirtualThreadPatterns {
 
     private VirtualThreadPatterns() {}
 
-    /**
-     * Starts a single named virtual thread.
-     */
+    /** Starts a single named virtual thread. */
     public static Thread startNamed(String name, Runnable task) {
         return Thread.ofVirtual().name(name).start(task);
     }
 
-    /**
-     * Starts a virtual thread for a fire-and-forget task.
-     */
+    /** Starts a virtual thread for a fire-and-forget task. */
     public static Thread startFireAndForget(Runnable task) {
         return Thread.startVirtualThread(task);
     }
 
-    /**
-     * Creates multiple named virtual threads with a common prefix.
-     */
+    /** Creates multiple named virtual threads with a common prefix. */
     public static List<Thread> startAll(String prefix, List<Runnable> tasks) {
         var builder = Thread.ofVirtual().name(prefix, 0);
         return tasks.stream().map(builder::start).toList();
     }
 
-    /**
-     * Processes I/O-bound items concurrently using virtual threads.
-     */
-    public static <T, R> List<R> processAllConcurrently(
-            List<T> items, Function<T, R> processor) throws InterruptedException {
+    /** Processes I/O-bound items concurrently using virtual threads. */
+    public static <T, R> List<R> processAllConcurrently(List<T> items, Function<T, R> processor)
+            throws InterruptedException {
 
         var results = new ConcurrentLinkedQueue<R>();
         var latch = new CountDownLatch(items.size());
@@ -66,9 +58,7 @@ public final class VirtualThreadPatterns {
         return List.copyOf(results);
     }
 
-    /**
-     * Handles incoming requests by dispatching each to its own virtual thread.
-     */
+    /** Handles incoming requests by dispatching each to its own virtual thread. */
     public static <T> void handleRequests(List<T> requests, Consumer<T> handler)
             throws InterruptedException {
 
@@ -90,9 +80,7 @@ public final class VirtualThreadPatterns {
         latch.await();
     }
 
-    /**
-     * Runs a task on a virtual thread with a timeout.
-     */
+    /** Runs a task on a virtual thread with a timeout. */
     public static boolean runWithTimeout(Runnable task, Duration timeout)
             throws InterruptedException {
 

@@ -1,13 +1,11 @@
 package io.github.seanchatmangpt.jotp.validation;
 
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
-
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,15 +35,18 @@ class PatternArchTest {
 
     @BeforeAll
     static void importClasses() {
-        allClasses = new ClassFileImporter()
-                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-                .importPackages("org.acme");
-        dogfoodClasses = new ClassFileImporter()
-                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-                .importPackages("org.acme.dogfood");
-        apiDogfoodClasses = new ClassFileImporter()
-                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-                .importPackages("org.acme.dogfood.api");
+        allClasses =
+                new ClassFileImporter()
+                        .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                        .importPackages("org.acme");
+        dogfoodClasses =
+                new ClassFileImporter()
+                        .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                        .importPackages("org.acme.dogfood");
+        apiDogfoodClasses =
+                new ClassFileImporter()
+                        .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                        .importPackages("org.acme.dogfood.api");
     }
 
     // =========================================================================
@@ -55,15 +56,17 @@ class PatternArchTest {
     @Test
     @DisplayName("Core patterns must not depend on dogfood implementations")
     void coreDoesNotDependOnDogfood() {
-        ArchRule rule = noClasses()
-                .that()
-                .resideInAPackage("org.acme")
-                .and()
-                .haveNameNotMatching("org\\.acme\\.dogfood\\..*")
-                .should()
-                .dependOnClassesThat()
-                .resideInAPackage("org.acme.dogfood..")
-                .because("Core patterns must be independent of dogfood — dogfood depends on core");
+        ArchRule rule =
+                noClasses()
+                        .that()
+                        .resideInAPackage("org.acme")
+                        .and()
+                        .haveNameNotMatching("org\\.acme\\.dogfood\\..*")
+                        .should()
+                        .dependOnClassesThat()
+                        .resideInAPackage("org.acme.dogfood..")
+                        .because(
+                                "Core patterns must be independent of dogfood — dogfood depends on core");
 
         rule.allowEmptyShould(true).check(allClasses);
     }
@@ -75,13 +78,15 @@ class PatternArchTest {
     @Test
     @DisplayName("API modernization patterns must not use legacy java.util.Date")
     void apiClassesDoNotUseLegacyDate() {
-        ArchRule rule = noClasses()
-                .that()
-                .resideInAPackage("org.acme.dogfood.api")
-                .should()
-                .dependOnClassesThat()
-                .haveFullyQualifiedName("java.util.Date")
-                .because("ggen-generated API patterns use java.time, not legacy java.util.Date");
+        ArchRule rule =
+                noClasses()
+                        .that()
+                        .resideInAPackage("org.acme.dogfood.api")
+                        .should()
+                        .dependOnClassesThat()
+                        .haveFullyQualifiedName("java.util.Date")
+                        .because(
+                                "ggen-generated API patterns use java.time, not legacy java.util.Date");
 
         rule.allowEmptyShould(true).check(apiDogfoodClasses);
     }
@@ -93,13 +98,14 @@ class PatternArchTest {
     @Test
     @DisplayName("All dogfood patterns must not use legacy java.util.Calendar")
     void dogfoodClassesDoNotUseCalendar() {
-        ArchRule rule = noClasses()
-                .that()
-                .resideInAPackage("org.acme.dogfood..")
-                .should()
-                .dependOnClassesThat()
-                .haveFullyQualifiedName("java.util.Calendar")
-                .because("ggen generates java.time patterns, not legacy Calendar");
+        ArchRule rule =
+                noClasses()
+                        .that()
+                        .resideInAPackage("org.acme.dogfood..")
+                        .should()
+                        .dependOnClassesThat()
+                        .haveFullyQualifiedName("java.util.Calendar")
+                        .because("ggen generates java.time patterns, not legacy Calendar");
 
         rule.allowEmptyShould(true).check(dogfoodClasses);
     }
@@ -111,13 +117,14 @@ class PatternArchTest {
     @Test
     @DisplayName("All dogfood patterns must not use legacy java.util.Date")
     void dogfoodClassesDoNotUseLegacyDate() {
-        ArchRule rule = noClasses()
-                .that()
-                .resideInAPackage("org.acme.dogfood..")
-                .should()
-                .dependOnClassesThat()
-                .haveFullyQualifiedName("java.util.Date")
-                .because("ggen generates java.time patterns, not legacy java.util.Date");
+        ArchRule rule =
+                noClasses()
+                        .that()
+                        .resideInAPackage("org.acme.dogfood..")
+                        .should()
+                        .dependOnClassesThat()
+                        .haveFullyQualifiedName("java.util.Date")
+                        .because("ggen generates java.time patterns, not legacy java.util.Date");
 
         rule.allowEmptyShould(true).check(dogfoodClasses);
     }

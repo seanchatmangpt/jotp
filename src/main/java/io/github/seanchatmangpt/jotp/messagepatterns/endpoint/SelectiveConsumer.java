@@ -12,8 +12,8 @@ import java.util.function.Predicate;
  * <p>Enterprise Integration Pattern: <em>Selective Consumer</em> (EIP §10.4). The consumer filters
  * incoming messages, processing only those it is interested in and rejecting the rest.
  *
- * <p>Erlang analog: selective receive with guard clauses — {@code receive Msg when Guard -> process(Msg)
- * end} — only messages satisfying the guard are dequeued.
+ * <p>Erlang analog: selective receive with guard clauses — {@code receive Msg when Guard ->
+ * process(Msg) end} — only messages satisfying the guard are dequeued.
  *
  * <p>Ported from Vaughn Vernon's Reactive Messaging Patterns (Scala/Akka). In the original, {@code
  * SelectiveConsumer} pattern-matches on message type and forwards to type-specific consumers.
@@ -31,18 +31,21 @@ public final class SelectiveConsumer<T> {
     private SelectiveConsumer(List<Selection<T>> selections, Consumer<T> rejected) {
         this.selections = List.copyOf(selections);
         this.rejected = rejected;
-        this.proc = new Proc<>(null, (state, msg) -> {
-            for (Selection<T> selection : selections) {
-                if (selection.predicate().test(msg)) {
-                    selection.consumer().accept(msg);
-                    return state;
-                }
-            }
-            if (rejected != null) {
-                rejected.accept(msg);
-            }
-            return state;
-        });
+        this.proc =
+                new Proc<>(
+                        null,
+                        (state, msg) -> {
+                            for (Selection<T> selection : selections) {
+                                if (selection.predicate().test(msg)) {
+                                    selection.consumer().accept(msg);
+                                    return state;
+                                }
+                            }
+                            if (rejected != null) {
+                                rejected.accept(msg);
+                            }
+                            return state;
+                        });
     }
 
     /** Send a message to the selective consumer. */
@@ -51,7 +54,7 @@ public final class SelectiveConsumer<T> {
     }
 
     /** Stop the consumer. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 

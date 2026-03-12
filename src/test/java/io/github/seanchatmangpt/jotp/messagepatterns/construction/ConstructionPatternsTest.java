@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -87,9 +86,10 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("addEntry accumulates audit trail")
         void accumulates() {
-            var metadata = MessageMetadata.empty()
-                    .addEntry("OrderService", "validated", "Router", "business rules")
-                    .addEntry("InventoryService", "reserved", "StockMgr", "allocated");
+            var metadata =
+                    MessageMetadata.empty()
+                            .addEntry("OrderService", "validated", "Router", "business rules")
+                            .addEntry("InventoryService", "reserved", "StockMgr", "allocated");
 
             assertThat(metadata.size()).isEqualTo(2);
             assertThat(metadata.lastEntry().who()).isEqualTo("InventoryService");
@@ -180,10 +180,13 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("request returns reply synchronously")
         void syncRequest() {
-            var server = RequestReply.server(
-                    "", (state, msg) -> switch (msg) {
-                        case Echo e -> "RE: " + e.text();
-                    });
+            var server =
+                    RequestReply.server(
+                            "",
+                            (state, msg) ->
+                                    switch (msg) {
+                                        case Echo e -> "RE: " + e.text();
+                                    });
 
             String reply = server.request(new Echo("Hello"), Duration.ofSeconds(2));
             assertThat(reply).isEqualTo("RE: Hello");
@@ -197,16 +200,18 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("return address wraps message with reply-to")
-        void wrapsMessage() {
+        void wrapsMessage() throws InterruptedException {
             var latch = new CountDownLatch(1);
             var received = new AtomicReference<String>();
 
-            var client = new io.github.seanchatmangpt.jotp.Proc<String, String>(
-                    null, (state, msg) -> {
-                        received.set(msg);
-                        latch.countDown();
-                        return msg;
-                    });
+            var client =
+                    new io.github.seanchatmangpt.jotp.Proc<String, String>(
+                            null,
+                            (state, msg) -> {
+                                received.set(msg);
+                                latch.countDown();
+                                return msg;
+                            });
 
             var returnAddr = ReturnAddress.of("Hello", client);
             returnAddr.reply("RE: Hello");

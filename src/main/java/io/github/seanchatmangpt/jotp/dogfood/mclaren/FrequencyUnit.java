@@ -8,9 +8,9 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  * drives {@link SqlRaceChannel#intervalNs()} through {@link SqlRaceChannel#periodic(long, String,
  * double, FrequencyUnit, DataType)}.
  *
- * <p>F1 telemetry channels span orders of magnitude: wheel speeds sampled at 500 Hz, GPS at
- * 20 Hz, and tyre temperature scans at 50 Hz. The {@code KHz} constant is included for
- * accelerometer and vibration channels (≥ 1 000 Hz).
+ * <p>F1 telemetry channels span orders of magnitude: wheel speeds sampled at 500 Hz, GPS at 20 Hz,
+ * and tyre temperature scans at 50 Hz. The {@code KHz} constant is included for accelerometer and
+ * vibration channels (≥ 1 000 Hz).
  */
 public enum FrequencyUnit {
     /** Hertz — samples per second. Used for most ECU channels (1 Hz – 500 Hz). */

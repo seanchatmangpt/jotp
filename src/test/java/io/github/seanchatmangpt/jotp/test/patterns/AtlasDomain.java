@@ -6,16 +6,17 @@ import java.util.UUID;
  * Shared domain types for McLaren Atlas SQL Race EIP pattern tests.
  *
  * <p>These types represent the core telemetry domain model:
+ *
  * <ul>
- *   <li>SessionId - correlation identifier for session saga</li>
- *   <li>Timestamp - nanosecond-precision timestamps for idempotency</li>
- *   <li>ParameterId - sensor channel identifier</li>
- *   <li>Sample - raw 16-bit sensor reading with quality status</li>
- *   <li>DataStatusType - quality status (Good | OutOfRange | InvalidData)</li>
+ *   <li>SessionId - correlation identifier for session saga
+ *   <li>Timestamp - nanosecond-precision timestamps for idempotency
+ *   <li>ParameterId - sensor channel identifier
+ *   <li>Sample - raw 16-bit sensor reading with quality status
+ *   <li>DataStatusType - quality status (Good | OutOfRange | InvalidData)
  * </ul>
  *
- * <p>Also provides a sealed Query interface hierarchy for type-safe state queries,
- * replacing awkward patterns like sending Sample with timestamp -1.
+ * <p>Also provides a sealed Query interface hierarchy for type-safe state queries, replacing
+ * awkward patterns like sending Sample with timestamp -1.
  */
 public final class AtlasDomain {
 
@@ -28,7 +29,8 @@ public final class AtlasDomain {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /** Data quality status following McLaren telemetry standards. */
-    public sealed interface DataStatusType permits DataStatusType.Good, DataStatusType.OutOfRange, DataStatusType.InvalidData {
+    public sealed interface DataStatusType
+            permits DataStatusType.Good, DataStatusType.OutOfRange, DataStatusType.InvalidData {
 
         /** Good quality data - within valid range. */
         record Good() implements DataStatusType {}
@@ -76,13 +78,15 @@ public final class AtlasDomain {
      * Sealed interface for type-safe state queries.
      *
      * <p>Instead of using awkward patterns like:
+     *
      * <ul>
-     *   <li>Sample with timestamp -1</li>
-     *   <li>Empty RoutingSlip</li>
-     *   <li>SessionEvent with QUERY state</li>
+     *   <li>Sample with timestamp -1
+     *   <li>Empty RoutingSlip
+     *   <li>SessionEvent with QUERY state
      * </ul>
      *
      * <p>Use explicit query types:
+     *
      * <pre>{@code
      * // Query list state
      * var samples = proc.ask(QueryState.SAMPLES).get();
@@ -94,7 +98,12 @@ public final class AtlasDomain {
      * var state = proc.ask(QueryState.FULL).get();
      * }</pre>
      */
-    public sealed interface QueryState permits QueryState.Samples, QueryState.Count, QueryState.Full, QueryState.DeadLetters, QueryState.RoutingLog {
+    public sealed interface QueryState
+            permits QueryState.Samples,
+                    QueryState.Count,
+                    QueryState.Full,
+                    QueryState.DeadLetters,
+                    QueryState.RoutingLog {
 
         /** Query for list of samples. */
         record Samples() implements QueryState {}
@@ -121,7 +130,11 @@ public final class AtlasDomain {
      *
      * <p>Provides compile-time exhaustiveness checking for pattern matching.
      */
-    public sealed interface AtlasMsg permits AtlasMsg.SampleMsg, AtlasMsg.SessionEventMsg, AtlasMsg.LapEventMsg, AtlasMsg.StrategyCmdMsg {
+    public sealed interface AtlasMsg
+            permits AtlasMsg.SampleMsg,
+                    AtlasMsg.SessionEventMsg,
+                    AtlasMsg.LapEventMsg,
+                    AtlasMsg.StrategyCmdMsg {
 
         SessionId sessionId();
 
@@ -132,11 +145,14 @@ public final class AtlasDomain {
         record SessionEventMsg(SessionId sessionId, SessionState state) implements AtlasMsg {}
 
         /** Lap completion event. */
-        record LapEventMsg(SessionId sessionId, LapNumber lap, Timestamp beaconTs) implements AtlasMsg {}
+        record LapEventMsg(SessionId sessionId, LapNumber lap, Timestamp beaconTs)
+                implements AtlasMsg {}
 
         /** Strategy command with reply-to future. */
         record StrategyCmdMsg(
-                SessionId sessionId, RaceState state, java.util.concurrent.CompletableFuture<Recommendation> replyTo)
+                SessionId sessionId,
+                RaceState state,
+                java.util.concurrent.CompletableFuture<Recommendation> replyTo)
                 implements AtlasMsg {}
     }
 
@@ -145,13 +161,24 @@ public final class AtlasDomain {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /** Session lifecycle states. */
-    public sealed interface SessionState permits SessionState.Initialized, SessionState.Configured, SessionState.GoLive, SessionState.Recording, SessionState.Saving, SessionState.Closed {
+    public sealed interface SessionState
+            permits SessionState.Initialized,
+                    SessionState.Configured,
+                    SessionState.GoLive,
+                    SessionState.Recording,
+                    SessionState.Saving,
+                    SessionState.Closed {
 
         record Initialized() implements SessionState {}
+
         record Configured() implements SessionState {}
+
         record GoLive() implements SessionState {}
+
         record Recording() implements SessionState {}
+
         record Saving() implements SessionState {}
+
         record Closed() implements SessionState {}
     }
 

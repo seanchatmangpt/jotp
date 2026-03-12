@@ -1,12 +1,10 @@
 package io.github.seanchatmangpt.jotp.dogfood.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
-import java.util.Optional;
+import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns.Payment;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
-import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns.Payment;
 
 /**
  * Tests for Java 26 pattern matching patterns in {@link PatternMatchingPatterns}.

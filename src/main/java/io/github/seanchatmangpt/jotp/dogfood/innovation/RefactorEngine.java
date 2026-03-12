@@ -4,13 +4,11 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Refactor Engine — the missing orchestrator that chains {@link OntologyMigrationEngine}, {@link
@@ -76,7 +74,8 @@ public final class RefactorEngine {
 
         /** Returns the full shell command string for this migration. */
         public String toShellCommand() {
-            return "bin/jgen generate -t %s -n %s -p %s".formatted(template, className, packageName);
+            return "bin/jgen generate -t %s -n %s -p %s"
+                    .formatted(template, className, packageName);
         }
 
         /** Returns a comment summarizing this command for the generated script. */
@@ -126,12 +125,13 @@ public final class RefactorEngine {
 
         /** One-line file summary: score + command count. */
         public String headline() {
-            return "[score=%3d] %s — %d migration(s), %d safe / %d breaking".formatted(
-                    score,
-                    file.getFileName(),
-                    commands.size(),
-                    safeCommands().size(),
-                    breakingCommands().size());
+            return "[score=%3d] %s — %d migration(s), %d safe / %d breaking"
+                    .formatted(
+                            score,
+                            file.getFileName(),
+                            commands.size(),
+                            safeCommands().size(),
+                            breakingCommands().size());
         }
     }
 
@@ -220,22 +220,30 @@ public final class RefactorEngine {
             var safe = safeCommands();
             if (!safe.isEmpty()) {
                 sb.append("\nTop safe migrations (apply immediately):\n");
-                safe.stream().limit(10).forEach(cmd -> {
-                    sb.append("  ").append(cmd.toComment()).append("\n");
-                    sb.append("  ").append(cmd.toShellCommand()).append("\n");
-                });
+                safe.stream()
+                        .limit(10)
+                        .forEach(
+                                cmd -> {
+                                    sb.append("  ").append(cmd.toComment()).append("\n");
+                                    sb.append("  ").append(cmd.toShellCommand()).append("\n");
+                                });
                 if (safe.size() > 10) {
-                    sb.append("  ... and ").append(safe.size() - 10).append(" more (see migrate.sh)\n");
+                    sb.append("  ... and ")
+                            .append(safe.size() - 10)
+                            .append(" more (see migrate.sh)\n");
                 }
             }
 
             var breaking = breakingCommands();
             if (!breaking.isEmpty()) {
                 sb.append("\nBreaking changes (review before applying):\n");
-                breaking.stream().limit(5).forEach(cmd -> {
-                    sb.append("  ").append(cmd.toComment()).append("\n");
-                    sb.append("  ").append(cmd.toShellCommand()).append("\n");
-                });
+                breaking.stream()
+                        .limit(5)
+                        .forEach(
+                                cmd -> {
+                                    sb.append("  ").append(cmd.toComment()).append("\n");
+                                    sb.append("  ").append(cmd.toShellCommand()).append("\n");
+                                });
                 if (breaking.size() > 5) {
                     sb.append("  ... and ").append(breaking.size() - 5).append(" more\n");
                 }
@@ -266,21 +274,25 @@ public final class RefactorEngine {
                 sb.append("echo 'No migrations required - codebase is modern!'\n");
             } else {
                 if (!safe.isEmpty()) {
-                    sb.append("# ── Safe migrations (non-breaking) ──────────────────────────────\n");
-                    safe.forEach(cmd -> {
-                        sb.append(cmd.toComment()).append("\n");
-                        sb.append(cmd.toShellCommand()).append("\n\n");
-                    });
+                    sb.append(
+                            "# ── Safe migrations (non-breaking) ──────────────────────────────\n");
+                    safe.forEach(
+                            cmd -> {
+                                sb.append(cmd.toComment()).append("\n");
+                                sb.append(cmd.toShellCommand()).append("\n\n");
+                            });
                 }
 
                 if (!breaking.isEmpty()) {
-                    sb.append("\n# ── Breaking changes — review before running ──────────────────\n");
+                    sb.append(
+                            "\n# ── Breaking changes — review before running ──────────────────\n");
                     sb.append("read -rp 'Apply breaking changes? (y/N) ' confirm\n");
                     sb.append("[[ \"$confirm\" =~ ^[Yy]$ ]] || exit 0\n\n");
-                    breaking.forEach(cmd -> {
-                        sb.append(cmd.toComment()).append("\n");
-                        sb.append(cmd.toShellCommand()).append("\n\n");
-                    });
+                    breaking.forEach(
+                            cmd -> {
+                                sb.append(cmd.toComment()).append("\n");
+                                sb.append(cmd.toShellCommand()).append("\n\n");
+                            });
                 }
 
                 sb.append("echo 'Migration complete. Run: bin/jgen verify'\n");
@@ -292,8 +304,8 @@ public final class RefactorEngine {
     // ── Core analysis API ─────────────────────────────────────────────────────
 
     /**
-     * Analyzes all Java source files under {@code sourceRoot} and produces a complete
-     * {@link RefactorPlan}.
+     * Analyzes all Java source files under {@code sourceRoot} and produces a complete {@link
+     * RefactorPlan}.
      *
      * @param sourceRoot root directory to scan (recursively)
      * @return a refactor plan with per-file analysis and aggregate commands
@@ -306,12 +318,12 @@ public final class RefactorEngine {
         List<FileRefactorPlan> plans;
 
         try (var stream = Files.walk(sourceRoot)) {
-            plans = stream
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .filter(Files::isRegularFile)
-                    .map(file -> analyzeFile(file, scorer))
-                    .sorted(Comparator.comparingInt(FileRefactorPlan::score)) // worst first
-                    .toList();
+            plans =
+                    stream.filter(p -> p.toString().endsWith(".java"))
+                            .filter(Files::isRegularFile)
+                            .map(file -> analyzeFile(file, scorer))
+                            .sorted(Comparator.comparingInt(FileRefactorPlan::score)) // worst first
+                            .toList();
         } catch (UncheckedIOException e) {
             throw e.getCause();
         }
@@ -320,8 +332,8 @@ public final class RefactorEngine {
     }
 
     /**
-     * Analyzes a single Java source file without walking a directory. Useful for targeted
-     * analysis or testing.
+     * Analyzes a single Java source file without walking a directory. Useful for targeted analysis
+     * or testing.
      *
      * @param file path to the {@code .java} file
      * @return a per-file refactor plan
@@ -342,9 +354,10 @@ public final class RefactorEngine {
         }
 
         var fileName = file.getFileName().toString();
-        var className = fileName.endsWith(".java")
-                ? fileName.substring(0, fileName.length() - 5)
-                : fileName;
+        var className =
+                fileName.endsWith(".java")
+                        ? fileName.substring(0, fileName.length() - 5)
+                        : fileName;
         var packageName = extractPackage(source);
 
         var migrationResult = OntologyMigrationEngine.analyze(fileName, source);
@@ -352,7 +365,12 @@ public final class RefactorEngine {
         var commands = toJgenCommands(migrationResult, className, packageName);
 
         return new FileRefactorPlan(
-                file, className, packageName, migrationResult, scoreResult.overallScore(), commands);
+                file,
+                className,
+                packageName,
+                migrationResult,
+                scoreResult.overallScore(),
+                commands);
     }
 
     private static String extractPackage(String source) {
@@ -366,28 +384,28 @@ public final class RefactorEngine {
      * {@code .tera} suffix.
      */
     private static List<JgenCommand> toJgenCommands(
-            OntologyMigrationEngine.AnalysisResult analysis,
-            String className,
-            String packageName) {
+            OntologyMigrationEngine.AnalysisResult analysis, String className, String packageName) {
 
         return analysis.byPriority().stream()
-                .map(plan -> {
-                    var rawTemplate = plan.rule().targetTemplate();
-                    var template = rawTemplate.endsWith(".tera")
-                            ? rawTemplate.substring(0, rawTemplate.length() - 5)
-                            : rawTemplate;
+                .map(
+                        plan -> {
+                            var rawTemplate = plan.rule().targetTemplate();
+                            var template =
+                                    rawTemplate.endsWith(".tera")
+                                            ? rawTemplate.substring(0, rawTemplate.length() - 5)
+                                            : rawTemplate;
 
-                    // Derive a migration-specific class name where appropriate
-                    var targetName = targetClassName(plan, className);
+                            // Derive a migration-specific class name where appropriate
+                            var targetName = targetClassName(plan, className);
 
-                    return new JgenCommand(
-                            template,
-                            targetName,
-                            packageName,
-                            plan.rule().label(),
-                            plan.rule().priority(),
-                            plan.rule().breaking());
-                })
+                            return new JgenCommand(
+                                    template,
+                                    targetName,
+                                    packageName,
+                                    plan.rule().label(),
+                                    plan.rule().priority(),
+                                    plan.rule().breaking());
+                        })
                 .collect(Collectors.toList());
     }
 
@@ -400,18 +418,15 @@ public final class RefactorEngine {
             OntologyMigrationEngine.MigrationPlan plan, String className) {
         return switch (plan) {
             case OntologyMigrationEngine.MigrationPlan.RecordMigration ignored -> className;
-            case OntologyMigrationEngine.MigrationPlan.LambdaMigration l ->
-                    className + "Lambda";
-            case OntologyMigrationEngine.MigrationPlan.PatternMatchMigration ignored ->
-                    className;
+            case OntologyMigrationEngine.MigrationPlan.LambdaMigration l -> className + "Lambda";
+            case OntologyMigrationEngine.MigrationPlan.PatternMatchMigration ignored -> className;
             case OntologyMigrationEngine.MigrationPlan.SwitchExpressionMigration ignored ->
                     className;
             case OntologyMigrationEngine.MigrationPlan.VirtualThreadMigration ignored ->
                     className + "VT";
             case OntologyMigrationEngine.MigrationPlan.JavaTimeMigration ignored ->
                     className + "Time";
-            case OntologyMigrationEngine.MigrationPlan.NioMigration ignored ->
-                    className + "Nio";
+            case OntologyMigrationEngine.MigrationPlan.NioMigration ignored -> className + "Nio";
             case OntologyMigrationEngine.MigrationPlan.StreamMigration ignored ->
                     className + "Stream";
             case OntologyMigrationEngine.MigrationPlan.GenericMigration ignored ->

@@ -4,15 +4,15 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.ProcRef;
+import io.github.seanchatmangpt.jotp.Supervisor;
+import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.Supervisor;
-import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
@@ -27,7 +27,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * <p>Each test shows a different facet of supervision: crash-and-restart, isolation between
  * children (ONE_FOR_ONE), cascaded restart (ONE_FOR_ALL), and max-restart threshold propagation.
  */
-@Execution(ExecutionMode.SAME_THREAD)  // Isolate from parallel tests due to timing sensitivity
+@Execution(ExecutionMode.SAME_THREAD) // Isolate from parallel tests due to timing sensitivity
 class SupervisorTest implements WithAssertions {
 
     // ── Shared message vocabulary ──────────────────────────────────────────

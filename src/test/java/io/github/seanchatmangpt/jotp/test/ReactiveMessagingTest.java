@@ -2,10 +2,6 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
 import io.github.seanchatmangpt.jotp.reactive.DeadLetterChannel;
 import io.github.seanchatmangpt.jotp.reactive.MessageAggregator;
 import io.github.seanchatmangpt.jotp.reactive.MessageDispatcher;
@@ -16,6 +12,10 @@ import io.github.seanchatmangpt.jotp.reactive.MessageSplitter;
 import io.github.seanchatmangpt.jotp.reactive.MessageTransformer;
 import io.github.seanchatmangpt.jotp.reactive.PointToPointChannel;
 import io.github.seanchatmangpt.jotp.reactive.PublishSubscribeChannel;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -81,9 +81,15 @@ class ReactiveMessagingTest implements WithAssertions {
     @Test
     void pointToPoint_queueDepth_reflectsBacklog() throws InterruptedException {
         // Consumer that blocks to create a backlog
-        var ch = new PointToPointChannel<Integer>(i -> {
-            try { Thread.sleep(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        });
+        var ch =
+                new PointToPointChannel<Integer>(
+                        i -> {
+                            try {
+                                Thread.sleep(200);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
 
         for (int i = 0; i < 5; i++) ch.send(i);
 
@@ -132,7 +138,10 @@ class ReactiveMessagingTest implements WithAssertions {
         var ch = new PublishSubscribeChannel<String>();
         var goodCount = new AtomicInteger();
 
-        ch.subscribe(msg -> { throw new RuntimeException("kaboom"); });
+        ch.subscribe(
+                msg -> {
+                    throw new RuntimeException("kaboom");
+                });
         ch.subscribe(msg -> goodCount.incrementAndGet());
 
         ch.sendSync("event-1");
@@ -183,7 +192,8 @@ class ReactiveMessagingTest implements WithAssertions {
         router.send(new OrderMsg.StandardOrder("s-1", 2));
         router.send(new OrderMsg.InvalidOrder("i-1")); // → dead
 
-        await().atMost(Duration.ofSeconds(2)).until(() -> express.size() == 1 && standard.size() == 1);
+        await().atMost(Duration.ofSeconds(2))
+                .until(() -> express.size() == 1 && standard.size() == 1);
 
         assertThat(express).hasSize(1);
         assertThat(standard).hasSize(1);
@@ -265,7 +275,8 @@ class ReactiveMessagingTest implements WithAssertions {
                         .completeWhen(lines -> lines.size() == 3)
                         .aggregateWith(
                                 lines ->
-                                        new FullOrder(lines.getFirst().orderId(), List.copyOf(lines)))
+                                        new FullOrder(
+                                                lines.getFirst().orderId(), List.copyOf(lines)))
                         .downstream(downstream)
                         .build();
 
@@ -293,7 +304,8 @@ class ReactiveMessagingTest implements WithAssertions {
                         .completeWhen(lines -> lines.size() == 2)
                         .aggregateWith(
                                 lines ->
-                                        new FullOrder(lines.getFirst().orderId(), List.copyOf(lines)))
+                                        new FullOrder(
+                                                lines.getFirst().orderId(), List.copyOf(lines)))
                         .downstream(downstream)
                         .build();
 
@@ -318,8 +330,7 @@ class ReactiveMessagingTest implements WithAssertions {
         var parts = new CopyOnWriteArrayList<OrderLine>();
         var downstream = new PointToPointChannel<OrderLine>(parts::add);
 
-        var splitter =
-                MessageSplitter.<FullOrder, OrderLine>of(FullOrder::lines, downstream);
+        var splitter = MessageSplitter.<FullOrder, OrderLine>of(FullOrder::lines, downstream);
 
         splitter.send(
                 new FullOrder(
@@ -345,9 +356,7 @@ class ReactiveMessagingTest implements WithAssertions {
         var counter = new AtomicInteger(0);
 
         var dispatcher =
-                MessageDispatcher.<Integer>builder()
-                        .workers(3, n -> counter.addAndGet(n))
-                        .build();
+                MessageDispatcher.<Integer>builder().workers(3, n -> counter.addAndGet(n)).build();
 
         for (int i = 1; i <= 10; i++) dispatcher.send(i);
 
@@ -379,10 +388,10 @@ class ReactiveMessagingTest implements WithAssertions {
                         .transform(n -> n * 2)
                         .sink(sink);
 
-        entry.send("5");   // passes: 5 > 0 → 10
-        entry.send("-3");  // filtered out
-        entry.send("7");   // passes: 7 > 0 → 14
-        entry.send("0");   // filtered out
+        entry.send("5"); // passes: 5 > 0 → 10
+        entry.send("-3"); // filtered out
+        entry.send("7"); // passes: 7 > 0 → 14
+        entry.send("0"); // filtered out
 
         await().atMost(Duration.ofSeconds(2)).until(() -> results.size() == 2);
 
@@ -397,10 +406,12 @@ class ReactiveMessagingTest implements WithAssertions {
 
         var entry =
                 MessagePipeline.<RawLog>source()
-                        .transform(raw -> {
-                            var parts = raw.line().split(" ", 2);
-                            return new ParsedLog(parts[0], parts.length > 1 ? parts[1] : "");
-                        })
+                        .transform(
+                                raw -> {
+                                    var parts = raw.line().split(" ", 2);
+                                    return new ParsedLog(
+                                            parts[0], parts.length > 1 ? parts[1] : "");
+                                })
                         .filter(log -> log.level().equals("ERROR") || log.level().equals("WARN"))
                         .sink(sink);
 
@@ -411,7 +422,8 @@ class ReactiveMessagingTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(2)).until(() -> results.size() == 2);
 
         assertThat(results).hasSize(2);
-        assertThat(results.stream().map(ParsedLog::level)).containsExactlyInAnyOrder("ERROR", "WARN");
+        assertThat(results.stream().map(ParsedLog::level))
+                .containsExactlyInAnyOrder("ERROR", "WARN");
 
         sink.stop();
     }

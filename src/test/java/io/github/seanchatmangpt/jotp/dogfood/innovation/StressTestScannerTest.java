@@ -2,12 +2,12 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.List;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.StressTestScanner.Priority;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.StressTestScanner.StressFinding;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.StressTestScanner.StressPlan;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -168,15 +168,15 @@ class StressTestScannerTest {
         }
     }
 
-    // ── ProcRegistry.java — shared-state patterns ──────────────────────────
+    // ── ProcessRegistry.java — shared-state patterns ──────────────────────────
 
     @Nested
-    @DisplayName("ProcRegistry.java")
-    class ProcRegistryFindings {
+    @DisplayName("ProcessRegistry.java")
+    class ProcessRegistryFindings {
 
         private List<StressFinding> registryFindings() {
             return plan.findings().stream()
-                    .filter(f -> f.file().getFileName().toString().equals("ProcRegistry.java"))
+                    .filter(f -> f.file().getFileName().toString().equals("ProcessRegistry.java"))
                     .toList();
         }
 
@@ -184,7 +184,8 @@ class StressTestScannerTest {
         @DisplayName("SharedStatePattern detected (ConcurrentHashMap / putIfAbsent)")
         void registry_sharedStatePatternDetected() {
             assertThat(registryFindings())
-                    .as("ProcRegistry.java must have SharedStatePattern (ConcurrentHashMap/putIfAbsent)")
+                    .as(
+                            "ProcessRegistry.java must have SharedStatePattern (ConcurrentHashMap/putIfAbsent)")
                     .anyMatch(f -> f instanceof StressFinding.SharedStatePattern);
         }
 
@@ -196,16 +197,19 @@ class StressTestScannerTest {
                     .filter(f -> f.priority() == Priority.CRITICAL)
                     .findFirst()
                     .ifPresentOrElse(
-                            f ->
-                                    assertThat(f.priority())
-                                            .isEqualTo(Priority.CRITICAL),
+                            f -> assertThat(f.priority()).isEqualTo(Priority.CRITICAL),
                             () ->
                                     assertThat(registryFindings())
-                                            .as("ProcRegistry must have at least one HIGH SharedStatePattern")
+                                            .as(
+                                                    "ProcessRegistry must have at least one HIGH SharedStatePattern")
                                             .anyMatch(
                                                     f ->
-                                                            f instanceof StressFinding.SharedStatePattern
-                                                                    && f.priority() != Priority.MEDIUM));
+                                                            f
+                                                                            instanceof
+                                                                            StressFinding
+                                                                                    .SharedStatePattern
+                                                                    && f.priority()
+                                                                            != Priority.MEDIUM));
         }
     }
 
@@ -225,7 +229,8 @@ class StressTestScannerTest {
         @DisplayName("ListenerPattern detected (CopyOnWriteArrayList / handler list)")
         void eventManager_listenerPatternDetected() {
             assertThat(emFindings())
-                    .as("EventManager.java must have ListenerPattern (CopyOnWriteArrayList/handlers)")
+                    .as(
+                            "EventManager.java must have ListenerPattern (CopyOnWriteArrayList/handlers)")
                     .anyMatch(f -> f instanceof StressFinding.ListenerPattern);
         }
 
@@ -256,8 +261,7 @@ class StressTestScannerTest {
     @Test
     @DisplayName("findings are sorted CRITICAL before HIGH before MEDIUM")
     void findings_sortedByPriority() {
-        var priorities =
-                plan.findings().stream().map(StressFinding::priority).toList();
+        var priorities = plan.findings().stream().map(StressFinding::priority).toList();
 
         for (int i = 1; i < priorities.size(); i++) {
             assertThat(priorities.get(i).compareTo(priorities.get(i - 1)))

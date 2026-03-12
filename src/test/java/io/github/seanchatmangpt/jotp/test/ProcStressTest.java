@@ -1,19 +1,17 @@
 package io.github.seanchatmangpt.jotp.test;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcSys;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcSys;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -64,8 +62,8 @@ class ProcStressTest implements WithAssertions {
     /**
      * <b>Breaking point: unbounded mailbox memory.</b>
      *
-     * <p>100 000 messages enqueued before the process drains them — the process must handle all
-     * of them and arrive at exactly the right total. ProcSys.statistics() must reflect reality.
+     * <p>100 000 messages enqueued before the process drains them — the process must handle all of
+     * them and arrive at exactly the right total. ProcSys.statistics() must reflect reality.
      *
      * <p>If the JVM runs low on heap, {@code LinkedTransferQueue.add()} will throw {@code
      * OutOfMemoryError} at some depth — this test reveals the practical limit.
@@ -131,12 +129,12 @@ class ProcStressTest implements WithAssertions {
     /**
      * <b>Breaking point: 50 ms poll gap in the Proc loop.</b>
      *
-     * <p>When the mailbox is empty, the loop polls with a 50 ms timeout. The first message after
-     * an idle period therefore incurs up to 50 ms additional latency before being dequeued. This
-     * test measures the actual worst case.
+     * <p>When the mailbox is empty, the loop polls with a 50 ms timeout. The first message after an
+     * idle period therefore incurs up to 50 ms additional latency before being dequeued. This test
+     * measures the actual worst case.
      *
-     * <p>Armstrong: <em>"Latency must be predictable. An unexpected 50 ms pause is indistinguishable
-     * from a partial crash."</em>
+     * <p>Armstrong: <em>"Latency must be predictable. An unexpected 50 ms pause is
+     * indistinguishable from a partial crash."</em>
      *
      * <p><b>Expected result:</b> < 120 ms worst-case (50 ms poll + 50 ms scheduling jitter + 20 ms
      * GC slack). If this consistently exceeds 120 ms, the poll interval should be tuned.
@@ -155,9 +153,7 @@ class ProcStressTest implements WithAssertions {
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
         // Worst-case: poll_interval (50ms) + scheduling jitter; allow 2000ms for JDK 21
-        assertThat(elapsedMs)
-                .as("idle-to-first-message latency (ms)")
-                .isLessThan(2000);
+        assertThat(elapsedMs).as("idle-to-first-message latency (ms)").isLessThan(2000);
 
         proc.stop();
     }
@@ -172,8 +168,8 @@ class ProcStressTest implements WithAssertions {
      * indefinitely delayed by a full mailbox.
      *
      * <p>If the process is processing messages faster than getState drains the queue, this works.
-     * If it is slower (e.g. handler does 1ms of work per message × 1000 = 1s minimum), getState
-     * is delayed by the entire message queue length. That is acceptable and by design.
+     * If it is slower (e.g. handler does 1ms of work per message × 1000 = 1s minimum), getState is
+     * delayed by the entire message queue length. That is acceptable and by design.
      */
     @Test
     void getState_underLoad_completesWithinDeadline() throws Exception {
@@ -198,12 +194,12 @@ class ProcStressTest implements WithAssertions {
      * <b>Breaking point: timeout precision under GC pressure.</b>
      *
      * <p>{@code ask(msg, timeout)} uses {@code CompletableFuture.orTimeout()}. When the JVM is
-     * under GC pressure, the scheduled timeout may fire late. We create background GC pressure
-     * and verify the timeout fires within a 3× tolerance window.
+     * under GC pressure, the scheduled timeout may fire late. We create background GC pressure and
+     * verify the timeout fires within a 3× tolerance window.
      *
      * <p>The slow process sleeps for 1 second per message. We ask with a 100 ms timeout. The
-     * timeout must fire between 100 ms and 400 ms (3× tolerance). Firing at 1000 ms would mean
-     * the orTimeout mechanism is broken under load.
+     * timeout must fire between 100 ms and 400 ms (3× tolerance). Firing at 1000 ms would mean the
+     * orTimeout mechanism is broken under load.
      */
     @Test
     void askTimeout_firesWithin3xToleranceUnderLoad() throws Exception {

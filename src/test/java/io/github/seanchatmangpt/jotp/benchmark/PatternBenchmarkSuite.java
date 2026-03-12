@@ -2,6 +2,9 @@ package io.github.seanchatmangpt.jotp.benchmark;
 
 import io.github.seanchatmangpt.jotp.dogfood.core.GathererPatterns;
 import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -16,15 +19,11 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.IntStream;
-
 /**
  * JMH benchmark suite for ggen-generated Java development patterns.
  *
- * <p>Thesis claim: <em>ggen-generated patterns perform within 100ns per operation for core
- * language feature patterns</em>.
+ * <p>Thesis claim: <em>ggen-generated patterns perform within 100ns per operation for core language
+ * feature patterns</em>.
  *
  * <p>Also serves as the JMH runner entry point for {@code ./mvnw verify -Pbenchmark}.
  *
@@ -49,7 +48,8 @@ public class PatternBenchmarkSuite {
     private static final PatternMatchingPatterns.Payment CARD =
             new PatternMatchingPatterns.Payment.CreditCard("4111111111111111", "Alice", 123, 5000);
     private static final PatternMatchingPatterns.Payment BANK =
-            new PatternMatchingPatterns.Payment.BankTransfer("DE89370400440532013000", "BIC", "Bob");
+            new PatternMatchingPatterns.Payment.BankTransfer(
+                    "DE89370400440532013000", "BIC", "Bob");
     private static final PatternMatchingPatterns.Payment CRYPTO =
             new PatternMatchingPatterns.Payment.CryptoPay("wallet", "BTC", 0.5);
     private static final PatternMatchingPatterns.Payment VOUCHER =
@@ -123,17 +123,13 @@ public class PatternBenchmarkSuite {
         return result;
     }
 
-    /**
-     * Running sum via Gatherers.scan(). Claim: < 10μs for 100 items.
-     */
+    /** Running sum via Gatherers.scan(). Claim: < 10μs for 100 items. */
     @Benchmark
     public List<Integer> gatherer_running_sum_100_items() {
         return GathererPatterns.runningSum(HUNDRED_ITEMS);
     }
 
-    /**
-     * Manual running sum baseline: pre-Java 22 loop. Measures overhead of Gatherers.scan() API.
-     */
+    /** Manual running sum baseline: pre-Java 22 loop. Measures overhead of Gatherers.scan() API. */
     @Benchmark
     public List<Integer> manual_running_sum_baseline() {
         var result = new java.util.ArrayList<Integer>(HUNDRED_ITEMS.size());
@@ -145,9 +141,7 @@ public class PatternBenchmarkSuite {
         return result;
     }
 
-    /**
-     * Deduplicate consecutive via custom Gatherer. Claim: < 10μs for 100 items.
-     */
+    /** Deduplicate consecutive via custom Gatherer. Claim: < 10μs for 100 items. */
     @Benchmark
     public List<Integer> gatherer_dedup_consecutive() {
         return HUNDRED_ITEMS.stream().gather(GathererPatterns.deduplicateConsecutive()).toList();
@@ -158,15 +152,16 @@ public class PatternBenchmarkSuite {
     // =========================================================================
 
     public static void main(String[] args) throws RunnerException {
-        Options opt = new OptionsBuilder()
-                .include(PatternBenchmarkSuite.class.getSimpleName())
-                .include(ActorBenchmark.class.getSimpleName())
-                .include(ResultBenchmark.class.getSimpleName())
-                .include(ParallelBenchmark.class.getSimpleName())
-                .forks(1)
-                .warmupIterations(3)
-                .measurementIterations(5)
-                .build();
+        Options opt =
+                new OptionsBuilder()
+                        .include(PatternBenchmarkSuite.class.getSimpleName())
+                        .include(ActorBenchmark.class.getSimpleName())
+                        .include(ResultBenchmark.class.getSimpleName())
+                        .include(ParallelBenchmark.class.getSimpleName())
+                        .forks(1)
+                        .warmupIterations(3)
+                        .measurementIterations(5)
+                        .build();
         new Runner(opt).run();
     }
 }

@@ -36,8 +36,8 @@ import java.util.Map;
  * @param timestamp when the envelope was created
  * @param <T> the domain message type
  */
-public record EnvelopeWrapper<T>(T payload, Map<String, String> headers, String messageId,
-        Instant timestamp) {
+public record EnvelopeWrapper<T>(
+        T payload, Map<String, String> headers, String messageId, Instant timestamp) {
 
     /** Canonical constructor ensuring immutable headers. */
     public EnvelopeWrapper {
@@ -54,10 +54,7 @@ public record EnvelopeWrapper<T>(T payload, Map<String, String> headers, String 
      */
     public static <T> EnvelopeWrapper<T> wrap(T payload, Map<String, String> headers) {
         return new EnvelopeWrapper<>(
-                payload,
-                headers,
-                CorrelationIdentifier.create().id().toString(),
-                Instant.now());
+                payload, headers, CorrelationIdentifier.create().id().toString(), Instant.now());
     }
 
     /**

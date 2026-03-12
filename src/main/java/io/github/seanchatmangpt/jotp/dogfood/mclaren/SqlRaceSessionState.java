@@ -1,11 +1,10 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
 /**
- * SQL Race session lifecycle states — the {@code S} type parameter for
- * {@link SqlRaceSession}'s {@code StateMachine}.
+ * SQL Race session lifecycle states — the {@code S} type parameter for {@link SqlRaceSession}'s
+ * {@code StateMachine}.
  *
- * <p>Maps to the real ATLAS session state machine ({@code SessionState} enum + recorder
- * lifecycle):
+ * <p>Maps to the real ATLAS session state machine ({@code SessionState} enum + recorder lifecycle):
  *
  * <pre>
  *   ┌──────────────┐  Configure   ┌──────┐  SessionSaved  ┌─────────┐  Close  ┌────────┐
@@ -19,15 +18,15 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  * <p>OTP equivalence:
  *
  * <ul>
- *   <li>{@code Initializing} — gen_statem initial state; the session has a key but no
- *       configuration committed yet. Equivalent to {@code SessionState.Live} before
- *       {@code config.Commit()} is called.
+ *   <li>{@code Initializing} — gen_statem initial state; the session has a key but no configuration
+ *       committed yet. Equivalent to {@code SessionState.Live} before {@code config.Commit()} is
+ *       called.
  *   <li>{@code Live} — active acquisition; parameters and laps are being appended in real time.
  *       Equivalent to {@code SessionState.Live} post-commit in ATLAS.
  *   <li>{@code Closing} — archive write triggered; waiting for the SQL Race engine to flush all
  *       ring-buffer pages to persistent storage.
- *   <li>{@code Closed} — terminal state; session is read-only in the SQL Race database. Any
- *       further messages → {@code Transition.stop("session closed")}.
+ *   <li>{@code Closed} — terminal state; session is read-only in the SQL Race database. Any further
+ *       messages → {@code Transition.stop("session closed")}.
  * </ul>
  */
 public sealed interface SqlRaceSessionState

@@ -1,12 +1,12 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.EventManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import io.github.seanchatmangpt.jotp.EventManager;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -244,8 +244,7 @@ class SessionEventBusTest implements WithAssertions {
 
         // Construct a live session and wire it to the bus via the forwarding handler
         var session = SqlRaceSession.create("forwarding-test");
-        var params =
-                List.of(SqlRaceParameter.of("vCar", "Chassis", 1L, 0.0, 400.0, "kph"));
+        var params = List.of(SqlRaceParameter.of("vCar", "Chassis", 1L, 0.0, 400.0, "kph"));
         var channels =
                 List.of(
                         SqlRaceChannel.periodic(

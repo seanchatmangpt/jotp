@@ -1,19 +1,17 @@
 package io.github.seanchatmangpt.jotp.test;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import net.jqwik.api.ForAll;
-import net.jqwik.api.Property;
-import net.jqwik.api.constraints.IntRange;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
+import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Property;
+import net.jqwik.api.constraints.IntRange;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -31,12 +29,12 @@ import org.junit.jupiter.api.Timeout;
  *   <li><b>Restart storm at the threshold boundary</b> — maxRestarts=3/window=1s: 3 crashes must
  *       restart; the 4th crash within the window must propagate (supervisor dies too). Off-by-one
  *       errors in the sliding window are the most common restart-limit bug.
- *   <li><b>Window expiry — crash after the window resets</b> — crash 3 times within window 1,
- *       wait for the window to expire, crash 3 more times within window 2. Each window gets its
- *       own restart budget; the counter must reset correctly.
+ *   <li><b>Window expiry — crash after the window resets</b> — crash 3 times within window 1, wait
+ *       for the window to expire, crash 3 more times within window 2. Each window gets its own
+ *       restart budget; the counter must reset correctly.
  *   <li><b>Rapid-fire crashes faster than restart latency</b> — crash faster than the supervisor
- *       can restart (restart takes ~1ms; crash every 0.1ms). The supervisor must not miss any
- *       crash event and must count them all toward the restart limit.
+ *       can restart (restart takes ~1ms; crash every 0.1ms). The supervisor must not miss any crash
+ *       event and must count them all toward the restart limit.
  *   <li><b>ONE_FOR_ALL cascade under load</b> — 10 children; when any crashes, all 10 are
  *       restarted. Under rapid crashes from multiple children simultaneously, restart events pile
  *       up. The supervisor must not double-restart, deadlock, or miss crashes.
@@ -85,18 +83,14 @@ class SupervisorStormStressTest implements WithAssertions {
      *   <li>Crash 4 within the window → supervisor gives up and terminates
      * </ul>
      *
-     * <p>An off-by-one bug would allow crash 4 to also restart (if the count is ≤ instead of <),
-     * or would kill the supervisor at crash 3 (if the count starts at 1 instead of 0).
+     * <p>An off-by-one bug would allow crash 4 to also restart (if the count is ≤ instead of <), or
+     * would kill the supervisor at crash 3 (if the count starts at 1 instead of 0).
      */
     @Test
     void restartBoundary_exactlyMaxRestartsAllowed_oneMoreKillsSupervisor() throws Exception {
         int maxRestarts = 3;
         var supervisor =
-                new Supervisor(
-                        "test-sv",
-                        Strategy.ONE_FOR_ONE,
-                        maxRestarts,
-                        Duration.ofSeconds(2));
+                new Supervisor("test-sv", Strategy.ONE_FOR_ONE, maxRestarts, Duration.ofSeconds(2));
 
         var ref = supervisor.supervise("child", 0, SupervisorStormStressTest::handler);
 
@@ -111,8 +105,7 @@ class SupervisorStormStressTest implements WithAssertions {
         // Crash 4 — over budget; supervisor must die
         ref.tell(new Msg.Boom("crash " + (maxRestarts + 1)));
 
-        await().atMost(Duration.ofSeconds(3))
-                .until(() -> !supervisor.isRunning());
+        await().atMost(Duration.ofSeconds(3)).until(() -> !supervisor.isRunning());
 
         assertThat(supervisor.isRunning())
                 .as("supervisor must have terminated after exceeding maxRestarts")
@@ -134,10 +127,7 @@ class SupervisorStormStressTest implements WithAssertions {
         int maxRestarts = 2;
         var supervisor =
                 new Supervisor(
-                        "window-sv",
-                        Strategy.ONE_FOR_ONE,
-                        maxRestarts,
-                        Duration.ofMillis(500));
+                        "window-sv", Strategy.ONE_FOR_ONE, maxRestarts, Duration.ofMillis(500));
 
         var ref = supervisor.supervise("child", 0, SupervisorStormStressTest::handler);
 
@@ -173,20 +163,17 @@ class SupervisorStormStressTest implements WithAssertions {
      * restarts and allows a "restart storm" to continue past the limit. We verify the supervisor
      * terminates after exactly maxRestarts+1 crashes, even at maximum rate.
      *
-     * <p>The supervisor processes crash events from a {@link java.util.concurrent.LinkedTransferQueue}
-     * — it cannot drop events. But if the restart itself takes longer than the next crash arrives,
-     * events pile up. This is safe (queue is unbounded) but tests that pile-up doesn't cause
-     * counting errors.
+     * <p>The supervisor processes crash events from a {@link
+     * java.util.concurrent.LinkedTransferQueue} — it cannot drop events. But if the restart itself
+     * takes longer than the next crash arrives, events pile up. This is safe (queue is unbounded)
+     * but tests that pile-up doesn't cause counting errors.
      */
     @Test
     void rapidFireCrashes_supervisorTerminatesAtLimit() throws Exception {
         int maxRestarts = 5;
         var supervisor =
                 new Supervisor(
-                        "rapid-sv",
-                        Strategy.ONE_FOR_ONE,
-                        maxRestarts,
-                        Duration.ofSeconds(5));
+                        "rapid-sv", Strategy.ONE_FOR_ONE, maxRestarts, Duration.ofSeconds(5));
 
         var ref = supervisor.supervise("child", 0, SupervisorStormStressTest::handler);
 
@@ -202,8 +189,7 @@ class SupervisorStormStressTest implements WithAssertions {
         }
 
         // Supervisor must die (crash count exceeded)
-        await().atMost(Duration.ofSeconds(10))
-                .until(() -> !supervisor.isRunning());
+        await().atMost(Duration.ofSeconds(10)).until(() -> !supervisor.isRunning());
     }
 
     // ── 4. ONE_FOR_ALL under concurrent child crashes ─────────────────────
@@ -220,8 +206,7 @@ class SupervisorStormStressTest implements WithAssertions {
      */
     @Test
     void oneForAll_concurrentChildCrashes_allChildrenRestart() throws Exception {
-        var supervisor =
-                new Supervisor("ofs-sv", Strategy.ONE_FOR_ALL, 10, Duration.ofSeconds(5));
+        var supervisor = new Supervisor("ofs-sv", Strategy.ONE_FOR_ALL, 10, Duration.ofSeconds(5));
 
         int childCount = 5;
         var refs = new ProcRef[childCount];
@@ -235,12 +220,13 @@ class SupervisorStormStressTest implements WithAssertions {
 
         // All children must eventually be reachable again
         await().atMost(Duration.ofSeconds(5))
-                .until(() -> {
-                    for (ProcRef ref : refs) {
-                        if (tryGet(ref) < 0) return false;
-                    }
-                    return true;
-                });
+                .until(
+                        () -> {
+                            for (ProcRef ref : refs) {
+                                if (tryGet(ref) < 0) return false;
+                            }
+                            return true;
+                        });
 
         // Supervisor must still be alive
         assertThat(supervisor.isRunning()).isTrue();
@@ -272,8 +258,7 @@ class SupervisorStormStressTest implements WithAssertions {
         // Crash exactly maxRestarts times — supervisor must survive each
         for (int i = 1; i <= maxRestarts; i++) {
             ref.tell(new Msg.Boom("crash " + i));
-            await().atMost(Duration.ofSeconds(3))
-                    .until(() -> tryGet(ref) >= 0);
+            await().atMost(Duration.ofSeconds(3)).until(() -> tryGet(ref) >= 0);
             assertThat(supervisor.isRunning())
                     .as("supervisor alive after %d/%d restarts", i, maxRestarts)
                     .isTrue();
@@ -289,9 +274,9 @@ class SupervisorStormStressTest implements WithAssertions {
     /**
      * <b>Breaking point: ONE_FOR_ALL restart latency grows linearly with child count.</b>
      *
-     * <p>With 10 children, a ONE_FOR_ALL restart must stop all 10 and restart them. We measure
-     * the time from crash to all-responsive and verify it is under 3 seconds. If each child
-     * restart takes 100ms, 10 children = 1s. If sequential restarts accumulate, this degrades.
+     * <p>With 10 children, a ONE_FOR_ALL restart must stop all 10 and restart them. We measure the
+     * time from crash to all-responsive and verify it is under 3 seconds. If each child restart
+     * takes 100ms, 10 children = 1s. If sequential restarts accumulate, this degrades.
      */
     @Test
     void oneForAll_10children_restartWithin3s() throws Exception {
@@ -302,8 +287,7 @@ class SupervisorStormStressTest implements WithAssertions {
         @SuppressWarnings("unchecked")
         ProcRef<Integer, Msg>[] refs = new ProcRef[childCount];
         for (int i = 0; i < childCount; i++) {
-            refs[i] =
-                    supervisor.supervise("child-" + i, 0, SupervisorStormStressTest::handler);
+            refs[i] = supervisor.supervise("child-" + i, 0, SupervisorStormStressTest::handler);
         }
 
         long start = System.nanoTime();
@@ -311,16 +295,16 @@ class SupervisorStormStressTest implements WithAssertions {
 
         // Wait for all children to be responsive again
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> {
-                    for (ProcRef<Integer, Msg> ref : refs) {
-                        if (tryGet(ref) < 0) return false;
-                    }
-                    return true;
-                });
+                .until(
+                        () -> {
+                            for (ProcRef<Integer, Msg> ref : refs) {
+                                if (tryGet(ref) < 0) return false;
+                            }
+                            return true;
+                        });
 
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-        System.out.printf(
-                "[one-for-all] children=%d restart-all=%d ms%n", childCount, elapsedMs);
+        System.out.printf("[one-for-all] children=%d restart-all=%d ms%n", childCount, elapsedMs);
 
         supervisor.shutdown();
     }

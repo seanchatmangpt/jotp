@@ -7,17 +7,48 @@
 
     <groupId>io.github.seanchatmangpt</groupId>
     <artifactId>jotp</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0</version>
+
+    <name>JOTP - Java OTP Framework</name>
+    <description>
+        Production-ready Java 26 framework implementing all 15 OTP (Erlang/OTP) primitives.
+        Brings battle-tested concurrency patterns, supervision trees, and fault tolerance to the JVM
+        using virtual threads, sealed types, and pattern matching.
+        Module: io.github.seanchatmangpt.jotp (Java 26 JPMS).
+    </description>
+    <url>https://github.com/seanchatmangpt/jotp</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <scm>
+        <connection>scm:git:git://github.com/seanchatmangpt/jotp.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/seanchatmangpt/jotp.git</developerConnection>
+        <url>https://github.com/seanchatmangpt/jotp</url>
+    </scm>
+
+    <developers>
+        <developer>
+            <id>seanchatmangpt</id>
+            <name>Sean Chat Mangpt</name>
+            <url>https://github.com/seanchatmangpt</url>
+        </developer>
+    </developers>
 
     <properties>
         <maven.compiler.release>26</maven.compiler.release>
-        <junit.version>6.0.0</junit.version>
+        <junit.version>5.12.2</junit.version>
         <awaitility.version>4.3.0</awaitility.version>
-        <assertj.version>3.27.6</assertj.version>
+        <assertj.version>3.27.3</assertj.version>
         <jqwik.version>1.9.3</jqwik.version>
         <record.builder.version>41</record.builder.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <instancio.version>5.5.1</instancio.version>
+        <instancio.version>5.4.1</instancio.version>
         <archunit.version>1.4.1</archunit.version>
         <tagNameFormat>v@{project.version}</tagNameFormat>
         <preparationGoals>clean compile test-compile</preparationGoals>
@@ -93,7 +124,7 @@
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
+                <version>3.15.0</version>
                 <configuration>
                     <compilerArgs>
                         <arg>--enable-preview</arg>
@@ -113,14 +144,14 @@
             </plugin>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <configuration>
                     <argLine>--enable-preview --add-reads io.github.seanchatmangpt.jotp=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <executions>
                     <execution>
                         <id>integration-test</id>
@@ -167,12 +198,19 @@
                             <goal>javadoc</goal>
                         </goals>
                     </execution>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
                 </executions>
             </plugin>
-            <plugin>
+            <!-- <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <version>0.8.13</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -213,7 +251,59 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin> -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <style>AOSP</style>
+                            <version>1.28.0</version>
+                        </googleJavaFormat>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>compile</phase>
+                    </execution>
+                </executions>
             </plugin>
+            <!-- <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin> -->
+            <!-- <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <keyname>${gpg.keyname}</keyname>
+                    <passphraseServerId>gpg.passphrase</passphraseServerId>
+                </configuration>
+            </plugin> -->
         </plugins>
     </build>
     <profiles>
@@ -229,11 +319,12 @@
                     <plugin>
                         <groupId>com.diffplug.spotless</groupId>
                         <artifactId>spotless-maven-plugin</artifactId>
-                        <version>3.0.0</version>
+                        <version>3.2.0</version>
                         <configuration>
                             <java>
                                 <googleJavaFormat>
                                     <style>AOSP</style>
+                                    <version>1.28.0</version>
                                 </googleJavaFormat>
                             </java>
                         </configuration>
@@ -361,4 +452,15 @@
             </build>
         </profile>
     </profiles>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
 </project>

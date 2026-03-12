@@ -1,11 +1,8 @@
 package io.github.seanchatmangpt.jotp.dogfood.core;
 
-import java.util.List;
-
-import org.assertj.core.api.WithAssertions;
-
 import net.jqwik.api.*;
 import net.jqwik.api.constraints.*;
+import org.assertj.core.api.WithAssertions;
 
 /**
  * Dogfood: rendered from templates/java/testing/property-based-jqwik.tera
@@ -17,8 +14,7 @@ class PersonProperties implements WithAssertions {
     // Basic property: valid names and ages always produce a valid Person
     @Property(tries = 1000)
     void validInputsAlwaysCreatePerson(
-            @ForAll @StringLength(min = 1, max = 100) @CharRange(from = 'a', to = 'z')
-                    String name,
+            @ForAll @StringLength(min = 1, max = 100) @CharRange(from = 'a', to = 'z') String name,
             @ForAll @IntRange(min = 0, max = 150) int age) {
         var person = new Person(name, age);
         assertThat(person.name()).isEqualTo(name);
@@ -28,8 +24,7 @@ class PersonProperties implements WithAssertions {
     // Record equality: same values produce equal records
     @Property
     void recordEqualityIsSymmetric(
-            @ForAll @StringLength(min = 1, max = 50) @CharRange(from = 'a', to = 'z')
-                    String name,
+            @ForAll @StringLength(min = 1, max = 50) @CharRange(from = 'a', to = 'z') String name,
             @ForAll @IntRange(min = 0, max = 150) int age) {
         var a = new Person(name, age);
         var b = new Person(name, age);
@@ -41,8 +36,7 @@ class PersonProperties implements WithAssertions {
     // Builder produces same result as constructor
     @Property
     void builderMatchesConstructor(
-            @ForAll @StringLength(min = 1, max = 50) @CharRange(from = 'a', to = 'z')
-                    String name,
+            @ForAll @StringLength(min = 1, max = 50) @CharRange(from = 'a', to = 'z') String name,
             @ForAll @IntRange(min = 0, max = 150) int age) {
         var fromConstructor = new Person(name, age);
         var fromBuilder = Person.builder().name(name).age(age).build();
@@ -58,11 +52,7 @@ class PersonProperties implements WithAssertions {
 
     @Provide
     Arbitrary<Person> validPeople() {
-        var names =
-                Arbitraries.strings()
-                        .withCharRange('a', 'z')
-                        .ofMinLength(1)
-                        .ofMaxLength(50);
+        var names = Arbitraries.strings().withCharRange('a', 'z').ofMinLength(1).ofMaxLength(50);
         var ages = Arbitraries.integers().between(0, 150);
         return Combinators.combine(names, ages).as(Person::new);
     }

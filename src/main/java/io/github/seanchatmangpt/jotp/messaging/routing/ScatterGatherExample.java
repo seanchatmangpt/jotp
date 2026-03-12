@@ -66,7 +66,11 @@ public class ScatterGatherExample {
                 String reason =
                         approved ? "Proposal looks good" : "I have concerns about this proposal";
                 System.out.println(
-                        "[" + state.voterId + "] Vote: " + (approved ? "YES" : "NO") + " - "
+                        "["
+                                + state.voterId
+                                + "] Vote: "
+                                + (approved ? "YES" : "NO")
+                                + " - "
                                 + reason);
                 yield state;
             }
@@ -107,8 +111,7 @@ public class ScatterGatherExample {
 
         // Convert voters to message-only refs (cast for this demo)
         @SuppressWarnings("unchecked")
-        var scatterGather =
-                new ScatterGather<VoteRequest, VoteReply, VoterState, VoterMessage>();
+        var scatterGather = new ScatterGather<VoteRequest, VoteReply, VoterState, VoterMessage>();
 
         var result =
                 scatterGather.scatterGather(
@@ -117,32 +120,49 @@ public class ScatterGatherExample {
                         Duration.ofSeconds(5),
                         reqWithId -> {
                             // Map request to CompletableFuture<ReplyWithId>
-                            var futures = new ArrayList<java.util.concurrent.CompletableFuture<ScatterGather.ReplyWithId<VoteReply>>>();
+                            var futures =
+                                    new ArrayList<
+                                            java.util.concurrent.CompletableFuture<
+                                                    ScatterGather.ReplyWithId<VoteReply>>>();
                             for (ProcRef<VoterState, VoterMessage> voter : voters) {
-                                var future =
-                                        java.util.concurrent.CompletableFuture.supplyAsync(
-                                                () -> {
-                                                    // Send vote request to voter and get reply
-                                                    try {
-                                                        var voterReply =
-                                                                voter.ask(
-                                                                        new VoterMessage.Request(
-                                                                                reqWithId.payload()),
-                                                                        Duration.ofSeconds(5));
-                                                        // Extract the vote reply (simulate extraction
-                                                        // from voter state)
-                                                        return new ScatterGather.ReplyWithId<>(
-                                                                reqWithId.requestId(),
-                                                                Result.ok(
-                                                                        new VoteReply(
-                                                                                true, "Simulated vote")));
-                                                    } catch (Exception e) {
-                                                        return new ScatterGather.ReplyWithId<>(
-                                                                reqWithId.requestId(),
-                                                                Result.failure("Vote failed: "
-                                                                        + e.getMessage()));
-                                                    }
-                                                });
+                                java.util.concurrent.CompletableFuture<
+                                                ScatterGather.ReplyWithId<VoteReply>>
+                                        future =
+                                                java.util.concurrent.CompletableFuture.supplyAsync(
+                                                        () -> {
+                                                            // Send vote request to voter and get
+                                                            // reply
+                                                            try {
+                                                                var voterReply =
+                                                                        voter.ask(
+                                                                                new VoterMessage
+                                                                                        .Request(
+                                                                                        reqWithId
+                                                                                                .payload()));
+                                                                // Extract the vote reply (simulate
+                                                                // extraction
+                                                                // from voter state)
+                                                                return new ScatterGather
+                                                                        .ReplyWithId<>(
+                                                                        reqWithId.requestId(),
+                                                                        Result
+                                                                                .<VoteReply, String>
+                                                                                        ok(
+                                                                                                new VoteReply(
+                                                                                                        true,
+                                                                                                        "Simulated vote")));
+                                                            } catch (Exception e) {
+                                                                return new ScatterGather
+                                                                        .ReplyWithId<>(
+                                                                        reqWithId.requestId(),
+                                                                        Result
+                                                                                .<VoteReply, String>
+                                                                                        failure(
+                                                                                                "Vote failed: "
+                                                                                                        + e
+                                                                                                                .getMessage()));
+                                                            }
+                                                        });
                                 futures.add(future);
                             }
                             return java.util.concurrent.CompletableFuture.supplyAsync(

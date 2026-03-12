@@ -8,19 +8,21 @@ import java.util.function.Predicate;
 /**
  * Content-based and predicate-based service router — EIP Content-Based Router for services.
  *
- * <p>Enterprise Integration Pattern: "Content-Based Router routes messages to different
- * services based on message content, without the sender needing to know which service
- * will handle the message."
+ * <p>Enterprise Integration Pattern: "Content-Based Router routes messages to different services
+ * based on message content, without the sender needing to know which service will handle the
+ * message."
  *
  * <p>This router enables:
+ *
  * <ul>
- *   <li><b>Predicate routing</b> — Route based on message predicates</li>
- *   <li><b>Content extraction</b> — Extract routing key from message</li>
- *   <li><b>Fallback routing</b> — Default route when no predicate matches</li>
- *   <li><b>Round-robin load balancing</b> — Distribute across matching services</li>
+ *   <li><b>Predicate routing</b> — Route based on message predicates
+ *   <li><b>Content extraction</b> — Extract routing key from message
+ *   <li><b>Fallback routing</b> — Default route when no predicate matches
+ *   <li><b>Round-robin load balancing</b> — Distribute across matching services
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * ServiceRouter<TelemetryMsg> router = ServiceRouter.<TelemetryMsg>builder()
  *     .route("high-priority", msg -> msg.priority() > 100, "priority-processor")
@@ -41,11 +43,7 @@ import java.util.function.Predicate;
 public final class ServiceRouter<M> {
 
     /** A routing rule with predicate and target service name. */
-    public record Route<M>(
-            String name,
-            Predicate<M> predicate,
-            String serviceName,
-            int priority) {}
+    public record Route<M>(String name, Predicate<M> predicate, String serviceName, int priority) {}
 
     // ── Router state ────────────────────────────────────────────────────────────
 
@@ -54,11 +52,13 @@ public final class ServiceRouter<M> {
     private final LoadBalancer loadBalancer;
     private final ConcurrentHashMap<String, AtomicCounter> counters = new ConcurrentHashMap<>();
 
-    private ServiceRouter(List<Route<M>> routes, String fallbackService, LoadBalancer loadBalancer) {
+    private ServiceRouter(
+            List<Route<M>> routes, String fallbackService, LoadBalancer loadBalancer) {
         // Sort by priority (higher first)
-        this.routes = routes.stream()
-                .sorted(Comparator.comparingInt((Route<M> r) -> r.priority()).reversed())
-                .toList();
+        this.routes =
+                routes.stream()
+                        .sorted(Comparator.comparingInt((Route<M> r) -> r.priority()).reversed())
+                        .toList();
         this.fallbackService = fallbackService;
         this.loadBalancer = loadBalancer != null ? loadBalancer : LoadBalancer.roundRobin();
     }
@@ -99,9 +99,7 @@ public final class ServiceRouter<M> {
         return target.isPresent();
     }
 
-    /**
-     * Find all services that match a message (for multicast routing).
-     */
+    /** Find all services that match a message (for multicast routing). */
     public List<String> matchingRoutes(M message) {
         List<String> matches = new ArrayList<>();
         for (Route<M> route : routes) {
@@ -115,9 +113,7 @@ public final class ServiceRouter<M> {
         return matches;
     }
 
-    /**
-     * Get all configured routes.
-     */
+    /** Get all configured routes. */
     public List<Route<M>> routes() {
         return routes;
     }
@@ -141,9 +137,7 @@ public final class ServiceRouter<M> {
 
     // ── Builder ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Create a new router builder.
-     */
+    /** Create a new router builder. */
     public static <M> Builder<M> builder() {
         return new Builder<>();
     }
@@ -174,7 +168,8 @@ public final class ServiceRouter<M> {
          * @param serviceName target service name
          * @param priority higher priority routes are checked first
          */
-        public Builder<M> route(String name, Predicate<M> predicate, String serviceName, int priority) {
+        public Builder<M> route(
+                String name, Predicate<M> predicate, String serviceName, int priority) {
             routes.add(new Route<>(name, predicate, serviceName, priority));
             return this;
         }
@@ -187,29 +182,24 @@ public final class ServiceRouter<M> {
          * @param key the key to match
          * @param serviceName target service name
          */
-        public <K> Builder<M> routeByKey(String name, Function<M, K> extractor, K key, String serviceName) {
+        public <K> Builder<M> routeByKey(
+                String name, Function<M, K> extractor, K key, String serviceName) {
             return route(name, msg -> Objects.equals(extractor.apply(msg), key), serviceName);
         }
 
-        /**
-         * Set fallback service for unmatched messages.
-         */
+        /** Set fallback service for unmatched messages. */
         public Builder<M> fallback(String serviceName) {
             this.fallbackService = serviceName;
             return this;
         }
 
-        /**
-         * Set load balancer for multi-instance services.
-         */
+        /** Set load balancer for multi-instance services. */
         public Builder<M> loadBalancer(LoadBalancer loadBalancer) {
             this.loadBalancer = loadBalancer;
             return this;
         }
 
-        /**
-         * Build the router.
-         */
+        /** Build the router. */
         public ServiceRouter<M> build() {
             return new ServiceRouter<>(routes, fallbackService, loadBalancer);
         }

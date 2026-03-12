@@ -41,11 +41,14 @@ public final class TransactionalActor<S, E> {
         this.committedState = initialState;
         this.tentativeState = initialState;
         this.eventHandler = eventHandler;
-        this.proc = new Proc<>(initialState, (state, event) -> {
-            uncommittedEvents.add(event);
-            tentativeState = eventHandler.apply(tentativeState, event);
-            return tentativeState;
-        });
+        this.proc =
+                new Proc<>(
+                        initialState,
+                        (state, event) -> {
+                            uncommittedEvents.add(event);
+                            tentativeState = eventHandler.apply(tentativeState, event);
+                            return tentativeState;
+                        });
     }
 
     /** Apply an event (tentatively — not yet committed). */
@@ -81,7 +84,7 @@ public final class TransactionalActor<S, E> {
     }
 
     /** Stop the actor. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

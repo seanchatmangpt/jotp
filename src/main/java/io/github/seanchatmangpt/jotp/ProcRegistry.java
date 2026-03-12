@@ -16,14 +16,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>OTP {@code register(Name, Pid)} → {@link #register(String, Proc)}: registers name, auto-
  *       removes entry when process terminates (any reason)
- *   <li>OTP {@code whereis(Name)} → {@link #whereis(String)}: returns an {@link Optional} (empty
- *       if not registered)
+ *   <li>OTP {@code whereis(Name)} → {@link #whereis(String)}: returns an {@link Optional} (empty if
+ *       not registered)
  *   <li>OTP {@code unregister(Name)} → {@link #unregister(String)}: explicit removal
  *   <li>OTP {@code registered()} → {@link #registered()}: set of all currently registered names
  * </ul>
  *
- * <p>Registration is global (JVM-scoped, not per-supervisor). This matches OTP's single global
- * name table. For scoped name spaces, use separate {@code Map<String, Proc<?,?>>} instances.
+ * <p>Registration is global (JVM-scoped, not per-supervisor). This matches OTP's single global name
+ * table. For scoped name spaces, use separate {@code Map<String, Proc<?,?>>} instances.
  */
 public final class ProcRegistry {
 

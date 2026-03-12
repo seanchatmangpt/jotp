@@ -8,8 +8,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * Reactive channel — bridges jOTP actor messaging with Reactive Streams
- * ({@link java.util.concurrent.Flow}).
+ * Reactive channel — bridges jOTP actor messaging with Reactive Streams ({@link
+ * java.util.concurrent.Flow}).
  *
  * <p>A {@code ReactiveChannel<T>} is a bounded, backpressure-aware stream of messages. It
  * implements {@link Flow.Publisher} so any JDK 9+ subscriber can consume from it, while also
@@ -223,8 +223,8 @@ public final class ReactiveChannel<T> implements Flow.Publisher<T>, AutoCloseabl
     }
 
     /**
-     * Returns a new channel that emits only the items for which {@code predicate} returns
-     * {@code true}.
+     * Returns a new channel that emits only the items for which {@code predicate} returns {@code
+     * true}.
      *
      * <p>The returned channel is closed automatically when this channel closes.
      *
@@ -317,8 +317,8 @@ public final class ReactiveChannel<T> implements Flow.Publisher<T>, AutoCloseabl
     // ── Lifecycle ────────────────────────────────────────────────────────────────
 
     /**
-     * Closes this channel. All pending items are flushed to subscribers, then
-     * {@link Flow.Subscriber#onComplete()} is invoked on each.
+     * Closes this channel. All pending items are flushed to subscribers, then {@link
+     * Flow.Subscriber#onComplete()} is invoked on each.
      */
     @Override
     public void close() {
@@ -326,8 +326,8 @@ public final class ReactiveChannel<T> implements Flow.Publisher<T>, AutoCloseabl
     }
 
     /**
-     * Closes this channel with an error. All subscribers receive
-     * {@link Flow.Subscriber#onError(Throwable)}.
+     * Closes this channel with an error. All subscribers receive {@link
+     * Flow.Subscriber#onError(Throwable)}.
      *
      * @param error the error to propagate
      */

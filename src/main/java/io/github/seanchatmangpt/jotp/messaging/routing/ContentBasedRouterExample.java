@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Example of ContentBasedRouter routing messages to different destinations based on content.
  *
  * <p>Demonstrates:
+ *
  * <ul>
  *   <li>Creating a router with multiple predicates
  *   <li>Routing messages based on content inspection
@@ -30,43 +31,49 @@ public class ContentBasedRouterExample {
         ContentBasedRouter<Message> router = new ContentBasedRouter<>();
 
         // Route 1: High priority (priority >= 8)
-        router.addRoute(msg -> msg.priority() >= 8, msg -> {
-            System.out.println("[URGENT] " + msg);
-            urgentCount.incrementAndGet();
-            latch.countDown();
-        });
+        router.addRoute(
+                msg -> msg.priority() >= 8,
+                msg -> {
+                    System.out.println("[URGENT] " + msg);
+                    urgentCount.incrementAndGet();
+                    latch.countDown();
+                });
 
         // Route 2: Normal priority (priority 3-7)
         router.addRoute(
-                msg -> msg.priority() >= 3 && msg.priority() < 8, msg -> {
-            System.out.println("[NORMAL] " + msg);
-            normalCount.incrementAndGet();
-            latch.countDown();
-        });
+                msg -> msg.priority() >= 3 && msg.priority() < 8,
+                msg -> {
+                    System.out.println("[NORMAL] " + msg);
+                    normalCount.incrementAndGet();
+                    latch.countDown();
+                });
 
         // Route 3: Low priority (priority < 3)
-        router.addRoute(msg -> msg.priority() < 3, msg -> {
-            System.out.println("[LOW] " + msg);
-            lowCount.incrementAndGet();
-            latch.countDown();
-        });
+        router.addRoute(
+                msg -> msg.priority() < 3,
+                msg -> {
+                    System.out.println("[LOW] " + msg);
+                    lowCount.incrementAndGet();
+                    latch.countDown();
+                });
 
         // Default route for unmatched (catches everything via predicate returning false)
-        router.setDefault(msg -> {
-            System.out.println("[DEFAULT] " + msg);
-            defaultCount.incrementAndGet();
-            latch.countDown();
-        });
+        router.setDefault(
+                msg -> {
+                    System.out.println("[DEFAULT] " + msg);
+                    defaultCount.incrementAndGet();
+                    latch.countDown();
+                });
 
         // Send test messages
         System.out.println("=== Content-Based Router Example ===\n");
 
-        router.route(new Message("order", 9, "Fix production bug"));  // URGENT
-        router.route(new Message("order", 5, "Regular order"));       // NORMAL
-        router.route(new Message("order", 1, "Low priority task"));   // LOW
-        router.route(new Message("alert", 9, "System failure"));      // URGENT
-        router.route(new Message("info", 2, "Informational"));        // LOW
-        router.route(new Message("unknown", 0, "No route"));          // DEFAULT
+        router.route(new Message("order", 9, "Fix production bug")); // URGENT
+        router.route(new Message("order", 5, "Regular order")); // NORMAL
+        router.route(new Message("order", 1, "Low priority task")); // LOW
+        router.route(new Message("alert", 9, "System failure")); // URGENT
+        router.route(new Message("info", 2, "Informational")); // LOW
+        router.route(new Message("unknown", 0, "No route")); // DEFAULT
 
         // Wait for processing
         latch.await();

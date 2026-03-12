@@ -4,9 +4,9 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  * Session metadata item — mirrors {@code MESL.SqlRace.Domain.SessionDataItem}.
  *
  * <p>In ATLAS, sessions carry a dictionary of key-value metadata items that describe the
- * engineering context: circuit, driver, weather conditions, chassis setup version, etc. These
- * items are attached to the session during live acquisition and searched via the Telemetry
- * Analytics API (TAPI).
+ * engineering context: circuit, driver, weather conditions, chassis setup version, etc. These items
+ * are attached to the session during live acquisition and searched via the Telemetry Analytics API
+ * (TAPI).
  *
  * <p>Real SQL Race C# original:
  *
@@ -16,7 +16,7 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  * session.Items.Add(new SessionDataItem("TyreCompound", "C3"));
  * }</pre>
  *
- * @param name  metadata key (e.g. {@code "Circuit"}, {@code "Driver"}, {@code "TyreCompound"})
+ * @param name metadata key (e.g. {@code "Circuit"}, {@code "Driver"}, {@code "TyreCompound"})
  * @param value metadata value as a string (numeric values are also stored as strings)
  */
 public record SqlRaceSessionDataItem(String name, String value) {

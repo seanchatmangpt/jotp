@@ -1,6 +1,5 @@
 package io.github.seanchatmangpt.jotp.messagepatterns.channel;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;

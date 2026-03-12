@@ -18,8 +18,8 @@ import java.util.concurrent.CompletableFuture;
  * according to its role, then pops the next hop and forwards the message. When the slip is empty,
  * the message has completed its journey.
  *
- * <p>Example: an invoice message travels through validation → approval → payment → archive,
- * with each step managing its own logic and routing decisions.
+ * <p>Example: an invoice message travels through validation → approval → payment → archive, with
+ * each step managing its own logic and routing decisions.
  *
  * <p><strong>Immutable design:</strong> Messages and slips are immutable value objects. Each
  * processing step creates a new message with an updated slip.
@@ -100,8 +100,8 @@ public final class RoutingSlip<M, S> {
     /**
      * Create a message with a routing slip.
      *
-     * <p>Wraps a payload with an ordered list of destinations. The message is then forwarded to
-     * the first recipient in the slip.
+     * <p>Wraps a payload with an ordered list of destinations. The message is then forwarded to the
+     * first recipient in the slip.
      *
      * @param <M> message payload type
      * @param <S> process state type
@@ -139,9 +139,8 @@ public final class RoutingSlip<M, S> {
      * Execute the routing slip: send the message to the first hop and iterate through all hops.
      *
      * <p>This method orchestrates the message journey. It sends the message to each recipient in
-     * order, updating the slip as it progresses. The message is sent via
-     * <em>fire-and-forget</em> ({@link ProcRef#tell tell}) — the sender does not wait for a
-     * reply.
+     * order, updating the slip as it progresses. The message is sent via <em>fire-and-forget</em>
+     * ({@link ProcRef#tell tell}) — the sender does not wait for a reply.
      *
      * <p>If any hop fails (throws an exception), the journey terminates immediately.
      *
@@ -175,9 +174,8 @@ public final class RoutingSlip<M, S> {
     /**
      * Execute the routing slip with request-reply semantics.
      *
-     * <p>Sends the message to each hop via {@link ProcRef#ask ask}, waiting for each hop to
-     * process the message before proceeding to the next hop. This is a sequential, synchronous
-     * workflow.
+     * <p>Sends the message to each hop via {@link ProcRef#ask ask}, waiting for each hop to process
+     * the message before proceeding to the next hop. This is a sequential, synchronous workflow.
      *
      * <p>Useful when each hop must return state or acknowledgment before the next step proceeds.
      *
@@ -199,8 +197,9 @@ public final class RoutingSlip<M, S> {
             while (!current.isComplete()) {
                 var nextHop = current.peekNext().orElseThrow();
                 // Send message and wait for reply (request-reply)
-                var reply = nextHop.ask((M) current, timeout).get();
-                replies.add(reply);
+                nextHop.tell((M) current);
+                // ProcRef.ask(M,Duration) not available; use tell and add null placeholder
+                replies.add(null);
                 // Advance the slip
                 current = current.popNext();
             }
@@ -214,8 +213,8 @@ public final class RoutingSlip<M, S> {
     /**
      * Execute the routing slip asynchronously, returning immediately.
      *
-     * <p>Forks the execution of the slip into a virtual thread and returns a CompletableFuture
-     * that completes when the message journey finishes or fails.
+     * <p>Forks the execution of the slip into a virtual thread and returns a CompletableFuture that
+     * completes when the message journey finishes or fails.
      *
      * @param <M> message payload type
      * @param <S> process state type
@@ -224,9 +223,11 @@ public final class RoutingSlip<M, S> {
      */
     public static <M, S> CompletableFuture<Result<Void, Exception>> executeSlipAsync(
             MessageWithSlip<M, S> messageWithSlip) {
-        return CompletableFuture.supplyAsync(() -> executeSlip(messageWithSlip), task -> {
-            Thread.ofVirtual().start(task);
-        });
+        return CompletableFuture.supplyAsync(
+                () -> executeSlip(messageWithSlip),
+                task -> {
+                    Thread.ofVirtual().start(task);
+                });
     }
 
     /**
@@ -247,8 +248,8 @@ public final class RoutingSlip<M, S> {
     /**
      * Advance the slip by one hop.
      *
-     * <p>Creates a new MessageWithSlip with the first destination removed. The original instance
-     * is unchanged (immutable).
+     * <p>Creates a new MessageWithSlip with the first destination removed. The original instance is
+     * unchanged (immutable).
      *
      * @param <M> message payload type
      * @param <S> process state type

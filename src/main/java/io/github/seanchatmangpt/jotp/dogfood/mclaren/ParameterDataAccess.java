@@ -1,21 +1,21 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.CrashRecovery;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.Result;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
-import io.github.seanchatmangpt.jotp.CrashRecovery;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.Result;
 
 /**
- * Parameter data access process — OTP {@code gen_server} mapped to SQL Race
- * {@code IParameterDataAccess} / {@code ParameterDataAccessBase}.
+ * Parameter data access process — OTP {@code gen_server} mapped to SQL Race {@code
+ * IParameterDataAccess} / {@code ParameterDataAccessBase}.
  *
  * <p>One virtual-thread {@link Proc} is spawned per parameter. The process owns the parameter's
- * in-memory ring buffer (capped at {@value #RING_BUFFER_CAP} samples) and answers
- * {@code GoTo/GetNextSamples} queries in O(log n) via a {@link TreeMap}.
+ * in-memory ring buffer (capped at {@value #RING_BUFFER_CAP} samples) and answers {@code
+ * GoTo/GetNextSamples} queries in O(log n) via a {@link TreeMap}.
  *
  * <h2>OTP "let it crash" vs. domain errors</h2>
  *
@@ -23,8 +23,8 @@ import io.github.seanchatmangpt.jotp.Result;
  *   <li><b>Crash</b>: lost ECU connection (null message), corrupt framing (exception in decode).
  *       The {@link org.acme.Supervisor} in {@link AcquisitionSupervisor} restarts the process
  *       within 50 ms — the ring buffer is fresh, but acquisition resumes immediately.
- *   <li><b>Domain error</b>: out-of-range value, non-finite double. Handled via
- *       {@link DataStatusType} tagging and {@link Result} — the process stays alive and continues
+ *   <li><b>Domain error</b>: out-of-range value, non-finite double. Handled via {@link
+ *       DataStatusType} tagging and {@link Result} — the process stays alive and continues
  *       recording. The erroneous sample is stored with the appropriate flag so analysts can
  *       investigate.
  * </ul>
@@ -53,6 +53,7 @@ public final class ParameterDataAccess {
     public static final class State {
         final SqlRaceParameter param;
         final SqlRaceChannel channel;
+
         /** Ring buffer: nanosecond timestamp → {value, status.ordinal()}. */
         final TreeMap<Long, double[]> buffer = new TreeMap<>();
 
@@ -74,24 +75,24 @@ public final class ParameterDataAccess {
      * Spawn a parameter data access process.
      *
      * <p>Uses {@link CrashRecovery#retry(int, java.util.function.Supplier)} to wrap the initial
-     * process spawn — if the virtual thread fails to start (e.g. due to resource exhaustion),
-     * up to 3 attempts are made before returning a {@link Result.Failure}.
+     * process spawn — if the virtual thread fails to start (e.g. due to resource exhaustion), up to
+     * 3 attempts are made before returning a {@link Result.Failure}.
      *
-     * @param param   parameter definition
+     * @param param parameter definition
      * @param channel backing data channel
      * @return {@code Result.success(proc)} on success; {@code Result.failure(e)} if all retries
-     *         exhausted
+     *     exhausted
      */
     public static Result<Proc<State, PdaMsg>, Exception> spawn(
             SqlRaceParameter param, SqlRaceChannel channel) {
-        return CrashRecovery.retry(3, () -> new Proc<>(new State(param, channel),
-                ParameterDataAccess::handle));
+        return CrashRecovery.retry(
+                3, () -> new Proc<>(new State(param, channel), ParameterDataAccess::handle));
     }
 
     /**
      * Spawn a parameter data access process, throwing on failure.
      *
-     * @param param   parameter definition
+     * @param param parameter definition
      * @param channel backing data channel
      * @return running {@link Proc}
      * @throws RuntimeException if process cannot be started after retries
@@ -108,7 +109,7 @@ public final class ParameterDataAccess {
         return switch (msg) {
             case PdaMsg.AddSamples(var ts, var vals) -> addSamples(state, ts, vals, null);
             case PdaMsg.AddSamplesWithStatus(var ts, var vals, var status) ->
-                addSamples(state, ts, vals, status);
+                    addSamples(state, ts, vals, status);
             case PdaMsg.GoTo(var tsNs) -> {
                 state.cursorNs = tsNs;
                 yield state;
@@ -118,12 +119,13 @@ public final class ParameterDataAccess {
                 yield state;
             }
             case PdaMsg.GetStats(var reply) -> {
-                reply.complete(new PdaStats(
-                        state.param.identifier(),
-                        state.totalSamples,
-                        state.goodSamples,
-                        state.buffer.size(),
-                        state.cursorNs));
+                reply.complete(
+                        new PdaStats(
+                                state.param.identifier(),
+                                state.totalSamples,
+                                state.goodSamples,
+                                state.buffer.size(),
+                                state.cursorNs));
                 yield state;
             }
             case PdaMsg.Clear() -> {
@@ -195,8 +197,8 @@ public final class ParameterDataAccess {
     /**
      * Synchronous helper: ask the process for the next {@code count} samples.
      *
-     * @param proc      a running {@code ParameterDataAccess} process
-     * @param count     number of samples to request
+     * @param proc a running {@code ParameterDataAccess} process
+     * @param count number of samples to request
      * @param direction traversal direction
      * @return parameter values (may be empty)
      */
