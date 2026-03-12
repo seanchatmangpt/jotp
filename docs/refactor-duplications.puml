@@ -1,0 +1,256 @@
+@startuml messagepatterns-duplications
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam packageBorderColor #333333
+skinparam classBorderColor #D32F2F
+skinparam classBackgroundColor #FFEBEE
+
+title Messagepatterns - Duplication Analysis & Consolidation
+
+package "CONSOLIDATION CANDIDATES" <<Rectangle>> {
+
+  package "Transformation Cluster (CRITICAL)" {
+    class "MessageTranslator<A,B>" as MT {
+      +MessageTranslator(Function<A,B>, Consumer<B>)
+      +translate(A): void
+      +apply(A): void
+      +stop(): void
+      --
+      Proc<Void, A> handler
+      Function<A,B> translator
+    }
+
+    class "ContentFilter<A,B>" as CF {
+      +ContentFilter(Function<A,B>, Consumer<B>)
+      +filter(A): void
+      +apply(A): void
+      +stop(): void
+      --
+      Proc<Void, A> handler
+      Function<A,B> filter
+      (returns Option<B>)
+    }
+
+    class "ContentEnricher<T,R,U>" as CE {
+      +ContentEnricher(Function<T,R>, BiFunction<T,R,U>, Consumer<U>)
+      +enrich(T): void
+      +apply(T): void
+      +stop(): void
+      --
+      Proc<Void, T> handler
+      Function<T,R> enricher
+      BiFunction<T,R,U> combiner
+    }
+
+    class "<<abstract>> UnaryTransformer<T>" as UT {
+      #Proc<Void, T> handler
+      #Consumer<T> downstream
+      --
+      +apply(T): void
+      +stop(): void
+      #{abstract} transform(T): void
+    }
+
+    note right of UT
+      NEW ABSTRACTION
+      Consolidates:
+      • MessageTranslator
+      • ContentFilter
+      • ContentEnricher
+      Via template method pattern
+    end note
+
+    MT -.-> UT : REFACTOR
+    CF -.-> UT : REFACTOR
+    CE -.-> UT : REFACTOR
+  }
+
+  package "Dead Letter Cluster" {
+    class "DeadLetter<T>" as DL {
+      -ConcurrentLinkedQueue<T> queue
+      +dead(T, String): void
+      +drain(): List<T>
+      +size(): int
+      +clear(): void
+    }
+
+    class "InvalidMessageChannel<T>" as IMC {
+      -ConcurrentLinkedQueue<T> queue
+      +reject(T, String): void
+      +drain(): List<T>
+      +size(): int
+      +clear(): void
+    }
+
+    class "<<sealed>> MessageCapture<T>" as MC {
+      permit DeadLetterMsg<T>
+      permit InvalidMsg<T>
+      --
+      -ConcurrentLinkedQueue<T> queue
+      -CaptureReason reason
+      +capture(T, CaptureReason): void
+      +drain(): List<T>
+      +reason(): CaptureReason
+    }
+
+    DL -.-> MC : CONSOLIDATE
+    IMC -.-> MC : CONSOLIDATE
+  }
+
+  package "Router Cluster (5 classes)" {
+    class "ContentBasedRouter<T>" as CBR {
+      -List<Route<T>> routes
+      {static} +builder(): Builder
+      +route(T): void
+    }
+
+    class "DynamicRouter<T>" as DR {
+      -List<Interest<T>> interests
+      +registerInterest(String, Predicate, Consumer)
+      +route(T): void
+    }
+
+    class "RecipientList<T>" as RL {
+      -List<Recipient<T>> recipients
+      +register(String, Consumer, Predicate)
+      +route(T): void
+    }
+
+    class "MessageRouter<T>" as MR {
+      -Consumer<T>[] destinations
+      -AtomicInteger roundRobin
+      +route(T): void
+    }
+
+    class "Splitter<T,P>" as SP {
+      -Function<T, List<P>> decomposer
+      -Consumer<P> downstream
+      +split(T): void
+    }
+
+    class "<<interface>> Router<T>" as Router {
+      +route(T): void
+    }
+
+    note right of Router
+      NEW ABSTRACTION
+      Unified routing interface
+      with multiple backends
+      (predicate, dynamic, list, etc.)
+    end note
+
+    CBR -.-> Router : IMPLEMENT
+    DR -.-> Router : IMPLEMENT
+    RL -.-> Router : IMPLEMENT
+    MR -.-> Router : IMPLEMENT
+    SP -.-> Router : IMPLEMENT
+  }
+
+  package "Proc-Heavy Duplication (13 classes)" {
+    note left
+      All follow same pattern:
+      • Proc<S, T> handler
+      • Consumer<R> destination
+      • start()/stop() lifecycle
+      • Minimal state variation
+
+      CANDIDATES FOR CONSOLIDATION:
+      • Generic ProcPattern<S,T,R> base
+      • Specific state types (Set, Map, etc.)
+      • Policy-based initialization
+    end note
+
+    class "ProcPattern<S,T,R>" as PP_Base {
+      #Proc<S, T> handler
+      #Consumer<R> destination
+      --
+      +start(): void
+      +stop(): void
+      #onMessage(T): Result<R>
+    }
+
+    class "DatatypeChannel<T>" as DC
+    class "PointToPoint<T>" as PPT
+    class "SelectiveConsumer<T>" as SEC
+    class "IdempotentReceiver<T,K>" as IR
+    class "PollingConsumer<T>" as PC
+    class "WireTap<T>" as WT
+    class "MessageTranslator<A,B>" as MT2
+    class "ContentFilter<A,B>" as CF2
+    class "ContentEnricher<T,R,U>" as CE2
+    class "PipesAndFilters<T>" as PnF
+    class "Aggregator<T,K,R>" as AGG
+    class "Resequencer<T>" as REQ
+    class "MessagingBridge<A,B>" as MB
+
+    DC -.-> PP_Base : REFACTOR
+    PPT -.-> PP_Base : REFACTOR
+    SEC -.-> PP_Base : REFACTOR
+    IR -.-> PP_Base : REFACTOR
+    PC -.-> PP_Base : REFACTOR
+    WT -.-> PP_Base : REFACTOR
+    MT2 -.-> PP_Base : REFACTOR
+    CF2 -.-> PP_Base : REFACTOR
+    CE2 -.-> PP_Base : REFACTOR
+    PnF -.-> PP_Base : REFACTOR
+    AGG -.-> PP_Base : REFACTOR
+    REQ -.-> PP_Base : REFACTOR
+    MB -.-> PP_Base : REFACTOR
+  }
+}
+
+package "REFACTORING WORKFLOW" <<Rectangle>> {
+
+  state "Phase 1: Extraction" as P1 {
+    state "Identify duplications" as P1A
+    state "Create base abstractions" as P1B
+    state "Add tests" as P1C
+  }
+
+  state "Phase 2: Consolidation" as P2 {
+    state "Refactor 13 Proc-heavy classes" as P2A
+    state "Merge transformation classes" as P2B
+    state "Merge dead letter classes" as P2C
+    state "Unify router pattern" as P2D
+  }
+
+  state "Phase 3: Advanced JOTP Integration" as P3 {
+    state "ProcessManager → Supervisor+StateMachine" as P3A
+    state "CompetingConsumer → Supervisor" as P3B
+    state "TransactionalActor → StateMachine" as P3C
+    state "SmartProxy → ProcMonitor" as P3D
+    state "ScatterGather → Proc instead of CompletableFuture" as P3E
+  }
+
+  state "Phase 4: Testing & Validation" as P4 {
+    state "Unit tests" as P4A
+    state "Integration tests" as P4B
+    state "Performance benchmarks" as P4C
+  }
+
+  [*] --> P1
+  P1A --> P1B
+  P1B --> P1C
+  P1C --> P2
+  P2A --> P2B
+  P2B --> P2C
+  P2C --> P2D
+  P2D --> P3
+  P3A --> P3B
+  P3B --> P3C
+  P3C --> P3D
+  P3D --> P3E
+  P3E --> P4
+  P4A --> P4B
+  P4B --> P4C
+  P4C --> [*]
+}
+
+legend right
+  |<#FFCDD2> CRITICAL: Identical structure |
+  |<#F8BBD0> HIGH: Very similar pattern |
+  |<#E1BEE7> MEDIUM: Related functionality |
+  |<#BBDEFB> LOW: Minor consolidation |
+end legend
+
+@enduml

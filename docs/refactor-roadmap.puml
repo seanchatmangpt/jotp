@@ -1,0 +1,339 @@
+@startuml messagepatterns-refactor-roadmap
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam actorBorderColor #2E7D32
+skinparam actorBackgroundColor #C8E6C9
+
+title Messagepatterns Refactoring - Phase Roadmap & Dependencies
+
+package "PHASE 0: FOUNDATION (Week 1)" {
+  state "0.1: Create Base Abstractions" as P0_1 {
+    note right
+      CREATE (non-breaking):
+      • interface Router<T>
+      • abstract UnaryTransformer<T>
+      • sealed MessageCapture<T>
+      • interface ProcPattern<S,T,R>
+
+      (Keep existing classes, add new abstractions)
+    end note
+  }
+
+  state "0.2: Unit Tests for New Abstractions" as P0_2 {
+    note right
+      • RouterTest.java
+      • UnaryTransformerTest.java
+      • MessageCaptureTest.java
+      • ProcPatternTest.java
+
+      (Green before refactoring)
+    end note
+  }
+
+  state "0.3: Update messagepatterns/README" as P0_3 {
+    note right
+      Document:
+      • New abstraction strategy
+      • Deprecation timeline
+      • Migration guide
+      • JOTP integration plan
+    end note
+  }
+}
+
+package "PHASE 1: TRANSFORMATION LAYER (Week 2)" {
+  state "1.1: Extract UnaryTransformer" as P1_1 {
+    note right
+      REFACTOR (with deprecation):
+      • Create UnaryTransformer<T> base
+      • MessageTranslator extends UnaryTransformer
+      • ContentFilter extends UnaryTransformer
+      • ContentEnricher extends UnaryTransformer
+
+      @Deprecated("Use UnaryTransformer directly")
+      (Keep old constructors, delegate)
+    end note
+  }
+
+  state "1.2: Merge DeadLetter + InvalidMessageChannel" as P1_2 {
+    note right
+      REFACTOR (with deprecation):
+      • Create sealed MessageCapture<T>
+      • DeadLetterMsg<T> permit
+      • InvalidMsg<T> permit
+
+      @Deprecated("Use MessageCapture")
+      DeadLetter.dead(T) → MessageCapture.capture(T, DEAD_LETTER)
+      InvalidMessageChannel.reject(T) → MessageCapture.capture(T, INVALID)
+    end note
+  }
+
+  state "1.3: Transformation Tests" as P1_3 {
+    note right
+      • UnaryTransformerTest (comprehensive)
+      • MessageTranslatorTest (backward compat)
+      • ContentFilterTest (backward compat)
+      • ContentEnricherTest (backward compat)
+      • MessageCaptureTest
+
+      All must PASS (no breakage)
+    end note
+  }
+
+  P0_3 --> P1_1
+  P1_1 --> P1_2
+  P1_2 --> P1_3
+}
+
+package "PHASE 2: ROUTER CONSOLIDATION (Week 2-3)" {
+  state "2.1: Create Router<T> Interface" as P2_1 {
+    note right
+      interface Router<T> {
+        void route(T message);
+      }
+
+      REFACTOR all 5 router classes:
+      • ContentBasedRouter<T> implements Router<T>
+      • DynamicRouter<T> implements Router<T>
+      • MessageRouter<T> implements Router<T>
+      • RecipientList<T> implements Router<T>
+      • Splitter<T,P> implements Router<P>
+    end note
+  }
+
+  state "2.2: Create RouterFactory + Builder" as P2_2 {
+    note right
+      factory class for:
+      • predicateBased(...)
+      • dynamic()
+      • roundRobin(Consumer...)
+      • recipient(...)
+      • splitter(Function, Router)
+
+      Unify construction patterns
+    end note
+  }
+
+  state "2.3: Router Tests + Integration" as P2_3 {
+    note right
+      • RouterFactoryTest
+      • ContentBasedRouterTest
+      • DynamicRouterTest
+      • MessageRouterTest
+      • RecipientListTest
+      • SplitterTest
+
+      Verify backward compatibility
+    end note
+  }
+
+  P1_3 --> P2_1
+  P2_1 --> P2_2
+  P2_2 --> P2_3
+}
+
+package "PHASE 3: PROC-HEAVY CONSOLIDATION (Week 3-4)" {
+  state "3.1: Create ProcPattern<S,T,R> Base" as P3_1 {
+    note right
+      abstract class ProcPattern<S,T,R> {
+        protected Proc<S,T> handler;
+        protected Consumer<R> destination;
+
+        protected void start(S initial, F handler) {}
+        protected void stop() {}
+        protected Result<R> onMessage(T msg) {}
+      }
+
+      REFACTOR (13 classes need this pattern)
+    end note
+  }
+
+  state "3.2: Refactor Proc-Heavy Classes" as P3_2 {
+    note right
+      Batch 1 (Week 3):
+      • DatatypeChannel extends ProcPattern
+      • PointToPoint extends ProcPattern
+      • SelectiveConsumer extends ProcPattern
+      • IdempotentReceiver extends ProcPattern
+
+      Batch 2 (Week 3-4):
+      • PollingConsumer extends ProcPattern
+      • WireTap extends ProcPattern
+      • PipesAndFilters extends ProcPattern
+
+      Batch 3 (Week 4):
+      • Aggregator extends ProcPattern
+      • Resequencer extends ProcPattern
+      • MessagingBridge extends ProcPattern
+      • ContentEnricher extends UnaryTransformer
+      • ContentFilter extends UnaryTransformer
+      • MessageTranslator extends UnaryTransformer
+    end note
+  }
+
+  state "3.3: Comprehensive Testing" as P3_3 {
+    note right
+      UNIT TESTS:
+      • Each class individually
+      • Backward compatibility assertions
+      • State management tests
+      • Message ordering tests
+
+      INTEGRATION TESTS:
+      • messagepatterns/*/Test.java
+      • test/patterns/Reactive*Test.java
+
+      Must maintain 100% pass rate
+    end note
+  }
+
+  P2_3 --> P3_1
+  P3_1 --> P3_2
+  P3_2 --> P3_3
+}
+
+package "PHASE 4: ADVANCED JOTP INTEGRATION (Week 5-6)" {
+  state "4.1: Supervisor Integration" as P4_1 {
+    note right
+      REFACTOR:
+      • CompetingConsumer → Supervisor + Proc pool
+        (ONE_FOR_ONE restart strategy)
+
+      • ProcessManager → Supervisor + StateMachine
+        (Manage process lifecycle)
+
+      • GuaranteedDelivery → Supervisor + retry policy
+        (Auto-restart failed handlers)
+
+      Breaking changes: New constructors alongside @Deprecated old ones
+    end note
+  }
+
+  state "4.2: StateMachine Integration" as P4_2 {
+    note right
+      REFACTOR:
+      • ProcessManager → StateMachine<ProcessState, Event, Data>
+        (State: Init → Running → Stopping → Stopped)
+
+      • TransactionalActor → StateMachine<TxnState, TxnEvent, TxnData>
+        (State: Idle → Accumulating → Committing → Committed/Rolled Back)
+
+      Sealed Transition hierarchy for each state machine
+    end note
+  }
+
+  state "4.3: ProcMonitor Integration" as P4_3 {
+    note right
+      REFACTOR:
+      • SmartProxy: Remove unused Proc field
+        → Add ProcMonitor on reply handler
+        → Auto-timeout on DOWN msg
+
+      • All Endpoints: Optional health monitoring
+        → ProcMonitor for handler process
+        → Statistics collection
+    end note
+  }
+
+  state "4.4: Advanced Integration Tests" as P4_4 {
+    note right
+      • ProcessManagerIT.java (Supervisor + StateMachine)
+      • TransactionalActorIT.java (StateMachine)
+      • CompetingConsumerIT.java (Supervisor)
+      • SmartProxyIT.java (ProcMonitor)
+      • GuaranteedDeliveryIT.java (Supervisor + retry)
+
+      Fault injection tests:
+      • Handler crash → Auto-restart
+      • Timeout scenarios
+      • State transition edge cases
+    end note
+  }
+
+  P3_3 --> P4_1
+  P4_1 --> P4_2
+  P4_2 --> P4_3
+  P4_3 --> P4_4
+}
+
+package "PHASE 5: OPTIMIZATION & POLISH (Week 6-7)" {
+  state "5.1: Performance Benchmarks" as P5_1 {
+    note right
+      Run benchmarks:
+      • Before vs. After refactoring
+      • Supervisor + StateMachine vs. manual state
+      • Throughput under load
+      • Crash recovery latency
+
+      Target: No performance regression
+    end note
+  }
+
+  state "5.2: Documentation + Examples" as P5_2 {
+    note right
+      • Update messagepatterns/README.md
+      • New architecture diagrams
+      • Migration examples
+      • JOTP integration guide
+      • Benchmark results
+    end note
+  }
+
+  state "5.3: Deprecation Cleanup (v2.0)" as P5_3 {
+    note right
+      (FUTURE RELEASE)
+      • Remove @Deprecated old classes
+      • Update import statements
+      • Finalize API surface
+
+      Not in v1.1 — keep backward compat
+    end note
+  }
+
+  state "5.4: Final Validation" as P5_4 {
+    note right
+      • Full mvnd verify (all tests + spotless)
+      • Code coverage report
+      • Javadoc generation
+      • Integration test suite
+      • Review pull request
+    end note
+  }
+
+  P4_4 --> P5_1
+  P5_1 --> P5_2
+  P5_2 --> P5_3
+  P5_3 --> P5_4
+}
+
+[*] --> P0_1
+P0_1 --> P0_2
+P0_2 --> P0_3
+P5_4 --> [*]
+
+note bottom
+  EFFORT ESTIMATE:
+  • Phase 0: 3-4 days (foundation)
+  • Phase 1: 3-4 days (transformation layer)
+  • Phase 2: 4-5 days (router consolidation)
+  • Phase 3: 6-7 days (Proc-heavy refactoring)
+  • Phase 4: 8-10 days (JOTP advanced integration)
+  • Phase 5: 5-7 days (optimization & polish)
+
+  TOTAL: 5-6 weeks, 1 FTE
+
+  RISK MITIGATION:
+  ✓ Keep all old classes (add @Deprecated)
+  ✓ Green tests at every phase
+  ✓ Branch early, push frequently
+  ✓ No API breakage until v2.0
+
+  TESTING STRATEGY:
+  ✓ Unit tests: 100% pass (Phase 0)
+  ✓ Integration tests: 100% pass (Phase 3)
+  ✓ Backward compatibility: Asserted (Phase 3)
+  ✓ Performance: Benchmarked (Phase 5)
+  ✓ Coverage: >85% (Phase 5)
+end note
+
+@enduml
