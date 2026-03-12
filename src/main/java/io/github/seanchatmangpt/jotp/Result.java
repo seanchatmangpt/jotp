@@ -52,6 +52,21 @@ import java.util.function.Supplier;
  *
  * <p>Both conventions are equivalent; use whichever reads better in context.
  *
+ * <p><strong>Java 26 Features Used:</strong>
+ *
+ * <ul>
+ *   <li><strong>Sealed Interface:</strong> {@code public sealed interface Result<S, F>} restricts
+ *       implementations to {@code Ok}, {@code Err}, {@code Success}, {@code Failure}, enabling
+ *       exhaustive pattern matching and compiler verification of all cases.
+ *   <li><strong>Records:</strong> Each variant is a record (immutable, transparent, with
+ *       destructuring support for pattern matching).
+ *   <li><strong>Pattern Matching:</strong> Use {@code switch} expressions with sealed patterns:
+ *       {@code switch (result) { case Ok(var v) -> ...; case Err(var e) -> ...; }}
+ *       The compiler enforces exhaustiveness.
+ *   <li><strong>Type-Safe Railway:</strong> All transformations ({@code map}, {@code flatMap},
+ *       {@code fold}) leverage generics to maintain type safety across both tracks.
+ * </ul>
+ *
  * @param <S> success type — the value carried on success
  * @param <F> failure type — the error carried on failure (often {@code Exception} or a sealed error
  *     hierarchy)

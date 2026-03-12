@@ -14,6 +14,23 @@ import java.util.function.Supplier;
  * concurrently on virtual threads, and on the <em>first</em> failure the scope cancels all
  * remaining tasks immediately (Armstrong: crash one, crash all). Returns {@code Result<List<T>,
  * Exception>} integrating with the existing railway-oriented {@link Result} type.
+ *
+ * <p><strong>Java 26 Structured Concurrency:</strong>
+ *
+ * <ul>
+ *   <li><strong>Virtual Threads:</strong> Each task runs on its own virtual thread spawned by the
+ *       scope (zero overhead, thousands per process).
+ *   <li><strong>StructuredTaskScope:</strong> Java 26's primary concurrency primitive for
+ *       structured fan-out patterns. The try-with-resources ensures proper cleanup and
+ *       cancellation semantics (no orphaned tasks).
+ *   <li><strong>Joiner Semantics:</strong> {@code awaitAllSuccessfulOrThrow()} enforces fail-fast:
+ *       if any task throws, all remaining tasks are cancelled immediately.
+ *   <li><strong>Railway-Oriented Result:</strong> Success path carries {@code List<T>} (results in
+ *       fork order), failure path carries the first {@code Exception}.
+ * </ul>
+ *
+ * <p>This is the canonical Java 26 implementation of Erlang's pmap pattern with explicit error
+ * handling and structured concurrency guarantees.
  */
 public final class Parallel {
 

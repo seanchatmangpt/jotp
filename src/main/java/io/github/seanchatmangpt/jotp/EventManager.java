@@ -31,6 +31,20 @@ import java.util.concurrent.TimeUnit;
  * <p><strong>Implementation:</strong> the event manager is itself a {@link Proc}, making it a
  * first-class process with a mailbox — exactly as in OTP where a gen_event manager is a process.
  *
+ * <p><strong>Java 26 Features Used:</strong>
+ *
+ * <ul>
+ *   <li><strong>Sealed Interfaces:</strong> Internal {@code Msg<E>} is sealed to 6 message types
+ *       (Notify, SyncNotify, Add, Delete, Call, Stop), enabling exhaustive pattern matching in
+ *       the event loop.
+ *   <li><strong>Records:</strong> Each message is a record carrying handler reference, event,
+ *       completion future, etc.
+ *   <li><strong>Virtual Threads:</strong> The event manager runs on its own virtual thread,
+ *       allowing thousands of managers without exhausting platform threads.
+ *   <li><strong>Pattern Matching:</strong> The manager's event loop uses {@code switch} to route
+ *       sealed Msg types to appropriate handlers.
+ * </ul>
+ *
  * @param <E> event type — use a {@code Record} or sealed interface of Records
  */
 public final class EventManager<E> {

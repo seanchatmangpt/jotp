@@ -73,6 +73,21 @@ import java.util.concurrent.TransferQueue;
  * D data = sm.call(new Lock()).join();  // waits for Lock event to be processed
  * }</pre>
  *
+ * <p><strong>Java 26 Features Used:</strong>
+ *
+ * <ul>
+ *   <li><strong>Virtual Threads:</strong> Each state machine runs on its own virtual thread with
+ *       its own message queue.
+ *   <li><strong>Sealed Interfaces:</strong> {@code Transition<S,D>} is sealed to NextState,
+ *       KeepState, Stop — compiler enforces exhaustive switch expressions.
+ *   <li><strong>Records:</strong> All transitions are records for immutability and destructuring
+ *       in pattern matching.
+ *   <li><strong>Nested Pattern Matching:</strong> The example shows nested {@code switch} over
+ *       state and event, both sealed hierarchies — Java 26 enforces completeness.
+ *   <li><strong>CompletableFuture for Request-Reply:</strong> {@code call(event)} returns a
+ *       future completing with the data after the transition.
+ * </ul>
+ *
  * @param <S> state type — use a {@code sealed interface} of {@code record}s for exhaustive switch
  * @param <E> event type — use a {@code sealed interface} of {@code record}s
  * @param <D> data type — carried across state transitions (immutable record recommended)
