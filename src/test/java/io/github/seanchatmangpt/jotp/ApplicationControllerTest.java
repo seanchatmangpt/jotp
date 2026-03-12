@@ -236,6 +236,42 @@ class ApplicationControllerTest {
         assertThat(receivedType.get()).isInstanceOf(StartType.Normal.class);
     }
 
+    @Test
+    @DisplayName("StartType.Takeover is passed to the callback when started with takeover")
+    void testStartWithTakeoverStartType() throws Exception {
+        var receivedType = new AtomicReference<StartType>();
+        var spec =
+                specWithCallback(
+                        "my-app",
+                        (type, args) -> {
+                            receivedType.set(type);
+                            return "ok";
+                        });
+
+        ApplicationController.start(spec, new StartType.Takeover("other-node"));
+
+        assertThat(receivedType.get()).isInstanceOf(StartType.Takeover.class);
+        assertThat(((StartType.Takeover) receivedType.get()).node()).isEqualTo("other-node");
+    }
+
+    @Test
+    @DisplayName("StartType.Failover is passed to the callback when started with failover")
+    void testStartWithFailoverStartType() throws Exception {
+        var receivedType = new AtomicReference<StartType>();
+        var spec =
+                specWithCallback(
+                        "my-app",
+                        (type, args) -> {
+                            receivedType.set(type);
+                            return "ok";
+                        });
+
+        ApplicationController.start(spec, new StartType.Failover("backup-node"));
+
+        assertThat(receivedType.get()).isInstanceOf(StartType.Failover.class);
+        assertThat(((StartType.Failover) receivedType.get()).node()).isEqualTo("backup-node");
+    }
+
     // ── Queries ────────────────────────────────────────────────────────────────
 
     @Test

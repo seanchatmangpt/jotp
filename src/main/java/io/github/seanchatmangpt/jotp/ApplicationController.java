@@ -40,8 +40,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p><strong>RunType cascade semantics:</strong>
  *
  * <ul>
- *   <li>{@link RunType#PERMANENT} — when stopped, all other running applications are also stopped
- *   <li>{@link RunType#TRANSIENT} — treated like PERMANENT in this implementation (conservative)
+ *   <li>{@link RunType#PERMANENT} — when stopped (normal or abnormal), all other running
+ *       applications are also stopped
+ *   <li>{@link RunType#TRANSIENT} — cascades only on abnormal termination ({@link #stop(String,
+ *       boolean) stop(name, true)}); a normal stop ({@link #stop(String) stop(name)}) is merely
+ *       logged
  *   <li>{@link RunType#TEMPORARY} — no cascade; other applications are unaffected (default)
  * </ul>
  *
@@ -130,7 +133,7 @@ public final class ApplicationController {
     }
 
     /**
-     * Start a loaded application with an explicit {@link RunType}.
+     * Start a loaded application with an explicit {@link RunType}, using {@link StartType.Normal}.
      *
      * <p>Equivalent to Erlang's {@code application:start/2}. Already-running applications are
      * silently ignored (idempotent).
@@ -138,19 +141,34 @@ public final class ApplicationController {
      * <p>Dependency resolution: for each name in {@link ApplicationSpec#applications()}, if the
      * dependency is loaded but not running it will be auto-started with {@link RunType#TEMPORARY}.
      *
-     * <p><strong>StartType limitation:</strong> This implementation always invokes the application
-     * callback with {@link StartType.Normal}. The {@link StartType.Takeover} and {@link
-     * StartType.Failover} variants (used in OTP distributed failover scenarios) are not yet
-     * supported. If your callback switches on {@link StartType}, it will always receive {@code
-     * Normal()}.
-     *
      * @param name the application name (must be loaded via {@link #load})
      * @param runType the run type governing cascade behavior on termination
      * @throws IllegalStateException if the application is not loaded
      * @throws Exception if the application callback's {@code start} throws
      */
-    @SuppressWarnings("unchecked")
     public static void start(String name, RunType runType) throws Exception {
+        start(name, runType, new StartType.Normal());
+    }
+
+    /**
+     * Start a loaded application with an explicit {@link RunType} and {@link StartType}.
+     *
+     * <p>Equivalent to Erlang's {@code application:start/2} with a distributed start type.
+     * Already-running applications are silently ignored (idempotent).
+     *
+     * <p>Dependency resolution: for each name in {@link ApplicationSpec#applications()}, if the
+     * dependency is loaded but not running it will be auto-started with {@link RunType#TEMPORARY}
+     * and {@link StartType.Normal}.
+     *
+     * @param name the application name (must be loaded via {@link #load})
+     * @param runType the run type governing cascade behavior on termination
+     * @param startType the start type ({@link StartType.Normal}, {@link StartType.Takeover}, or
+     *     {@link StartType.Failover})
+     * @throws IllegalStateException if the application is not loaded
+     * @throws Exception if the application callback's {@code start} throws
+     */
+    @SuppressWarnings("unchecked")
+    public static void start(String name, RunType runType, StartType startType) throws Exception {
         LoadedEntry entry = loaded.get(name);
         if (entry == null) {
             throw new IllegalStateException(
@@ -171,15 +189,16 @@ public final class ApplicationController {
             }
         }
 
-        // Invoke the application callback
+        // Invoke the application callback with the provided startType
         ApplicationCallback<Object> callback = (ApplicationCallback<Object>) spec.mod();
-        Object state = callback.start(new StartType.Normal(), spec.startArgs());
+        Object state = callback.start(startType, spec.startArgs());
 
         running.put(name, new RunningEntry(spec, runType, state));
     }
 
     /**
-     * Convenience: load and start an application in one step with {@link RunType#TEMPORARY}.
+     * Convenience: load and start an application in one step with {@link RunType#TEMPORARY} and
+     * {@link StartType.Normal}.
      *
      * @param spec the application spec
      * @throws Exception if the application callback's {@code start} throws
@@ -190,7 +209,8 @@ public final class ApplicationController {
     }
 
     /**
-     * Convenience: load and start an application in one step with an explicit {@link RunType}.
+     * Convenience: load and start an application in one step with an explicit {@link RunType} and
+     * {@link StartType.Normal}.
      *
      * @param spec the application spec
      * @param runType the run type
@@ -199,6 +219,36 @@ public final class ApplicationController {
     public static void start(ApplicationSpec spec, RunType runType) throws Exception {
         load(spec);
         start(spec.name(), runType);
+    }
+
+    /**
+     * Convenience: load and start an application in one step with {@link RunType#TEMPORARY} and an
+     * explicit {@link StartType}.
+     *
+     * @param spec the application spec
+     * @param startType the start type ({@link StartType.Normal}, {@link StartType.Takeover}, or
+     *     {@link StartType.Failover})
+     * @throws Exception if the application callback's {@code start} throws
+     */
+    public static void start(ApplicationSpec spec, StartType startType) throws Exception {
+        load(spec);
+        start(spec.name(), RunType.TEMPORARY, startType);
+    }
+
+    /**
+     * Convenience: load and start an application in one step with an explicit {@link RunType} and
+     * {@link StartType}.
+     *
+     * @param spec the application spec
+     * @param runType the run type
+     * @param startType the start type ({@link StartType.Normal}, {@link StartType.Takeover}, or
+     *     {@link StartType.Failover})
+     * @throws Exception if the application callback's {@code start} throws
+     */
+    public static void start(ApplicationSpec spec, RunType runType, StartType startType)
+            throws Exception {
+        load(spec);
+        start(spec.name(), runType, startType);
     }
 
     // ── Stop ───────────────────────────────────────────────────────────────────
