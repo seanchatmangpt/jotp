@@ -42,6 +42,48 @@ public final class FactoryMethodPatterns {
 
     private FactoryMethodPatterns() {}
 
+    sealed interface CounterMsg {
+        record Increment() implements CounterMsg {}
+
+        record Reset() implements CounterMsg {}
+    }
+
+    record Counter(int value) {}
+
+    sealed interface LockState {
+        record Locked() implements LockState {}
+
+        record Open() implements LockState {}
+    }
+
+    sealed interface LockEvent {
+        record PushButton(char digit) implements LockEvent {}
+
+        record Lock() implements LockEvent {}
+    }
+
+    record LockData(String entered, String code) {
+        LockData withEntered(String entered) {
+            return new LockData(entered, code);
+        }
+    }
+
+    sealed interface LogEvent {
+        record ErrorEvent(String msg) implements LogEvent {}
+
+        record WarningEvent(String msg) implements LogEvent {}
+    }
+
+    sealed interface IntegrationCounterMsg {
+        record Increment() implements IntegrationCounterMsg {}
+    }
+
+    record IntegrationCounter(int value) {}
+
+    sealed interface IntegrationEvent {
+        record Processing() implements IntegrationEvent {}
+    }
+
     /**
      * Example 1: Lightweight process creation using {@link Proc#spawn(Object,
      * java.util.function.BiFunction)}.
@@ -427,10 +469,10 @@ public final class FactoryMethodPatterns {
                         "app", Supervisor.Strategy.ONE_FOR_ALL, 5, Duration.ofSeconds(60));
 
         // 2. Supervise a worker process
-        ProcRef<Counter, CounterMsg> counter =
+        ProcRef<IntegrationCounter, IntegrationCounterMsg> counter =
                 supervisor.supervise(
                         "counter",
-                        new Counter(0),
+                        new IntegrationCounter(0),
                         (state, msg) ->
                                 switch (msg) {
                                     case CounterMsg.Increment _ -> new Counter(state.value() + 1);

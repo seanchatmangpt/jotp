@@ -249,14 +249,14 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         var result = Parallel.all(tasks);
         var elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
 
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         assertThat(elapsedMs)
                 .as("100 parallel assessments should finish within 20 s")
                 .isLessThan(20_000L);
 
         // Derive throughput for informational logging (not a hard assertion)
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
         double tputPerSec = n * 1_000.0 / Math.max(elapsedMs, 1L);
         assertThat(assessments).hasSize(n);
         assertThat(tputPerSec)

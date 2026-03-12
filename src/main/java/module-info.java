@@ -6,8 +6,7 @@
  * <p>JOTP brings battle-tested enterprise concurrency patterns from Erlang/OTP to the JVM using
  * Java 26 features: virtual threads, sealed types, pattern matching, and records.
  *
- * <p>This module provides 15 foundational OTP primitives plus 6 OTP Application equivalence
- * classes:
+ * <p>This module provides 15 foundational OTP primitives:
  *
  * <ul>
  *   <li>{@code Proc} - Lightweight process with virtual thread mailbox and pure state handler
@@ -26,12 +25,6 @@
  *   <li>{@code ProcLib} - proc_lib startup handshake: start_link with blocking initialization
  *   <li>{@code EventManager} - gen_event: typed event manager with isolated handler crashes
  *   <li>{@code Result} - Railway-oriented programming: sealed Success/Failure with map/fold
- *   <li>{@code ApplicationController} - application_controller: load/start/stop/query lifecycle
- *   <li>{@code ApplicationSpec} - .app resource file: metadata, dependencies, callback binding
- *   <li>{@code ApplicationCallback} - -behaviour(application): start/2 and stop/1 interface
- *   <li>{@code StartType} - Sealed start type: Normal, Takeover(node), Failover(node)
- *   <li>{@code RunType} - Run type enum: PERMANENT, TRANSIENT, TEMPORARY cascade semantics
- *   <li>{@code ApplicationInfo} - {Name, Description, Vsn} tuple from loaded/which_applications
  * </ul>
  *
  * <h2>Export Groups</h2>
@@ -40,8 +33,7 @@
  *
  * <p>Package: {@code io.github.seanchatmangpt.jotp}
  *
- * <p>15 production-ready OTP primitives plus 6 OTP Application equivalence classes. These exports
- * are STABLE and follow semantic versioning.
+ * <p>15 production-ready OTP primitives. These exports are STABLE and follow semantic versioning.
  *
  * <h3>Reactive Foundation (STABLE)</h3>
  *
@@ -88,19 +80,12 @@
  * <table border="1">
  *   <tr><th>OTP Concept</th><th>JOTP Class</th><th>Notes</th></tr>
  *   <tr><td>spawn/3</td><td>{@code Proc}</td><td>Virtual thread mailbox + state handler</td></tr>
- *   <tr><td>gen_server</td><td>{@code Proc}</td><td>Virtual thread mailbox + pure state handler</td></tr>
- *   <tr><td>gen_statem</td><td>{@code StateMachine}</td><td>Sealed state/event/data transitions</td></tr>
+ *   <tr><td>gen_server</td><td>{@code StateMachine}</td><td>Sealed state/event/data transitions</td></tr>
  *   <tr><td>supervisor</td><td>{@code Supervisor}</td><td>Sliding window restart strategies</td></tr>
  *   <tr><td>gen_event</td><td>{@code EventManager}</td><td>Typed event bus with isolated handlers</td></tr>
  *   <tr><td>timer:send_after</td><td>{@code ProcTimer}</td><td>Timed message delivery</td></tr>
  *   <tr><td>process_flag(trap_exit)</td><td>{@code ExitSignal}</td><td>Exit trapping as mailbox messages</td></tr>
  *   <tr><td>sys:get_state</td><td>{@code ProcSys}</td><td>Live state introspection</td></tr>
- *   <tr><td>application_controller / application:start/2</td><td>{@code ApplicationController}</td><td>Load/start/stop/query with cascade semantics</td></tr>
- *   <tr><td>.app resource file</td><td>{@code ApplicationSpec}</td><td>Metadata, dependencies, callback binding</td></tr>
- *   <tr><td>-behaviour(application)</td><td>{@code ApplicationCallback}</td><td>start/2 and stop/1 functional interface</td></tr>
- *   <tr><td>normal | {takeover,Node} | {failover,Node}</td><td>{@code StartType}</td><td>Sealed start type with exhaustive pattern matching</td></tr>
- *   <tr><td>permanent | transient | temporary</td><td>{@code RunType}</td><td>Run type enum governing termination cascade</td></tr>
- *   <tr><td>{Name, Description, Vsn} tuple</td><td>{@code ApplicationInfo}</td><td>Loaded/running application metadata record</td></tr>
  * </table>
  *
  * @see <a href="https://erlang.org/doc/man/otp_introduction.html">Erlang/OTP Introduction</a>
@@ -123,10 +108,22 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.otp;
     exports io.github.seanchatmangpt.jotp.dogfood.security;
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
-    // dogfood.mclaren excluded — pre-existing compile errors
-    // dogfood.messaging excluded — pre-existing compile errors
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
 
-    // Distributed Applications (OTP dist_ac equivalent)
-    exports io.github.seanchatmangpt.jotp.distributed;
+    // Enterprise Patterns
+    exports io.github.seanchatmangpt.jotp.enterprise.health;
+    exports io.github.seanchatmangpt.jotp.enterprise.backpressure;
+    exports io.github.seanchatmangpt.jotp.enterprise.recovery;
+    exports io.github.seanchatmangpt.jotp.enterprise.bulkhead;
+    exports io.github.seanchatmangpt.jotp.enterprise.multitenancy;
+    exports io.github.seanchatmangpt.jotp.enterprise.eventbus;
+    exports io.github.seanchatmangpt.jotp.enterprise.saga;
+
+    // Reactive Messaging Patterns (Vaughn Vernon port)
+    exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.routing;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.transformation;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.management;
 }

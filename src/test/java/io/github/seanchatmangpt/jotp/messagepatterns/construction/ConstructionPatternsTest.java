@@ -179,23 +179,21 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("request returns reply synchronously")
-        void syncRequest() {
+        void syncRequest() throws Exception {
             var server =
                     RequestReply.server(
                             "",
                             (state, msg) ->
                                     switch (msg) {
                                         case Echo e -> "RE: " + e.text();
-                                        default -> "";
+                                        default ->
+                                                throw new IllegalArgumentException(
+                                                        "unexpected: " + msg);
                                     });
 
             String reply = server.request(new Echo("Hello"), Duration.ofSeconds(2));
             assertThat(reply).isEqualTo("RE: Hello");
-            try {
-                server.stop();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            server.stop();
         }
     }
 
