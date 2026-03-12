@@ -42,11 +42,10 @@ public enum RunType {
      *
      * <p>Use for applications that are important but whose clean shutdown should not cascade.
      *
-     * <p><strong>Implementation note:</strong> The current {@link ApplicationController}
-     * implementation treats {@code TRANSIENT} identically to {@link #PERMANENT} — any termination
-     * (normal or abnormal) triggers a full cascade stop. This is a conservative departure from OTP
-     * semantics, where a clean TRANSIENT shutdown would not cascade. This may be refined in a
-     * future release.
+     * <p>Use {@link ApplicationController#stop(String, boolean)} with {@code abnormal=true} to
+     * signal an abnormal termination that triggers a cascade; calling {@link
+     * ApplicationController#stop(String)} (or {@code stop(name, false)}) treats the termination as
+     * normal and does not cascade.
      */
     TRANSIENT,
 

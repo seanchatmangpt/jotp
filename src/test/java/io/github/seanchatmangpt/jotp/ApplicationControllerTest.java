@@ -431,12 +431,38 @@ class ApplicationControllerTest {
     }
 
     @Test
-    @DisplayName("TRANSIENT: stopping one app cascades to all other running apps")
+    @DisplayName("TRANSIENT: abnormal termination cascades to all other running apps")
     void testTransientCascade() throws Exception {
         ApplicationController.start(minimalSpec("app-a"));
         ApplicationController.start(minimalSpec("gateway"), RunType.TRANSIENT);
 
-        ApplicationController.stop("gateway"); // TRANSIENT — should cascade
+        ApplicationController.stop("gateway", true); // TRANSIENT abnormal — should cascade
+
+        assertThat(ApplicationController.whichApplications()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("TRANSIENT: normal termination does not cascade to other apps")
+    void testTransientNormalTerminationDoesNotCascade() throws Exception {
+        ApplicationController.start(minimalSpec("app-a"));
+        ApplicationController.start(minimalSpec("gateway"), RunType.TRANSIENT);
+
+        ApplicationController.stop("gateway"); // normal stop — should NOT cascade
+
+        assertThat(ApplicationController.whichApplications())
+                .extracting(ApplicationInfo::name)
+                .contains("app-a");
+    }
+
+    @Test
+    @DisplayName(
+            "TRANSIENT: abnormal termination (stop(name, true)) cascades to all other running apps")
+    void testTransientAbnormalTerminationCascades() throws Exception {
+        ApplicationController.start(minimalSpec("app-a"));
+        ApplicationController.start(minimalSpec("app-b"));
+        ApplicationController.start(minimalSpec("gateway"), RunType.TRANSIENT);
+
+        ApplicationController.stop("gateway", true); // abnormal — should cascade
 
         assertThat(ApplicationController.whichApplications()).isEmpty();
     }

@@ -254,22 +254,47 @@ public final class ApplicationController {
     // ── Stop ───────────────────────────────────────────────────────────────────
 
     /**
-     * Stop a running application without unloading its spec.
+     * Stop a running application without unloading its spec (normal termination).
      *
      * <p>Equivalent to Erlang's {@code application:stop/1}. The spec remains in the loaded
      * registry; call {@link #unload} if you also want to remove the spec.
      *
-     * <p>If the application's {@link RunType} is {@link RunType#PERMANENT} or {@link
-     * RunType#TRANSIENT}, all other running applications are also stopped after this one (cascade
-     * semantics).
+     * <p>Treats the termination as <em>normal</em>: {@link RunType#PERMANENT} applications cascade
+     * to all other running applications, but {@link RunType#TRANSIENT} applications do not cascade
+     * (matching OTP semantics where a clean TRANSIENT shutdown is merely logged). {@link
+     * RunType#TEMPORARY} applications never cascade.
      *
      * <p>Already-stopped applications are silently ignored (idempotent).
      *
      * @param name the application name
      * @throws Exception if the application callback's {@code stop} throws
      */
-    @SuppressWarnings("unchecked")
     public static void stop(String name) throws Exception {
+        stop(name, false);
+    }
+
+    /**
+     * Stop a running application, distinguishing normal from abnormal termination.
+     *
+     * <p>This overload implements proper OTP {@link RunType#TRANSIENT} semantics:
+     *
+     * <ul>
+     *   <li>{@code abnormal=false} (normal stop): {@link RunType#PERMANENT} cascades; {@link
+     *       RunType#TRANSIENT} is logged only (no cascade); {@link RunType#TEMPORARY} is
+     *       unaffected.
+     *   <li>{@code abnormal=true} (abnormal stop): both {@link RunType#PERMANENT} and {@link
+     *       RunType#TRANSIENT} cascade to all other running applications.
+     * </ul>
+     *
+     * <p>Already-stopped applications are silently ignored (idempotent).
+     *
+     * @param name the application name
+     * @param abnormal {@code true} if the termination is abnormal (exception/crash); {@code false}
+     *     for a clean shutdown
+     * @throws Exception if the application callback's {@code stop} throws
+     */
+    @SuppressWarnings("unchecked")
+    public static void stop(String name, boolean abnormal) throws Exception {
         RunningEntry entry = running.remove(name);
         if (entry == null) {
             return; // Already stopped — idempotent
@@ -279,12 +304,15 @@ public final class ApplicationController {
         ApplicationCallback<Object> callback = (ApplicationCallback<Object>) entry.spec().mod();
         callback.stop(entry.state());
 
-        // Apply cascade semantics
-        if (entry.runType() == RunType.PERMANENT || entry.runType() == RunType.TRANSIENT) {
+        // Apply cascade semantics based on RunType and termination kind
+        boolean cascade =
+                entry.runType() == RunType.PERMANENT
+                        || (entry.runType() == RunType.TRANSIENT && abnormal);
+        if (cascade) {
             List<String> others = new ArrayList<>(running.keySet());
             for (String other : others) {
                 try {
-                    stop(other);
+                    stop(other, abnormal);
                 } catch (Exception ignored) {
                     // Best-effort cascade; individual stop failures should not prevent others
                 }
