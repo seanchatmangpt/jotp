@@ -108,10 +108,15 @@ public final class Supervisor {
     /**
      * Create a supervisor with the given strategy and restart limits.
      *
+     * <p><strong>Deprecated:</strong> Use {@link #create(Strategy, int, Duration)} or {@link
+     * #create(String, Strategy, int, Duration)} instead.
+     *
      * @param strategy restart strategy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
      * @param maxRestarts maximum number of restarts allowed within the window
      * @param window time window for counting restarts
+     * @deprecated Use {@link #create(Strategy, int, Duration)} instead
      */
+    @Deprecated(since = "1.0", forRemoval = true)
     public Supervisor(Strategy strategy, int maxRestarts, Duration window) {
         this.strategy = strategy;
         this.maxRestarts = maxRestarts;
@@ -122,11 +127,16 @@ public final class Supervisor {
     /**
      * Create a named supervisor with the given strategy and restart limits.
      *
+     * <p><strong>Deprecated:</strong> Use {@link #create(String, Strategy, int, Duration)}
+     * instead.
+     *
      * @param name supervisor name (used for thread naming)
      * @param strategy restart strategy
      * @param maxRestarts maximum restarts within the window
      * @param window time window for counting restarts
+     * @deprecated Use {@link #create(String, Strategy, int, Duration)} instead
      */
+    @Deprecated(since = "1.0", forRemoval = true)
     public Supervisor(String name, Strategy strategy, int maxRestarts, Duration window) {
         this.strategy = strategy;
         this.maxRestarts = maxRestarts;
@@ -280,5 +290,75 @@ public final class Supervisor {
 
     private ChildEntry find(String id) {
         return children.stream().filter(c -> c.id.equals(id)).findFirst().orElse(null);
+    }
+
+    /**
+     * Create a supervision tree node with the given restart strategy and limits.
+     *
+     * <p>Establishes a supervisor process that manages child process lifecycle, restart policy, and
+     * fault tolerance — the core OTP supervision primitive.
+     *
+     * <p><b>Usage Example:</b>
+     *
+     * <pre>{@code
+     * var supervisor = Supervisor.create(
+     *     Supervisor.Strategy.ONE_FOR_ONE,
+     *     5,
+     *     Duration.ofSeconds(60)
+     * );
+     *
+     * var worker1 = supervisor.supervise("worker-1", state1, handler1);
+     * var worker2 = supervisor.supervise("worker-2", state2, handler2);
+     *
+     * // If worker1 crashes, only worker1 is restarted (ONE_FOR_ONE strategy)
+     * // If any worker crashes > 5 times in 60 seconds, supervisor terminates
+     *
+     * supervisor.shutdown();  // Graceful shutdown
+     * }</pre>
+     *
+     * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
+     * @param maxRestarts maximum number of child restarts allowed within the time window
+     * @param window time window for counting restart attempts
+     * @return a new supervisor instance with its event loop running on a virtual thread
+     * @throws NullPointerException if {@code strategy} or {@code window} is null
+     * @throws IllegalArgumentException if {@code maxRestarts < 0}
+     * @see #create(String, Strategy, int, Duration) for named supervisors
+     * @see #supervise(String, Object, BiFunction) to add child processes
+     * @see Strategy for restart policy details
+     */
+    public static Supervisor create(Strategy strategy, int maxRestarts, Duration window) {
+        return new Supervisor(strategy, maxRestarts, window);
+    }
+
+    /**
+     * Create a named supervision tree node with the given restart strategy and limits.
+     *
+     * <p>Same as {@link #create(Strategy, int, Duration)} but with an explicit name used for
+     * thread naming and debugging.
+     *
+     * <p><b>Usage:</b>
+     *
+     * <pre>{@code
+     * var appSupervisor = Supervisor.create(
+     *     "app-supervisor",
+     *     Supervisor.Strategy.ONE_FOR_ALL,
+     *     3,
+     *     Duration.ofSeconds(30)
+     * );
+     * }</pre>
+     *
+     * @param name supervisor identifier (used in thread names and diagnostics)
+     * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
+     * @param maxRestarts maximum number of child restarts within the window
+     * @param window time window for counting restart attempts
+     * @return a new named supervisor instance
+     * @throws NullPointerException if {@code name}, {@code strategy}, or {@code window} is null
+     * @throws IllegalArgumentException if {@code maxRestarts < 0}
+     * @see #create(Strategy, int, Duration) for unnamed supervisors
+     * @see #supervise(String, Object, BiFunction) to add children
+     */
+    public static Supervisor create(
+            String name, Strategy strategy, int maxRestarts, Duration window) {
+        return new Supervisor(name, strategy, maxRestarts, window);
     }
 }

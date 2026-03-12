@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -77,9 +78,23 @@ public final class EventManager<E> {
         record Stop<E>() implements Msg<E> {}
     }
 
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
+
     private final Proc<List<Handler<E>>, Msg<E>> proc;
+    private final Duration timeout;
 
     private EventManager() {
+        this(DEFAULT_TIMEOUT);
+    }
+
+    private EventManager(Duration timeout) {
+        if (timeout == null) {
+            throw new IllegalArgumentException("timeout cannot be null");
+        }
+        if (timeout.isNegative() || timeout.isZero()) {
+            throw new IllegalArgumentException("timeout must be positive, got: " + timeout);
+        }
+        this.timeout = timeout;
         proc = new Proc<>(new CopyOnWriteArrayList<>(), EventManager::handle);
     }
 
@@ -147,13 +162,37 @@ public final class EventManager<E> {
     }
 
     /**
-     * Start a new event manager process.
+     * Start a new event manager process with default 5-second timeout.
      *
-     * @param <E> event type
-     * @return the running event manager
+     * <p>Creates an event manager that runs in its own virtual thread, decoupling event producers
+     * from consumers — the OTP {@code gen_event} pattern.
+     *
+     * @param <E> event type (use a sealed interface of records)
+     * @return a new event manager instance with its process running
+     * @see #start(Duration) for custom timeout
+     * @see #addHandler(Handler) to register event handlers
+     * @see #notify(Object) for async broadcast
+     * @see #syncNotify(Object) for sync broadcast
      */
     public static <E> EventManager<E> start() {
         return new EventManager<>();
+    }
+
+    /**
+     * Start a new event manager process with custom timeout.
+     *
+     * <p>Same as {@link #start()} but with a configurable timeout for synchronous operations.
+     *
+     * @param timeout the timeout duration for synchronous operations (syncNotify, deleteHandler,
+     *     call); must be positive
+     * @param <E> event type (use a sealed interface of records)
+     * @return a new event manager instance with the specified timeout
+     * @throws NullPointerException if {@code timeout} is null
+     * @throws IllegalArgumentException if {@code timeout} is not positive
+     * @see #start() for default 5-second timeout
+     */
+    public static <E> EventManager<E> start(Duration timeout) {
+        return new EventManager<>(timeout);
     }
 
     /**
@@ -183,14 +222,34 @@ public final class EventManager<E> {
      * Broadcast {@code event} and wait until all handlers have processed it — mirrors OTP {@code
      * gen_event:sync_notify/2}.
      *
+     * <p>Uses the event manager's configured timeout (default 5 seconds).
+     *
      * @param event the event to broadcast
      * @throws InterruptedException if the calling thread is interrupted while waiting
      */
     public void syncNotify(E event) throws InterruptedException {
+        syncNotify(event, timeout);
+    }
+
+    /**
+     * Broadcast {@code event} and wait until all handlers have processed it with custom timeout.
+     *
+     * @param event the event to broadcast
+     * @param timeout the timeout duration; must be positive
+     * @throws InterruptedException if the calling thread is interrupted while waiting
+     * @throws IllegalArgumentException if timeout is null or not positive
+     */
+    public void syncNotify(E event, Duration timeout) throws InterruptedException {
+        if (timeout == null) {
+            throw new IllegalArgumentException("timeout cannot be null");
+        }
+        if (timeout.isNegative() || timeout.isZero()) {
+            throw new IllegalArgumentException("timeout must be positive, got: " + timeout);
+        }
         var done = new CompletableFuture<Void>();
         proc.tell(new Msg.SyncNotify<>(event, done));
         try {
-            done.get(5, TimeUnit.SECONDS);
+            done.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.ExecutionException
                 | java.util.concurrent.TimeoutException e) {
             throw new RuntimeException("syncNotify failed", e);
@@ -201,16 +260,37 @@ public final class EventManager<E> {
      * Remove a handler — mirrors OTP {@code gen_event:delete_handler/3}.
      *
      * <p>Calls {@link Handler#terminate(Throwable)} with {@code null} reason on the removed
-     * handler.
+     * handler. Uses the event manager's configured timeout (default 5 seconds).
      *
      * @param handler the handler to remove
      * @return {@code true} if the handler was registered and removed
      */
     public boolean deleteHandler(Handler<E> handler) {
+        return deleteHandler(handler, timeout);
+    }
+
+    /**
+     * Remove a handler with custom timeout — mirrors OTP {@code gen_event:delete_handler/3}.
+     *
+     * <p>Calls {@link Handler#terminate(Throwable)} with {@code null} reason on the removed
+     * handler.
+     *
+     * @param handler the handler to remove
+     * @param timeout the timeout duration; must be positive
+     * @return {@code true} if the handler was registered and removed
+     * @throws IllegalArgumentException if timeout is null or not positive
+     */
+    public boolean deleteHandler(Handler<E> handler, Duration timeout) {
+        if (timeout == null) {
+            throw new IllegalArgumentException("timeout cannot be null");
+        }
+        if (timeout.isNegative() || timeout.isZero()) {
+            throw new IllegalArgumentException("timeout must be positive, got: " + timeout);
+        }
         var result = new CompletableFuture<Boolean>();
         proc.tell(new Msg.Delete<>(handler, result));
         try {
-            return result.get(5, TimeUnit.SECONDS);
+            return result.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             throw new RuntimeException("deleteHandler failed", e);
         }
@@ -221,16 +301,39 @@ public final class EventManager<E> {
      * gen_event:call/4}.
      *
      * <p>Only the specified handler receives the event via this path; other handlers are not
-     * notified. If the handler is not registered, this is a no-op.
+     * notified. If the handler is not registered, this is a no-op. Uses the event manager's
+     * configured timeout (default 5 seconds).
      *
      * @param handler the specific handler to call
      * @param event the event to deliver
      */
     public void call(Handler<E> handler, E event) {
+        call(handler, event, timeout);
+    }
+
+    /**
+     * Synchronously call a specific handler with {@code event} and custom timeout — mirrors OTP
+     * {@code gen_event:call/4}.
+     *
+     * <p>Only the specified handler receives the event via this path; other handlers are not
+     * notified. If the handler is not registered, this is a no-op.
+     *
+     * @param handler the specific handler to call
+     * @param event the event to deliver
+     * @param timeout the timeout duration; must be positive
+     * @throws IllegalArgumentException if timeout is null or not positive
+     */
+    public void call(Handler<E> handler, E event, Duration timeout) {
+        if (timeout == null) {
+            throw new IllegalArgumentException("timeout cannot be null");
+        }
+        if (timeout.isNegative() || timeout.isZero()) {
+            throw new IllegalArgumentException("timeout must be positive, got: " + timeout);
+        }
         var done = new CompletableFuture<Void>();
         proc.tell(new Msg.Call<>(handler, event, done));
         try {
-            done.get(5, TimeUnit.SECONDS);
+            done.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             throw new RuntimeException("call failed", e);
         }

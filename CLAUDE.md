@@ -92,21 +92,21 @@ cd guard-system && cargo build --release
 
 **Formatting:** Spotless with Google Java Format (AOSP style) runs automatically at compile phase. The PostToolUse hook (see below) auto-runs `spotless:apply` after every Java file edit — do not run it manually.
 
-**Joe Armstrong / Erlang/OTP patterns** — fifteen primitives in `io.github.seanchatmangpt.jotp`:
-- `Proc<S,M>` — lightweight process: virtual-thread mailbox + pure state handler (OTP: `spawn/3`)
+**Joe Armstrong / Erlang/OTP patterns** — fifteen primitives in `io.github.seanchatmangpt.jotp` with standardized factory methods:
+- `Proc<S,M>` — lightweight process: virtual-thread mailbox + pure state handler (OTP: `spawn/3`); use **`Proc.spawn(state, handler)`** factory
 - `ProcRef<S,M>` — stable Pid: opaque handle that survives supervisor restarts
-- `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window
-- `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads
-- `StateMachine<S,E,D>` — gen_statem: state/event/data separation + sealed `Transition` hierarchy
+- `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window; use **`Supervisor.create(strategy, maxRestarts, window)`** or **`Supervisor.create(name, strategy, maxRestarts, window)`** factories
+- `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads; use **`CrashRecovery.retry(maxAttempts, supplier)`** factory
+- `StateMachine<S,E,D>` — gen_statem: state/event/data separation + sealed `Transition` hierarchy; use **`StateMachine.create(state, data, fn)`** factory
 - `ProcessLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)
-- `Parallel` — structured fan-out with fail-fast semantics (`StructuredTaskScope`, OTP: `pmap`)
+- `Parallel` — structured fan-out with fail-fast semantics (`StructuredTaskScope`, OTP: `pmap`); use **`Parallel.all(tasks)`** factory
 - `ProcessMonitor` — unilateral DOWN notifications: `monitor(process, Pid)` / `demonitor/1`; fires on any exit (normal or abnormal); does NOT kill the monitoring side (unlike links)
 - `ProcessRegistry` — global name table: `register/2`, `whereis/1`, `unregister/1`, `registered/0`; auto-deregisters when a process terminates
 - `ProcTimer` — timed message delivery: `timer:send_after/3`, `timer:send_interval/3`, `timer:cancel/1`
 - `ExitSignal` — exit signal record delivered as a mailbox message when a process traps exits (`process_flag(trap_exit, true)`)
 - `ProcSys` — sys module: `get_state`, `suspend`, `resume`, `statistics` — process introspection without stopping
 - `ProcLib` — proc_lib startup handshake: `start_link` blocks until child calls `initAck()`, returning `StartResult.Ok | Err`
-- `EventManager<E>` — gen_event: typed event manager with `addHandler`, `notify`, `syncNotify`, `deleteHandler`, `call`; crashes handlers without killing the manager
+- `EventManager<E>` — gen_event: typed event manager with configurable timeouts for `syncNotify(event, timeout)`, `deleteHandler(handler, timeout)`, `call(handler, event, timeout)` (default 5s); crashes handlers without killing the manager; use **`EventManager.start()`** or **`EventManager.start(timeout)`** factories
 - `Proc.trapExits(boolean)` / `Proc.ask(msg, timeout)` — `process_flag(trap_exit)` and timed `gen_server:call` added to core `Proc`
 
 ## Claude Code Configuration (`.claude/`)

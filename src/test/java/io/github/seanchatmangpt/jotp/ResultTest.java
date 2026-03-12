@@ -92,14 +92,25 @@ class ResultTest implements WithAssertions {
         }
 
         @Test
-        @DisplayName("throws on orElseThrow with Throwable error")
-        void throwsOnOrElseThrowWithThrowableError() {
-            Exception original = new IllegalStateException("boom");
+        @DisplayName("throws on orElseThrow with RuntimeException error (direct throw)")
+        void throwsOnOrElseThrowWithRuntimeException() {
+            RuntimeException original = new IllegalStateException("boom");
+            Result<String, RuntimeException> result = Result.err(original);
+
+            assertThatThrownBy(result::orElseThrow)
+                    .isSameAs(original)
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("throws on orElseThrow with checked exception (wrapped)")
+        void throwsOnOrElseThrowWithCheckedException() {
+            Exception original = new Exception("checked");
             Result<String, Exception> result = Result.err(original);
 
             assertThatThrownBy(result::orElseThrow)
                     .isInstanceOf(RuntimeException.class)
-                    .hasCauseInstanceOf(IllegalStateException.class);
+                    .hasCauseInstanceOf(Exception.class);
         }
     }
 
@@ -447,6 +458,338 @@ class ResultTest implements WithAssertions {
         }
     }
 
+    @Nested
+    @DisplayName("peek(Consumer) — side effects on success track")
+    class PeekOperation {
+
+        @Test
+        @DisplayName("applies action to success value")
+        void appliesActionToSuccess() {
+            var log = new java.util.ArrayList<String>();
+            Result<String, String> result =
+                    Result.<String, String>ok("hello").peek(log::add);
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(log).containsExactly("hello");
+        }
+
+        @Test
+        @DisplayName("returns same result after action")
+        void returnsSameResultAfterAction() {
+            Result<String, String> original = Result.ok("value");
+            Result<String, String> peeked = original.peek(v -> {});
+
+            assertThat(peeked).isSameAs(original);
+        }
+
+        @Test
+        @DisplayName("does not apply action to failure")
+        void doesNotApplyActionToFailure() {
+            var log = new java.util.ArrayList<String>();
+            Result<String, String> result =
+                    Result.<String, String>err("error").peek(log::add);
+
+            assertThat(result.isError()).isTrue();
+            assertThat(log).isEmpty();
+        }
+
+        @Test
+        @DisplayName("returns same failure after peek")
+        void returnsSameFailureAfterPeek() {
+            Result<String, String> original = Result.err("error");
+            Result<String, String> peeked = original.peek(v -> {});
+
+            assertThat(peeked).isSameAs(original);
+        }
+
+        @Test
+        @DisplayName("works with Success alias")
+        void worksWithSuccessAlias() {
+            var log = new java.util.ArrayList<Integer>();
+            Result<Integer, String> result =
+                    Result.<Integer, String>success(42).peek(log::add);
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(log).containsExactly(42);
+        }
+
+        @Test
+        @DisplayName("works with Failure alias")
+        void worksWithFailureAlias() {
+            var log = new java.util.ArrayList<String>();
+            Result<String, String> result =
+                    Result.<String, String>failure("error").peek(log::add);
+
+            assertThat(result.isError()).isTrue();
+            assertThat(log).isEmpty();
+        }
+
+        @Test
+        @DisplayName("chains multiple peek operations on success")
+        void chainsMultiplePeeks() {
+            var log1 = new java.util.ArrayList<Integer>();
+            var log2 = new java.util.ArrayList<Integer>();
+            Result<Integer, String> result =
+                    Result.<Integer, String>ok(42).peek(log1::add).peek(log2::add);
+
+            assertThat(log1).containsExactly(42);
+            assertThat(log2).containsExactly(42);
+            assertThat(result.isSuccess()).isTrue();
+        }
+
+        @Test
+        @DisplayName("throws NullPointerException when action is null")
+        void throwsNullPointerExceptionForNullAction() {
+            Result<String, String> result = Result.ok("value");
+
+            assertThatThrownBy(() -> result.peek(null))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        @DisplayName("propagates exception thrown by action")
+        void propagatesExceptionFromAction() {
+            Result<String, String> result = Result.ok("value");
+
+            assertThatThrownBy(
+                            () ->
+                                    result.peek(
+                                            v -> {
+                                                throw new IllegalStateException("action failed");
+                                            }))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("action failed");
+        }
+
+        @Test
+        @DisplayName("peek with fold in pipeline")
+        void peekWithFoldInPipeline() {
+            var log = new java.util.ArrayList<Integer>();
+            String result =
+                    Result.<Integer, String>ok(100)
+                            .map(x -> x * 2)
+                            .peek(log::add)
+                            .fold(v -> "result=" + v, e -> "error=" + e);
+
+            assertThat(result).isEqualTo("result=200");
+            assertThat(log).containsExactly(200);
+        }
+    }
+
+    @Nested
+    @DisplayName("recover(Function) — error recovery on failure track")
+    class RecoverOperation {
+
+        @Test
+        @DisplayName("does not apply handler to success")
+        void doesNotApplyHandlerToSuccess() {
+            Result<String, String> result =
+                    Result.<String, String>ok("value")
+                            .recover(e -> Result.ok("recovered"));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("value");
+        }
+
+        @Test
+        @DisplayName("returns same success after recover")
+        void returnsSameSuccessAfterRecover() {
+            Result<String, String> original = Result.ok("value");
+            Result<String, String> recovered = original.recover(e -> Result.ok("fallback"));
+
+            assertThat(recovered).isSameAs(original);
+        }
+
+        @Test
+        @DisplayName("applies handler to failure")
+        void appliesHandlerToFailure() {
+            Result<String, String> result =
+                    Result.<String, String>err("error")
+                            .recover(e -> Result.ok("recovered: " + e));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("recovered: error");
+        }
+
+        @Test
+        @DisplayName("handler can return failure")
+        void handlerCanReturnFailure() {
+            Result<String, String> result =
+                    Result.<String, String>err("error1")
+                            .recover(e -> Result.err("error2"));
+
+            assertThat(result.isError()).isTrue();
+            switch (result) {
+                case Result.Err<String, String>(var e) ->
+                        assertThat(e).isEqualTo("error2");
+                default -> fail("Expected Err");
+            }
+        }
+
+        @Test
+        @DisplayName("works with Success alias")
+        void worksWithSuccessAlias() {
+            Result<String, String> result =
+                    Result.<String, String>success("value")
+                            .recover(e -> Result.ok("fallback"));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("value");
+        }
+
+        @Test
+        @DisplayName("works with Failure alias")
+        void worksWithFailureAlias() {
+            Result<String, String> result =
+                    Result.<String, String>failure("error")
+                            .recover(e -> Result.ok("recovered"));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("recovered");
+        }
+
+        @Test
+        @DisplayName("chains multiple recover operations")
+        void chainsMultipleRecovers() {
+            Result<String, String> result =
+                    Result.<String, String>err("error1")
+                            .recover(e -> Result.err("error2"))
+                            .recover(e -> Result.ok("final"));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("final");
+        }
+
+        @Test
+        @DisplayName("throws NullPointerException when handler is null")
+        void throwsNullPointerExceptionForNullHandler() {
+            Result<String, String> result = Result.err("error");
+
+            assertThatThrownBy(() -> result.recover(null))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        @DisplayName("propagates exception thrown by handler")
+        void propagatesExceptionFromHandler() {
+            Result<String, String> result = Result.err("error");
+
+            assertThatThrownBy(
+                            () ->
+                                    result.recover(
+                                            e -> {
+                                                throw new IllegalStateException("recovery failed");
+                                            }))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("recovery failed");
+        }
+
+        @Test
+        @DisplayName("recover with peek in pipeline")
+        void recoverWithPeekInPipeline() {
+            var log = new java.util.ArrayList<String>();
+            String result =
+                    Result.<String, String>err("initial error")
+                            .recover(e -> Result.ok("recovered"))
+                            .peek(log::add)
+                            .fold(v -> "success=" + v, e -> "failed=" + e);
+
+            assertThat(result).isEqualTo("success=recovered");
+            assertThat(log).containsExactly("recovered");
+        }
+
+        @Test
+        @DisplayName("recover with exception type handler")
+        void recoverWithExceptionTypeHandler() {
+            Exception originalError = new IllegalArgumentException("invalid input");
+            Result<String, Exception> result =
+                    Result.<String, Exception>err(originalError)
+                            .recover(
+                                    e -> {
+                                        if (e instanceof IllegalArgumentException) {
+                                            return Result.ok("handled: " + e.getMessage());
+                                        }
+                                        return Result.err(e);
+                                    });
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("handled: invalid input");
+        }
+    }
+
+    @Nested
+    @DisplayName("peek() and recover() integration")
+    class PeekAndRecoverIntegration {
+
+        @Test
+        @DisplayName("peek then recover on success")
+        void peekThenRecoverOnSuccess() {
+            var log = new java.util.ArrayList<String>();
+            Result<String, String> result =
+                    Result.<String, String>ok("value")
+                            .peek(log::add)
+                            .recover(e -> Result.ok("fallback"));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("value");
+            assertThat(log).containsExactly("value");
+        }
+
+        @Test
+        @DisplayName("recover then peek on failure")
+        void recoverThenPeekOnFailure() {
+            var log = new java.util.ArrayList<String>();
+            Result<String, String> result =
+                    Result.<String, String>err("error")
+                            .recover(e -> Result.ok("recovered"))
+                            .peek(log::add);
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo("recovered");
+            assertThat(log).containsExactly("recovered");
+        }
+
+        @Test
+        @DisplayName("complete pipeline: map -> flatMap -> peek -> recover -> fold")
+        void completePipeline() {
+            record Order(String id, int quantity) {}
+
+            String result =
+                    Result.<String, String>of(() -> "order-123")
+                            .map(id -> new Order(id, 10))
+                            .peek(order -> System.out.println("Order created: " + order.id()))
+                            .flatMap(
+                                    order ->
+                                            order.quantity() > 0
+                                                    ? Result.ok(order)
+                                                    : Result.err("invalid quantity"))
+                            .recover(e -> Result.ok(new Order("default", 0)))
+                            .fold(
+                                    order -> "processed=" + order.id(),
+                                    e -> "error=" + e);
+
+            assertThat(result).isEqualTo("processed=order-123");
+        }
+
+        @Test
+        @DisplayName("recovery with side effect using peek")
+        void recoveryWithSideEffect() {
+            var recoveredErrors = new java.util.ArrayList<String>();
+            Result<Integer, String> result =
+                    Result.<Integer, String>err("parse failed")
+                            .recover(
+                                    e -> {
+                                        recoveredErrors.add("Caught: " + e);
+                                        return Result.ok(0);
+                                    })
+                            .peek(v -> System.out.println("Final value: " + v));
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.orElseThrow()).isEqualTo(0);
+            assertThat(recoveredErrors).containsExactly("Caught: parse failed");
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Edge Cases
     // ─────────────────────────────────────────────────────────────────────────────
@@ -498,6 +841,40 @@ class ResultTest implements WithAssertions {
             assertThat(failure).isInstanceOf(Result.Failure.class);
             assertThat(err.isError()).isTrue();
             assertThat(failure.isError()).isTrue();
+        }
+
+        @Test
+        @DisplayName("orElseThrow throws RuntimeException directly without wrapping")
+        void orElseThrowThrowsRuntimeDirectly() {
+            RuntimeException originalError = new IllegalStateException("boom");
+            Result<String, RuntimeException> result = Result.err(originalError);
+
+            assertThatThrownBy(result::orElseThrow)
+                    .isSameAs(originalError)
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("orElseThrow wraps non-Throwable errors in RuntimeException")
+        void orElseThrowWrapsNonThrowable() {
+            Result<String, String> result = Result.err("error message");
+
+            assertThatThrownBy(result::orElseThrow)
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("error message")
+                    .isNotInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("orElseThrow wraps checked exceptions in RuntimeException")
+        void orElseThrowWrapsCheckedException() {
+            Exception checked = new Exception("checked error");
+            Result<String, Exception> result = Result.err(checked);
+
+            assertThatThrownBy(result::orElseThrow)
+                    .isInstanceOf(RuntimeException.class)
+                    .hasCauseInstanceOf(Exception.class)
+                    .hasMessageContaining("checked error");
         }
     }
 }

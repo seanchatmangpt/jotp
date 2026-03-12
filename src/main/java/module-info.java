@@ -128,8 +128,8 @@
  * record Increment() implements CounterMsg {}
  * record Reset() implements CounterMsg {}
  *
- * // 2. Create a process with state handler
- * ProcRef&lt;Counter, CounterMsg&gt; counter =
+ * // 2. Create a process using Proc.spawn() factory
+ * Proc&lt;Counter, CounterMsg&gt; counter =
  *     Proc.spawn(
  *         new Counter(0),
  *         (state, msg) -&gt;
@@ -139,20 +139,31 @@
  *             });
  *
  * // 3. Create a supervisor to manage the process
- * ProcRef&lt;?, ?&gt; supervisor =
- *     Supervisor.start(
+ * Supervisor supervisor =
+ *     Supervisor.create(
  *         "counter-supervisor",
- *         SupervisorFlags.ONE_FOR_ONE,
- *         List.of(
- *             ChildSpec.permanent("counter", counter)
- *         ));
+ *         Supervisor.Strategy.ONE_FOR_ONE,
+ *         5,
+ *         Duration.ofSeconds(60));
  *
- * // 4. Send messages asynchronously
- * counter.send(new Increment());
- * counter.send(new Increment());
- * counter.send(new Reset());
+ * // 4. Supervise the counter process
+ * ProcRef&lt;Counter, CounterMsg&gt; supervised =
+ *     supervisor.supervise(
+ *         "counter",
+ *         new Counter(0),
+ *         (state, msg) -&gt;
+ *             switch (msg) {
+ *               case Increment _ -&gt; new Counter(state.value() + 1);
+ *               case Reset _ -&gt; new Counter(0);
+ *             });
  *
- * // 5. If counter crashes, supervisor restarts it automatically
+ * // 5. Send messages asynchronously
+ * supervised.tell(new Increment());
+ * supervised.tell(new Increment());
+ * supervised.tell(new Reset());
+ *
+ * // 6. If counter crashes, supervisor restarts it automatically
+ * supervisor.shutdown();  // Graceful shutdown
  * </pre>
  *
  * <h2>References</h2>

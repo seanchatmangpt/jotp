@@ -50,16 +50,34 @@ Add JOTP to your `pom.xml`:
 
 ```java
 import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
 
-// Spawn a lightweight process
-var proc = Proc.spawn((mailbox, state) -> {
-    var message = mailbox.receive();
-    System.out.println("Received: " + message);
-    return state;
-}, initialState);
+// 1. Define state and messages
+record Counter(int value) {}
+sealed interface CounterMsg permits Increment, Reset {}
+record Increment() implements CounterMsg {}
+record Reset() implements CounterMsg {}
 
-// Send a message
-proc.send("Hello, JOTP!");
+// 2. Spawn a lightweight process using Proc.spawn()
+Proc<Counter, CounterMsg> counter = Proc.spawn(
+    new Counter(0),
+    (state, msg) -> switch (msg) {
+        case Increment _ -> new Counter(state.value() + 1);
+        case Reset _ -> new Counter(0);
+    }
+);
+
+// 3. Create a supervisor to manage the process
+Supervisor supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofSeconds(60)
+);
+
+// 4. Send messages
+counter.tell(new Increment());
+counter.tell(new Increment());
+var future = counter.ask(new Reset());
 ```
 
 ## Build & Development Commands

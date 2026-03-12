@@ -84,11 +84,60 @@ public final class Proc<S, M> {
     private final List<Consumer<Throwable>> terminationCallbacks = new CopyOnWriteArrayList<>();
 
     /**
-     * Create and start a process.
+     * Create and start a lightweight process.
+     *
+     * <p>Spawns a new virtual thread with an isolated mailbox and pure state handler — the standard
+     * OTP factory pattern for process creation.
+     *
+     * <p>Armstrong: "Processes share nothing, communicate only by message passing. Spawning is the
+     * fundamental concurrency primitive."
+     *
+     * <p><b>Usage Example:</b>
+     *
+     * <pre>{@code
+     * // Define state and messages
+     * record Counter(int value) {}
+     * sealed interface CounterMsg permits Increment, Reset {}
+     * record Increment() implements CounterMsg {}
+     * record Reset() implements CounterMsg {}
+     *
+     * // Spawn a new process
+     * Proc<Counter, CounterMsg> counter = Proc.spawn(
+     *     new Counter(0),
+     *     (state, msg) -> switch (msg) {
+     *         case Increment _ -> new Counter(state.value() + 1);
+     *         case Reset _ -> new Counter(0);
+     *     }
+     * );
+     *
+     * // Send messages asynchronously
+     * counter.tell(new Increment());
+     * counter.tell(new Increment());
+     * }</pre>
+     *
+     * @param <S> state type (immutable value type recommended)
+     * @param <M> message type (use Records or sealed interfaces)
+     * @param initial initial state value
+     * @param handler pure state transformation function: {@code (state, message) -> nextState}
+     * @return a new process instance with its virtual thread already running
+     * @throws NullPointerException if {@code initial}, {@code handler} is null
+     * @see #tell(Object)
+     * @see #ask(Object)
+     * @see ProcRef#spawn(Object, BiFunction) for process references that survive supervisor
+     *     restarts
+     */
+    public static <S, M> Proc<S, M> spawn(S initial, BiFunction<S, M, S> handler) {
+        return new Proc<>(initial, handler);
+    }
+
+    /**
+     * Create and start a process using the static {@link #spawn(Object, BiFunction)} factory.
      *
      * @param initial initial state
      * @param handler {@code (state, message) -> nextState} — pure function, no side-effects
+     * @deprecated Use {@link #spawn(Object, BiFunction)} instead
      */
+    @Deprecated(since = "1.0", forRemoval = true)
     public Proc(S initial, BiFunction<S, M, S> handler) {
         thread =
                 Thread.ofVirtual()
