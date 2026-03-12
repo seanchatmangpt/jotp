@@ -1,7 +1,6 @@
 package io.github.seanchatmangpt.jotp;
 
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
@@ -9,7 +8,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Distributed actor bridge enabling serialization and cross-JVM ProcRef communication using gRPC.
@@ -47,15 +45,15 @@ import java.util.concurrent.TimeoutException;
  *
  * <p><strong>Message Serialization:</strong>
  *
- * <p>Messages are serialized using Java's built-in serialization (via Base64-encoded bytes for
- * gRPC compatibility). State types should implement {@link Serializable}. Custom serialization can
- * be plugged in via a codec interface.
+ * <p>Messages are serialized using Java's built-in serialization (via Base64-encoded bytes for gRPC
+ * compatibility). State types should implement {@link Serializable}. Custom serialization can be
+ * plugged in via a codec interface.
  *
  * <p><strong>Error Handling:</strong>
  *
  * <ul>
- *   <li><strong>Network timeouts:</strong> Requests timeout after a configurable duration
- *       (default: 5 seconds).
+ *   <li><strong>Network timeouts:</strong> Requests timeout after a configurable duration (default:
+ *       5 seconds).
  *   <li><strong>Deserialization failures:</strong> Return {@link Result} with error details.
  *   <li><strong>Remote process crashes:</strong> Delivered as {@link ExitSignal} messages to
  *       trapping processes.
@@ -155,30 +153,36 @@ public final class DistributedActorBridge {
         /**
          * Request-reply: send message and wait for response (state) from remote actor.
          *
-         * @return future completing with the remote actor's state after processing, or timing
-         *     out after the configured timeout
+         * @return future completing with the remote actor's state after processing, or timing out
+         *     after the configured timeout
          */
         public CompletableFuture<S> ask(M msg) {
             return switch (location) {
                 case ActorLocation.Local(var name) ->
-                    // Local actor: delegate to ProcRegistry
-                    ProcRegistry.whereis(name)
-                            .map(proc -> proc.ask(msg).orTimeout(timeout.toMillis(),
-                                TimeUnit.MILLISECONDS))
-                            .<CompletableFuture<S>>map(cf -> cf.thenApply(s -> (S) s))
-                            .orElseGet(() -> {
-                                var cf = new CompletableFuture<S>();
-                                cf.completeExceptionally(
-                                        new IllegalStateException("Local actor not registered: " + name));
-                                return cf;
-                            });
+                        // Local actor: delegate to ProcRegistry
+                        ProcRegistry.whereis(name)
+                                .map(
+                                        proc ->
+                                                proc.ask(msg)
+                                                        .orTimeout(
+                                                                timeout.toMillis(),
+                                                                TimeUnit.MILLISECONDS))
+                                .<CompletableFuture<S>>map(cf -> cf.thenApply(s -> (S) s))
+                                .orElseGet(
+                                        () -> {
+                                            var cf = new CompletableFuture<S>();
+                                            cf.completeExceptionally(
+                                                    new IllegalStateException(
+                                                            "Local actor not registered: " + name));
+                                            return cf;
+                                        });
 
                 case ActorLocation.Remote remote ->
-                    // Remote actor: delegate to gRPC stub
-                    ensureStub(remote)
-                            .ask(msg)
-                            .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-                            .thenApply(result -> (S) result);
+                        // Remote actor: delegate to gRPC stub
+                        ensureStub(remote)
+                                .ask(msg)
+                                .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
+                                .thenApply(result -> (S) result);
             };
         }
 
@@ -191,13 +195,14 @@ public final class DistributedActorBridge {
         public void stop() {
             if (location instanceof ActorLocation.Local(var name)) {
                 ProcRegistry.whereis(name)
-                        .ifPresent(proc -> {
-                            try {
-                                proc.stop();
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        });
+                        .ifPresent(
+                                proc -> {
+                                    try {
+                                        proc.stop();
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    }
+                                });
             } else if (location instanceof ActorLocation.Remote remote) {
                 ensureStub(remote).stop().exceptionally(ex -> null);
             }
@@ -207,9 +212,7 @@ public final class DistributedActorBridge {
             if (stub == null) {
                 synchronized (this) {
                     if (stub == null) {
-                        stub =
-                                new RemoteActorStub<>(
-                                        remote.host(), remote.port(), timeout, codec);
+                        stub = new RemoteActorStub<>(remote.host(), remote.port(), timeout, codec);
                     }
                 }
             }
@@ -261,8 +264,8 @@ public final class DistributedActorBridge {
      * Remote gRPC stub for communication with remote actors. Wraps gRPC channel and stubs for
      * tell/ask operations.
      *
-     * <p>This is a simplified stub that demonstrates the architecture. In a production system,
-     * this would be generated from a .proto file via protoc.
+     * <p>This is a simplified stub that demonstrates the architecture. In a production system, this
+     * would be generated from a .proto file via protoc.
      */
     static final class RemoteActorStub<M> {
         private final String host;
@@ -279,32 +282,34 @@ public final class DistributedActorBridge {
 
         /** Fire-and-forget tell. */
         CompletableFuture<Void> tell(M msg) {
-            return CompletableFuture.runAsync(() -> {
-                try {
-                    String encoded = codec.encode(msg);
-                    // In a real implementation, use gRPC channel and stub
-                    // channel.newCall(method).sendMessage(encodedMsg).build().execute()
-                    simulateRemoteTell(encoded);
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to tell remote actor", e);
-                }
-            });
+            return CompletableFuture.runAsync(
+                    () -> {
+                        try {
+                            String encoded = codec.encode(msg);
+                            // In a real implementation, use gRPC channel and stub
+                            // channel.newCall(method).sendMessage(encodedMsg).build().execute()
+                            simulateRemoteTell(encoded);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to tell remote actor", e);
+                        }
+                    });
         }
 
         /** Request-reply ask. */
         @SuppressWarnings("unchecked")
         CompletableFuture<M> ask(M msg) {
-            return CompletableFuture.supplyAsync(() -> {
-                try {
-                    String encoded = codec.encode(msg);
-                    // In a real implementation, use gRPC channel and async stub
-                    // channel.newCall(method).sendMessage(encodedMsg).build().execute()
-                    String responseEncoded = simulateRemoteAsk(encoded);
-                    return codec.decode(responseEncoded);
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to ask remote actor", e);
-                }
-            });
+            return CompletableFuture.supplyAsync(
+                    () -> {
+                        try {
+                            String encoded = codec.encode(msg);
+                            // In a real implementation, use gRPC channel and async stub
+                            // channel.newCall(method).sendMessage(encodedMsg).build().execute()
+                            String responseEncoded = simulateRemoteAsk(encoded);
+                            return codec.decode(responseEncoded);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to ask remote actor", e);
+                        }
+                    });
         }
 
         /** Stop the remote actor. */
@@ -333,8 +338,7 @@ public final class DistributedActorBridge {
 
     private final String host;
     private final int port;
-    private final Map<String, RemoteActorHandle<?, ?>> remoteActors =
-            new ConcurrentHashMap<>();
+    private final Map<String, RemoteActorHandle<?, ?>> remoteActors = new ConcurrentHashMap<>();
     private final MessageCodec<?> defaultCodec;
 
     /**
@@ -352,8 +356,8 @@ public final class DistributedActorBridge {
     /**
      * Start the gRPC server to accept remote actor requests.
      *
-     * <p>This server exposes registered local actors from ProcRegistry to remote clients.
-     * In a production system, this would be a full gRPC service with reflection support.
+     * <p>This server exposes registered local actors from ProcRegistry to remote clients. In a
+     * production system, this would be a full gRPC service with reflection support.
      */
     public void startServer() {
         // In a real implementation:
@@ -382,8 +386,7 @@ public final class DistributedActorBridge {
         var requestId = actorName + "@" + remoteHost + ":" + remotePort;
         var handle =
                 new RemoteActorHandle<S, M>(
-                        location, requestId, Duration.ofSeconds(5),
-                        (MessageCodec<M>) defaultCodec);
+                        location, requestId, Duration.ofSeconds(5), (MessageCodec<M>) defaultCodec);
         remoteActors.put(requestId, handle);
         return handle;
     }
@@ -399,16 +402,19 @@ public final class DistributedActorBridge {
     @SuppressWarnings("unchecked")
     public <S, M> Optional<RemoteActorHandle<S, M>> localRef(String actorName) {
         return ProcRegistry.whereis(actorName)
-                .map(proc -> {
-                    var location = new ActorLocation.Local(actorName);
-                    var requestId = actorName + "@local";
-                    var handle =
-                            new RemoteActorHandle<S, M>(
-                                    location, requestId, Duration.ofSeconds(5),
-                                    (MessageCodec<M>) defaultCodec);
-                    remoteActors.put(requestId, handle);
-                    return handle;
-                });
+                .map(
+                        proc -> {
+                            var location = new ActorLocation.Local(actorName);
+                            var requestId = actorName + "@local";
+                            var handle =
+                                    new RemoteActorHandle<S, M>(
+                                            location,
+                                            requestId,
+                                            Duration.ofSeconds(5),
+                                            (MessageCodec<M>) defaultCodec);
+                            remoteActors.put(requestId, handle);
+                            return handle;
+                        });
     }
 
     /**
@@ -461,8 +467,10 @@ public final class DistributedActorBridge {
             case ActorLocation.Remote(var host, var port) -> {
                 var handle =
                         new RemoteActorHandle<S, M>(
-                                location, name + "@" + host + ":" + port,
-                                Duration.ofSeconds(5), (MessageCodec<M>) defaultCodec);
+                                location,
+                                name + "@" + host + ":" + port,
+                                Duration.ofSeconds(5),
+                                (MessageCodec<M>) defaultCodec);
                 yield Optional.of(handle);
             }
         };
