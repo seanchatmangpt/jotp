@@ -11,8 +11,8 @@
     ]
   },
   "env": {
-    "JAVA_HOME": "/usr/lib/jvm/graalvm-community-openjdk-25.0.2+10.1",
-    "PATH": "/usr/lib/jvm/graalvm-community-openjdk-25.0.2+10.1/bin:/root/.mvnd/mvnd-2.0.0-rc-3/bin:/usr/local/bin:${PATH}"
+    "JAVA_HOME": "/usr/lib/jvm/openjdk-26",
+    "PATH": "/usr/lib/jvm/openjdk-26/bin:/root/.mvnd/mvnd-2.0.0-rc-3/bin:/usr/local/bin:${PATH}"
   },
   "hooks": {
     "SessionStart": [

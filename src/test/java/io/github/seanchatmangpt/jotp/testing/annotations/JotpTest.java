@@ -12,10 +12,10 @@ import java.lang.annotation.*;
  *   <li>Supervisor (supervision tree)</li>
  *   <li>CrashRecovery (let it crash + retry)</li>
  *   <li>StateMachine (state/event/data separation)</li>
- *   <li>ProcessLink (bilateral crash propagation)</li>
+ *   <li>ProcLink (bilateral crash propagation)</li>
  *   <li>Parallel (structured concurrency)</li>
- *   <li>ProcessMonitor (unilateral DOWN notifications)</li>
- *   <li>ProcessRegistry (global name table)</li>
+ *   <li>ProcMonitor (unilateral DOWN notifications)</li>
+ *   <li>ProcRegistry (global name table)</li>
  *   <li>ProcTimer (timed message delivery)</li>
  *   <li>ExitSignal (exit signal record)</li>
  *   <li>ProcSys (introspection: get_state, suspend, resume)</li>
@@ -70,19 +70,19 @@ public @interface JotpTest {
    *
    * @return true to test link/unlink
    */
-  boolean testProcessLinks() default false;
+  boolean testProcLinks() default false;
 
   /**
    * Enable process monitor testing.
    *
    * @return true to test monitor/demonitor
    */
-  boolean testProcessMonitors() default false;
+  boolean testProcMonitors() default false;
 
   /**
-   * Enable ProcessRegistry testing.
+   * Enable ProcRegistry testing.
    *
    * @return true to test register/unregister/whereis
    */
-  boolean testProcessRegistry() default false;
+  boolean testProcRegistry() default false;
 }

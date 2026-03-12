@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Proxy & Java 26 Setup (Automatic via SessionStart hook)
+
+The `.claude/setup.sh` script runs automatically on every session start and handles:
+
+1. **OpenJDK 26** — Downloads and installs to `/usr/lib/jvm/openjdk-26` if not present
+2. **mvnd 2.0.0-rc-3** — Downloads Maven Daemon if not present
+3. **Maven proxy** — Auto-generates `~/.m2/settings.xml` with proxy credentials extracted from `JAVA_TOOL_OPTIONS` or `https_proxy` environment variables
+4. **maven-proxy-v2.py bridge** — Starts if `https_proxy` env var is set
+
+No manual setup is needed. If the session start hook fails, run manually:
+```bash
+bash .claude/setup.sh
+```
+
 ## Build Tool: mvnd (Maven Daemon, Maven 4) — REQUIRED
 
 **mvnd is mandatory.** Raw `mvn`/`./mvnw` is not used — mvnd 2.0.0-rc-3 (bundling Maven 4) is the build tool.
@@ -11,25 +25,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Download mvnd 2.0.0-rc-3 (Linux x86_64)
 # https://github.com/apache/maven-mvnd/releases/download/2.0.0-rc-3/maven-mvnd-2.0.0-rc-3-linux-amd64.tar.gz
 # Symlink: ln -sf /path/to/mvnd/bin/mvnd /usr/local/bin/mvnd
-```
-
-**Start proxy before building** (required when `https_proxy` is active in the environment):
-```bash
-python3 maven-proxy-v2.py &   # starts local proxy on 127.0.0.1:3128
-```
-
-**Configure Maven to use local proxy** (add to `~/.m2/settings.xml`):
-```xml
-<settings>
-  <proxies>
-    <proxy><id>local</id><active>true</active><protocol>https</protocol>
-      <host>127.0.0.1</host><port>3128</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
-    <proxy><id>local-http</id><active>true</active><protocol>http</protocol>
-      <host>127.0.0.1</host><port>3128</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
-  </proxies>
-</settings>
 ```
 
 ## Commands
@@ -83,7 +78,7 @@ cd guard-system && cargo build --release
 
 ## Architecture
 
-**Java 26 JPMS library** (`io.github.seanchatmangpt.jotp` module) targeting Java 26 with preview features enabled (`--enable-preview`). JDK: GraalVM Community CE 25.0.2 (Java 26 EA builds required for Java 26 target).
+**Java 26 JPMS library** (`io.github.seanchatmangpt.jotp` module) targeting Java 26 with preview features enabled (`--enable-preview`). JDK: OpenJDK 26 (auto-installed by `.claude/setup.sh`).
 
 **Test separation:**
 - Unit tests: `*Test.java` — run by maven-surefire-plugin via `./mvnw test`
@@ -103,10 +98,10 @@ cd guard-system && cargo build --release
 - `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window
 - `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads
 - `StateMachine<S,E,D>` — gen_statem: state/event/data separation + sealed `Transition` hierarchy
-- `ProcessLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)
+- `ProcLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)
 - `Parallel` — structured fan-out with fail-fast semantics (`StructuredTaskScope`, OTP: `pmap`)
-- `ProcessMonitor` — unilateral DOWN notifications: `monitor(process, Pid)` / `demonitor/1`; fires on any exit (normal or abnormal); does NOT kill the monitoring side (unlike links)
-- `ProcessRegistry` — global name table: `register/2`, `whereis/1`, `unregister/1`, `registered/0`; auto-deregisters when a process terminates
+- `ProcMonitor` — unilateral DOWN notifications: `monitor(process, Pid)` / `demonitor/1`; fires on any exit (normal or abnormal); does NOT kill the monitoring side (unlike links)
+- `ProcRegistry` — global name table: `register/2`, `whereis/1`, `unregister/1`, `registered/0`; auto-deregisters when a process terminates
 - `ProcTimer` — timed message delivery: `timer:send_after/3`, `timer:send_interval/3`, `timer:cancel/1`
 - `ExitSignal` — exit signal record delivered as a mailbox message when a process traps exits (`process_flag(trap_exit, true)`)
 - `ProcSys` — sys module: `get_state`, `suspend`, `resume`, `statistics` — process introspection without stopping

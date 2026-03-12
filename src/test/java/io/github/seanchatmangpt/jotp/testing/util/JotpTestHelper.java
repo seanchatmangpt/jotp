@@ -12,10 +12,10 @@ import java.util.concurrent.*;
  *   <li>Proc (lightweight process)</li>
  *   <li>Supervisor (supervision tree)</li>
  *   <li>StateMachine (state/event/data separation)</li>
- *   <li>ProcessLink (bilateral crash propagation)</li>
+ *   <li>ProcLink (bilateral crash propagation)</li>
  *   <li>Parallel (structured concurrency)</li>
- *   <li>ProcessMonitor (unilateral DOWN notifications)</li>
- *   <li>ProcessRegistry (global name table)</li>
+ *   <li>ProcMonitor (unilateral DOWN notifications)</li>
+ *   <li>ProcRegistry (global name table)</li>
  *   <li>And 8 more OTP primitives</li>
  * </ul>
  *
@@ -144,7 +144,7 @@ public class JotpTestHelper {
   }
 
   /**
-   * Check if ProcessLink is established (bilateral crash propagation).
+   * Check if ProcLink is established (bilateral crash propagation).
    */
   public static boolean isLinked(Object processRef1, Object processRef2) {
     // Implementation would check link status
@@ -155,14 +155,14 @@ public class JotpTestHelper {
    * Create a link between two processes (for testing).
    */
   public static void createLink(Object processRef1, Object processRef2) {
-    // Implementation would call ProcessLink.link()
+    // Implementation would call ProcLink.link()
   }
 
   /**
-   * Create a process monitor (for testing ProcessMonitor).
+   * Create a process monitor (for testing ProcMonitor).
    */
   public static Object createMonitor(Object processRef) {
-    // Implementation would call ProcessMonitor.monitor()
+    // Implementation would call ProcMonitor.monitor()
     return new Object();
   }
 
@@ -182,24 +182,24 @@ public class JotpTestHelper {
   }
 
   /**
-   * Register process in ProcessRegistry (for testing).
+   * Register process in ProcRegistry (for testing).
    */
   public static void registerProcess(String name, Object processRef) {
-    // Implementation would call ProcessRegistry.register()
+    // Implementation would call ProcRegistry.register()
   }
 
   /**
-   * Unregister process from ProcessRegistry.
+   * Unregister process from ProcRegistry.
    */
   public static void unregisterProcess(String name) {
-    // Implementation would call ProcessRegistry.unregister()
+    // Implementation would call ProcRegistry.unregister()
   }
 
   /**
-   * Look up process in ProcessRegistry.
+   * Look up process in ProcRegistry.
    */
   public static Object lookupProcess(String name) {
-    // Implementation would call ProcessRegistry.whereis()
+    // Implementation would call ProcRegistry.whereis()
     return null;
   }
 
@@ -207,7 +207,7 @@ public class JotpTestHelper {
    * Get all registered processes.
    */
   public static List<String> getRegisteredProcessNames() {
-    // Implementation would call ProcessRegistry.registered()
+    // Implementation would call ProcRegistry.registered()
     return List.of();
   }
 

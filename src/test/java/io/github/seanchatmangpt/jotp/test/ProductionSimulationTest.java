@@ -27,9 +27,9 @@ import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessLink;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcLink;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.ProcTimer;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
@@ -86,7 +86,7 @@ class ProductionSimulationTest implements WithAssertions {
 
     @AfterEach
     void cleanup() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ class ProductionSimulationTest implements WithAssertions {
 
             // Link services in a chain
             for (int i = 1; i < serviceCount; i++) {
-                ProcessLink.link(services.get(i - 1), services.get(i));
+                ProcLink.link(services.get(i - 1), services.get(i));
             }
 
             // Crash the last service
@@ -325,7 +325,7 @@ class ProductionSimulationTest implements WithAssertions {
             var standby = new Proc<>(0, ProductionSimulationTest::handler);
 
             var primaryDead = new AtomicBoolean(false);
-            ProcessMonitor.monitor(primary, (down) -> {
+            ProcMonitor.monitor(primary, (down) -> {
                 primaryDead.set(true);
                 standby.tell(new Msg.Set(sharedState.get()));
             });
@@ -426,7 +426,7 @@ class ProductionSimulationTest implements WithAssertions {
                 var w = new Proc<>(i, ProductionSimulationTest::handler);
                 workers.add(w);
                 alive.put(w, true);
-                ProcessMonitor.monitor(w, (down) -> alive.remove(w));
+                ProcMonitor.monitor(w, (down) -> alive.remove(w));
             }
 
             for (int i = 0; i < initialWorkers - 1; i++) {
@@ -649,7 +649,7 @@ class ProductionSimulationTest implements WithAssertions {
                             String name = "proc-" + threadId + "-" + i;
                             var proc = new Proc<>(0, ProductionSimulationTest::handler);
                             try {
-                                ProcessRegistry.register(name, proc);
+                                ProcRegistry.register(name, proc);
                                 registered.incrementAndGet();
                             } catch (IllegalStateException e) {
                                 // duplicate - shouldn't happen
@@ -673,11 +673,11 @@ class ProductionSimulationTest implements WithAssertions {
             for (int t = 0; t < 10; t++) {
                 for (int i = 0; i < perThread; i++) {
                     String name = "proc-" + t + "-" + i;
-                    Optional<Proc<Integer, Msg>> proc = ProcessRegistry.whereis(name);
+                    Optional<Proc<Integer, Msg>> proc = ProcRegistry.whereis(name);
                     proc.ifPresent(p -> {
                         try { p.stop(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                     });
-                    ProcessRegistry.unregister(name);
+                    ProcRegistry.unregister(name);
                 }
             }
         }

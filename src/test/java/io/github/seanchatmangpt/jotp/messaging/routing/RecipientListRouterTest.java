@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -193,9 +193,9 @@ class RecipientListRouterTest implements WithAssertions {
       assertThat(messages2).contains("broadcast-message");
       assertThat(messages3).contains("broadcast-message");
 
-      ProcessRegistry.unregister("recipient-1");
-      ProcessRegistry.unregister("recipient-2");
-      ProcessRegistry.unregister("recipient-3");
+      ProcRegistry.unregister("recipient-1");
+      ProcRegistry.unregister("recipient-2");
+      ProcRegistry.unregister("recipient-3");
     }
 
     @Test
@@ -296,8 +296,8 @@ class RecipientListRouterTest implements WithAssertions {
 
     @AfterEach
     void cleanup() {
-      for (String name : ProcessRegistry.registered()) {
-        ProcessRegistry.unregister(name);
+      for (String name : ProcRegistry.registered()) {
+        ProcRegistry.unregister(name);
       }
     }
 
