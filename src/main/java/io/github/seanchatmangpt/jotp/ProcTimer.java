@@ -23,15 +23,41 @@ import java.util.concurrent.TimeUnit;
  *   <li>OTP {@code timer:cancel(TRef)} → {@link #cancel(TimerRef)} or {@link TimerRef#cancel()}
  * </ul>
  *
- * <p>The shared scheduler uses a single daemon platform thread (one timer wheel for all timers).
- * The actual work is just a non-blocking {@link Proc#tell} enqueue, so the timer thread never
- * blocks on application logic.
+ * <p><strong>Java 26 Design Rationale:</strong> The shared scheduler uses a single daemon
+ * platform thread (backing a timer wheel for all timers). This design is optimal because:
+ *
+ * <ul>
+ *   <li><strong>Timer wheels are CPU-bound:</strong> Managing the timer wheel requires precise
+ *       scheduling and interrupt handling—work best suited to a single platform thread with
+ *       kernel-level timer semantics.
+ *   <li><strong>Virtual threads for I/O:</strong> Virtual threads excel at I/O-bound workloads
+ *       (network, files); they add overhead for CPU-bound tasks like timer management.
+ *   <li><strong>Minimal callback overhead:</strong> The actual callback work is just a
+ *       non-blocking {@link Proc#tell(Object)} enqueue into the target process's mailbox, so the
+ *       timer thread itself never blocks or yields to application logic.
+ *   <li><strong>Fairness:</strong> A single thread ensures all timers are processed with uniform
+ *       latency guarantees, avoiding the fairness issues of thread pools.
+ * </ul>
+ *
+ * <p>While Java 26 adds {@code newVirtualThreadPerTaskExecutor()}, using it for timer management
+ * would violate the "use virtual threads for I/O, not CPU work" principle and would only increase
+ * overhead. The current approach remains the idiomatic choice for OTP-style timers.
  */
 public final class ProcTimer {
 
     private ProcTimer() {}
 
-    /** Shared timer scheduler — single daemon thread, fires tell() into target mailboxes. */
+    /**
+     * Shared timer scheduler — single daemon platform thread with internal timer wheel.
+     *
+     * <p><strong>Java 26 Best Practice:</strong> This implementation intentionally uses a single
+     * daemon <em>platform thread</em> rather than virtual threads because timer wheel management
+     * is CPU-bound work, not I/O. Virtual threads excel at I/O-bound workloads; using them for
+     * pure timer tick counting would add overhead without benefit.
+     *
+     * <p>The actual callback is a non-blocking {@link Proc#tell(Object)} enqueue, so this thread
+     * never blocks on application logic.
+     */
     private static final ScheduledExecutorService SCHEDULER =
             Executors.newScheduledThreadPool(
                     1,

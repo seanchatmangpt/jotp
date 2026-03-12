@@ -58,6 +58,18 @@ import java.util.function.*;
  * supervisor.shutdown();
  * }</pre>
  *
+ * <p><strong>Java 26 Features Used:</strong>
+ *
+ * <ul>
+ *   <li><strong>Virtual Threads:</strong> The supervisor itself runs on a virtual thread,
+ *       monitoring all children efficiently.
+ *   <li><strong>Sealed Interfaces:</strong> Internal {@code SvEvent} is sealed to
+ *       {@code SvEvent_ChildCrashed}, {@code SvEvent_Shutdown} for exhaustive event handling.
+ *   <li><strong>Records:</strong> Events are records carrying child ID, crash reason, etc.
+ *   <li><strong>Pattern Matching:</strong> Supervisor's event loop uses switch/case on sealed
+ *       events to route crashes to the appropriate restart strategy handler.
+ * </ul>
+ *
  * @see Proc
  * @see ProcRef
  * @see CrashRecovery

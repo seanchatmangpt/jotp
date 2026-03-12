@@ -1,6 +1,8 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.lang.ScopedValue;
 import java.time.Duration;
+import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -53,10 +55,12 @@ public final class ProcLib {
     private static final Duration DEFAULT_INIT_TIMEOUT = Duration.ofSeconds(5);
 
     /**
-     * Thread-local latch used to pass the init-ack signal from the child's init handler back to the
-     * {@link #startLink} caller. Set before the init handler runs, cleared afterward.
+     * Scoped value binding the init-ack latch from the child's init handler back to the
+     * {@link #startLink} caller. Established before the init handler runs, automatically cleaned up
+     * when the handler completes. Uses Java 26 structured concurrency semantics to improve
+     * integration with StructuredTaskScope and avoid thread-local pollution.
      */
-    private static final ThreadLocal<CountDownLatch> INIT_LATCH = new ThreadLocal<>();
+    private static final ScopedValue<CountDownLatch> INIT_LATCH = ScopedValue.newInstance();
 
     /**
      * Sealed result type for {@link #startLink} — mirrors OTP's {@code {ok, Pid} | {error,
@@ -125,20 +129,28 @@ public final class ProcLib {
                     public S apply(S state, M msg) {
                         if (!initDone) {
                             initDone = true;
-                            INIT_LATCH.set(ready);
                             try {
-                                S next = initHandler.apply(state);
-                                // Do NOT call ready.countDown() here — the init handler MUST
-                                // call initAck() explicitly to unblock the parent, mirroring
-                                // OTP proc_lib:init_ack({ok, self()}). If initAck() is never
-                                // called, the parent times out and returns Err.
-                                return next;
+                                // Establish ScopedValue binding for init handler.
+                                // The scope is automatically cleaned up when the call completes,
+                                // improving integration with StructuredTaskScope and avoiding
+                                // thread-local pollution (Java 26 best practice).
+                                return ScopedValue.where(INIT_LATCH, ready).call(() -> {
+                                    try {
+                                        S next = initHandler.apply(state);
+                                        // Do NOT call ready.countDown() here — the init handler MUST
+                                        // call initAck() explicitly to unblock the parent, mirroring
+                                        // OTP proc_lib:init_ack({ok, self()}). If initAck() is never
+                                        // called, the parent times out and returns Err.
+                                        return next;
+                                    } catch (RuntimeException e) {
+                                        initError.set(e);
+                                        ready.countDown();
+                                        throw e; // crash the process
+                                    }
+                                });
                             } catch (RuntimeException e) {
-                                initError.set(e);
-                                ready.countDown();
-                                throw e; // crash the process
-                            } finally {
-                                INIT_LATCH.remove();
+                                // Already handled by the scoped call; re-throw to crash the process
+                                throw e;
                             }
                         }
                         return loopHandler.apply(state, msg);
@@ -176,11 +188,18 @@ public final class ProcLib {
      * this unblocks the parent that is waiting in {@link #startLink}. If the init handler returns
      * without calling this, the parent is unblocked on return anyway (best-effort). Calling it
      * outside of a {@link #startLink} context is a safe no-op.
+     *
+     * <p><strong>Java 26 Implementation:</strong> Uses {@link ScopedValue} for scope-aware binding,
+     * providing cleaner structural concurrency integration compared to thread-local storage.
      */
     public static void initAck() {
-        CountDownLatch latch = INIT_LATCH.get();
-        if (latch != null) {
-            latch.countDown();
+        try {
+            CountDownLatch latch = INIT_LATCH.get();
+            if (latch != null) {
+                latch.countDown();
+            }
+        } catch (NoSuchElementException e) {
+            // initAck() called outside of startLink scope — safe no-op
         }
     }
 
