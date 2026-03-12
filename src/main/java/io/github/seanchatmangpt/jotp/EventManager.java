@@ -69,8 +69,7 @@ public final class EventManager<E> {
 
         record Add<E>(Handler<E> handler) implements Msg<E> {}
 
-        record Delete<E>(Handler<E> handler, CompletableFuture<Boolean> result)
-                implements Msg<E> {}
+        record Delete<E>(Handler<E> handler, CompletableFuture<Boolean> result) implements Msg<E> {}
 
         record Call<E>(Handler<E> handler, E event, CompletableFuture<Void> done)
                 implements Msg<E> {}

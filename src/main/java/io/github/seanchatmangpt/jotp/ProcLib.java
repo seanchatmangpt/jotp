@@ -15,8 +15,8 @@ import java.util.function.Function;
  *
  * <p>In OTP, {@code proc_lib:start_link/3} blocks the calling process until the spawned child
  * explicitly calls {@code proc_lib:init_ack({ok, self()})}. The parent receives {@code {ok, Pid}}
- * or {@code {error, Reason}}. Without this handshake, a supervisor cannot distinguish "the child
- * is starting" from "the child crashed during init."
+ * or {@code {error, Reason}}. Without this handshake, a supervisor cannot distinguish "the child is
+ * starting" from "the child crashed during init."
  *
  * <p>Java 26 mapping:
  *
@@ -53,13 +53,14 @@ public final class ProcLib {
     private static final Duration DEFAULT_INIT_TIMEOUT = Duration.ofSeconds(5);
 
     /**
-     * Thread-local latch used to pass the init-ack signal from the child's init handler back to
-     * the {@link #startLink} caller. Set before the init handler runs, cleared afterward.
+     * Thread-local latch used to pass the init-ack signal from the child's init handler back to the
+     * {@link #startLink} caller. Set before the init handler runs, cleared afterward.
      */
     private static final ThreadLocal<CountDownLatch> INIT_LATCH = new ThreadLocal<>();
 
     /**
-     * Sealed result type for {@link #startLink} — mirrors OTP's {@code {ok, Pid} | {error, Reason}}.
+     * Sealed result type for {@link #startLink} — mirrors OTP's {@code {ok, Pid} | {error,
+     * Reason}}.
      *
      * @param <S> process state type
      * @param <M> message type

@@ -4,31 +4,31 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
  * Saga Orchestrator — coordinates distributed transactions across services.
  *
- * <p>Vaughn Vernon: "A Saga is a sequence of local transactions where each transaction
- * updates a single service and publishes a message or event to trigger the next step.
- * If a step fails, compensating actions undo the previous steps."
+ * <p>Vaughn Vernon: "A Saga is a sequence of local transactions where each transaction updates a
+ * single service and publishes a message or event to trigger the next step. If a step fails,
+ * compensating actions undo the previous steps."
  *
- * <p>Joe Armstrong: "In Erlang, we don't have distributed transactions. We have processes
- * that coordinate through message passing. The saga pattern is just another process."
+ * <p>Joe Armstrong: "In Erlang, we don't have distributed transactions. We have processes that
+ * coordinate through message passing. The saga pattern is just another process."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Orchestrated sagas</b> — Central coordinator manages the workflow</li>
- *   <li><b>Compensating actions</b> — Rollback on failure</li>
- *   <li><b>State persistence</b> — Recover from crashes mid-saga</li>
- *   <li><b>Timeout handling</b> — Automatic compensation on timeout</li>
- *   <li><b>Step retry</b> — Configurable retry for transient failures</li>
+ *   <li><b>Orchestrated sagas</b> — Central coordinator manages the workflow
+ *   <li><b>Compensating actions</b> — Rollback on failure
+ *   <li><b>State persistence</b> — Recover from crashes mid-saga
+ *   <li><b>Timeout handling</b> — Automatic compensation on timeout
+ *   <li><b>Step retry</b> — Configurable retry for transient failures
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * SagaOrchestrator saga = SagaOrchestrator.builder("order-fulfillment")
  *     .step("reserve-inventory")
@@ -77,7 +77,8 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                 return this;
             }
 
-            public Builder<S, D> compensation(BiFunction<D, S, CompletableFuture<Void>> compensation) {
+            public Builder<S, D> compensation(
+                    BiFunction<D, S, CompletableFuture<Void>> compensation) {
                 this.compensation = compensation;
                 return this;
             }
@@ -98,13 +99,7 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
             }
 
             public Step<S, D> build() {
-                return new Step<>(
-                        name,
-                        action,
-                        compensation,
-                        timeout,
-                        maxRetries,
-                        retryOn);
+                return new Step<>(name, action, compensation, timeout, maxRetries, retryOn);
             }
         }
     }
@@ -120,7 +115,14 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
             List<String> completedSteps) {
 
         public static SagaContext start(UUID sagaId, String sagaName) {
-            return new SagaContext(sagaId, sagaName, Instant.now(), 0, SagaStatus.STARTED, new LinkedHashMap<>(), new ArrayList<>());
+            return new SagaContext(
+                    sagaId,
+                    sagaName,
+                    Instant.now(),
+                    0,
+                    SagaStatus.STARTED,
+                    new LinkedHashMap<>(),
+                    new ArrayList<>());
         }
 
         public SagaContext withResult(String step, Object result) {
@@ -128,11 +130,13 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
             newResults.put(step, result);
             List<String> newCompleted = new ArrayList<>(completedSteps);
             newCompleted.add(step);
-            return new SagaContext(sagaId, sagaName, startTime, currentStep + 1, status, newResults, newCompleted);
+            return new SagaContext(
+                    sagaId, sagaName, startTime, currentStep + 1, status, newResults, newCompleted);
         }
 
         public SagaContext withStatus(SagaStatus newStatus) {
-            return new SagaContext(sagaId, sagaName, startTime, currentStep, newStatus, results, completedSteps);
+            return new SagaContext(
+                    sagaId, sagaName, startTime, currentStep, newStatus, results, completedSteps);
         }
 
         public Duration elapsed() {
@@ -152,10 +156,14 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
     }
 
     /** Saga execution result. */
-    public sealed interface SagaResult permits SagaResult.Success, SagaResult.Failure, SagaResult.Compensated {
+    public sealed interface SagaResult
+            permits SagaResult.Success, SagaResult.Failure, SagaResult.Compensated {
         record Success(Map<String, Object> results) implements SagaResult {}
+
         record Failure(String step, Throwable error) implements SagaResult {}
-        record Compensated(String failedStep, Throwable error, List<String> compensatedSteps) implements SagaResult {}
+
+        record Compensated(String failedStep, Throwable error, List<String> compensatedSteps)
+                implements SagaResult {}
     }
 
     // ── Saga orchestrator state ──────────────────────────────────────────────────
@@ -167,22 +175,29 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
     private final Proc<SagaState, SagaMsg> coordinator;
 
     private record SagaState(
-            Map<UUID, SagaRuntime> sagas,
-            Map<UUID, CompletableFuture<SagaResult>> pending) {}
+            Map<UUID, SagaRuntime> sagas, Map<UUID, CompletableFuture<SagaResult>> pending) {}
 
-    private sealed interface SagaMsg permits SagaMsg.Start, SagaMsg.StepComplete, SagaMsg.StepFailed, SagaMsg.Timeout, SagaMsg.GetStatus {
-        record Start(UUID sagaId, Object data, CompletableFuture<SagaResult> replyTo) implements SagaMsg {}
+    private sealed interface SagaMsg
+            permits SagaMsg.Start,
+                    SagaMsg.StepComplete,
+                    SagaMsg.StepFailed,
+                    SagaMsg.Timeout,
+                    SagaMsg.GetStatus {
+        record Start(UUID sagaId, Object data, CompletableFuture<SagaResult> replyTo)
+                implements SagaMsg {}
+
         record StepComplete(UUID sagaId, String step, Object result) implements SagaMsg {}
+
         record StepFailed(UUID sagaId, String step, Throwable error) implements SagaMsg {}
+
         record Timeout(UUID sagaId) implements SagaMsg {}
-        record GetStatus(UUID sagaId, CompletableFuture<Optional<SagaContext>> replyTo) implements SagaMsg {}
+
+        record GetStatus(UUID sagaId, CompletableFuture<Optional<SagaContext>> replyTo)
+                implements SagaMsg {}
     }
 
     /** Saga runtime state including the original data for step execution. */
-    private record SagaRuntime(
-            SagaContext context,
-            Object data,
-            Map<String, Object> stepResults) {
+    private record SagaRuntime(SagaContext context, Object data, Map<String, Object> stepResults) {
 
         SagaRuntime withResult(String step, Object result) {
             Map<String, Object> newResults = new LinkedHashMap<>(stepResults);
@@ -197,9 +212,10 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
         this.globalTimeout = builder.globalTimeout;
         this.eventStore = builder.eventStore;
 
-        this.coordinator = new Proc<>(
-                new SagaState(new ConcurrentHashMap<>(), new ConcurrentHashMap<>()),
-                this::handleSagaMessage);
+        this.coordinator =
+                new Proc<>(
+                        new SagaState(new ConcurrentHashMap<>(), new ConcurrentHashMap<>()),
+                        this::handleSagaMessage);
     }
 
     // ── Factory ──────────────────────────────────────────────────────────────────
@@ -241,9 +257,7 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
 
     // ── Saga execution ────────────────────────────────────────────────────────────
 
-    /**
-     * Execute a saga with the given data.
-     */
+    /** Execute a saga with the given data. */
     @SuppressWarnings("unchecked")
     public CompletableFuture<SagaResult> execute(D data) {
         UUID sagaId = UUID.randomUUID();
@@ -256,9 +270,7 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                 .exceptionally(e -> new SagaResult.Failure("global", e));
     }
 
-    /**
-     * Get the status of a saga.
-     */
+    /** Get the status of a saga. */
     public CompletableFuture<Optional<SagaContext>> getStatus(UUID sagaId) {
         CompletableFuture<Optional<SagaContext>> future = new CompletableFuture<>();
         coordinator.tell(new SagaMsg.GetStatus(sagaId, future));
@@ -275,7 +287,8 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                 SagaRuntime runtime = new SagaRuntime(ctx, data, new LinkedHashMap<>());
                 Map<UUID, SagaRuntime> newSagas = new ConcurrentHashMap<>(state.sagas());
                 newSagas.put(sagaId, runtime);
-                Map<UUID, CompletableFuture<SagaResult>> newPending = new ConcurrentHashMap<>(state.pending());
+                Map<UUID, CompletableFuture<SagaResult>> newPending =
+                        new ConcurrentHashMap<>(state.pending());
                 newPending.put(sagaId, replyTo);
 
                 // Start first step
@@ -295,14 +308,20 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                 if (newRuntime.context().currentStep() >= steps.size()) {
                     // Saga complete
                     SagaContext newCtx = newRuntime.context().withStatus(SagaStatus.COMPLETED);
-                    newSagas.put(sagaId, new SagaRuntime(newCtx, newRuntime.data(), newRuntime.stepResults()));
+                    newSagas.put(
+                            sagaId,
+                            new SagaRuntime(newCtx, newRuntime.data(), newRuntime.stepResults()));
                     CompletableFuture<SagaResult> future = state.pending().get(sagaId);
                     if (future != null) {
                         future.complete(new SagaResult.Success(newCtx.results()));
                     }
                 } else {
                     // Continue to next step with stored data
-                    executeStep(sagaId, (D) newRuntime.data(), newRuntime.context(), newRuntime.context().currentStep());
+                    executeStep(
+                            sagaId,
+                            (D) newRuntime.data(),
+                            newRuntime.context(),
+                            newRuntime.context().currentStep());
                 }
 
                 yield new SagaState(newSagas, state.pending());
@@ -315,7 +334,8 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                 // Start compensation
                 SagaContext newCtx = runtime.context().withStatus(SagaStatus.COMPENSATING);
                 Map<UUID, SagaRuntime> newSagas = new ConcurrentHashMap<>(state.sagas());
-                newSagas.put(sagaId, new SagaRuntime(newCtx, runtime.data(), runtime.stepResults()));
+                newSagas.put(
+                        sagaId, new SagaRuntime(newCtx, runtime.data(), runtime.stepResults()));
 
                 // Compensate in reverse order
                 compensate(sagaId, runtime.context(), state.pending().get(sagaId), error);
@@ -329,9 +349,14 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
 
                 SagaContext newCtx = runtime.context().withStatus(SagaStatus.TIMED_OUT);
                 Map<UUID, SagaRuntime> newSagas = new ConcurrentHashMap<>(state.sagas());
-                newSagas.put(sagaId, new SagaRuntime(newCtx, runtime.data(), runtime.stepResults()));
+                newSagas.put(
+                        sagaId, new SagaRuntime(newCtx, runtime.data(), runtime.stepResults()));
 
-                compensate(sagaId, runtime.context(), state.pending().get(sagaId), new TimeoutException("Saga timed out"));
+                compensate(
+                        sagaId,
+                        runtime.context(),
+                        state.pending().get(sagaId),
+                        new TimeoutException("Saga timed out"));
 
                 yield new SagaState(newSagas, state.pending());
             }
@@ -350,16 +375,25 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
 
         Step<S, D> step = steps.get(stepIndex);
 
-        step.action().apply(data, ctx)
-                .thenAccept(result -> coordinator.tell(new SagaMsg.StepComplete(sagaId, step.name(), result)))
-                .exceptionally(error -> {
-                    coordinator.tell(new SagaMsg.StepFailed(sagaId, step.name(), error));
-                    return null;
-                });
+        step.action()
+                .apply(data, ctx)
+                .thenAccept(
+                        result ->
+                                coordinator.tell(
+                                        new SagaMsg.StepComplete(sagaId, step.name(), result)))
+                .exceptionally(
+                        error -> {
+                            coordinator.tell(new SagaMsg.StepFailed(sagaId, step.name(), error));
+                            return null;
+                        });
     }
 
     @SuppressWarnings("unchecked")
-    private void compensate(UUID sagaId, SagaContext ctx, CompletableFuture<SagaResult> pendingFuture, Throwable originalError) {
+    private void compensate(
+            UUID sagaId,
+            SagaContext ctx,
+            CompletableFuture<SagaResult> pendingFuture,
+            Throwable originalError) {
         // Compensate in reverse order
         List<String> toCompensate = new ArrayList<>(ctx.completedSteps());
         Collections.reverse(toCompensate);
@@ -368,36 +402,46 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
             steps.stream()
                     .filter(s -> s.name().equals(stepName))
                     .findFirst()
-                    .ifPresent(step -> {
-                        Object result = ctx.results().get(stepName);
-                        if (result != null && step.compensation() != null) {
-                            try {
-                                step.compensation().apply(null, (S) result).get(30, TimeUnit.SECONDS);
-                            } catch (Exception e) {
-                                // Log but continue compensation
-                                System.err.println("[Saga] Compensation failed for " + stepName + ": " + e.getMessage());
-                            }
-                        }
-                    });
+                    .ifPresent(
+                            step -> {
+                                Object result = ctx.results().get(stepName);
+                                if (result != null && step.compensation() != null) {
+                                    try {
+                                        step.compensation()
+                                                .apply(null, (S) result)
+                                                .get(30, TimeUnit.SECONDS);
+                                    } catch (Exception e) {
+                                        // Log but continue compensation
+                                        System.err.println(
+                                                "[Saga] Compensation failed for "
+                                                        + stepName
+                                                        + ": "
+                                                        + e.getMessage());
+                                    }
+                                }
+                            });
         }
 
         // Complete the pending future with compensated result
         if (pendingFuture != null) {
-            pendingFuture.complete(new SagaResult.Compensated(
-                    ctx.completedSteps().isEmpty() ? "unknown" : ctx.completedSteps().getLast(),
-                    originalError,
-                    toCompensate));
+            pendingFuture.complete(
+                    new SagaResult.Compensated(
+                            ctx.completedSteps().isEmpty()
+                                    ? "unknown"
+                                    : ctx.completedSteps().getLast(),
+                            originalError,
+                            toCompensate));
         }
     }
 
     // ── Infrastructure ────────────────────────────────────────────────────────────
 
     @Override
-    public String name() { return name; }
+    public String name() {
+        return name;
+    }
 
-    /**
-     * Shutdown the saga orchestrator.
-     */
+    /** Shutdown the saga orchestrator. */
     public void shutdown() throws InterruptedException {
         coordinator.stop();
     }

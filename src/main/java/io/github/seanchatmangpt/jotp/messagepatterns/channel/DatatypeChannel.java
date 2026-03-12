@@ -52,10 +52,13 @@ public final class DatatypeChannel<T> {
      * @return a new datatype channel
      */
     public static <T> DatatypeChannel<T> create(Class<T> messageType, Consumer<T> consumer) {
-        var proc = new Proc<Void, T>(null, (state, msg) -> {
-            consumer.accept(msg);
-            return state;
-        });
+        var proc =
+                new Proc<Void, T>(
+                        null,
+                        (state, msg) -> {
+                            consumer.accept(msg);
+                            return state;
+                        });
         return new DatatypeChannel<>(messageType, proc);
     }
 
@@ -70,7 +73,7 @@ public final class DatatypeChannel<T> {
     }
 
     /** Stop the channel. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

@@ -58,11 +58,14 @@ public final class MessagingBridge<A, B> {
             Class<B> targetType,
             Function<A, B> translator,
             java.util.function.Consumer<B> delivery) {
-        var proc = new Proc<Void, A>(null, (state, msg) -> {
-            B translated = translator.apply(msg);
-            delivery.accept(translated);
-            return state;
-        });
+        var proc =
+                new Proc<Void, A>(
+                        null,
+                        (state, msg) -> {
+                            B translated = translator.apply(msg);
+                            delivery.accept(translated);
+                            return state;
+                        });
         return new MessagingBridge<>(translator, proc);
     }
 
@@ -72,7 +75,7 @@ public final class MessagingBridge<A, B> {
     }
 
     /** Stop the bridge. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         bridgeProc.stop();
     }
 }

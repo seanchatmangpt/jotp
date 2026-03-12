@@ -4,11 +4,11 @@ import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Domain model tests for the SQL Race parameter and channel types — replacing the old
- * placeholder {@code TelemetryChannel} tests with real SQL Race API coverage.
+ * Domain model tests for the SQL Race parameter and channel types — replacing the old placeholder
+ * {@code TelemetryChannel} tests with real SQL Race API coverage.
  *
- * <p>Tests cover: identifier format, factory methods, conversion math, classification logic,
- * and validation contracts.
+ * <p>Tests cover: identifier format, factory methods, conversion math, classification logic, and
+ * validation contracts.
  */
 class TelemetryChannelTest implements WithAssertions {
 
@@ -25,9 +25,18 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void parameterRejectsIdentifierWithoutColon() {
-        assertThatThrownBy(() -> new SqlRaceParameter(
-                "vCarChassis", "vCar", "desc", 400, 0,
-                "CONV_vCar:Chassis", "ChassisChannels", 1L, "Chassis"))
+        assertThatThrownBy(
+                        () ->
+                                new SqlRaceParameter(
+                                        "vCarChassis",
+                                        "vCar",
+                                        "desc",
+                                        400,
+                                        0,
+                                        "CONV_vCar:Chassis",
+                                        "ChassisChannels",
+                                        1L,
+                                        "Chassis"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("name:AppGroup");
     }
@@ -79,8 +88,8 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void periodicFactoryComputesIntervalFromHz() {
-        var channel = SqlRaceChannel.periodic(1L, "vCar", 200.0, FrequencyUnit.Hz,
-                DataType.Signed16Bit);
+        var channel =
+                SqlRaceChannel.periodic(1L, "vCar", 200.0, FrequencyUnit.Hz, DataType.Signed16Bit);
 
         assertThat(channel.intervalNs()).isEqualTo(5_000_000L); // 1e9 / 200 = 5ms
         assertThat(channel.dataSourceType()).isEqualTo(ChannelDataSourceType.Periodic);
@@ -89,16 +98,22 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void channelRejectsZeroInterval() {
-        assertThatThrownBy(() -> new SqlRaceChannel(1L, "x", 0L, DataType.Float64Bit,
-                ChannelDataSourceType.Periodic))
+        assertThatThrownBy(
+                        () ->
+                                new SqlRaceChannel(
+                                        1L,
+                                        "x",
+                                        0L,
+                                        DataType.Float64Bit,
+                                        ChannelDataSourceType.Periodic))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("intervalNs");
     }
 
     @Test
     void kHzUnitComputesCorrectInterval() {
-        var channel = SqlRaceChannel.periodic(2L, "accel", 2.0, FrequencyUnit.KHz,
-                DataType.Float32Bit);
+        var channel =
+                SqlRaceChannel.periodic(2L, "accel", 2.0, FrequencyUnit.KHz, DataType.Float32Bit);
 
         assertThat(channel.intervalNs()).isEqualTo(500_000L); // 1e6 / 2 = 500µs
     }
@@ -153,11 +168,13 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void goodSamplesFiltersOutNonGood() {
-        var pv = new ParameterValues(
-                new long[] {1L, 2L, 3L},
-                new double[] {100.0, 999.0, 200.0},
-                new DataStatusType[] {DataStatusType.Good, DataStatusType.OutOfRange,
-                        DataStatusType.Good});
+        var pv =
+                new ParameterValues(
+                        new long[] {1L, 2L, 3L},
+                        new double[] {100.0, 999.0, 200.0},
+                        new DataStatusType[] {
+                            DataStatusType.Good, DataStatusType.OutOfRange, DataStatusType.Good
+                        });
 
         var good = pv.goodSamples();
         assertThat(good.count()).isEqualTo(2);
@@ -166,10 +183,12 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void parameterValuesRejectsArrayLengthMismatch() {
-        assertThatThrownBy(() -> new ParameterValues(
-                new long[] {1L, 2L},
-                new double[] {1.0},
-                new DataStatusType[] {DataStatusType.Good}))
+        assertThatThrownBy(
+                        () ->
+                                new ParameterValues(
+                                        new long[] {1L, 2L},
+                                        new double[] {1.0},
+                                        new DataStatusType[] {DataStatusType.Good}))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("mismatch");
     }
@@ -206,8 +225,7 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void lapRejectsNegativeNumber() {
-        assertThatThrownBy(
-                () -> new SqlRaceLap(0L, -1, SqlRaceLap.TRIGGER_GPS, "bad", false))
+        assertThatThrownBy(() -> new SqlRaceLap(0L, -1, SqlRaceLap.TRIGGER_GPS, "bad", false))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -215,8 +233,8 @@ class TelemetryChannelTest implements WithAssertions {
 
     @Test
     void applicationGroupRdaFactory() {
-        var appGroup = ApplicationGroup.rda("Chassis", "ChassisKinematicChannels",
-                "PowertrainChannels");
+        var appGroup =
+                ApplicationGroup.rda("Chassis", "ChassisKinematicChannels", "PowertrainChannels");
 
         assertThat(appGroup.identifier()).isEqualTo("Chassis");
         assertThat(appGroup.supportsRda()).isTrue();

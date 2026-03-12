@@ -7,8 +7,8 @@ import java.util.function.Consumer;
  *
  * <p>Unlike {@link ProcessLink} (which kills the monitoring process on crash), a monitor is
  * <em>unidirectional</em>: when the monitored process terminates for any reason — normal or
- * abnormal — the monitoring side receives a {@code DOWN} notification carrying the exit reason.
- * The monitoring process itself is never killed.
+ * abnormal — the monitoring side receives a {@code DOWN} notification carrying the exit reason. The
+ * monitoring process itself is never killed.
  *
  * <p>This is the mechanism {@code GenServer.call/3} uses to implement call timeouts: it monitors
  * the target, sends a request, and either receives a reply or a {@code DOWN} notification first.
@@ -23,9 +23,9 @@ import java.util.function.Consumer;
  *       reason = normal exit; non-null = the exception that killed the process
  * </ul>
  *
- * <p><strong>Composability:</strong> A process can be simultaneously supervised (via
- * {@link Supervisor}), linked (via {@link ProcessLink}), and monitored (via this class). All three
- * are orthogonal; they use separate callback lists on {@link Proc}.
+ * <p><strong>Composability:</strong> A process can be simultaneously supervised (via {@link
+ * Supervisor}), linked (via {@link ProcessLink}), and monitored (via this class). All three are
+ * orthogonal; they use separate callback lists on {@link Proc}.
  */
 public final class ProcessMonitor {
 
@@ -57,7 +57,8 @@ public final class ProcessMonitor {
      * @param downHandler called when target terminates; argument is {@code null} for normal exit
      * @return a {@link MonitorRef} — keep it to cancel via {@link #demonitor}
      */
-    public static <S, M> MonitorRef<S, M> monitor(Proc<S, M> target, Consumer<Throwable> downHandler) {
+    public static <S, M> MonitorRef<S, M> monitor(
+            Proc<S, M> target, Consumer<Throwable> downHandler) {
         target.addTerminationCallback(downHandler);
         return new MonitorRef<>(target, downHandler);
     }

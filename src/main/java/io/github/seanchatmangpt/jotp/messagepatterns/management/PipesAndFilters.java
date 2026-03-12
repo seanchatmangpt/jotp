@@ -39,13 +39,16 @@ public final class PipesAndFilters<T> {
         for (int i = filters.size() - 1; i >= 0; i--) {
             Filter<T> filter = filters.get(i);
             Consumer<T> downstream = next;
-            var proc = new Proc<Void, T>(null, (state, msg) -> {
-                T transformed = filter.transform().apply(msg);
-                if (transformed != null) {
-                    downstream.accept(transformed);
-                }
-                return state;
-            });
+            var proc =
+                    new Proc<Void, T>(
+                            null,
+                            (state, msg) -> {
+                                T transformed = filter.transform().apply(msg);
+                                if (transformed != null) {
+                                    downstream.accept(transformed);
+                                }
+                                return state;
+                            });
             filterProcs.addFirst(proc);
             next = proc::tell;
         }
@@ -59,7 +62,7 @@ public final class PipesAndFilters<T> {
     }
 
     /** Stop all filter processes. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         for (Proc<Void, T> proc : filterProcs) {
             proc.stop();
         }

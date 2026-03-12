@@ -7,9 +7,9 @@ import java.util.List;
 /**
  * Timestamped sample array — mirrors {@code MESL.SqlRace.Domain.ParameterValues}.
  *
- * <p>In the SQL Race model, {@code ParameterValues} is the return type from
- * {@code IParameterDataAccess.GetNextSamples()} and the write target for incoming ECU data.
- * Each array index corresponds to a single sample:
+ * <p>In the SQL Race model, {@code ParameterValues} is the return type from {@code
+ * IParameterDataAccess.GetNextSamples()} and the write target for incoming ECU data. Each array
+ * index corresponds to a single sample:
  *
  * <pre>
  *   timestamps[i] — nanoseconds since session epoch
@@ -26,12 +26,12 @@ import java.util.List;
  * }
  * }</pre>
  *
- * <p><b>Note on array equality:</b> this record uses arrays. {@code equals()} and
- * {@code hashCode()} are overridden to use {@link Arrays#equals} for correct value semantics.
+ * <p><b>Note on array equality:</b> this record uses arrays. {@code equals()} and {@code
+ * hashCode()} are overridden to use {@link Arrays#equals} for correct value semantics.
  *
- * @param timestamps  nanosecond timestamps (monotonically increasing within a parameter)
- * @param data        engineering values; same length as {@code timestamps}
- * @param dataStatus  per-sample quality flags; same length as {@code timestamps}
+ * @param timestamps nanosecond timestamps (monotonically increasing within a parameter)
+ * @param data engineering values; same length as {@code timestamps}
+ * @param dataStatus per-sample quality flags; same length as {@code timestamps}
  */
 public record ParameterValues(long[] timestamps, double[] data, DataStatusType[] dataStatus) {
 
@@ -61,7 +61,7 @@ public record ParameterValues(long[] timestamps, double[] data, DataStatusType[]
      * Single-sample factory with {@link DataStatusType#Good} status.
      *
      * @param timestampNs nanosecond timestamp
-     * @param value       engineering value
+     * @param value engineering value
      * @return single-sample {@code ParameterValues}
      */
     public static ParameterValues single(long timestampNs, double value) {
@@ -75,15 +75,13 @@ public record ParameterValues(long[] timestamps, double[] data, DataStatusType[]
      * Single-sample factory with explicit status.
      *
      * @param timestampNs nanosecond timestamp
-     * @param value       engineering value (may be NaN for {@link DataStatusType#Missing})
-     * @param status      data quality flag
+     * @param value engineering value (may be NaN for {@link DataStatusType#Missing})
+     * @param status data quality flag
      * @return single-sample {@code ParameterValues}
      */
     public static ParameterValues single(long timestampNs, double value, DataStatusType status) {
         return new ParameterValues(
-                new long[] {timestampNs},
-                new double[] {value},
-                new DataStatusType[] {status});
+                new long[] {timestampNs}, new double[] {value}, new DataStatusType[] {status});
     }
 
     /** Number of samples in this batch. */

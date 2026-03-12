@@ -3,7 +3,6 @@ package io.github.seanchatmangpt.jotp.messagepatterns.routing;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * Recipient List pattern: routes a message to a dynamically computed list of recipients.
@@ -23,8 +22,8 @@ import java.util.function.Function;
 public final class RecipientList<T> {
 
     /** A registered recipient with its interest predicate. */
-    public record Recipient<T>(String id, Consumer<T> consumer,
-            java.util.function.Predicate<T> interested) {}
+    public record Recipient<T>(
+            String id, Consumer<T> consumer, java.util.function.Predicate<T> interested) {}
 
     private final List<Recipient<T>> recipients = new ArrayList<>();
 
@@ -36,9 +35,7 @@ public final class RecipientList<T> {
      * @param interested predicate determining interest
      */
     public void register(
-            String id,
-            Consumer<T> consumer,
-            java.util.function.Predicate<T> interested) {
+            String id, Consumer<T> consumer, java.util.function.Predicate<T> interested) {
         recipients.add(new Recipient<>(id, consumer, interested));
     }
 

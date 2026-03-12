@@ -9,11 +9,11 @@ import java.lang.annotation.Target;
  * Attaches a highlighted code snippet to a test method for inclusion in the generated HTML
  * documentation.
  *
- * <p>Inspired by the {@code @DocCode} annotation in
- * <a href="https://github.com/seanchatmangpt/doctester">seanchatmangpt/doctester</a>.
+ * <p>Inspired by the {@code @DocCode} annotation in <a
+ * href="https://github.com/seanchatmangpt/doctester">seanchatmangpt/doctester</a>.
  *
- * <p>The snippet is rendered inside a {@code <pre><code>} block in the output document. If
- * {@link #value()} is empty, the test method's own source is used as the code example.
+ * <p>The snippet is rendered inside a {@code <pre><code>} block in the output document. If {@link
+ * #value()} is empty, the test method's own source is used as the code example.
  *
  * <pre>{@code
  * @DocCode("""

@@ -7,10 +7,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Runnable example of the Publish-Subscribe Channel pattern.
  *
- * <p>Demonstrates a stock price update system where:
- * 1. StockPriceService publishes price updates
- * 2. Multiple subscribers (Dashboard, Analytics, Logger) receive updates independently
- * 3. Each subscriber processes the event according to its own logic
+ * <p>Demonstrates a stock price update system where: 1. StockPriceService publishes price updates
+ * 2. Multiple subscribers (Dashboard, Analytics, Logger) receive updates independently 3. Each
+ * subscriber processes the event according to its own logic
  *
  * <p>Run with: java io.github.seanchatmangpt.jotp.messaging.channels.PublishSubscribeChannelExample
  */
@@ -25,38 +24,45 @@ public class PublishSubscribeChannelExample {
 
         // Subscriber 1: Dashboard (updates display)
         var dashboard = new Dashboard();
-        stockChannel.subscribe(msg -> {
-            if (msg instanceof Message.EventMsg evt && "PRICE_UPDATE".equals(evt.eventType())) {
-                dashboard.updatePrice(evt.payload());
-            }
-        });
+        stockChannel.subscribe(
+                msg -> {
+                    if (msg instanceof Message.EventMsg evt
+                            && "PRICE_UPDATE".equals(evt.eventType())) {
+                        dashboard.updatePrice(evt.payload());
+                    }
+                });
 
         // Subscriber 2: Analytics (logs for analysis)
         var analytics = new Analytics();
-        stockChannel.subscribe(msg -> {
-            if (msg instanceof Message.EventMsg evt && "PRICE_UPDATE".equals(evt.eventType())) {
-                analytics.recordUpdate(evt.payload());
-            }
-        });
+        stockChannel.subscribe(
+                msg -> {
+                    if (msg instanceof Message.EventMsg evt
+                            && "PRICE_UPDATE".equals(evt.eventType())) {
+                        analytics.recordUpdate(evt.payload());
+                    }
+                });
 
         // Subscriber 3: Alert Service (checks thresholds)
         var alertService = new AlertService();
-        stockChannel.subscribe(msg -> {
-            if (msg instanceof Message.EventMsg evt && "PRICE_UPDATE".equals(evt.eventType())) {
-                alertService.checkAlert(evt.payload());
-            }
-        });
+        stockChannel.subscribe(
+                msg -> {
+                    if (msg instanceof Message.EventMsg evt
+                            && "PRICE_UPDATE".equals(evt.eventType())) {
+                        alertService.checkAlert(evt.payload());
+                    }
+                });
 
         System.out.println("Subscribers registered: " + stockChannel.subscriberCount() + "\n");
 
         // Publish price updates (all subscribers notified)
         System.out.println("Publishing stock price updates...\n");
 
-        var prices = new Object[]{
-            Map.of("symbol", "AAPL", "price", 150.25),
-            Map.of("symbol", "AAPL", "price", 151.00),
-            Map.of("symbol", "AAPL", "price", 149.75)
-        };
+        var prices =
+                new Object[] {
+                    Map.of("symbol", "AAPL", "price", 150.25),
+                    Map.of("symbol", "AAPL", "price", 151.00),
+                    Map.of("symbol", "AAPL", "price", 149.75)
+                };
 
         for (var price : prices) {
             var event = Message.event("PRICE_UPDATE", price);

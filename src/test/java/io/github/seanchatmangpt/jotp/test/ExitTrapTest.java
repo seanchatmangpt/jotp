@@ -2,11 +2,11 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcessLink;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -79,7 +79,12 @@ class ExitTrapTest implements WithAssertions {
 
     @Test
     void trapExit_false_propagatesInterrupt() throws Exception {
-        var a = new Proc<>(0, (Integer s, String m) -> { throw new RuntimeException(m); });
+        var a =
+                new Proc<>(
+                        0,
+                        (Integer s, String m) -> {
+                            throw new RuntimeException(m);
+                        });
         var b = new Proc<>(0, (Integer s, String m) -> s); // passive
 
         ProcessLink.link(a, b);

@@ -23,7 +23,9 @@ public final class ModernizationScorer {
 
     /** Top-level score summarizing a codebase analysis. */
     public record CodebaseScore(
-            int overallScore, List<CategoryScore> categories, List<Recommendation> recommendations) {
+            int overallScore,
+            List<CategoryScore> categories,
+            List<Recommendation> recommendations) {
 
         public CodebaseScore {
             if (overallScore < 0 || overallScore > 100) {
@@ -56,16 +58,18 @@ public final class ModernizationScorer {
 
     /** A ranked recommendation for modernizing the codebase. */
     public record Recommendation(
-            String title, String description, int impactScore, int effortScore, String templateRef) {
+            String title,
+            String description,
+            int impactScore,
+            int effortScore,
+            String templateRef) {
 
         public Recommendation {
             if (impactScore < 0 || impactScore > 10) {
-                throw new IllegalArgumentException(
-                        "impactScore must be 0-10, got " + impactScore);
+                throw new IllegalArgumentException("impactScore must be 0-10, got " + impactScore);
             }
             if (effortScore < 0 || effortScore > 10) {
-                throw new IllegalArgumentException(
-                        "effortScore must be 0-10, got " + effortScore);
+                throw new IllegalArgumentException("effortScore must be 0-10, got " + effortScore);
             }
         }
 
@@ -185,14 +189,7 @@ public final class ModernizationScorer {
 
         // Modern: text block
         rules.add(
-                rule(
-                        Category.LANGUAGE,
-                        "\"\"\"",
-                        true,
-                        "Text block",
-                        null,
-                        1,
-                        "core/text-block"));
+                rule(Category.LANGUAGE, "\"\"\"", true, "Text block", null, 1, "core/text-block"));
 
         // ── CONCURRENCY ──
 
@@ -577,10 +574,7 @@ public final class ModernizationScorer {
                                         findingsByCategory.get(rule.category()).stream()
                                                 .anyMatch(
                                                         f ->
-                                                                f
-                                                                                instanceof
-                                                                                Finding.LegacyUsage
-                                                                                        lu
+                                                                f instanceof Finding.LegacyUsage lu
                                                                         && lu.pattern()
                                                                                 .equals(
                                                                                         rule
@@ -594,7 +588,7 @@ public final class ModernizationScorer {
                                                                     f
                                                                                     instanceof
                                                                                     Finding
-                                                                                            .LegacyUsage
+                                                                                                    .LegacyUsage
                                                                                             lu
                                                                             && lu.pattern()
                                                                                     .equals(

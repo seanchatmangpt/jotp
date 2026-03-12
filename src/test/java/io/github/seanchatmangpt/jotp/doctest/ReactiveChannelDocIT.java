@@ -1,12 +1,12 @@
 package io.github.seanchatmangpt.jotp.doctest;
 
+import io.github.seanchatmangpt.jotp.ReactiveChannel;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import io.github.seanchatmangpt.jotp.ReactiveChannel;
 import org.assertj.core.api.WithAssertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
@@ -16,10 +16,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 /**
  * Doctest: {@link ReactiveChannel} — Reactive Messaging Patterns.
  *
- * <p>Documents the {@link ReactiveChannel} API through executable examples. A
- * {@code ReactiveChannel<T>} bridges jOTP actor-style messaging with Reactive Streams
- * ({@link java.util.concurrent.Flow}): it is a {@link Flow.Publisher} that also accepts direct
- * submissions, supports pipeline combinators, and handles backpressure automatically.
+ * <p>Documents the {@link ReactiveChannel} API through executable examples. A {@code
+ * ReactiveChannel<T>} bridges jOTP actor-style messaging with Reactive Streams ({@link
+ * java.util.concurrent.Flow}): it is a {@link Flow.Publisher} that also accepts direct submissions,
+ * supports pipeline combinators, and handles backpressure automatically.
  *
  * <p>HTML output: {@code target/site/doctester/ReactiveChannelDocIT.html}.
  */
@@ -54,9 +54,7 @@ class ReactiveChannelDocIT implements WithAssertions {
         ch.submit("world");
         ch.close();
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> received.size() == 2);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> received.size() == 2);
         assertThat(received).containsExactly("hello", "world");
     }
 
@@ -80,9 +78,7 @@ class ReactiveChannelDocIT implements WithAssertions {
         ch.submit(3);
         ch.close();
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> a.size() == 3 && b.size() == 3);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> a.size() == 3 && b.size() == 3);
         assertThat(a).containsExactly(1, 2, 3);
         assertThat(b).containsExactly(1, 2, 3);
     }
@@ -118,9 +114,7 @@ class ReactiveChannelDocIT implements WithAssertions {
         numbers.submit(2);
         numbers.close();
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> out.size() == 2);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> out.size() == 2);
         assertThat(out).containsExactly("item-1", "item-2");
     }
 
@@ -149,9 +143,7 @@ class ReactiveChannelDocIT implements WithAssertions {
         for (int i = 1; i <= 6; i++) all.submit(i);
         all.close();
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> out.size() == 3);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> out.size() == 3);
         assertThat(out).containsExactly(2, 4, 6);
     }
 
@@ -163,8 +155,7 @@ class ReactiveChannelDocIT implements WithAssertions {
     @Test
     void chained_filter_then_map_pipeline() throws Exception {
         ReactiveChannel<Integer> source = ReactiveChannel.create("source");
-        ReactiveChannel<String> result =
-                source.filter(n -> n > 0).map(n -> "+" + n);
+        ReactiveChannel<String> result = source.filter(n -> n > 0).map(n -> "+" + n);
 
         List<String> out = new CopyOnWriteArrayList<>();
         result.subscribe(collecting(out));
@@ -175,9 +166,7 @@ class ReactiveChannelDocIT implements WithAssertions {
         source.submit(7);
         source.close();
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> out.size() == 2);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> out.size() == 2);
         assertThat(out).containsExactly("+3", "+7");
     }
 

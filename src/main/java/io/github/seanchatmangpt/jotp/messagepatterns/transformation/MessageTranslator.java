@@ -29,11 +29,14 @@ public final class MessageTranslator<A, B> {
      */
     public MessageTranslator(Function<A, B> translator, Consumer<B> destination) {
         this.translator = translator;
-        this.proc = new Proc<>(null, (state, msg) -> {
-            B translated = translator.apply(msg);
-            destination.accept(translated);
-            return state;
-        });
+        this.proc =
+                new Proc<>(
+                        null,
+                        (state, msg) -> {
+                            B translated = translator.apply(msg);
+                            destination.accept(translated);
+                            return state;
+                        });
     }
 
     /** Translate and forward a message. */
@@ -47,7 +50,7 @@ public final class MessageTranslator<A, B> {
     }
 
     /** Stop the translator. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

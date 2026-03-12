@@ -46,10 +46,13 @@ public final class PointToPoint<T> {
      * @return a new point-to-point channel
      */
     public static <T> PointToPoint<T> create(Consumer<T> consumer) {
-        var proc = new Proc<Void, T>(null, (state, msg) -> {
-            consumer.accept(msg);
-            return state;
-        });
+        var proc =
+                new Proc<Void, T>(
+                        null,
+                        (state, msg) -> {
+                            consumer.accept(msg);
+                            return state;
+                        });
         return new PointToPoint<>(proc);
     }
 
@@ -72,7 +75,7 @@ public final class PointToPoint<T> {
     }
 
     /** Stop the channel. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 

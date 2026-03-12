@@ -10,11 +10,12 @@ import java.util.stream.Collectors;
 /**
  * Living Documentation Generator — produces Markdown documentation directly from Java source code.
  *
- * <p>Instead of static docs that rot, this generator extracts structural information (records, sealed
- * types, module declarations, method signatures) from Java source strings via regex-based parsing and
- * renders always-in-sync Markdown documentation.
+ * <p>Instead of static docs that rot, this generator extracts structural information (records,
+ * sealed types, module declarations, method signatures) from Java source strings via regex-based
+ * parsing and renders always-in-sync Markdown documentation.
  *
- * <p>Demonstrates modern Java: sealed interfaces, records, pattern matching, text blocks, and streams.
+ * <p>Demonstrates modern Java: sealed interfaces, records, pattern matching, text blocks, and
+ * streams.
  */
 public final class LivingDocGenerator {
 
@@ -119,8 +120,7 @@ public final class LivingDocGenerator {
     private static final Pattern MODULE_PATTERN =
             Pattern.compile("(?:open\\s+)?module\\s+([\\w.]+)\\s*\\{([^}]*)}");
 
-    private static final Pattern EXPORTS_PATTERN =
-            Pattern.compile("exports\\s+([\\w.]+)\\s*;");
+    private static final Pattern EXPORTS_PATTERN = Pattern.compile("exports\\s+([\\w.]+)\\s*;");
 
     private static final Pattern REQUIRES_PATTERN =
             Pattern.compile("requires\\s+(?:transitive\\s+)?([\\w.]+)\\s*;");
@@ -170,8 +170,7 @@ public final class LivingDocGenerator {
         // Group and render by type
         renderSection(sb, "Packages", filterByType(elements, DocElement.PackageDoc.class));
         renderSection(sb, "Modules", filterByType(elements, DocElement.ModuleDoc.class));
-        renderSection(
-                sb, "Sealed Types", filterByType(elements, DocElement.SealedTypeDoc.class));
+        renderSection(sb, "Sealed Types", filterByType(elements, DocElement.SealedTypeDoc.class));
         renderSection(sb, "Records", filterByType(elements, DocElement.RecordDoc.class));
         renderSection(sb, "Methods", filterByType(elements, DocElement.MethodDoc.class));
 
@@ -319,8 +318,7 @@ public final class LivingDocGenerator {
                 if (depth < 0) {
                     depth = 0;
                 }
-            }
-            else if (c == ',' && depth == 0) {
+            } else if (c == ',' && depth == 0) {
                 parts.add(str.substring(start, i));
                 start = i + 1;
             }
@@ -443,9 +441,7 @@ public final class LivingDocGenerator {
                         .map(p -> p.type() + " " + p.name())
                         .collect(Collectors.joining(", "));
         String modStr =
-                method.modifiers().isEmpty()
-                        ? ""
-                        : String.join(" ", method.modifiers()) + " ";
+                method.modifiers().isEmpty() ? "" : String.join(" ", method.modifiers()) + " ";
 
         sb.append("#### `")
                 .append(modStr)

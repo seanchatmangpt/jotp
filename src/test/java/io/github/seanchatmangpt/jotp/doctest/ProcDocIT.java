@@ -2,12 +2,12 @@ package io.github.seanchatmangpt.jotp.doctest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.ProcTimer;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -43,9 +43,9 @@ class ProcDocIT implements WithAssertions {
     @Test
     void createProc() throws InterruptedException {
         Proc<Integer, String> counter = new Proc<>(0, (state, msg) -> state + 1);
-        assertThat(counter.isRunning()).isTrue();
+        assertThat(counter.thread().isAlive()).isTrue();
         counter.stop();
-        assertThat(counter.isRunning()).isFalse();
+        assertThat(counter.thread().isAlive()).isFalse();
     }
 
     // ── Fire-and-forget messaging ────────────────────────────────────────────────
@@ -127,8 +127,7 @@ class ProcDocIT implements WithAssertions {
     @Test
     void stateIsPrivateToProcess() throws Exception {
         record Counter(int value) {}
-        Proc<Counter, String> p =
-                new Proc<>(new Counter(0), (s, m) -> new Counter(s.value() + 1));
+        Proc<Counter, String> p = new Proc<>(new Counter(0), (s, m) -> new Counter(s.value() + 1));
         p.tell("a");
         p.tell("b");
         p.tell("c");

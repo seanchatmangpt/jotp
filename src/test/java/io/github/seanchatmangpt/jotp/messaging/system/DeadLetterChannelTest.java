@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.messaging.system;
 
-import static org.awaitility.Awaitility.await;
-
 import io.github.seanchatmangpt.jotp.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -200,7 +198,7 @@ class DeadLetterChannelTest implements WithAssertions {
                                         case OrderMsg.Order order -> {
                                             if (order.amount() < 0) {
                                                 throw new IllegalArgumentException(
-                                                    "Negative amount: " + order.amount());
+                                                        "Negative amount: " + order.amount());
                                             }
                                             counter.incrementAndGet();
                                         }
@@ -313,8 +311,8 @@ class DeadLetterChannelTest implements WithAssertions {
 
     @Test
     void genericTypes_handledCorrectly() {
-        var dlcString = DeadLetterChannel.<String>.create();
-        var dlcInteger = DeadLetterChannel.<Integer>.create();
+        var dlcString = DeadLetterChannel.<String>create();
+        var dlcInteger = DeadLetterChannel.<Integer>create();
 
         dlcString.onFailure("message1", "Error for string");
         dlcInteger.onFailure(42, "Error for integer");

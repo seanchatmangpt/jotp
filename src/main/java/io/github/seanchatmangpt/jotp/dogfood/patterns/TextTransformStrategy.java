@@ -60,16 +60,12 @@ public final class TextTransformStrategy {
                     Map.entry("reverse", REVERSE),
                     Map.entry("trim", TRIM));
 
-    /**
-     * Looks up a strategy by name.
-     */
+    /** Looks up a strategy by name. */
     public static Optional<Transform<String, String>> lookup(String name) {
         return Optional.ofNullable(REGISTRY.get(name.toLowerCase()));
     }
 
-    /**
-     * Executes the named strategy on the given input.
-     */
+    /** Executes the named strategy on the given input. */
     public static String execute(String strategyName, String input) {
         return lookup(strategyName)
                 .orElseThrow(

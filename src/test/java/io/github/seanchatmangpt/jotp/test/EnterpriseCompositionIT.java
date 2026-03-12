@@ -1,35 +1,35 @@
 package io.github.seanchatmangpt.jotp.test;
 
-import io.github.seanchatmangpt.jotp.*;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Order;
-import org.assertj.core.api.WithAssertions;
+import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.awaitility.Awaitility.await;
+import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Order;
 
 /**
  * Integration tests for JOTP Enterprise Application Composer.
  *
  * <p>Tests all enterprise composition primitives:
+ *
  * <ul>
- *   <li>Application container and lifecycle</li>
- *   <li>Service registry and discovery</li>
- *   <li>Load balancing strategies</li>
- *   <li>Circuit breaker pattern</li>
- *   <li>Message bus with topics</li>
- *   <li>Event store and projections</li>
- *   <li>Metrics collection</li>
- *   <li>Distributed tracing</li>
- *   <li>Health checking</li>
- *   <li>API Gateway with routing</li>
- *   <li>Rate limiting</li>
- *   <li>CQRS command/query dispatch</li>
+ *   <li>Application container and lifecycle
+ *   <li>Service registry and discovery
+ *   <li>Load balancing strategies
+ *   <li>Circuit breaker pattern
+ *   <li>Message bus with topics
+ *   <li>Event store and projections
+ *   <li>Metrics collection
+ *   <li>Distributed tracing
+ *   <li>Health checking
+ *   <li>API Gateway with routing
+ *   <li>Rate limiting
+ *   <li>CQRS command/query dispatch
  * </ul>
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -49,20 +49,23 @@ class EnterpriseCompositionIT implements WithAssertions {
         var metrics = MetricsCollector.create("test-metrics");
 
         // Build application
-        Application app = Application.builder("test-app")
-                .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
-                .maxRestarts(5)
-                .restartWindow(Duration.ofMinutes(1))
-                .service("processor",
-                        () -> new ProcessorState(new ArrayList<>()),
-                        this::handleProcessorMessage)
-                .infrastructure(messageBus)
-                .infrastructure(eventStore)
-                .config(ApplicationConfig.create()
-                        .environment("test")
-                        .set("max.items", 100)
-                        .build())
-                .build();
+        Application app =
+                Application.builder("test-app")
+                        .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
+                        .maxRestarts(5)
+                        .restartWindow(Duration.ofMinutes(1))
+                        .service(
+                                "processor",
+                                () -> new ProcessorState(new ArrayList<>()),
+                                this::handleProcessorMessage)
+                        .infrastructure(messageBus)
+                        .infrastructure(eventStore)
+                        .config(
+                                ApplicationConfig.create()
+                                        .environment("test")
+                                        .set("max.items", 100)
+                                        .build())
+                        .build();
 
         assertThat(app.name()).isEqualTo("test-app");
         assertThat(app.isStarted()).isFalse();
@@ -76,7 +79,8 @@ class EnterpriseCompositionIT implements WithAssertions {
         Optional<ProcRef<ProcessorState, ProcessorMsg>> service = app.service("processor");
         assertThat(service).isPresent();
 
-        ProcessorState state = service.get().ask(new ProcessorMsg.Process("test-data")).get(5, TimeUnit.SECONDS);
+        ProcessorState state =
+                service.get().ask(new ProcessorMsg.Process("test-data")).get(5, TimeUnit.SECONDS);
         assertThat(state.items()).hasSize(1);
         assertThat(state.items().getFirst()).isEqualTo("test-data");
 
@@ -89,13 +93,14 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(2)
     @DisplayName("ApplicationConfig: should provide typed configuration access")
     void applicationConfigShouldProvideTypedAccess() {
-        ApplicationConfig config = ApplicationConfig.create()
-                .environment("production")
-                .set("server.port", 8080)
-                .set("server.host", "localhost")
-                .set("cache.enabled", true)
-                .set("timeout.seconds", 30L)
-                .set("rate", 1.5);
+        ApplicationConfig config =
+                ApplicationConfig.create()
+                        .environment("production")
+                        .set("server.port", 8080)
+                        .set("server.host", "localhost")
+                        .set("cache.enabled", true)
+                        .set("timeout.seconds", 30L)
+                        .set("rate", 1.5);
 
         assertThat(config.environment()).isEqualTo("production");
         assertThat(config.getInt("server.port", 0)).isEqualTo(8080);
@@ -120,16 +125,16 @@ class EnterpriseCompositionIT implements WithAssertions {
         ServiceRegistry.reset();
 
         // Create and register a service
-        Proc<ProcessorState, ProcessorMsg> proc = new Proc<>(
-                new ProcessorState(new ArrayList<>()),
-                this::handleProcessorMessage);
+        Proc<ProcessorState, ProcessorMsg> proc =
+                new Proc<>(new ProcessorState(new ArrayList<>()), this::handleProcessorMessage);
 
-        ServiceRegistry.ServiceMetadata metadata = ServiceRegistry.ServiceMetadata.builder()
-                .version("1.0.0")
-                .tag("processing")
-                .tag("telemetry")
-                .property("region", "us-east-1")
-                .build();
+        ServiceRegistry.ServiceMetadata metadata =
+                ServiceRegistry.ServiceMetadata.builder()
+                        .version("1.0.0")
+                        .tag("processing")
+                        .tag("telemetry")
+                        .property("region", "us-east-1")
+                        .build();
 
         ServiceRegistry.register("telemetry-processor", proc, metadata);
 
@@ -169,11 +174,12 @@ class EnterpriseCompositionIT implements WithAssertions {
         ServiceRegistry.register("fallback", fallback);
 
         // Build router
-        ServiceRouter<String> router = ServiceRouter.<String>builder()
-                .route("high", msg -> msg.startsWith("URGENT:"), "high-priority", 10)
-                .route("normal", msg -> true, "normal-priority", 5)
-                .fallback("fallback")
-                .build();
+        ServiceRouter<String> router =
+                ServiceRouter.<String>builder()
+                        .route("high", msg -> msg.startsWith("URGENT:"), "high-priority", 10)
+                        .route("normal", msg -> true, "normal-priority", 5)
+                        .fallback("fallback")
+                        .build();
 
         // Test routing
         List<String> highRoute = router.matchingRoutes("URGENT:data");
@@ -227,12 +233,13 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(6)
     @DisplayName("CircuitBreaker: should open and close circuit based on failures")
     void circuitBreakerShouldOpenAndClose() throws Exception {
-        CircuitBreaker breaker = CircuitBreaker.builder("test-breaker")
-                .failureThreshold(3)
-                .timeout(Duration.ofSeconds(1))
-                .resetTimeout(Duration.ofMillis(100))
-                .halfOpenRequests(2)
-                .build();
+        CircuitBreaker breaker =
+                CircuitBreaker.builder("test-breaker")
+                        .failureThreshold(3)
+                        .timeout(Duration.ofSeconds(1))
+                        .resetTimeout(Duration.ofMillis(100))
+                        .halfOpenRequests(2)
+                        .build();
 
         // Initially closed
         assertThat(breaker.state()).isEqualTo(CircuitBreaker.State.CLOSED);
@@ -244,21 +251,26 @@ class EnterpriseCompositionIT implements WithAssertions {
 
         // Failures should open circuit
         for (int i = 0; i < 3; i++) {
-            breaker.execute(() -> { throw new RuntimeException("error"); });
+            breaker.execute(
+                    () -> {
+                        throw new RuntimeException("error");
+                    });
         }
 
         // Circuit should be open
         assertThat(breaker.state()).isEqualTo(CircuitBreaker.State.OPEN);
 
         // Requests should fail fast
-        Result<String, CircuitBreaker.CircuitError> openResult = breaker.execute(() -> "should not run");
+        Result<String, CircuitBreaker.CircuitError> openResult =
+                breaker.execute(() -> "should not run");
         assertThat(openResult.isFailure()).isTrue();
 
         // Wait for reset timeout
         Thread.sleep(150);
 
         // Should transition to half-open
-        assertThat(breaker.state()).isIn(CircuitBreaker.State.HALF_OPEN, CircuitBreaker.State.CLOSED);
+        assertThat(breaker.state())
+                .isIn(CircuitBreaker.State.HALF_OPEN, CircuitBreaker.State.CLOSED);
 
         // Reset for next test
         breaker.reset();
@@ -277,9 +289,12 @@ class EnterpriseCompositionIT implements WithAssertions {
         List<String> received = new CopyOnWriteArrayList<>();
 
         // Subscribe to topic
-        MessageBus.Subscription sub = bus.subscribe("test.topic", env -> {
-            received.add((String) env.payload());
-        });
+        MessageBus.Subscription sub =
+                bus.subscribe(
+                        "test.topic",
+                        env -> {
+                            received.add((String) env.payload());
+                        });
 
         // Publish messages
         bus.publish("test.topic", "message-1");
@@ -325,10 +340,8 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(9)
     @DisplayName("MessageStore: should persist and retrieve messages")
     void messageStoreShouldPersistAndRetrieve() {
-        MessageStore store = MessageStore.inMemory()
-                .retention(Duration.ofHours(24))
-                .maxSize(1000)
-                .build();
+        MessageStore store =
+                MessageStore.inMemory().retention(Duration.ofHours(24)).maxSize(1000).build();
 
         // Store messages
         for (int i = 0; i < 5; i++) {
@@ -360,11 +373,12 @@ class EnterpriseCompositionIT implements WithAssertions {
         EventStore store = EventStore.create();
 
         // Append events
-        store.append("order-123", List.of(
-                new OrderCreated("order-123", Instant.now()),
-                new ItemAdded("order-123", "item-1", 2),
-                new ItemAdded("order-123", "item-2", 1)
-        ));
+        store.append(
+                "order-123",
+                List.of(
+                        new OrderCreated("order-123", Instant.now()),
+                        new ItemAdded("order-123", "item-1", 2),
+                        new ItemAdded("order-123", "item-2", 1)));
 
         // Load events
         List<EventStore.StoredEvent> events = store.load("order-123").toList();
@@ -389,8 +403,12 @@ class EnterpriseCompositionIT implements WithAssertions {
         store.append("order-456", List.of(new OrderCreated("order-456", Instant.now())), 0);
 
         // Concurrent append with wrong version should fail
-        assertThatThrownBy(() ->
-                store.append("order-456", List.of(new ItemAdded("order-456", "item-1", 1)), 0))
+        assertThatThrownBy(
+                        () ->
+                                store.append(
+                                        "order-456",
+                                        List.of(new ItemAdded("order-456", "item-1", 1)),
+                                        0))
                 .isInstanceOf(IllegalStateException.class);
 
         // Correct version should succeed
@@ -407,11 +425,12 @@ class EnterpriseCompositionIT implements WithAssertions {
         store.addProjection(projection);
 
         // Append events - projection should be updated
-        store.append("order-789", List.of(
-                new OrderCreated("order-789", Instant.now()),
-                new ItemAdded("order-789", "item-1", 2),
-                new ItemAdded("order-789", "item-2", 1)
-        ));
+        store.append(
+                "order-789",
+                List.of(
+                        new OrderCreated("order-789", Instant.now()),
+                        new ItemAdded("order-789", "item-1", 2),
+                        new ItemAdded("order-789", "item-2", 1)));
 
         assertThat(projection.totalOrders()).isEqualTo(1);
         assertThat(projection.totalItems()).isEqualTo(2);
@@ -465,7 +484,8 @@ class EnterpriseCompositionIT implements WithAssertions {
 
         // Snapshot
         Map<String, Object> snapshot = metrics.snapshot();
-        assertThat(snapshot).containsKeys("requests.total", "queue.depth", "latency.ms", "request.duration");
+        assertThat(snapshot)
+                .containsKeys("requests.total", "queue.depth", "latency.ms", "request.duration");
     }
 
     @Test
@@ -475,19 +495,21 @@ class EnterpriseCompositionIT implements WithAssertions {
         DistributedTracer tracer = DistributedTracer.create("test-tracer");
 
         // Create root span
-        DistributedTracer.Span root = tracer.spanBuilder("operation")
-                .setKind(DistributedTracer.SpanKind.SERVER)
-                .setAttribute("service", "test")
-                .startSpan();
+        DistributedTracer.Span root =
+                tracer.spanBuilder("operation")
+                        .setKind(DistributedTracer.SpanKind.SERVER)
+                        .setAttribute("service", "test")
+                        .startSpan();
 
         try (DistributedTracer.SpanScope scope = root.makeCurrent()) {
             // Current span is available
             assertThat(tracer.getCurrentSpan()).isPresent();
 
             // Create child span
-            DistributedTracer.Span child = tracer.spanBuilder("sub-operation")
-                    .setKind(DistributedTracer.SpanKind.INTERNAL)
-                    .startSpan();
+            DistributedTracer.Span child =
+                    tracer.spanBuilder("sub-operation")
+                            .setKind(DistributedTracer.SpanKind.INTERNAL)
+                            .startSpan();
 
             try {
                 Thread.sleep(5);
@@ -509,12 +531,18 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(15)
     @DisplayName("HealthChecker: should run health checks and report status")
     void healthCheckerShouldRunChecks() {
-        HealthChecker checker = HealthChecker.builder()
-                .name("test-health")
-                .check("always-healthy", () -> true, Duration.ofSeconds(5))
-                .check("always-unhealthy", () -> false, Duration.ofSeconds(5))
-                .check("throwing", () -> { throw new RuntimeException("oops"); }, Duration.ofSeconds(5))
-                .build();
+        HealthChecker checker =
+                HealthChecker.builder()
+                        .name("test-health")
+                        .check("always-healthy", () -> true, Duration.ofSeconds(5))
+                        .check("always-unhealthy", () -> false, Duration.ofSeconds(5))
+                        .check(
+                                "throwing",
+                                () -> {
+                                    throw new RuntimeException("oops");
+                                },
+                                Duration.ofSeconds(5))
+                        .build();
 
         // Run all checks
         HealthChecker.Status status = checker.check();
@@ -524,9 +552,12 @@ class EnterpriseCompositionIT implements WithAssertions {
 
         // Individual checks
         assertThat(status.checks()).hasSize(3);
-        assertThat(status.checks().get("always-healthy").status()).isEqualTo(HealthChecker.HealthStatus.HEALTHY);
-        assertThat(status.checks().get("always-unhealthy").status()).isEqualTo(HealthChecker.HealthStatus.UNHEALTHY);
-        assertThat(status.checks().get("throwing").status()).isEqualTo(HealthChecker.HealthStatus.UNHEALTHY);
+        assertThat(status.checks().get("always-healthy").status())
+                .isEqualTo(HealthChecker.HealthStatus.HEALTHY);
+        assertThat(status.checks().get("always-unhealthy").status())
+                .isEqualTo(HealthChecker.HealthStatus.UNHEALTHY);
+        assertThat(status.checks().get("throwing").status())
+                .isEqualTo(HealthChecker.HealthStatus.UNHEALTHY);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -537,14 +568,26 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(16)
     @DisplayName("ApiGateway: should route requests to handlers")
     void apiGatewayShouldRouteRequests() throws Exception {
-        ApiGateway gateway = ApiGateway.builder()
-                .route("/api/orders", ApiGateway.Method.GET,
-                        req -> CompletableFuture.completedFuture(ApiGateway.Response.ok("[]")))
-                .route("/api/orders", ApiGateway.Method.POST,
-                        req -> CompletableFuture.completedFuture(ApiGateway.Response.created("/api/orders/123")))
-                .route("/api/health",
-                        req -> CompletableFuture.completedFuture(ApiGateway.Response.ok("{\"status\":\"ok\"}")))
-                .build();
+        ApiGateway gateway =
+                ApiGateway.builder()
+                        .route(
+                                "/api/orders",
+                                ApiGateway.Method.GET,
+                                req ->
+                                        CompletableFuture.completedFuture(
+                                                ApiGateway.Response.ok("[]")))
+                        .route(
+                                "/api/orders",
+                                ApiGateway.Method.POST,
+                                req ->
+                                        CompletableFuture.completedFuture(
+                                                ApiGateway.Response.created("/api/orders/123")))
+                        .route(
+                                "/api/health",
+                                req ->
+                                        CompletableFuture.completedFuture(
+                                                ApiGateway.Response.ok("{\"status\":\"ok\"}")))
+                        .build();
 
         // GET request
         ApiGateway.Request getReq = ApiGateway.Request.get("/api/orders");
@@ -611,26 +654,33 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(18)
     @DisplayName("CommandDispatcher: should dispatch commands to handlers")
     void commandDispatcherShouldDispatchCommands() {
-        CommandDispatcher dispatcher = CommandDispatcher.create()
-                .register(CreateOrderCmd.class, cmd -> CommandDispatcher.CommandResult.ok(
-                        new OrderCreated(cmd.orderId, Instant.now())))
-                .register(AddItemCmd.class, cmd -> {
-                    if (cmd.quantity < 0) {
-                        return CommandDispatcher.CommandResult.err("Invalid quantity");
-                    }
-                    return CommandDispatcher.CommandResult.ok(
-                            new ItemAdded(cmd.orderId, cmd.itemId, cmd.quantity));
-                });
+        CommandDispatcher dispatcher =
+                CommandDispatcher.create()
+                        .register(
+                                CreateOrderCmd.class,
+                                cmd ->
+                                        CommandDispatcher.CommandResult.ok(
+                                                new OrderCreated(cmd.orderId, Instant.now())))
+                        .register(
+                                AddItemCmd.class,
+                                cmd -> {
+                                    if (cmd.quantity < 0) {
+                                        return CommandDispatcher.CommandResult.err(
+                                                "Invalid quantity");
+                                    }
+                                    return CommandDispatcher.CommandResult.ok(
+                                            new ItemAdded(cmd.orderId, cmd.itemId, cmd.quantity));
+                                });
 
         // Dispatch valid command
-        CommandDispatcher.CommandResult<OrderCreated> result1 = dispatcher.dispatch(
-                new CreateOrderCmd("order-1"));
+        CommandDispatcher.CommandResult<OrderCreated> result1 =
+                dispatcher.dispatch(new CreateOrderCmd("order-1"));
         assertThat(result1.isSuccess()).isTrue();
         assertThat(result1.orElse(null).orderId).isEqualTo("order-1");
 
         // Dispatch invalid command
-        CommandDispatcher.CommandResult<ItemAdded> result2 = dispatcher.dispatch(
-                new AddItemCmd("order-1", "item-1", -1));
+        CommandDispatcher.CommandResult<ItemAdded> result2 =
+                dispatcher.dispatch(new AddItemCmd("order-1", "item-1", -1));
         assertThat(result2.isSuccess()).isFalse();
 
         // Stats
@@ -646,12 +696,15 @@ class EnterpriseCompositionIT implements WithAssertions {
     void queryDispatcherShouldExecuteQueries() {
         AtomicInteger queryCount = new AtomicInteger(0);
 
-        QueryDispatcher dispatcher = QueryDispatcher.create()
-                .registerFunc(GetOrderQuery.class, q -> {
-                    queryCount.incrementAndGet();
-                    return new TestOrder(q.orderId, "Order " + q.orderId);
-                })
-                .cache(Duration.ofMinutes(5));
+        QueryDispatcher dispatcher =
+                QueryDispatcher.create()
+                        .registerFunc(
+                                GetOrderQuery.class,
+                                q -> {
+                                    queryCount.incrementAndGet();
+                                    return new TestOrder(q.orderId, "Order " + q.orderId);
+                                })
+                        .cache(Duration.ofMinutes(5));
 
         // First query
         Optional<TestOrder> result1 = dispatcher.query(new GetOrderQuery("order-1"));
@@ -687,30 +740,35 @@ class EnterpriseCompositionIT implements WithAssertions {
         MessageBus messageBus = MessageBus.create("telemetry-bus");
         EventStore eventStore = EventStore.create("telemetry-events");
         MetricsCollector metrics = MetricsCollector.create("telemetry-metrics");
-        HealthChecker healthChecker = HealthChecker.builder()
-                .name("telemetry-health")
-                .check("self", () -> true, Duration.ofSeconds(5))
-                .build();
+        HealthChecker healthChecker =
+                HealthChecker.builder()
+                        .name("telemetry-health")
+                        .check("self", () -> true, Duration.ofSeconds(5))
+                        .build();
 
         // Build application
-        Application app = Application.builder("telemetry-service")
-                .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
-                .maxRestarts(10)
-                .restartWindow(Duration.ofMinutes(1))
-                .service("ingress",
-                        () -> new IngressState(messageBus, metrics),
-                        this::handleIngress)
-                .service("processor",
-                        () -> new ProcessorState(new ArrayList<>()),
-                        this::handleProcessorMessage)
-                .infrastructure(messageBus)
-                .infrastructure(eventStore)
-                .healthCheck(healthChecker)
-                .config(ApplicationConfig.create()
-                        .environment("test")
-                        .set("batch.size", 100)
-                        .build())
-                .build();
+        Application app =
+                Application.builder("telemetry-service")
+                        .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
+                        .maxRestarts(10)
+                        .restartWindow(Duration.ofMinutes(1))
+                        .service(
+                                "ingress",
+                                () -> new IngressState(messageBus, metrics),
+                                this::handleIngress)
+                        .service(
+                                "processor",
+                                () -> new ProcessorState(new ArrayList<>()),
+                                this::handleProcessorMessage)
+                        .infrastructure(messageBus)
+                        .infrastructure(eventStore)
+                        .healthCheck(healthChecker)
+                        .config(
+                                ApplicationConfig.create()
+                                        .environment("test")
+                                        .set("batch.size", 100)
+                                        .build())
+                        .build();
 
         // Start
         app.start();
@@ -721,7 +779,8 @@ class EnterpriseCompositionIT implements WithAssertions {
         assertThat(ingress).isPresent();
 
         // Send message
-        IngressState state = ingress.get().ask(new IngressMsg.Ingest("sample-data")).get(5, TimeUnit.SECONDS);
+        IngressState state =
+                ingress.get().ask(new IngressMsg.Ingest("sample-data")).get(5, TimeUnit.SECONDS);
         assertThat(state.processed).isGreaterThan(0);
 
         // Check infrastructure
@@ -776,7 +835,9 @@ class EnterpriseCompositionIT implements WithAssertions {
 
     // Event types
     record OrderCreated(String orderId, Instant timestamp) {}
+
     record ItemAdded(String orderId, String itemId, int quantity) {}
+
     record OrderSubmitted(String orderId, Instant timestamp) {}
 
     // Projection
@@ -784,7 +845,10 @@ class EnterpriseCompositionIT implements WithAssertions {
         private int totalOrders = 0;
         private int totalItems = 0;
 
-        @Override public String name() { return "order-summary"; }
+        @Override
+        public String name() {
+            return "order-summary";
+        }
 
         @Override
         public void apply(EventStore.StoredEvent event) {
@@ -795,19 +859,34 @@ class EnterpriseCompositionIT implements WithAssertions {
             }
         }
 
-        @Override public void reset() { totalOrders = 0; totalItems = 0; }
-        public int totalOrders() { return totalOrders; }
-        public int totalItems() { return totalItems; }
+        @Override
+        public void reset() {
+            totalOrders = 0;
+            totalItems = 0;
+        }
+
+        public int totalOrders() {
+            return totalOrders;
+        }
+
+        public int totalItems() {
+            return totalItems;
+        }
     }
 
     // Order query
     record TestOrder(String id, String name) {}
 
     record GetOrderQuery(String orderId) implements QueryDispatcher.Query<TestOrder> {
-        @Override public String cacheKey() { return "order:" + orderId; }
+        @Override
+        public String cacheKey() {
+            return "order:" + orderId;
+        }
     }
 
     // Commands
     record CreateOrderCmd(String orderId) implements CommandDispatcher.Command {}
-    record AddItemCmd(String orderId, String itemId, int quantity) implements CommandDispatcher.Command {}
+
+    record AddItemCmd(String orderId, String itemId, int quantity)
+            implements CommandDispatcher.Command {}
 }

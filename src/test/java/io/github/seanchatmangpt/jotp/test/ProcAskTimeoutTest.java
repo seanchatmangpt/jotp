@@ -1,10 +1,10 @@
 package io.github.seanchatmangpt.jotp.test;
 
+import io.github.seanchatmangpt.jotp.Proc;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import io.github.seanchatmangpt.jotp.Proc;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;

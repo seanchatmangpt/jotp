@@ -10,19 +10,21 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Distributed tracer — W3C Trace Context compatible tracing for JOTP.
  *
- * <p>Joe Armstrong: "In distributed systems, you need to follow the request
- * across process boundaries. Distributed tracing is the distributed debugger."
+ * <p>Joe Armstrong: "In distributed systems, you need to follow the request across process
+ * boundaries. Distributed tracing is the distributed debugger."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>W3C Trace Context</b> — Compatible with OpenTelemetry, Jaeger, Zipkin</li>
- *   <li><b>Span hierarchy</b> — Parent-child relationships for nested operations</li>
- *   <li><b>Context propagation</b> — Trace context flows with messages</li>
- *   <li><b>Span events</b> — Timestamped events within spans</li>
- *   <li><b>Attribute bags</b> — Key-value attributes on spans</li>
+ *   <li><b>W3C Trace Context</b> — Compatible with OpenTelemetry, Jaeger, Zipkin
+ *   <li><b>Span hierarchy</b> — Parent-child relationships for nested operations
+ *   <li><b>Context propagation</b> — Trace context flows with messages
+ *   <li><b>Span events</b> — Timestamped events within spans
+ *   <li><b>Attribute bags</b> — Key-value attributes on spans
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * DistributedTracer tracer = DistributedTracer.create("telemetry-service");
  *
@@ -56,21 +58,16 @@ public final class DistributedTracer implements Application.Infrastructure {
 
     /** W3C Trace Context. */
     public record TraceContext(
-            String traceId,      // 32 hex chars
-            String spanId,       // 16 hex chars
+            String traceId, // 32 hex chars
+            String spanId, // 16 hex chars
             String parentSpanId, // 16 hex chars or null
-            byte traceFlags,     // 0x01 = sampled
+            byte traceFlags, // 0x01 = sampled
             Map<String, String> traceState) {
 
         private static final Random RANDOM = new Random();
 
         public static TraceContext create() {
-            return new TraceContext(
-                    generateTraceId(),
-                    generateSpanId(),
-                    null,
-                    (byte) 1,
-                    Map.of());
+            return new TraceContext(generateTraceId(), generateSpanId(), null, (byte) 1, Map.of());
         }
 
         public static TraceContext createChild(TraceContext parent) {
@@ -141,26 +138,45 @@ public final class DistributedTracer implements Application.Infrastructure {
     /** Span interface. */
     public interface Span {
         String name();
+
         TraceContext context();
+
         SpanKind kind();
+
         StatusCode status();
+
         String statusDescription();
+
         Instant startTime();
+
         Instant endTime();
+
         Duration duration();
+
         boolean isEnded();
+
         boolean isRecording();
 
         void setStatus(StatusCode status);
+
         void setStatus(StatusCode status, String description);
+
         void addEvent(String name);
+
         void addEvent(String name, Map<String, Object> attributes);
+
         void setAttribute(String key, String value);
+
         void setAttribute(String key, long value);
+
         void setAttribute(String key, double value);
+
         void setAttribute(String key, boolean value);
+
         void recordException(Throwable exception);
+
         void end();
+
         void end(Throwable exception);
 
         SpanScope makeCurrent();
@@ -194,15 +210,50 @@ public final class DistributedTracer implements Application.Infrastructure {
             this.tracer = tracer;
         }
 
-        @Override public String name() { return name; }
-        @Override public TraceContext context() { return context; }
-        @Override public SpanKind kind() { return kind; }
-        @Override public StatusCode status() { return status; }
-        @Override public String statusDescription() { return statusDescription; }
-        @Override public Instant startTime() { return startTime; }
-        @Override public Instant endTime() { return endTime; }
-        @Override public boolean isEnded() { return ended; }
-        @Override public boolean isRecording() { return !ended; }
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public TraceContext context() {
+            return context;
+        }
+
+        @Override
+        public SpanKind kind() {
+            return kind;
+        }
+
+        @Override
+        public StatusCode status() {
+            return status;
+        }
+
+        @Override
+        public String statusDescription() {
+            return statusDescription;
+        }
+
+        @Override
+        public Instant startTime() {
+            return startTime;
+        }
+
+        @Override
+        public Instant endTime() {
+            return endTime;
+        }
+
+        @Override
+        public boolean isEnded() {
+            return ended;
+        }
+
+        @Override
+        public boolean isRecording() {
+            return !ended;
+        }
 
         @Override
         public Duration duration() {
@@ -210,24 +261,46 @@ public final class DistributedTracer implements Application.Infrastructure {
             return Duration.between(startTime, end);
         }
 
-        @Override public void setStatus(StatusCode status) { this.status = status; }
-        @Override public void setStatus(StatusCode status, String description) {
+        @Override
+        public void setStatus(StatusCode status) {
+            this.status = status;
+        }
+
+        @Override
+        public void setStatus(StatusCode status, String description) {
             this.status = status;
             this.statusDescription = description;
         }
 
-        @Override public void addEvent(String name) {
+        @Override
+        public void addEvent(String name) {
             events.add(SpanEvent.of(name));
         }
 
-        @Override public void addEvent(String name, Map<String, Object> attributes) {
+        @Override
+        public void addEvent(String name, Map<String, Object> attributes) {
             events.add(SpanEvent.of(name, attributes));
         }
 
-        @Override public void setAttribute(String key, String value) { attributes.put(key, value); }
-        @Override public void setAttribute(String key, long value) { attributes.put(key, value); }
-        @Override public void setAttribute(String key, double value) { attributes.put(key, value); }
-        @Override public void setAttribute(String key, boolean value) { attributes.put(key, value); }
+        @Override
+        public void setAttribute(String key, String value) {
+            attributes.put(key, value);
+        }
+
+        @Override
+        public void setAttribute(String key, long value) {
+            attributes.put(key, value);
+        }
+
+        @Override
+        public void setAttribute(String key, double value) {
+            attributes.put(key, value);
+        }
+
+        @Override
+        public void setAttribute(String key, boolean value) {
+            attributes.put(key, value);
+        }
 
         @Override
         public void recordException(Throwable exception) {
@@ -277,11 +350,16 @@ public final class DistributedTracer implements Application.Infrastructure {
             map.put("durationMs", duration().toMillis());
             map.put("status", status.name());
             map.put("attributes", Map.copyOf(attributes));
-            map.put("events", events.stream().map(e -> Map.of(
-                    "name", e.name(),
-                    "timestamp", e.timestamp().toString(),
-                    "attributes", e.attributes()
-            )).toList());
+            map.put(
+                    "events",
+                    events.stream()
+                            .map(
+                                    e ->
+                                            Map.of(
+                                                    "name", e.name(),
+                                                    "timestamp", e.timestamp().toString(),
+                                                    "attributes", e.attributes()))
+                            .toList());
             return map;
         }
     }
@@ -384,9 +462,10 @@ public final class DistributedTracer implements Application.Infrastructure {
         }
 
         public Span startSpan() {
-            TraceContext context = parentContext != null
-                    ? TraceContext.createChild(parentContext)
-                    : TraceContext.create();
+            TraceContext context =
+                    parentContext != null
+                            ? TraceContext.createChild(parentContext)
+                            : TraceContext.create();
 
             SpanImpl span = new SpanImpl(spanName, context, kind, tracer);
             attributes.forEach((k, v) -> span.setAttribute(k, String.valueOf(v)));
@@ -397,16 +476,12 @@ public final class DistributedTracer implements Application.Infrastructure {
 
     // ── Current span ──────────────────────────────────────────────────────────────
 
-    /**
-     * Get the current span for this thread.
-     */
+    /** Get the current span for this thread. */
     public Optional<Span> getCurrentSpan() {
         return Optional.ofNullable(currentSpan.get());
     }
 
-    /**
-     * Get the current trace context for propagation.
-     */
+    /** Get the current trace context for propagation. */
     public Optional<TraceContext> getCurrentContext() {
         return getCurrentSpan().map(Span::context);
     }
@@ -420,9 +495,7 @@ public final class DistributedTracer implements Application.Infrastructure {
         }
     }
 
-    /**
-     * Get completed spans (for export).
-     */
+    /** Get completed spans (for export). */
     public List<Map<String, Object>> exportSpans() {
         List<Map<String, Object>> exported = new ArrayList<>();
         SpanImpl span;
@@ -432,9 +505,7 @@ public final class DistributedTracer implements Application.Infrastructure {
         return exported;
     }
 
-    /**
-     * Get tracer statistics.
-     */
+    /** Get tracer statistics. */
     public Map<String, Long> stats() {
         Map<String, Long> s = new LinkedHashMap<>();
         s.put("spansCreated", spansCreated.get());
@@ -446,5 +517,7 @@ public final class DistributedTracer implements Application.Infrastructure {
     // ── Infrastructure lifecycle ─────────────────────────────────────────────────
 
     @Override
-    public String name() { return name; }
+    public String name() {
+        return name;
+    }
 }

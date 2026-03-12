@@ -7,14 +7,9 @@ import java.util.Objects;
  *
  * <p>Demonstrates record with compact constructor validation and builder pattern.
  */
-public record Person(
-        String name,
-        int age
-) {
+public record Person(String name, int age) {
 
-    /**
-     * Compact constructor — validates all components.
-     */
+    /** Compact constructor — validates all components. */
     public Person {
         Objects.requireNonNull(name, "name must not be null");
         if (name.isBlank()) {
@@ -25,16 +20,12 @@ public record Person(
         }
     }
 
-    /**
-     * Creates a new builder for {@code Person}.
-     */
+    /** Creates a new builder for {@code Person}. */
     public static Builder builder() {
         return new Builder();
     }
 
-    /**
-     * Step builder for {@code Person}.
-     */
+    /** Step builder for {@code Person}. */
     public static final class Builder {
         private String name;
         private int age;

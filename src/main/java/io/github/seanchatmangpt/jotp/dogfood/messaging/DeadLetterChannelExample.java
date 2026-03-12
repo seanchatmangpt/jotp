@@ -7,18 +7,16 @@ import java.time.Duration;
 /**
  * Runnable example demonstrating Dead Letter Channel pattern with poison pill recovery.
  *
- * <p>Scenario: An order processing system receives orders to validate. Some orders
- * are "poison pills" (malformed) that cause validation to fail. The Dead Letter Channel
- * captures these failed messages for inspection while keeping the main handler alive.
+ * <p>Scenario: An order processing system receives orders to validate. Some orders are "poison
+ * pills" (malformed) that cause validation to fail. The Dead Letter Channel captures these failed
+ * messages for inspection while keeping the main handler alive.
  */
 public final class DeadLetterChannelExample {
 
-    /**
-     * Represents an order record.
-     */
+    /** Represents an order record. */
     sealed interface OrderMsg permits OrderMsg.Order, OrderMsg.PoisonPill {
         record Order(String orderId, double amount) implements OrderMsg {
-            Order {
+            public Order {
                 if (orderId == null || orderId.isBlank()) {
                     throw new IllegalArgumentException("orderId must not be blank");
                 }
@@ -31,16 +29,12 @@ public final class DeadLetterChannelExample {
         record PoisonPill() implements OrderMsg {}
     }
 
-    /**
-     * System message for monitoring.
-     */
+    /** System message for monitoring. */
     sealed interface SystemMsg permits SystemMsg.Report {
         record Report() implements SystemMsg {}
     }
 
-    /**
-     * Main entry point demonstrating dead letter channel recovery.
-     */
+    /** Main entry point demonstrating dead letter channel recovery. */
     public static void main(String[] args) throws InterruptedException {
         System.out.println("=== Dead Letter Channel Example: Poison Pill Recovery ===\n");
 
@@ -67,18 +61,18 @@ public final class DeadLetterChannelExample {
                                             // Validate and process
                                             if (order.amount() < 0) {
                                                 throw new IllegalArgumentException(
-                                                    "Negative amount: " + order.amount());
+                                                        "Negative amount: " + order.amount());
                                             }
                                             System.out.println(
-                                                "✓ Order processed: "
-                                                    + order.orderId()
-                                                    + " for $"
-                                                    + order.amount());
+                                                    "✓ Order processed: "
+                                                            + order.orderId()
+                                                            + " for $"
+                                                            + order.amount());
                                         }
                                         case OrderMsg.PoisonPill pill -> {
                                             // This is our poison pill — throw to trigger DLC
                                             throw new IllegalStateException(
-                                                "Poison pill: intentional crash for recovery demo");
+                                                    "Poison pill: intentional crash for recovery demo");
                                         }
                                     }
                                 }));

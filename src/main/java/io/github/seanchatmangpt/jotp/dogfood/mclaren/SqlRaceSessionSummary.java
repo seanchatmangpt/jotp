@@ -3,18 +3,18 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 /**
  * Session summary — mirrors {@code MESL.SqlRace.Domain.SessionSummary} / {@code ISessionSummary}.
  *
- * <p>In ATLAS, {@code SessionManager} returns a {@code SessionSummary} for each session found in
- * a database or file store. The Telemetry Analytics API (TAPI) uses summaries for search and
+ * <p>In ATLAS, {@code SessionManager} returns a {@code SessionSummary} for each session found in a
+ * database or file store. The Telemetry Analytics API (TAPI) uses summaries for search and
  * aggregation queries without loading the full session.
  *
  * <p>Factory: {@link SqlRaceSessionData#toSummary()}.
  *
- * @param key            session identity
- * @param identifier     human-readable name
- * @param startTimeNs    session start (nanoseconds since Unix epoch)
- * @param endTimeNs      session end (0 if session is still live)
- * @param state          current lifecycle state
- * @param lapCount       number of committed laps
+ * @param key session identity
+ * @param identifier human-readable name
+ * @param startTimeNs session start (nanoseconds since Unix epoch)
+ * @param endTimeNs session end (0 if session is still live)
+ * @param state current lifecycle state
+ * @param lapCount number of committed laps
  * @param parameterCount number of configured parameters
  */
 public record SqlRaceSessionSummary(
@@ -29,7 +29,7 @@ public record SqlRaceSessionSummary(
     /**
      * Derive a summary from the current session data envelope.
      *
-     * @param data  current session data
+     * @param data current session data
      * @param state current lifecycle state
      * @return summary suitable for Telemetry Analytics API responses
      */

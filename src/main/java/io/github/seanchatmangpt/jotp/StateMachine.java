@@ -130,8 +130,8 @@ public final class StateMachine<S, E, D> {
     // ── TransitionFn ─────────────────────────────────────────────────────────
 
     /**
-     * The pure transition function — equivalent to OTP's {@code handle_event/4} in
-     * {@code handle_event_function} callback mode.
+     * The pure transition function — equivalent to OTP's {@code handle_event/4} in {@code
+     * handle_event_function} callback mode.
      *
      * <p>OTP: {@code handle_event(EventType, EventContent, State, Data) -> Transition}
      *
@@ -164,15 +164,13 @@ public final class StateMachine<S, E, D> {
      * Create and immediately start the state machine.
      *
      * @param initialState initial state value (OTP: returned from {@code init/1} as first element)
-     * @param initialData  initial data value (OTP: returned from {@code init/1} as second element)
-     * @param fn           transition function
+     * @param initialData initial data value (OTP: returned from {@code init/1} as second element)
+     * @param fn transition function
      */
     public StateMachine(S initialState, D initialData, TransitionFn<S, E, D> fn) {
         this.currentState = initialState;
-        this.currentData  = initialData;
-        this.thread = Thread.ofVirtual()
-                .name("statem")
-                .start(() -> loop(fn));
+        this.currentData = initialData;
+        this.thread = Thread.ofVirtual().name("statem").start(() -> loop(fn));
     }
 
     // ── Event API ─────────────────────────────────────────────────────────────
@@ -193,8 +191,8 @@ public final class StateMachine<S, E, D> {
      *
      * <p>OTP: {@code gen_statem:call(Pid, Event)}
      *
-     * @return future completing with {@link D} after the transition, or failing with
-     *         {@link IllegalStateException} if the machine stopped
+     * @return future completing with {@link D} after the transition, or failing with {@link
+     *     IllegalStateException} if the machine stopped
      */
     @SuppressWarnings("unchecked")
     public CompletableFuture<D> call(E event) {
@@ -257,7 +255,7 @@ public final class StateMachine<S, E, D> {
                 switch (transition) {
                     case Transition.NextState<S, D>(var newState, var newData) -> {
                         currentState = newState;
-                        currentData  = newData;
+                        currentData = newData;
                         if (env.reply() != null) env.reply().complete(newData);
                     }
                     case Transition.KeepState<S, D>(var newData) -> {
@@ -268,8 +266,10 @@ public final class StateMachine<S, E, D> {
                         stopReason = reason;
                         running = false;
                         if (env.reply() != null) {
-                            env.reply().completeExceptionally(
-                                    new IllegalStateException("state machine stopped: " + reason));
+                            env.reply()
+                                    .completeExceptionally(
+                                            new IllegalStateException(
+                                                    "state machine stopped: " + reason));
                         }
                         // drain remaining mailbox, failing pending calls
                         drainMailbox();
@@ -287,8 +287,9 @@ public final class StateMachine<S, E, D> {
         Envelope<E> env;
         while ((env = mailbox.poll()) != null) {
             if (env.reply() != null) {
-                env.reply().completeExceptionally(
-                        new IllegalStateException("state machine stopped: " + stopReason));
+                env.reply()
+                        .completeExceptionally(
+                                new IllegalStateException("state machine stopped: " + stopReason));
             }
         }
     }

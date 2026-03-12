@@ -1,12 +1,11 @@
 package io.github.seanchatmangpt.jotp.test;
 
 import io.github.seanchatmangpt.jotp.*;
-import org.junit.jupiter.api.*;
-import org.assertj.core.api.WithAssertions;
-
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.*;
 
 /**
  * Tests for enterprise project templates.
@@ -44,7 +43,8 @@ class ProjectTemplateIT implements WithAssertions {
         String content = Files.readString(pomTemplate);
 
         assertThat(content).contains("<maven.compiler.release>26</maven.compiler.release>");
-        assertThat(content).contains("<maven.compiler.enablePreview>true</maven.compiler.enablePreview>");
+        assertThat(content)
+                .contains("<maven.compiler.enablePreview>true</maven.compiler.enablePreview>");
         assertThat(content).contains("junit-jupiter");
         assertThat(content).contains("assertj-core");
         assertThat(content).contains("maven-shade-plugin");
@@ -128,8 +128,8 @@ class ProjectTemplateIT implements WithAssertions {
         assertThat(content).contains("org.acme");
         assertThat(content).contains("Application");
         assertThat(content).contains("Supervisor");
-        assertThat(content).contains("service");  // Service registration
-        assertThat(content).contains("start()");  // Lifecycle
+        assertThat(content).contains("service"); // Service registration
+        assertThat(content).contains("start()"); // Lifecycle
     }
 
     @Test

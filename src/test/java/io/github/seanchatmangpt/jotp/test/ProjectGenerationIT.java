@@ -1,22 +1,17 @@
 package io.github.seanchatmangpt.jotp.test;
 
 import io.github.seanchatmangpt.jotp.*;
-import org.junit.jupiter.api.*;
-import org.assertj.core.api.WithAssertions;
-import org.awaitility.Awaitility;
-
 import java.io.*;
 import java.nio.file.*;
-import java.time.Duration;
 import java.util.concurrent.*;
-
-import static org.awaitility.Awaitility.await;
+import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.*;
 
 /**
  * Tests for project generation from Turtle specifications.
  *
- * <p>Validates that the Joe Armstrong AGI vision:
- * "Write Turtle specification, press button, get complete application"
+ * <p>Validates that the Joe Armstrong AGI vision: "Write Turtle specification, press button, get
+ * complete application"
  *
  * <p>TODO: These tests require jgen-render-project script with execute permissions.
  */
@@ -40,18 +35,21 @@ class ProjectGenerationIT implements WithAssertions {
         Path outputDir = OUTPUT_BASE.resolve("telemetry-app");
 
         // Skip if spec file doesn't exist
-        Assumptions.assumeTrue(Files.exists(specFile),
-                "Test requires examples/telemetry-app.ttl");
+        Assumptions.assumeTrue(Files.exists(specFile), "Test requires examples/telemetry-app.ttl");
 
         // Generate project
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command("./bin/jgen-render-project",
-                "--spec", specFile.toString(),
-                "--output", outputDir.toString(),
+        pb.command(
+                "./bin/jgen-render-project",
+                "--spec",
+                specFile.toString(),
+                "--output",
+                outputDir.toString(),
                 "--validate");
 
         Process p = pb.start();
-        boolean completed = p.waitFor(5, java.util.concurrent.TimeUnit.MINUTES) && p.exitValue() == 0;
+        boolean completed =
+                p.waitFor(5, java.util.concurrent.TimeUnit.MINUTES) && p.exitValue() == 0;
 
         assertThat(completed).isTrue();
 
@@ -59,8 +57,13 @@ class ProjectGenerationIT implements WithAssertions {
         assertThat(Files.exists(outputDir.resolve("pom.xml"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("Dockerfile"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("src/main/java/module-info.java"))).isTrue();
-        assertThat(Files.exists(outputDir.resolve("src/main/java/org/generated/Application.java"))).isTrue();
-        assertThat(Files.exists(outputDir.resolve("src/test/java/org/generated/ApplicationIT.java"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("src/main/java/org/generated/Application.java")))
+                .isTrue();
+        assertThat(
+                        Files.exists(
+                                outputDir.resolve(
+                                        "src/test/java/org/generated/ApplicationIT.java")))
+                .isTrue();
         assertThat(Files.exists(outputDir.resolve("k8s/deployment.yaml"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("k8s/service.yaml"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("README.md"))).isTrue();
@@ -74,17 +77,21 @@ class ProjectGenerationIT implements WithAssertions {
         Path outputDir = OUTPUT_BASE.resolve("f1-telemetry-app");
 
         // Skip if spec file doesn't exist
-        Assumptions.assumeTrue(Files.exists(specFile),
-                "Test requires examples/f1-telemetry-application.ttl");
+        Assumptions.assumeTrue(
+                Files.exists(specFile), "Test requires examples/f1-telemetry-application.ttl");
 
         // Generate project (without validation for speed)
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command("./bin/jgen-render-project",
-                "--spec", specFile.toString(),
-                "--output", outputDir.toString());
+        pb.command(
+                "./bin/jgen-render-project",
+                "--spec",
+                specFile.toString(),
+                "--output",
+                outputDir.toString());
 
         Process p = pb.start();
-        boolean completed = p.waitFor(2, java.util.concurrent.TimeUnit.MINUTES) && p.exitValue() == 0;
+        boolean completed =
+                p.waitFor(2, java.util.concurrent.TimeUnit.MINUTES) && p.exitValue() == 0;
 
         assertThat(completed).isTrue();
 
@@ -104,14 +111,16 @@ class ProjectGenerationIT implements WithAssertions {
         Path outputDir = OUTPUT_BASE.resolve("telemetry-pom-test");
         Path pomFile = outputDir.resolve("pom.xml");
 
-        Assumptions.assumeTrue(Files.exists(specFile),
-                "Test requires examples/telemetry-app.ttl");
+        Assumptions.assumeTrue(Files.exists(specFile), "Test requires examples/telemetry-app.ttl");
 
         // Generate project
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command("./bin/jgen-render-project",
-                "--spec", specFile.toString(),
-                "--output", outputDir.toString());
+        pb.command(
+                "./bin/jgen-render-project",
+                "--spec",
+                specFile.toString(),
+                "--output",
+                outputDir.toString());
 
         Process p = pb.start();
         boolean completed = p.waitFor(2, java.util.concurrent.TimeUnit.MINUTES);
@@ -121,7 +130,8 @@ class ProjectGenerationIT implements WithAssertions {
         String pomContent = Files.readString(pomFile);
 
         assertThat(pomContent).contains("<maven.compiler.release>26</maven.compiler.release>");
-        assertThat(pomContent).contains("<maven.compiler.enablePreview>true</maven.compiler.enablePreview>");
+        assertThat(pomContent)
+                .contains("<maven.compiler.enablePreview>true</maven.compiler.enablePreview>");
         assertThat(pomContent).contains("junit-jupiter");
         assertThat(pomContent).contains("assertj-core");
         assertThat(pomContent).contains("maven-shade-plugin");
@@ -135,14 +145,16 @@ class ProjectGenerationIT implements WithAssertions {
         Path outputDir = OUTPUT_BASE.resolve("telemetry-docker-test");
         Path dockerFile = outputDir.resolve("Dockerfile");
 
-        Assumptions.assumeTrue(Files.exists(specFile),
-                "Test requires examples/telemetry-app.ttl");
+        Assumptions.assumeTrue(Files.exists(specFile), "Test requires examples/telemetry-app.ttl");
 
         // Generate project
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command("./bin/jgen-render-project",
-                "--spec", specFile.toString(),
-                "--output", outputDir.toString());
+        pb.command(
+                "./bin/jgen-render-project",
+                "--spec",
+                specFile.toString(),
+                "--output",
+                outputDir.toString());
 
         Process p = pb.start();
         boolean completed = p.waitFor(2, java.util.concurrent.TimeUnit.MINUTES);
@@ -155,6 +167,7 @@ class ProjectGenerationIT implements WithAssertions {
         assertThat(dockerContent).contains("--enable-preview");
         assertThat(dockerContent).contains("EXPOSE");
     }
+
     @Test
     @Order(5)
     @DisplayName("Generated application should have supervisor strategy")
@@ -163,14 +176,16 @@ class ProjectGenerationIT implements WithAssertions {
         Path outputDir = OUTPUT_BASE.resolve("telemetry-supervisor-test");
         Path appFile = outputDir.resolve("src/main/java/org/generated/Application.java");
 
-        Assumptions.assumeTrue(Files.exists(specFile),
-                "Test requires examples/telemetry-app.ttl");
+        Assumptions.assumeTrue(Files.exists(specFile), "Test requires examples/telemetry-app.ttl");
 
         // Generate project
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command("./bin/jgen-render-project",
-                "--spec", specFile.toString(),
-                "--output", outputDir.toString());
+        pb.command(
+                "./bin/jgen-render-project",
+                "--spec",
+                specFile.toString(),
+                "--output",
+                outputDir.toString());
 
         Process p = pb.start();
         boolean completed = p.waitFor(2, java.util.concurrent.TimeUnit.MINUTES);

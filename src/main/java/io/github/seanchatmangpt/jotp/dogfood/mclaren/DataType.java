@@ -3,8 +3,8 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 /**
  * Channel data type — mirrors {@code MESL.SqlRace.Domain.DataType} from the SQL Race API.
  *
- * <p>In ATLAS, every {@link SqlRaceChannel} declares the binary representation of its samples.
- * The choice affects both storage density and precision: an ECU transmitting 12-bit ADC readings
+ * <p>In ATLAS, every {@link SqlRaceChannel} declares the binary representation of its samples. The
+ * choice affects both storage density and precision: an ECU transmitting 12-bit ADC readings
  * naturally fits in {@code Signed16Bit}, while a GPS-derived velocity uses {@code Float64Bit}.
  *
  * <p>Frequency naming follows McLaren convention:

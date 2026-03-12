@@ -3,19 +3,17 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Tests for {@link TurtleParser} — Turtle/RDF parser and SPARQL query executor.
  *
- * <p>Validates pattern extraction, dependency resolution, error handling,
- * and project structure parsing.
+ * <p>Validates pattern extraction, dependency resolution, error handling, and project structure
+ * parsing.
  */
 @DisplayName("TurtleParser")
 class TurtleParserTest implements WithAssertions {
@@ -32,16 +30,20 @@ class TurtleParserTest implements WithAssertions {
         @DisplayName("rejects null uri")
         void rejectsNullUri() {
             assertThatNullPointerException()
-                    .isThrownBy(() ->
-                            new TurtleParser.PatternSpec(null, "name", "cat", "tpl", null, 1, null, List.of()));
+                    .isThrownBy(
+                            () ->
+                                    new TurtleParser.PatternSpec(
+                                            null, "name", "cat", "tpl", null, 1, null, List.of()));
         }
 
         @Test
         @DisplayName("rejects null name")
         void rejectsNullName() {
             assertThatNullPointerException()
-                    .isThrownBy(() ->
-                            new TurtleParser.PatternSpec("uri", null, "cat", "tpl", null, 1, null, List.of()));
+                    .isThrownBy(
+                            () ->
+                                    new TurtleParser.PatternSpec(
+                                            "uri", null, "cat", "tpl", null, 1, null, List.of()));
         }
 
         @Test
@@ -49,7 +51,9 @@ class TurtleParserTest implements WithAssertions {
         void defensivelyCopiesDependencies() {
             var mutableDeps = new java.util.ArrayList<String>();
             mutableDeps.add("dep1");
-            var spec = new TurtleParser.PatternSpec("uri", "name", "cat", "tpl", null, 1, null, mutableDeps);
+            var spec =
+                    new TurtleParser.PatternSpec(
+                            "uri", "name", "cat", "tpl", null, 1, null, mutableDeps);
             mutableDeps.add("dep2");
             assertThat(spec.dependencies()).hasSize(1);
         }
@@ -57,10 +61,16 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("accepts valid pattern spec")
         void acceptsValidSpec() {
-            var spec = new TurtleParser.PatternSpec(
-                    "eip:MessageBus", "Message Bus", "foundation",
-                    "messaging/message-bus", "Proc", 2, "Central message routing",
-                    List.of("eip:Channel"));
+            var spec =
+                    new TurtleParser.PatternSpec(
+                            "eip:MessageBus",
+                            "Message Bus",
+                            "foundation",
+                            "messaging/message-bus",
+                            "Proc",
+                            2,
+                            "Central message routing",
+                            List.of("eip:Channel"));
 
             assertThat(spec.uri()).isEqualTo("eip:MessageBus");
             assertThat(spec.name()).isEqualTo("Message Bus");
@@ -97,7 +107,9 @@ class TurtleParserTest implements WithAssertions {
         @DisplayName("defensively copies patterns")
         void defensivelyCopiesPatterns() {
             var mutablePatterns = new java.util.ArrayList<TurtleParser.PatternSpec>();
-            mutablePatterns.add(new TurtleParser.PatternSpec("uri", "name", null, "tpl", null, 1, null, List.of()));
+            mutablePatterns.add(
+                    new TurtleParser.PatternSpec(
+                            "uri", "name", null, "tpl", null, 1, null, List.of()));
             var module = new TurtleParser.ModuleSpec("uri", "name", "pkg", mutablePatterns);
             mutablePatterns.clear();
             assertThat(module.patterns()).hasSize(1);
@@ -114,8 +126,16 @@ class TurtleParserTest implements WithAssertions {
         @DisplayName("rejects null name")
         void rejectsNullName() {
             assertThatNullPointerException()
-                    .isThrownBy(() ->
-                            new TurtleParser.ProjectSpec(null, "group", "artifact", "1.0", 26, "desc", List.of()));
+                    .isThrownBy(
+                            () ->
+                                    new TurtleParser.ProjectSpec(
+                                            null,
+                                            "group",
+                                            "artifact",
+                                            "1.0",
+                                            26,
+                                            "desc",
+                                            List.of()));
         }
 
         @Test
@@ -123,8 +143,9 @@ class TurtleParserTest implements WithAssertions {
         void defensivelyCopiesModules() {
             var mutableModules = new java.util.ArrayList<TurtleParser.ModuleSpec>();
             mutableModules.add(new TurtleParser.ModuleSpec("uri", "name", "pkg", List.of()));
-            var project = new TurtleParser.ProjectSpec(
-                    "name", "group", "artifact", "1.0", 26, "desc", mutableModules);
+            var project =
+                    new TurtleParser.ProjectSpec(
+                            "name", "group", "artifact", "1.0", 26, "desc", mutableModules);
             mutableModules.clear();
             assertThat(project.modules()).hasSize(1);
         }
@@ -132,11 +153,16 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("accepts valid project spec")
         void acceptsValidSpec() {
-            var module = new TurtleParser.ModuleSpec(
-                    "mod1", "Core", "org.acme.core", List.of());
-            var project = new TurtleParser.ProjectSpec(
-                    "TestProject", "org.acme", "test-project", "1.0.0", 26,
-                    "A test project", List.of(module));
+            var module = new TurtleParser.ModuleSpec("mod1", "Core", "org.acme.core", List.of());
+            var project =
+                    new TurtleParser.ProjectSpec(
+                            "TestProject",
+                            "org.acme",
+                            "test-project",
+                            "1.0.0",
+                            26,
+                            "A test project",
+                            List.of(module));
 
             assertThat(project.name()).isEqualTo("TestProject");
             assertThat(project.groupId()).isEqualTo("org.acme");
@@ -157,8 +183,7 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("TurtleFileNotFoundException for missing file")
         void fileNotFound() {
-            assertThatThrownBy(() ->
-                            TurtleParser.extractPatterns(Path.of("nonexistent.ttl")))
+            assertThatThrownBy(() -> TurtleParser.extractPatterns(Path.of("nonexistent.ttl")))
                     .isInstanceOf(TurtleParser.TurtleFileNotFoundException.class)
                     .hasMessageContaining("not found");
         }
@@ -166,16 +191,14 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("extractPatternsSafe throws for missing file")
         void extractPatternsSafeThrowsForMissingFile() {
-            assertThatThrownBy(() ->
-                            TurtleParser.extractPatternsSafe(Path.of("nonexistent.ttl")))
+            assertThatThrownBy(() -> TurtleParser.extractPatternsSafe(Path.of("nonexistent.ttl")))
                     .isInstanceOf(TurtleParser.TurtleFileNotFoundException.class);
         }
 
         @Test
         @DisplayName("extractProjectSafe throws for missing file")
         void extractProjectSafeThrowsForMissingFile() {
-            assertThatThrownBy(() ->
-                            TurtleParser.extractProjectSafe(Path.of("nonexistent.ttl")))
+            assertThatThrownBy(() -> TurtleParser.extractProjectSafe(Path.of("nonexistent.ttl")))
                     .isInstanceOf(TurtleParser.TurtleFileNotFoundException.class);
         }
 
@@ -221,7 +244,8 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("validateTurtleContent accepts valid Turtle")
         void validateContentAcceptsValidTurtle() {
-            var validTurtle = """
+            var validTurtle =
+                    """
                     @prefix ex: <http://example.org/> .
                     ex:Subject ex:predicate ex:object .
                     """;
@@ -233,7 +257,8 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("validateTurtleContent accepts Turtle with prefixes only")
         void validateContentAcceptsPrefixesOnly() {
-            var validTurtle = """
+            var validTurtle =
+                    """
                     @prefix ex: <http://example.org/> .
                     @base <http://example.org/base> .
                     """;
@@ -252,8 +277,7 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("extractPatterns rejects null path")
         void extractPatternsRejectsNull() {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> TurtleParser.extractPatterns(null));
+            assertThatNullPointerException().isThrownBy(() -> TurtleParser.extractPatterns(null));
         }
 
         @Test
@@ -270,17 +294,20 @@ class TurtleParserTest implements WithAssertions {
 
             assertThat(patterns).isNotEmpty();
             assertThat(patterns)
-                    .allSatisfy(p -> {
-                        assertThat(p.uri()).isNotBlank();
-                        assertThat(p.name()).isNotBlank();
-                    });
+                    .allSatisfy(
+                            p -> {
+                                assertThat(p.uri()).isNotBlank();
+                                assertThat(p.name()).isNotBlank();
+                            });
         }
 
         @Test
         @DisplayName("extractPatterns returns empty list for non-pattern file")
         void extractPatternsReturnsEmptyForNonPatternFile(@TempDir Path tempDir) throws Exception {
             var ttlFile = tempDir.resolve("test.ttl");
-            Files.writeString(ttlFile, """
+            Files.writeString(
+                    ttlFile,
+                    """
                     @prefix ex: <http://example.org/> .
                     ex:Subject a ex:Thing .
                     """);
@@ -301,8 +328,7 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("extractProject rejects null path")
         void extractProjectRejectsNull() {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> TurtleParser.extractProject(null));
+            assertThatNullPointerException().isThrownBy(() -> TurtleParser.extractProject(null));
         }
 
         @Test
@@ -351,8 +377,12 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("resolveDependencies returns same order for no dependencies")
         void resolveDependenciesNoDeps() {
-            var p1 = new TurtleParser.PatternSpec("uri1", "A", "cat", "tpl", null, 1, null, List.of());
-            var p2 = new TurtleParser.PatternSpec("uri2", "B", "cat", "tpl", null, 1, null, List.of());
+            var p1 =
+                    new TurtleParser.PatternSpec(
+                            "uri1", "A", "cat", "tpl", null, 1, null, List.of());
+            var p2 =
+                    new TurtleParser.PatternSpec(
+                            "uri2", "B", "cat", "tpl", null, 1, null, List.of());
 
             var resolved = TurtleParser.resolveDependencies(List.of(p1, p2));
 
@@ -362,8 +392,12 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("resolveDependencies puts dependency before dependent")
         void resolveDependenciesOrdersCorrectly() {
-            var p1 = new TurtleParser.PatternSpec("uri1", "A", "cat", "tpl", null, 1, null, List.of("B"));
-            var p2 = new TurtleParser.PatternSpec("uri2", "B", "cat", "tpl", null, 1, null, List.of());
+            var p1 =
+                    new TurtleParser.PatternSpec(
+                            "uri1", "A", "cat", "tpl", null, 1, null, List.of("B"));
+            var p2 =
+                    new TurtleParser.PatternSpec(
+                            "uri2", "B", "cat", "tpl", null, 1, null, List.of());
 
             var resolved = TurtleParser.resolveDependencies(List.of(p1, p2));
 
@@ -375,9 +409,15 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("resolveDependencies handles transitive dependencies")
         void resolveDependenciesHandlesTransitive() {
-            var p1 = new TurtleParser.PatternSpec("uri1", "A", "cat", "tpl", null, 1, null, List.of("B"));
-            var p2 = new TurtleParser.PatternSpec("uri2", "B", "cat", "tpl", null, 1, null, List.of("C"));
-            var p3 = new TurtleParser.PatternSpec("uri3", "C", "cat", "tpl", null, 1, null, List.of());
+            var p1 =
+                    new TurtleParser.PatternSpec(
+                            "uri1", "A", "cat", "tpl", null, 1, null, List.of("B"));
+            var p2 =
+                    new TurtleParser.PatternSpec(
+                            "uri2", "B", "cat", "tpl", null, 1, null, List.of("C"));
+            var p3 =
+                    new TurtleParser.PatternSpec(
+                            "uri3", "C", "cat", "tpl", null, 1, null, List.of());
 
             var resolved = TurtleParser.resolveDependencies(List.of(p1, p2, p3));
 
@@ -389,8 +429,12 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("resolveDependencies detects circular dependency")
         void resolveDependenciesDetectsCircular() {
-            var p1 = new TurtleParser.PatternSpec("uri1", "A", "cat", "tpl", null, 1, null, List.of("B"));
-            var p2 = new TurtleParser.PatternSpec("uri2", "B", "cat", "tpl", null, 1, null, List.of("A"));
+            var p1 =
+                    new TurtleParser.PatternSpec(
+                            "uri1", "A", "cat", "tpl", null, 1, null, List.of("B"));
+            var p2 =
+                    new TurtleParser.PatternSpec(
+                            "uri2", "B", "cat", "tpl", null, 1, null, List.of("A"));
 
             assertThatIllegalStateException()
                     .isThrownBy(() -> TurtleParser.resolveDependencies(List.of(p1, p2)))
@@ -400,7 +444,9 @@ class TurtleParserTest implements WithAssertions {
         @Test
         @DisplayName("resolveDependencies ignores missing dependencies")
         void resolveDependenciesIgnoresMissing() {
-            var p1 = new TurtleParser.PatternSpec("uri1", "A", "cat", "tpl", null, 1, null, List.of("NonExistent"));
+            var p1 =
+                    new TurtleParser.PatternSpec(
+                            "uri1", "A", "cat", "tpl", null, 1, null, List.of("NonExistent"));
 
             var resolved = TurtleParser.resolveDependencies(List.of(p1));
 

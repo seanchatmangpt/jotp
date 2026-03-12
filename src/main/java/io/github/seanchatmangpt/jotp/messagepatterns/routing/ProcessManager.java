@@ -53,33 +53,40 @@ public final class ProcessManager<S, M> {
         this.isCompleted = isCompleted;
         this.onCompleted = onCompleted;
 
-        this.proc = new Proc<>(new HashMap<>(), (processes, msg) -> {
-            if (msg instanceof ProcessManager.StartProcess start) {
-                var updated = new HashMap<>(processes);
-                updated.put(
-                        start.processId(),
-                        new ManagedProcess<>(start.processId(), initialProcessState.get()));
-                return updated;
-            }
-            if (msg instanceof ProcessManager.ProcessMessage<?> processMsg) {
-                var managed = processes.get(processMsg.processId());
-                if (managed == null) return processes;
+        this.proc =
+                new Proc<>(
+                        new HashMap<>(),
+                        (processes, msg) -> {
+                            if (msg instanceof ProcessManager.StartProcess start) {
+                                var updated = new HashMap<>(processes);
+                                updated.put(
+                                        start.processId(),
+                                        new ManagedProcess<>(
+                                                start.processId(), initialProcessState.get()));
+                                return updated;
+                            }
+                            if (msg instanceof ProcessManager.ProcessMessage<?> processMsg) {
+                                var managed = processes.get(processMsg.processId());
+                                if (managed == null) return processes;
 
-                S newState = processHandler.apply(managed.state(), (M) processMsg.message());
-                var updated = new HashMap<>(processes);
-                if (isCompleted.test(newState)) {
-                    var completed = new ManagedProcess<>(processMsg.processId(), newState);
-                    updated.remove(processMsg.processId());
-                    onCompleted.accept(completed);
-                } else {
-                    updated.put(
-                            processMsg.processId(),
-                            new ManagedProcess<>(processMsg.processId(), newState));
-                }
-                return updated;
-            }
-            return processes;
-        });
+                                S newState =
+                                        processHandler.apply(
+                                                managed.state(), (M) processMsg.message());
+                                var updated = new HashMap<>(processes);
+                                if (isCompleted.test(newState)) {
+                                    var completed =
+                                            new ManagedProcess<>(processMsg.processId(), newState);
+                                    updated.remove(processMsg.processId());
+                                    onCompleted.accept(completed);
+                                } else {
+                                    updated.put(
+                                            processMsg.processId(),
+                                            new ManagedProcess<>(processMsg.processId(), newState));
+                                }
+                                return updated;
+                            }
+                            return processes;
+                        });
     }
 
     /** Start a new managed process. */
@@ -112,7 +119,7 @@ public final class ProcessManager<S, M> {
     }
 
     /** Stop the process manager. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

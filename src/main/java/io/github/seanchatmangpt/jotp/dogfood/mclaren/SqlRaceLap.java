@@ -3,9 +3,9 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 /**
  * Lap record — mirrors {@code MESL.SqlRace.Domain.Lap} / {@code ILap}.
  *
- * <p>In ATLAS, a lap is a named time segment within a session. The {@link #startTimeNs()} marks
- * the moment the lap counter was triggered (beacon, GPS crossing, or manual). Laps are appended
- * to a session during live acquisition and are immutable once committed.
+ * <p>In ATLAS, a lap is a named time segment within a session. The {@link #startTimeNs()} marks the
+ * moment the lap counter was triggered (beacon, GPS crossing, or manual). Laps are appended to a
+ * session during live acquisition and are immutable once committed.
  *
  * <p>Real SQL Race C# original:
  *
@@ -22,20 +22,15 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  *   <li>Final lap: the <em>in-lap</em> back to pit lane — {@code countForFastestLap = false}
  * </ul>
  *
- * @param startTimeNs       lap start in nanoseconds since session epoch (GPS-synchronised)
- * @param number            1-based lap counter; lap 0 is the pit-exit out-lap
- * @param triggerSource     source that fired the lap trigger (see constants below)
- * @param name              descriptive label (e.g. {@code "Outlap"}, {@code "Lap 12"},
- *                          {@code "In Lap"})
+ * @param startTimeNs lap start in nanoseconds since session epoch (GPS-synchronised)
+ * @param number 1-based lap counter; lap 0 is the pit-exit out-lap
+ * @param triggerSource source that fired the lap trigger (see constants below)
+ * @param name descriptive label (e.g. {@code "Outlap"}, {@code "Lap 12"}, {@code "In Lap"})
  * @param countForFastestLap whether this lap counts toward fastest-lap statistics; {@code false}
- *                          for out-laps and in-laps
+ *     for out-laps and in-laps
  */
 public record SqlRaceLap(
-        long startTimeNs,
-        int number,
-        byte triggerSource,
-        String name,
-        boolean countForFastestLap) {
+        long startTimeNs, int number, byte triggerSource, String name, boolean countForFastestLap) {
 
     /** Trigger source: unknown / software-generated. */
     public static final byte TRIGGER_UNKNOWN = 0;
@@ -74,7 +69,7 @@ public record SqlRaceLap(
      * Factory for a timed flying lap.
      *
      * @param startTimeNs when the car crossed the start/finish line
-     * @param number      lap number (≥ 1)
+     * @param number lap number (≥ 1)
      * @return flying lap record
      */
     public static SqlRaceLap flyingLap(long startTimeNs, int number) {
@@ -85,7 +80,7 @@ public record SqlRaceLap(
      * Factory for the pit-entry in-lap.
      *
      * @param startTimeNs when the final lap started (usually same as last flying lap's trigger)
-     * @param number      in-lap number
+     * @param number in-lap number
      * @return in-lap record
      */
     public static SqlRaceLap inLap(long startTimeNs, int number) {

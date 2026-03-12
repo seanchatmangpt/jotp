@@ -15,7 +15,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Tests for {@link ContentBasedRouter} — Vernon's Content-Based Router pattern implemented with JOTP.
+ * Tests for {@link ContentBasedRouter} — Vernon's Content-Based Router pattern implemented with
+ * JOTP.
  *
  * <p>Covers routing correctness, edge cases, and performance characteristics.
  */
@@ -36,14 +37,18 @@ class ContentBasedRouterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(2);
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
-            router.addRoute(msg -> msg.priority() >= 8, msg -> {
-                urgentCount.incrementAndGet();
-                latch.countDown();
-            });
-            router.addRoute(msg -> msg.priority() < 8, msg -> {
-                normalCount.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.priority() >= 8,
+                    msg -> {
+                        urgentCount.incrementAndGet();
+                        latch.countDown();
+                    });
+            router.addRoute(
+                    msg -> msg.priority() < 8,
+                    msg -> {
+                        normalCount.incrementAndGet();
+                        latch.countDown();
+                    });
 
             router.route(new Message("alert", 9, "urgent"));
             router.route(new Message("info", 3, "normal"));
@@ -64,14 +69,18 @@ class ContentBasedRouterTest implements WithAssertions {
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
             // Both predicates match, but first should be used
-            router.addRoute(msg -> msg.priority() >= 5, msg -> {
-                firstRoute.incrementAndGet();
-                latch.countDown();
-            });
-            router.addRoute(msg -> msg.priority() >= 3, msg -> {
-                secondRoute.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.priority() >= 5,
+                    msg -> {
+                        firstRoute.incrementAndGet();
+                        latch.countDown();
+                    });
+            router.addRoute(
+                    msg -> msg.priority() >= 3,
+                    msg -> {
+                        secondRoute.incrementAndGet();
+                        latch.countDown();
+                    });
 
             router.route(new Message("order", 7, "content"));
 
@@ -112,14 +121,17 @@ class ContentBasedRouterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(2);
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
-            router.addRoute(msg -> msg.type().equals("ORDER"), msg -> {
-                mainRoute.incrementAndGet();
-                latch.countDown();
-            });
-            router.setDefault(msg -> {
-                defaultRoute.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.type().equals("ORDER"),
+                    msg -> {
+                        mainRoute.incrementAndGet();
+                        latch.countDown();
+                    });
+            router.setDefault(
+                    msg -> {
+                        defaultRoute.incrementAndGet();
+                        latch.countDown();
+                    });
 
             router.route(new Message("ORDER", 5, "matching"));
             router.route(new Message("UNKNOWN", 5, "unmatched"));
@@ -137,10 +149,12 @@ class ContentBasedRouterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(1);
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
-            router.addRoute(msg -> msg.type().equals("ORDER"), msg -> {
-                delivered.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.type().equals("ORDER"),
+                    msg -> {
+                        delivered.incrementAndGet();
+                        latch.countDown();
+                    });
             router.setDefault(null); // Explicitly null default
 
             router.route(new Message("ORDER", 5, "match"));
@@ -217,19 +231,23 @@ class ContentBasedRouterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(messageCount);
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
-            router.addRoute(msg -> msg.priority() >= 5, msg -> {
-                routedCount.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.priority() >= 5,
+                    msg -> {
+                        routedCount.incrementAndGet();
+                        latch.countDown();
+                    });
 
             // Send messages from multiple virtual threads
             for (int i = 0; i < messageCount; i++) {
                 final int priority = i % 10;
-                Thread.ofVirtual().start(() -> {
-                    if (priority >= 5) {
-                        router.route(new Message("msg", priority, "content"));
-                    }
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    if (priority >= 5) {
+                                        router.route(new Message("msg", priority, "content"));
+                                    }
+                                });
             }
 
             latch.await();
@@ -246,18 +264,22 @@ class ContentBasedRouterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(2);
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
-            router.addRoute(msg -> msg.type().equals("TYPE1"), msg -> {
-                route1.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.type().equals("TYPE1"),
+                    msg -> {
+                        route1.incrementAndGet();
+                        latch.countDown();
+                    });
 
             router.route(new Message("TYPE1", 5, "first"));
 
             // Add second route while first is being used
-            router.addRoute(msg -> msg.type().equals("TYPE2"), msg -> {
-                route2.incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.type().equals("TYPE2"),
+                    msg -> {
+                        route2.incrementAndGet();
+                        latch.countDown();
+                    });
 
             router.route(new Message("TYPE2", 5, "second"));
 
@@ -284,18 +306,24 @@ class ContentBasedRouterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(messageCount);
 
             ContentBasedRouter<Message> router = new ContentBasedRouter<>();
-            router.addRoute(msg -> msg.priority() <= 3, msg -> {
-                destinations.get("A").incrementAndGet();
-                latch.countDown();
-            });
-            router.addRoute(msg -> msg.priority() > 3 && msg.priority() <= 6, msg -> {
-                destinations.get("B").incrementAndGet();
-                latch.countDown();
-            });
-            router.addRoute(msg -> msg.priority() > 6, msg -> {
-                destinations.get("C").incrementAndGet();
-                latch.countDown();
-            });
+            router.addRoute(
+                    msg -> msg.priority() <= 3,
+                    msg -> {
+                        destinations.get("A").incrementAndGet();
+                        latch.countDown();
+                    });
+            router.addRoute(
+                    msg -> msg.priority() > 3 && msg.priority() <= 6,
+                    msg -> {
+                        destinations.get("B").incrementAndGet();
+                        latch.countDown();
+                    });
+            router.addRoute(
+                    msg -> msg.priority() > 6,
+                    msg -> {
+                        destinations.get("C").incrementAndGet();
+                        latch.countDown();
+                    });
 
             long start = System.currentTimeMillis();
 

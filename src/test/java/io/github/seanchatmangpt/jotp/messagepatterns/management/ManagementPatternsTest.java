@@ -12,9 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * Tests for Management patterns ported from Vaughn Vernon's Reactive Messaging Patterns.
- */
+/** Tests for Management patterns ported from Vaughn Vernon's Reactive Messaging Patterns. */
 @DisplayName("Management Patterns")
 class ManagementPatternsTest implements WithAssertions {
 
@@ -28,15 +26,17 @@ class ManagementPatternsTest implements WithAssertions {
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<String>();
 
-            var pipeline = PipesAndFilters.<String>builder()
-                    .filter("decrypt", s -> s.replace("(encrypted)", ""))
-                    .filter("authenticate", s -> s.replace("(cert)", ""))
-                    .filter("trim", String::trim)
-                    .endpoint(s -> {
-                        result.set(s);
-                        latch.countDown();
-                    })
-                    .build();
+            var pipeline =
+                    PipesAndFilters.<String>builder()
+                            .filter("decrypt", s -> s.replace("(encrypted)", ""))
+                            .filter("authenticate", s -> s.replace("(cert)", ""))
+                            .filter("trim", String::trim)
+                            .endpoint(
+                                    s -> {
+                                        result.set(s);
+                                        latch.countDown();
+                                    })
+                            .build();
 
             pipeline.process("(encrypted) Hello World (cert) ");
             assertThat(latch.await(2, TimeUnit.SECONDS)).isTrue();
@@ -56,12 +56,13 @@ class ManagementPatternsTest implements WithAssertions {
             var tapped = new CopyOnWriteArrayList<String>();
             var primary = new AtomicReference<String>();
 
-            var wireTap = new WireTap<String>(
-                    msg -> {
-                        primary.set(msg);
-                        latch.countDown();
-                    },
-                    tapped::add);
+            var wireTap =
+                    new WireTap<String>(
+                            msg -> {
+                                primary.set(msg);
+                                latch.countDown();
+                            },
+                            tapped::add);
 
             wireTap.send("message-1");
             assertThat(latch.await(2, TimeUnit.SECONDS)).isTrue();
@@ -76,8 +77,7 @@ class ManagementPatternsTest implements WithAssertions {
             var latch = new CountDownLatch(1);
             var tapped = new CopyOnWriteArrayList<String>();
 
-            var wireTap = new WireTap<String>(
-                    msg -> latch.countDown(), tapped::add);
+            var wireTap = new WireTap<String>(msg -> latch.countDown(), tapped::add);
 
             wireTap.deactivate();
             wireTap.send("message-1");
@@ -99,8 +99,8 @@ class ManagementPatternsTest implements WithAssertions {
         @DisplayName("tracks and routes replies to requesters")
         void tracksReplies() {
             var serviceReceived = new CopyOnWriteArrayList<Request>();
-            var proxy = new SmartProxy<Request, Reply>(
-                    Request::id, Reply::id, serviceReceived::add);
+            var proxy =
+                    new SmartProxy<Request, Reply>(Request::id, Reply::id, serviceReceived::add);
 
             var replyResult = new AtomicReference<Reply>();
             var corrId = CorrelationIdentifier.create();
@@ -137,16 +137,23 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("commit persists state changes")
         void commit() throws InterruptedException {
-            var actor = new TransactionalActor<OrderState, OrderEvent>(
-                    OrderState.empty(),
-                    (state, event) -> switch (event) {
-                        case OrderStarted e -> new OrderState(e.customerId(), state.total(), false);
-                        case ItemAdded e ->
-                                new OrderState(
-                                        state.customerId(), state.total() + e.price(), false);
-                        case OrderPlaced e ->
-                                new OrderState(state.customerId(), state.total(), true);
-                    });
+            var actor =
+                    new TransactionalActor<OrderState, OrderEvent>(
+                            OrderState.empty(),
+                            (state, event) ->
+                                    switch (event) {
+                                        case OrderStarted e ->
+                                                new OrderState(
+                                                        e.customerId(), state.total(), false);
+                                        case ItemAdded e ->
+                                                new OrderState(
+                                                        state.customerId(),
+                                                        state.total() + e.price(),
+                                                        false);
+                                        case OrderPlaced e ->
+                                                new OrderState(
+                                                        state.customerId(), state.total(), true);
+                                    });
 
             actor.apply(new OrderStarted("C001"));
             actor.apply(new ItemAdded(29.99));
@@ -162,16 +169,23 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("rollback reverts to last committed state")
         void rollback() throws InterruptedException {
-            var actor = new TransactionalActor<OrderState, OrderEvent>(
-                    OrderState.empty(),
-                    (state, event) -> switch (event) {
-                        case OrderStarted e -> new OrderState(e.customerId(), state.total(), false);
-                        case ItemAdded e ->
-                                new OrderState(
-                                        state.customerId(), state.total() + e.price(), false);
-                        case OrderPlaced e ->
-                                new OrderState(state.customerId(), state.total(), true);
-                    });
+            var actor =
+                    new TransactionalActor<OrderState, OrderEvent>(
+                            OrderState.empty(),
+                            (state, event) ->
+                                    switch (event) {
+                                        case OrderStarted e ->
+                                                new OrderState(
+                                                        e.customerId(), state.total(), false);
+                                        case ItemAdded e ->
+                                                new OrderState(
+                                                        state.customerId(),
+                                                        state.total() + e.price(),
+                                                        false);
+                                        case OrderPlaced e ->
+                                                new OrderState(
+                                                        state.customerId(), state.total(), true);
+                                    });
 
             actor.apply(new OrderStarted("C001"));
             Thread.sleep(100);

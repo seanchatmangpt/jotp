@@ -34,17 +34,20 @@ public final class WireTap<T> {
     public WireTap(Consumer<T> primary, Consumer<T> tap) {
         this.primary = primary;
         this.tap = tap;
-        this.proc = new Proc<>(null, (state, msg) -> {
-            if (tapActive) {
-                try {
-                    tap.accept(msg);
-                } catch (Exception e) {
-                    // tap failures must not affect primary flow
-                }
-            }
-            primary.accept(msg);
-            return state;
-        });
+        this.proc =
+                new Proc<>(
+                        null,
+                        (state, msg) -> {
+                            if (tapActive) {
+                                try {
+                                    tap.accept(msg);
+                                } catch (Exception e) {
+                                    // tap failures must not affect primary flow
+                                }
+                            }
+                            primary.accept(msg);
+                            return state;
+                        });
     }
 
     /** Send a message through the wire tap. */
@@ -68,7 +71,7 @@ public final class WireTap<T> {
     }
 
     /** Stop the wire tap. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

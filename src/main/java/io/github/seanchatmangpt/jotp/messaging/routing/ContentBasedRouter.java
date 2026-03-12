@@ -6,16 +6,16 @@ import java.util.List;
 import java.util.function.Predicate;
 
 /**
- * Content-Based Router — routes messages to different destinations based on message
- * content/fields.
+ * Content-Based Router — routes messages to different destinations based on message content/fields.
  *
- * <p>Vernon: "A Content-Based Router examines the content of the message and routes to
- * different destinations based on data contained in the message."
+ * <p>Vernon: "A Content-Based Router examines the content of the message and routes to different
+ * destinations based on data contained in the message."
  *
- * <p>Joe Armstrong influence: "Processes share nothing, communicate only by message passing."
- * The content-based routing decision is pure functional logic applied before message forwarding.
+ * <p>Joe Armstrong influence: "Processes share nothing, communicate only by message passing." The
+ * content-based routing decision is pure functional logic applied before message forwarding.
  *
  * <p><strong>Routing Pattern:</strong>
+ *
  * <ol>
  *   <li>Caller sends message to router
  *   <li>Router applies predicates in order to the message
@@ -25,6 +25,7 @@ import java.util.function.Predicate;
  * </ol>
  *
  * <p><strong>Usage:</strong>
+ *
  * <pre>{@code
  * var router = new ContentBasedRouter<String>();
  * router.addRoute(msg -> msg.startsWith("URGENT:"), urgentHandler);
@@ -47,9 +48,7 @@ public final class ContentBasedRouter<M> {
     }
 
     /** Router state: routes and optional default destination. */
-    private record RouterState<M>(
-            List<Route<M>> routes,
-            Destination<M> defaultDestination) {}
+    private record RouterState<M>(List<Route<M>> routes, Destination<M> defaultDestination) {}
 
     private final Proc<RouterState<M>, RoutingCommand<M>> routerProc;
 
@@ -73,10 +72,12 @@ public final class ContentBasedRouter<M> {
                         initialState,
                         (state, cmd) -> {
                             return switch (cmd) {
-                                case RoutingCommand.RouteMsg<M> rm -> routeMessage(state, rm.message());
+                                case RoutingCommand.RouteMsg<M> rm ->
+                                        routeMessage(state, rm.message());
                                 case RoutingCommand.AddRoute<M> ar ->
                                         addRoute(state, ar.predicate(), ar.destination());
-                                case RoutingCommand.SetDefault<M> sd -> setDefault(state, sd.destination());
+                                case RoutingCommand.SetDefault<M> sd ->
+                                        setDefault(state, sd.destination());
                             };
                         });
     }
@@ -84,8 +85,8 @@ public final class ContentBasedRouter<M> {
     /**
      * Add a content-based routing rule.
      *
-     * <p>Rules are evaluated in the order they were added. The first matching predicate
-     * determines the destination.
+     * <p>Rules are evaluated in the order they were added. The first matching predicate determines
+     * the destination.
      *
      * @param predicate condition to match against the message
      * @param destination process or handler to receive matching messages
@@ -118,16 +119,12 @@ public final class ContentBasedRouter<M> {
         routerProc.tell(new RoutingCommand.RouteMsg<>(message));
     }
 
-    /**
-     * Get the router's process reference (for monitoring or linking).
-     */
+    /** Get the router's process reference (for monitoring or linking). */
     public Proc<RouterState<M>, RoutingCommand<M>> process() {
         return routerProc;
     }
 
-    /**
-     * Process a route command: find the first matching predicate and forward to destination.
-     */
+    /** Process a route command: find the first matching predicate and forward to destination. */
     private RouterState<M> routeMessage(RouterState<M> state, M message) {
         // First matching predicate wins
         for (Route<M> route : state.routes()) {
@@ -146,9 +143,7 @@ public final class ContentBasedRouter<M> {
         return state;
     }
 
-    /**
-     * Process add route command: append a new route.
-     */
+    /** Process add route command: append a new route. */
     private RouterState<M> addRoute(
             RouterState<M> state, Predicate<M> predicate, Destination<M> destination) {
         var routes = new ArrayList<>(state.routes());
@@ -156,9 +151,7 @@ public final class ContentBasedRouter<M> {
         return new RouterState<>(routes, state.defaultDestination());
     }
 
-    /**
-     * Process set default command: update default destination.
-     */
+    /** Process set default command: update default destination. */
     private RouterState<M> setDefault(RouterState<M> state, Destination<M> destination) {
         return new RouterState<>(state.routes(), destination);
     }

@@ -8,35 +8,34 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * Publish-Subscribe Channel (Vernon: "Publish-Subscribe Channel")
  *
- * <p>A messaging channel that broadcasts each message to all subscribers.
- * Perfect for 1:N event distribution where decoupling is critical.
+ * <p>A messaging channel that broadcasts each message to all subscribers. Perfect for 1:N event
+ * distribution where decoupling is critical.
  *
- * <p>JOTP Implementation: Uses {@code EventManager<Message>} to manage typed
- * event subscribers. Each subscriber receives a copy of the published message.
+ * <p>JOTP Implementation: Uses {@code EventManager<Message>} to manage typed event subscribers.
+ * Each subscriber receives a copy of the published message.
  *
  * <p>Example:
+ *
  * <pre>
  * // Create a pub-sub channel
  * var channel = PublishSubscribeChannel.create();
  *
  * // Subscribe (multiple subscribers welcome)
- * channel.subscribe(msg -> System.out.println("Subscriber 1: " + msg));
- * channel.subscribe(msg -> System.out.println("Subscriber 2: " + msg));
+ * channel.subscribe(event -> System.out.println("Subscriber 1: " + event));
+ * channel.subscribe(event -> System.out.println("Subscriber 2: " + event));
  *
  * // Publish (all subscribers notified)
  * channel.publish(Message.event("OrderCreated", order));
  * </pre>
  */
-public sealed class PublishSubscribeChannel<E extends Message> implements PubSubChannelOps<E> {
+public final class PublishSubscribeChannel<E extends Message> {
 
     private final EventManager<E> eventManager;
-    private final List<EventHandler<E>> handlers;
+    private final List<EventManager.Handler<E>> handlers;
 
-    /**
-     * Creates a new Publish-Subscribe channel.
-     */
+    /** Creates a new Publish-Subscribe channel. */
     private PublishSubscribeChannel() {
-        this.eventManager = EventManager.create();
+        this.eventManager = EventManager.start();
         this.handlers = new CopyOnWriteArrayList<>();
     }
 
@@ -51,12 +50,11 @@ public sealed class PublishSubscribeChannel<E extends Message> implements PubSub
     }
 
     /**
-     * Publishes a message to all active subscribers (1:N broadcast).
-     * Non-blocking; subscribers are notified asynchronously.
+     * Publishes a message to all active subscribers (1:N broadcast). Non-blocking; subscribers are
+     * notified asynchronously.
      *
      * @param message The message to publish
      */
-    @Override
     public void publish(E message) {
         eventManager.notify(message);
     }
@@ -67,20 +65,22 @@ public sealed class PublishSubscribeChannel<E extends Message> implements PubSub
      * @param message The message to publish
      * @return Number of subscribers notified
      */
-    @Override
     public int publishSync(E message) {
-        return eventManager.syncNotify(message);
+        try {
+            eventManager.syncNotify(message);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return handlers.size();
     }
 
     /**
-     * Subscribes a handler to this channel.
-     * Handler will be called for every published message.
+     * Subscribes a handler to this channel. Handler will be called for every published message.
      *
-     * @param handler Function to invoke on each message
+     * @param handler Handler to invoke on each message
      * @return Handler reference (use for unsubscribe)
      */
-    @Override
-    public EventHandler<E> subscribe(EventHandler<E> handler) {
+    public EventManager.Handler<E> subscribe(EventManager.Handler<E> handler) {
         eventManager.addHandler(handler);
         handlers.add(handler);
         return handler;
@@ -91,8 +91,7 @@ public sealed class PublishSubscribeChannel<E extends Message> implements PubSub
      *
      * @param handler Handler reference returned from subscribe()
      */
-    @Override
-    public void unsubscribe(EventHandler<E> handler) {
+    public void unsubscribe(EventManager.Handler<E> handler) {
         eventManager.deleteHandler(handler);
         handlers.remove(handler);
     }
@@ -102,29 +101,28 @@ public sealed class PublishSubscribeChannel<E extends Message> implements PubSub
      *
      * @return Subscriber count
      */
-    @Override
     public int subscriberCount() {
         return handlers.size();
     }
 
-    /**
-     * Unsubscribes all handlers from this channel.
-     */
-    @Override
+    /** Unsubscribes all handlers from this channel. */
     public void unsubscribeAll() {
         handlers.forEach(eventManager::deleteHandler);
         handlers.clear();
     }
 
-    /**
-     * Operations contract for Publish-Subscribe channels.
-     */
+    /** Operations contract for Publish-Subscribe channels. */
     public interface PubSubChannelOps<E extends Message> {
         void publish(E message);
+
         int publishSync(E message);
-        EventHandler<E> subscribe(EventHandler<E> handler);
-        void unsubscribe(EventHandler<E> handler);
+
+        EventManager.Handler<E> subscribe(EventManager.Handler<E> handler);
+
+        void unsubscribe(EventManager.Handler<E> handler);
+
         int subscriberCount();
+
         void unsubscribeAll();
     }
 }

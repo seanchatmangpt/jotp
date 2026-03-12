@@ -1,13 +1,11 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-
 import io.github.seanchatmangpt.jotp.dogfood.innovation.TemplateCompositionEngine.CompositionResult;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.TemplateCompositionEngine.FeatureRecipe;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.TemplateCompositionEngine.TemplateRef;
-import io.github.seanchatmangpt.jotp.dogfood.innovation.TurtleParser;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -88,10 +86,7 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @DisplayName("should reject empty templates list")
         void shouldRejectEmptyTemplates() {
             assertThatIllegalArgumentException()
-                    .isThrownBy(
-                            () ->
-                                    new FeatureRecipe(
-                                            "Empty", "desc", List.of(), List.of()));
+                    .isThrownBy(() -> new FeatureRecipe("Empty", "desc", List.of(), List.of()));
         }
 
         @Test
@@ -126,21 +121,26 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("should succeed for recipe with valid templates")
         void shouldSucceedForValidTemplates() {
-            var recipe = new FeatureRecipe(
-                    "SimpleFeature",
-                    "A minimal feature",
-                    List.of(
-                            new TemplateRef(
-                                    "core",
-                                    "record",
-                                    Map.of("entity_name", "Order", "package", "org.acme.domain")),
-                            new TemplateRef(
-                                    "testing",
-                                    "junit5-test",
-                                    Map.of(
-                                            "entity_name", "Order",
-                                            "package", "org.acme.domain"))),
-                    List.of("core/record"));
+            var recipe =
+                    new FeatureRecipe(
+                            "SimpleFeature",
+                            "A minimal feature",
+                            List.of(
+                                    new TemplateRef(
+                                            "core",
+                                            "record",
+                                            Map.of(
+                                                    "entity_name",
+                                                    "Order",
+                                                    "package",
+                                                    "org.acme.domain")),
+                                    new TemplateRef(
+                                            "testing",
+                                            "junit5-test",
+                                            Map.of(
+                                                    "entity_name", "Order",
+                                                    "package", "org.acme.domain"))),
+                            List.of("core/record"));
 
             var result = engine.compose(recipe);
 
@@ -148,19 +148,18 @@ class TemplateCompositionEngineTest implements WithAssertions {
             var success = (CompositionResult.Success) result;
             assertThat(success.featureName()).isEqualTo("SimpleFeature");
             assertThat(success.generatedFiles()).hasSize(2);
-            assertThat(success.generatedFiles().getFirst())
-                    .contains("Order")
-                    .endsWith(".java");
+            assertThat(success.generatedFiles().getFirst()).contains("Order").endsWith(".java");
         }
 
         @Test
         @DisplayName("should fail when template does not exist on disk")
         void shouldFailForMissingTemplate() {
-            var recipe = new FeatureRecipe(
-                    "BrokenFeature",
-                    "references a non-existent template",
-                    List.of(TemplateRef.of("core", "does-not-exist")),
-                    List.of());
+            var recipe =
+                    new FeatureRecipe(
+                            "BrokenFeature",
+                            "references a non-existent template",
+                            List.of(TemplateRef.of("core", "does-not-exist")),
+                            List.of());
 
             var result = engine.compose(recipe);
 
@@ -177,30 +176,31 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("should fail when dependency references unknown template")
         void shouldFailForBadDependency() {
-            var recipe = new FeatureRecipe(
-                    "BadDep",
-                    "dependency on non-listed template",
-                    List.of(TemplateRef.of("core", "record")),
-                    List.of("patterns/service-layer"));
+            var recipe =
+                    new FeatureRecipe(
+                            "BadDep",
+                            "dependency on non-listed template",
+                            List.of(TemplateRef.of("core", "record")),
+                            List.of("patterns/service-layer"));
 
             var result = engine.compose(recipe);
 
             assertThat(result).isInstanceOf(CompositionResult.Failure.class);
             var failure = (CompositionResult.Failure) result;
-            assertThat(failure.errors())
-                    .anyMatch(e -> e.contains("patterns/service-layer"));
+            assertThat(failure.errors()).anyMatch(e -> e.contains("patterns/service-layer"));
         }
 
         @Test
         @DisplayName("should collect multiple errors")
         void shouldCollectMultipleErrors() {
-            var recipe = new FeatureRecipe(
-                    "MultiError",
-                    "multiple bad templates",
-                    List.of(
-                            TemplateRef.of("core", "nonexistent-a"),
-                            TemplateRef.of("testing", "nonexistent-b")),
-                    List.of());
+            var recipe =
+                    new FeatureRecipe(
+                            "MultiError",
+                            "multiple bad templates",
+                            List.of(
+                                    TemplateRef.of("core", "nonexistent-a"),
+                                    TemplateRef.of("testing", "nonexistent-b")),
+                            List.of());
 
             var result = engine.compose(recipe);
 
@@ -212,19 +212,24 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("should resolve shared variables across templates")
         void shouldResolveSharedVariables() {
-            var recipe = new FeatureRecipe(
-                    "VarResolution",
-                    "test variable propagation",
-                    List.of(
-                            new TemplateRef(
-                                    "core",
-                                    "record",
-                                    Map.of("entity_name", "Product", "package", "org.acme.shop")),
-                            new TemplateRef(
-                                    "patterns",
-                                    "repository-generic",
-                                    Map.of("repo_type", "JPA"))),
-                    List.of());
+            var recipe =
+                    new FeatureRecipe(
+                            "VarResolution",
+                            "test variable propagation",
+                            List.of(
+                                    new TemplateRef(
+                                            "core",
+                                            "record",
+                                            Map.of(
+                                                    "entity_name",
+                                                    "Product",
+                                                    "package",
+                                                    "org.acme.shop")),
+                                    new TemplateRef(
+                                            "patterns",
+                                            "repository-generic",
+                                            Map.of("repo_type", "JPA"))),
+                            List.of());
 
             var result = engine.compose(recipe);
 
@@ -242,27 +247,32 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("should generate distinct file paths for each template")
         void shouldGenerateDistinctPaths() {
-            var recipe = new FeatureRecipe(
-                    "DistinctPaths",
-                    "no file collisions",
-                    List.of(
-                            new TemplateRef(
-                                    "core",
-                                    "record",
-                                    Map.of("entity_name", "Invoice", "package", "org.acme.billing")),
-                            new TemplateRef(
-                                    "patterns",
-                                    "repository-generic",
-                                    Map.of(
-                                            "entity_name", "Invoice",
-                                            "package", "org.acme.billing")),
-                            new TemplateRef(
-                                    "testing",
-                                    "junit5-test",
-                                    Map.of(
-                                            "entity_name", "Invoice",
-                                            "package", "org.acme.billing"))),
-                    List.of());
+            var recipe =
+                    new FeatureRecipe(
+                            "DistinctPaths",
+                            "no file collisions",
+                            List.of(
+                                    new TemplateRef(
+                                            "core",
+                                            "record",
+                                            Map.of(
+                                                    "entity_name",
+                                                    "Invoice",
+                                                    "package",
+                                                    "org.acme.billing")),
+                                    new TemplateRef(
+                                            "patterns",
+                                            "repository-generic",
+                                            Map.of(
+                                                    "entity_name", "Invoice",
+                                                    "package", "org.acme.billing")),
+                                    new TemplateRef(
+                                            "testing",
+                                            "junit5-test",
+                                            Map.of(
+                                                    "entity_name", "Invoice",
+                                                    "package", "org.acme.billing"))),
+                            List.of());
 
             var result = engine.compose(recipe);
 
@@ -360,14 +370,15 @@ class TemplateCompositionEngineTest implements WithAssertions {
             var recipe = TemplateCompositionEngine.crudFeature("Widget");
             var result = engine.compose(recipe);
 
-            var message = switch (result) {
-                case CompositionResult.Success s ->
-                        "Generated %d files for %s".formatted(
-                                s.generatedFiles().size(), s.featureName());
-                case CompositionResult.Failure f ->
-                        "Failed %s with %d errors".formatted(
-                                f.featureName(), f.errors().size());
-            };
+            var message =
+                    switch (result) {
+                        case CompositionResult.Success s ->
+                                "Generated %d files for %s"
+                                        .formatted(s.generatedFiles().size(), s.featureName());
+                        case CompositionResult.Failure f ->
+                                "Failed %s with %d errors"
+                                        .formatted(f.featureName(), f.errors().size());
+                    };
 
             assertThat(message).startsWith("Generated 7 files for WidgetCrud");
         }
@@ -474,10 +485,11 @@ class TemplateCompositionEngineTest implements WithAssertions {
 
             assertThat(patterns).isNotEmpty();
             assertThat(patterns)
-                    .allSatisfy(p -> {
-                        assertThat(p.uri()).isNotBlank();
-                        assertThat(p.name()).isNotBlank();
-                    });
+                    .allSatisfy(
+                            p -> {
+                                assertThat(p.uri()).isNotBlank();
+                                assertThat(p.name()).isNotBlank();
+                            });
         }
 
         @Test
@@ -500,8 +512,7 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("extractPatterns should reject null path")
         void extractPatternsShouldRejectNull() {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> TurtleParser.extractPatterns(null));
+            assertThatNullPointerException().isThrownBy(() -> TurtleParser.extractPatterns(null));
         }
 
         @Test
@@ -523,8 +534,7 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("extractProject should reject null path")
         void extractProjectShouldRejectNull() {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> TurtleParser.extractProject(null));
+            assertThatNullPointerException().isThrownBy(() -> TurtleParser.extractProject(null));
         }
     }
 
@@ -537,16 +547,14 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("extractPatternsSafe should throw for non-existent file")
         void extractPatternsSafeShouldThrowForMissingFile() {
-            assertThatThrownBy(() ->
-                    TurtleParser.extractPatternsSafe(Path.of("nonexistent.ttl")))
+            assertThatThrownBy(() -> TurtleParser.extractPatternsSafe(Path.of("nonexistent.ttl")))
                     .isInstanceOf(TurtleParser.TurtleFileNotFoundException.class);
         }
 
         @Test
         @DisplayName("extractProjectSafe should throw for non-existent file")
         void extractProjectSafeShouldThrowForMissingFile() {
-            assertThatThrownBy(() ->
-                    TurtleParser.extractProjectSafe(Path.of("nonexistent.ttl")))
+            assertThatThrownBy(() -> TurtleParser.extractProjectSafe(Path.of("nonexistent.ttl")))
                     .isInstanceOf(TurtleParser.TurtleFileNotFoundException.class);
         }
 
@@ -587,7 +595,8 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @Test
         @DisplayName("validateTurtleContent should accept valid Turtle")
         void validateTurtleContentShouldAcceptValidTurtle() {
-            var validTurtle = """
+            var validTurtle =
+                    """
                     @prefix ex: <http://example.org/> .
                     ex:Subject ex:predicate ex:object .
                     """;
@@ -600,16 +609,20 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @DisplayName("PatternSpec should reject null uri")
         void patternSpecShouldRejectNullUri() {
             assertThatNullPointerException()
-                    .isThrownBy(() ->
-                            new TurtleParser.PatternSpec(null, "name", "cat", "tpl", null, 1, null, List.of()));
+                    .isThrownBy(
+                            () ->
+                                    new TurtleParser.PatternSpec(
+                                            null, "name", "cat", "tpl", null, 1, null, List.of()));
         }
 
         @Test
         @DisplayName("PatternSpec should reject null name")
         void patternSpecShouldRejectNullName() {
             assertThatNullPointerException()
-                    .isThrownBy(() ->
-                            new TurtleParser.PatternSpec("uri", null, "cat", "tpl", null, 1, null, List.of()));
+                    .isThrownBy(
+                            () ->
+                                    new TurtleParser.PatternSpec(
+                                            "uri", null, "cat", "tpl", null, 1, null, List.of()));
         }
 
         @Test
@@ -617,7 +630,9 @@ class TemplateCompositionEngineTest implements WithAssertions {
         void patternSpecShouldDefensivelyCopyDeps() {
             var mutableDeps = new java.util.ArrayList<String>();
             mutableDeps.add("dep1");
-            var spec = new TurtleParser.PatternSpec("uri", "name", "cat", "tpl", null, 1, null, mutableDeps);
+            var spec =
+                    new TurtleParser.PatternSpec(
+                            "uri", "name", "cat", "tpl", null, 1, null, mutableDeps);
             mutableDeps.add("dep2");
             assertThat(spec.dependencies()).hasSize(1);
         }
@@ -626,7 +641,9 @@ class TemplateCompositionEngineTest implements WithAssertions {
         @DisplayName("ModuleSpec should defensively copy patterns")
         void moduleSpecShouldDefensivelyCopyPatterns() {
             var mutablePatterns = new java.util.ArrayList<TurtleParser.PatternSpec>();
-            mutablePatterns.add(new TurtleParser.PatternSpec("uri", "name", null, "tpl", null, 1, null, List.of()));
+            mutablePatterns.add(
+                    new TurtleParser.PatternSpec(
+                            "uri", "name", null, "tpl", null, 1, null, List.of()));
             var module = new TurtleParser.ModuleSpec("uri", "name", "pkg", mutablePatterns);
             mutablePatterns.clear();
             assertThat(module.patterns()).hasSize(1);
@@ -637,7 +654,9 @@ class TemplateCompositionEngineTest implements WithAssertions {
         void projectSpecShouldDefensivelyCopyModules() {
             var mutableModules = new java.util.ArrayList<TurtleParser.ModuleSpec>();
             mutableModules.add(new TurtleParser.ModuleSpec("uri", "name", "pkg", List.of()));
-            var project = new TurtleParser.ProjectSpec("name", "group", "artifact", "1.0", 26, "desc", mutableModules);
+            var project =
+                    new TurtleParser.ProjectSpec(
+                            "name", "group", "artifact", "1.0", 26, "desc", mutableModules);
             mutableModules.clear();
             assertThat(project.modules()).hasSize(1);
         }

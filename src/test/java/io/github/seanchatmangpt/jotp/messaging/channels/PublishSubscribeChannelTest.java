@@ -1,18 +1,17 @@
 package io.github.seanchatmangpt.jotp.messaging.channels;
 
-import io.github.seanchatmangpt.jotp.messaging.Message;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.DisplayName;
-
-import java.util.*;
-import java.util.concurrent.*;
-
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.messaging.Message;
+import java.util.*;
+import java.util.concurrent.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
 /**
- * Test suite for PublishSubscribeChannel pattern.
- * Verifies 1:N broadcast delivery, subscriber isolation, and event ordering.
+ * Test suite for PublishSubscribeChannel pattern. Verifies 1:N broadcast delivery, subscriber
+ * isolation, and event ordering.
  */
 @DisplayName("Publish-Subscribe Channel Pattern")
 class PublishSubscribeChannelTest {
@@ -179,9 +178,10 @@ class PublishSubscribeChannelTest {
         // Given: one throwing subscriber, one normal
         List<Message> okEvents = Collections.synchronizedList(new ArrayList<>());
 
-        channel.subscribe(msg -> {
-            throw new RuntimeException("Simulated failure");
-        });
+        channel.subscribe(
+                msg -> {
+                    throw new RuntimeException("Simulated failure");
+                });
 
         channel.subscribe(okEvents::add);
 
@@ -195,17 +195,18 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should support different message types")
-    void testMessageTypeFiltering() throws InterruptException {
+    void testMessageTypeFiltering() throws InterruptedException {
         // Given: subscriber that filters by message type
         List<String> eventTypes = Collections.synchronizedList(new ArrayList<>());
 
-        channel.subscribe(msg -> {
-            if (msg instanceof Message.EventMsg evt) {
-                eventTypes.add("EVENT: " + evt.eventType());
-            } else if (msg instanceof Message.CommandMsg cmd) {
-                eventTypes.add("COMMAND: " + cmd.commandType());
-            }
-        });
+        channel.subscribe(
+                msg -> {
+                    if (msg instanceof Message.EventMsg evt) {
+                        eventTypes.add("EVENT: " + evt.eventType());
+                    } else if (msg instanceof Message.CommandMsg cmd) {
+                        eventTypes.add("COMMAND: " + cmd.commandType());
+                    }
+                });
 
         // When: publishing different message types
         channel.publish(Message.event("ORDER_PLACED", null));
@@ -216,11 +217,8 @@ class PublishSubscribeChannelTest {
 
         // Then: types were captured correctly
         assertThat(eventTypes)
-            .containsExactly(
-                "EVENT: ORDER_PLACED",
-                "COMMAND: PROCESS_ORDER",
-                "EVENT: SHIPMENT_SENT"
-            );
+                .containsExactly(
+                        "EVENT: ORDER_PLACED", "COMMAND: PROCESS_ORDER", "EVENT: SHIPMENT_SENT");
     }
 
     @Test
@@ -240,8 +238,7 @@ class PublishSubscribeChannelTest {
         Thread.sleep(100);
 
         // Then: both have the same message ID
-        assertThat(sub1.get(0).messageId())
-            .isEqualTo(sub2.get(0).messageId());
+        assertThat(sub1.get(0).messageId()).isEqualTo(sub2.get(0).messageId());
     }
 
     @Test
@@ -275,14 +272,16 @@ class PublishSubscribeChannelTest {
         List<Message> sub1 = Collections.synchronizedList(new ArrayList<>());
         List<Message> sub2 = Collections.synchronizedList(new ArrayList<>());
 
-        channel.subscribe(msg -> {
-            sub1.add(msg);
-            processedLatch.countDown();
-        });
-        channel.subscribe(msg -> {
-            sub2.add(msg);
-            processedLatch.countDown();
-        });
+        channel.subscribe(
+                msg -> {
+                    sub1.add(msg);
+                    processedLatch.countDown();
+                });
+        channel.subscribe(
+                msg -> {
+                    sub2.add(msg);
+                    processedLatch.countDown();
+                });
 
         // When: publishing synchronously
         var msg = Message.event("TEST", null);

@@ -190,8 +190,7 @@ public final class InputValidation {
                         "Validation failed: "
                                 + errors.stream()
                                         .map(ValidationError::toString)
-                                        .collect(
-                                                java.util.stream.Collectors.joining("; ")));
+                                        .collect(java.util.stream.Collectors.joining("; ")));
             }
             return supplier.get();
         }
@@ -208,8 +207,7 @@ public final class InputValidation {
 
         <U> ValidationResult<U> map(Function<T, U> mapper);
 
-        <U> U fold(
-                Function<T, U> onValid, Function<List<ValidationError>, U> onInvalid);
+        <U> U fold(Function<T, U> onValid, Function<List<ValidationError>, U> onInvalid);
 
         record Valid<T>(T value) implements ValidationResult<T> {
             @Override
@@ -224,8 +222,7 @@ public final class InputValidation {
 
             @Override
             public <U> U fold(
-                    Function<T, U> onValid,
-                    Function<List<ValidationError>, U> onInvalid) {
+                    Function<T, U> onValid, Function<List<ValidationError>, U> onInvalid) {
                 return onValid.apply(value);
             }
         }
@@ -248,16 +245,14 @@ public final class InputValidation {
 
             @Override
             public <U> U fold(
-                    Function<T, U> onValid,
-                    Function<List<ValidationError>, U> onInvalid) {
+                    Function<T, U> onValid, Function<List<ValidationError>, U> onInvalid) {
                 return onInvalid.apply(errors);
             }
         }
     }
 
     /** Validates a registration request with error accumulation. */
-    public static ValidationResult<User> validateRegistration(
-            String name, String email, int age) {
+    public static ValidationResult<User> validateRegistration(String name, String email, int age) {
         return Validator.<User>of()
                 .requireNonBlank("name", name)
                 .check(

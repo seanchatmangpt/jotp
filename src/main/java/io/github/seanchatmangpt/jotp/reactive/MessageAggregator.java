@@ -7,13 +7,13 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * Correlation-based message aggregator: collects related messages under a shared key, then emits
- * an aggregated result when the completion condition is met.
+ * Correlation-based message aggregator: collects related messages under a shared key, then emits an
+ * aggregated result when the completion condition is met.
  *
  * <p>Enterprise Integration Pattern: <em>Aggregator</em> (EIP §9.5). Erlang analog: a stateful
  * {@code gen_server} maintaining a {@code Map} of in-flight correlation groups, accumulating
- * partial results and replying with the combined value once complete — the canonical OTP
- * "gather phase" of a scatter-gather workflow.
+ * partial results and replying with the combined value once complete — the canonical OTP "gather
+ * phase" of a scatter-gather workflow.
  *
  * <p>Three functions define an aggregator:
  *
@@ -147,8 +147,8 @@ public final class MessageAggregator<T, R> implements MessageChannel<T> {
         }
 
         /**
-         * Set the aggregation function that combines a completed group into the result type
-         * {@code R}.
+         * Set the aggregation function that combines a completed group into the result type {@code
+         * R}.
          */
         public Builder<T, R> aggregateWith(Function<List<T>, R> aggregate) {
             this.aggregate = aggregate;
@@ -163,7 +163,8 @@ public final class MessageAggregator<T, R> implements MessageChannel<T> {
 
         /** Build the {@link MessageAggregator}. */
         public MessageAggregator<T, R> build() {
-            if (correlationKey == null) throw new IllegalStateException("correlateBy() is required");
+            if (correlationKey == null)
+                throw new IllegalStateException("correlateBy() is required");
             if (isComplete == null) throw new IllegalStateException("completeWhen() is required");
             if (aggregate == null) throw new IllegalStateException("aggregateWith() is required");
             if (downstream == null) throw new IllegalStateException("downstream() is required");

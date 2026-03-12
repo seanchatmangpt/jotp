@@ -16,7 +16,8 @@ class RefactorEngineTest implements WithAssertions {
 
     // ── Legacy Java snippets used as test fixtures ────────────────────────────
 
-    private static final String LEGACY_POJO = """
+    private static final String LEGACY_POJO =
+            """
             package com.example.legacy;
 
             import java.util.Date;
@@ -56,7 +57,8 @@ class RefactorEngineTest implements WithAssertions {
             }
             """;
 
-    private static final String MODERN_RECORD = """
+    private static final String MODERN_RECORD =
+            """
             package com.example.modern;
 
             import java.time.Instant;
@@ -64,7 +66,8 @@ class RefactorEngineTest implements WithAssertions {
             public record Invoice(String id, Instant issuedAt, double amount) {}
             """;
 
-    private static final String EMPTY_CLASS = """
+    private static final String EMPTY_CLASS =
+            """
             package com.example;
 
             public class Empty {}
@@ -119,13 +122,15 @@ class RefactorEngineTest implements WithAssertions {
 
         var plan = RefactorEngine.analyzeFile(file);
 
-        plan.commands().forEach(cmd -> {
-            assertThat(cmd.toShellCommand())
-                    .startsWith("bin/jgen generate -t ")
-                    .contains(" -n ")
-                    .contains(" -p com.example.legacy");
-            assertThat(cmd.template()).doesNotEndWith(".tera");
-        });
+        plan.commands()
+                .forEach(
+                        cmd -> {
+                            assertThat(cmd.toShellCommand())
+                                    .startsWith("bin/jgen generate -t ")
+                                    .contains(" -n ")
+                                    .contains(" -p com.example.legacy");
+                            assertThat(cmd.template()).doesNotEndWith(".tera");
+                        });
     }
 
     @Test
@@ -150,10 +155,12 @@ class RefactorEngineTest implements WithAssertions {
         Files.writeString(file, LEGACY_POJO);
 
         var plan = RefactorEngine.analyzeFile(file);
-        plan.commands().forEach(cmd -> {
-            assertThat(cmd.toComment()).startsWith("# [P");
-            assertThat(cmd.toComment()).contains(cmd.migrationLabel());
-        });
+        plan.commands()
+                .forEach(
+                        cmd -> {
+                            assertThat(cmd.toComment()).startsWith("# [P");
+                            assertThat(cmd.toComment()).contains(cmd.migrationLabel());
+                        });
     }
 
     // ── analyze (directory) ──────────────────────────────────────────────────
@@ -177,9 +184,8 @@ class RefactorEngineTest implements WithAssertions {
 
         var plan = RefactorEngine.analyze(tmp);
 
-        var scores = plan.files().stream()
-                .mapToInt(RefactorEngine.FileRefactorPlan::score)
-                .toArray();
+        var scores =
+                plan.files().stream().mapToInt(RefactorEngine.FileRefactorPlan::score).toArray();
         // Worst (lowest) score first
         for (int i = 0; i < scores.length - 1; i++) {
             assertThat(scores[i]).isLessThanOrEqualTo(scores[i + 1]);
@@ -302,14 +308,12 @@ class RefactorEngineTest implements WithAssertions {
 
         @Test
         void analyzeFile_nullPath_throws(@TempDir Path tmp) {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> RefactorEngine.analyzeFile(null));
+            assertThatNullPointerException().isThrownBy(() -> RefactorEngine.analyzeFile(null));
         }
 
         @Test
         void analyze_nullPath_throws(@TempDir Path tmp) {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> RefactorEngine.analyze(null));
+            assertThatNullPointerException().isThrownBy(() -> RefactorEngine.analyze(null));
         }
 
         @Test
@@ -343,8 +347,10 @@ class RefactorEngineTest implements WithAssertions {
         }
 
         @Test
-        void jgenCommand_toShellCommand_escapesSpecialCharacters(@TempDir Path tmp) throws IOException {
-            var source = """
+        void jgenCommand_toShellCommand_escapesSpecialCharacters(@TempDir Path tmp)
+                throws IOException {
+            var source =
+                    """
                     package io.github.seanchatmangpt.jotp;
                     public class Test {
                         private String field;
@@ -356,11 +362,13 @@ class RefactorEngineTest implements WithAssertions {
 
             var plan = RefactorEngine.analyzeFile(file);
 
-            plan.commands().forEach(cmd -> {
-                // Shell command should be safe to execute
-                assertThat(cmd.toShellCommand()).doesNotContain("\n");
-                assertThat(cmd.toShellCommand()).doesNotContain("`");
-            });
+            plan.commands()
+                    .forEach(
+                            cmd -> {
+                                // Shell command should be safe to execute
+                                assertThat(cmd.toShellCommand()).doesNotContain("\n");
+                                assertThat(cmd.toShellCommand()).doesNotContain("`");
+                            });
         }
     }
 }

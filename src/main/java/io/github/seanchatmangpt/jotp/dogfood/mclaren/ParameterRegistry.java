@@ -1,17 +1,16 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
-import java.util.Optional;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import java.util.Optional;
 
 /**
  * SQL Race parameter registry — OTP {@code ProcessRegistry} mapped to parameter identifier lookup.
  *
- * <p>In ATLAS, parameters are looked up by their SQL Race identifier
- * ({@code "name:ApplicationGroup"}) anywhere in the system — in live display plugins, in
- * post-processing pipelines, and by the Advanced Streams broker. The OTP equivalent is
- * {@code erlang:register/2} / {@code whereis/1} — a JVM-global name table that maps atom (name)
- * to process.
+ * <p>In ATLAS, parameters are looked up by their SQL Race identifier ({@code
+ * "name:ApplicationGroup"}) anywhere in the system — in live display plugins, in post-processing
+ * pipelines, and by the Advanced Streams broker. The OTP equivalent is {@code erlang:register/2} /
+ * {@code whereis/1} — a JVM-global name table that maps atom (name) to process.
  *
  * <p>This wrapper translates SQL Race identifiers to {@link ProcessRegistry} keys and
  * auto-deregisters when the backing {@link ParameterDataAccess} process terminates.
@@ -35,11 +34,11 @@ public final class ParameterRegistry {
     /**
      * Register a parameter data access process under its SQL Race identifier.
      *
-     * <p>The process is automatically unregistered when it terminates (normal or crash) —
-     * mirroring OTP's {@code ProcessRegistry} auto-deregister behaviour.
+     * <p>The process is automatically unregistered when it terminates (normal or crash) — mirroring
+     * OTP's {@code ProcessRegistry} auto-deregister behaviour.
      *
      * @param param the parameter whose {@link SqlRaceParameter#identifier()} is used as the key
-     * @param proc  the running {@link ParameterDataAccess} process
+     * @param proc the running {@link ParameterDataAccess} process
      * @throws IllegalStateException if the identifier is already registered
      */
     public static void register(
@@ -51,10 +50,9 @@ public final class ParameterRegistry {
      * Register using an explicit identifier (for alternative naming schemes).
      *
      * @param identifier SQL Race identifier (e.g. {@code "vCar:Chassis"})
-     * @param proc       the running process
+     * @param proc the running process
      */
-    public static void register(
-            String identifier, Proc<ParameterDataAccess.State, PdaMsg> proc) {
+    public static void register(String identifier, Proc<ParameterDataAccess.State, PdaMsg> proc) {
         ProcessRegistry.register(identifier, proc);
     }
 
@@ -70,10 +68,10 @@ public final class ParameterRegistry {
     }
 
     /**
-     * Look up by short name and application group — convenience for display plugins that
-     * receive the two parts separately.
+     * Look up by short name and application group — convenience for display plugins that receive
+     * the two parts separately.
      *
-     * @param name     parameter short name (e.g. {@code "vCar"})
+     * @param name parameter short name (e.g. {@code "vCar"})
      * @param appGroup application group (e.g. {@code "Chassis"})
      * @return the running process, or empty if not registered
      */
@@ -95,8 +93,8 @@ public final class ParameterRegistry {
     }
 
     /**
-     * Return the set of all currently registered parameter identifiers — mirrors
-     * {@code registered/0}.
+     * Return the set of all currently registered parameter identifiers — mirrors {@code
+     * registered/0}.
      *
      * @return snapshot of registered names
      */
@@ -104,9 +102,7 @@ public final class ParameterRegistry {
         return ProcessRegistry.registered();
     }
 
-    /**
-     * Clear all registrations (for test isolation — mirrors {@code ProcessRegistry.reset()}).
-     */
+    /** Clear all registrations (for test isolation — mirrors {@code ProcessRegistry.reset()}). */
     public static void reset() {
         ProcessRegistry.reset();
     }

@@ -8,8 +8,9 @@ import java.util.function.Predicate;
  * Content-based router: inspects each message and forwards it to the first matching channel.
  *
  * <p>Enterprise Integration Pattern: <em>Content-Based Router</em> (EIP §8.1). Erlang analog:
- * Erlang selective receive ({@code receive Msg when Guard -> ...}) and {@code gen_server:handle_call}
- * pattern matching — the router dispatches based on message content rather than origin.
+ * Erlang selective receive ({@code receive Msg when Guard -> ...}) and {@code
+ * gen_server:handle_call} pattern matching — the router dispatches based on message content rather
+ * than origin.
  *
  * <p>Routes are evaluated in declaration order; the first matching predicate wins. An optional
  * <em>otherwise</em> channel (typically a {@link DeadLetterChannel}) captures unmatched messages.

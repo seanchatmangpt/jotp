@@ -7,13 +7,14 @@ import java.util.function.Function;
 /**
  * Message Translator (Vernon: "Message Translator")
  *
- * <p>Transforms a message from one format/type to another.
- * Essential for integrating systems with different message schemas.
+ * <p>Transforms a message from one format/type to another. Essential for integrating systems with
+ * different message schemas.
  *
- * <p>JOTP Implementation: Uses pure Function<Message, Message> with Proc<S,M>
- * for stateless message transformation.
+ * <p>JOTP Implementation: Uses pure Function<Message, Message> with Proc<S,M> for stateless message
+ * transformation.
  *
  * <p>Example:
+ *
  * <pre>
  * var translator = MessageTranslator.create(msg -> {
  *     if (msg instanceof Message.EventMsg evt) {
@@ -27,20 +28,21 @@ import java.util.function.Function;
  */
 public final class MessageTranslator {
 
-    private MessageTranslator() {
-    }
+    private MessageTranslator() {}
 
     /**
      * Creates a message translator with a custom transformation function.
      *
      * @param transformer Function that converts Message -> Message
-     * @return ProcRef that translates messages
+     * @return Proc that translates messages
      */
-    public static ProcRef<Void, Message> create(Function<Message, Message> transformer) {
-        return Proc.spawn((Void) null, state -> msg -> {
-            transformer.apply(msg); // Transform and forward (implementation detail)
-            return state;
-        });
+    public static Proc<Void, Message> create(Function<Message, Message> transformer) {
+        return new Proc<>(
+                (Void) null,
+                (state, msg) -> {
+                    transformer.apply(msg); // Transform and forward (implementation detail)
+                    return state;
+                });
     }
 
     /**
@@ -73,9 +75,7 @@ public final class MessageTranslator {
 
     // Common translator factories
 
-    /**
-     * Creates a translator that converts EventMsg to CommandMsg.
-     */
+    /** Creates a translator that converts EventMsg to CommandMsg. */
     public static Function<Message, Message> eventToCommand(String commandPrefix) {
         return msg -> {
             if (msg instanceof Message.EventMsg evt) {
@@ -85,9 +85,7 @@ public final class MessageTranslator {
         };
     }
 
-    /**
-     * Creates a translator that enriches messages with additional context.
-     */
+    /** Creates a translator that enriches messages with additional context. */
     public static Function<Message, Message> enrichWithMetadata(String source) {
         return msg -> {
             // Add metadata - implementation depends on extending Message with metadata field
@@ -95,17 +93,16 @@ public final class MessageTranslator {
         };
     }
 
-    /**
-     * Creates a translator that extracts payload and wraps in new message type.
-     */
+    /** Creates a translator that extracts payload and wraps in new message type. */
     public static Function<Message, Message> extractAndWrap(String newType) {
         return msg -> {
-            Object payload = switch (msg) {
-                case Message.EventMsg evt -> evt.payload();
-                case Message.CommandMsg cmd -> cmd.payload();
-                case Message.QueryMsg q -> q.criteria();
-                case Message.DocumentMsg doc -> doc.documentBytes();
-            };
+            Object payload =
+                    switch (msg) {
+                        case Message.EventMsg evt -> evt.payload();
+                        case Message.CommandMsg cmd -> cmd.payload();
+                        case Message.QueryMsg q -> q.criteria();
+                        case Message.DocumentMsg doc -> doc.documentBytes();
+                    };
             return Message.event(newType, payload);
         };
     }

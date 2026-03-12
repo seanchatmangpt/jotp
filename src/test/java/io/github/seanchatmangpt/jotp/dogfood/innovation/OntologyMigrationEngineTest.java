@@ -1,7 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import java.util.Set;
-
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,17 +14,20 @@ class OntologyMigrationEngineTest implements WithAssertions {
     void allRulesReturnsBuiltInRules() {
         var rules = OntologyMigrationEngine.allRules();
         assertThat(rules).hasSize(15);
-        assertThat(rules).allSatisfy(r -> {
-            assertThat(r.id()).isNotBlank();
-            assertThat(r.label()).isNotBlank();
-            assertThat(r.priority()).isBetween(1, 10);
-        });
+        assertThat(rules)
+                .allSatisfy(
+                        r -> {
+                            assertThat(r.id()).isNotBlank();
+                            assertThat(r.label()).isNotBlank();
+                            assertThat(r.priority()).isBetween(1, 10);
+                        });
     }
 
     @Test
     @DisplayName("analyze detects new Thread() as virtual thread migration opportunity")
     void analyzeDetectsNewThread() {
-        var source = """
+        var source =
+                """
                 public class LegacyService {
                     public void process() {
                         new Thread(() -> System.out.println("work")).start();
@@ -35,14 +37,20 @@ class OntologyMigrationEngineTest implements WithAssertions {
 
         var result = OntologyMigrationEngine.analyze("LegacyService.java", source);
 
-        assertThat(result.plans()).anyMatch(
-                p -> p instanceof OntologyMigrationEngine.MigrationPlan.VirtualThreadMigration);
+        assertThat(result.plans())
+                .anyMatch(
+                        p ->
+                                p
+                                        instanceof
+                                        OntologyMigrationEngine.MigrationPlan
+                                                .VirtualThreadMigration);
     }
 
     @Test
     @DisplayName("analyze detects Executors.newFixedThreadPool as thread pool migration")
     void analyzeDetectsThreadPool() {
-        var source = """
+        var source =
+                """
                 import java.util.concurrent.Executors;
                 public class PoolService {
                     var pool = Executors.newFixedThreadPool(10);
@@ -51,14 +59,20 @@ class OntologyMigrationEngineTest implements WithAssertions {
 
         var result = OntologyMigrationEngine.analyze("PoolService.java", source);
 
-        assertThat(result.plans()).anyMatch(
-                p -> p instanceof OntologyMigrationEngine.MigrationPlan.VirtualThreadMigration);
+        assertThat(result.plans())
+                .anyMatch(
+                        p ->
+                                p
+                                        instanceof
+                                        OntologyMigrationEngine.MigrationPlan
+                                                .VirtualThreadMigration);
     }
 
     @Test
     @DisplayName("analyze detects legacy Date/Calendar usage")
     void analyzeDetectsLegacyDate() {
-        var source = """
+        var source =
+                """
                 import java.util.Date;
                 import java.util.Calendar;
                 public class DateService {
@@ -69,14 +83,16 @@ class OntologyMigrationEngineTest implements WithAssertions {
 
         var result = OntologyMigrationEngine.analyze("DateService.java", source);
 
-        assertThat(result.plans()).anyMatch(
-                p -> p instanceof OntologyMigrationEngine.MigrationPlan.JavaTimeMigration);
+        assertThat(result.plans())
+                .anyMatch(
+                        p -> p instanceof OntologyMigrationEngine.MigrationPlan.JavaTimeMigration);
     }
 
     @Test
     @DisplayName("analyze detects JUnit 4 imports as migration opportunity")
     void analyzeDetectsJUnit4() {
-        var source = """
+        var source =
+                """
                 import org.junit.Test;
                 import org.junit.Before;
                 public class OldTest {
@@ -87,15 +103,22 @@ class OntologyMigrationEngineTest implements WithAssertions {
 
         var result = OntologyMigrationEngine.analyze("OldTest.java", source);
 
-        assertThat(result.plans()).anyMatch(
-                p -> p instanceof OntologyMigrationEngine.MigrationPlan.GenericMigration gm
-                        && gm.rule().id().equals("JUnit4ToJUnit5"));
+        assertThat(result.plans())
+                .anyMatch(
+                        p ->
+                                p
+                                                instanceof
+                                                OntologyMigrationEngine.MigrationPlan
+                                                                .GenericMigration
+                                                        gm
+                                        && gm.rule().id().equals("JUnit4ToJUnit5"));
     }
 
     @Test
     @DisplayName("analyze returns empty plans for modern code")
     void analyzeReturnsEmptyForModernCode() {
-        var source = """
+        var source =
+                """
                 package io.github.seanchatmangpt.jotp;
                 public record ModernEntity(String name, int value) {}
                 """;
@@ -108,7 +131,8 @@ class OntologyMigrationEngineTest implements WithAssertions {
     @Test
     @DisplayName("analyze with category filter only returns matching categories")
     void analyzeWithCategoryFilter() {
-        var source = """
+        var source =
+                """
                 import java.util.Date;
                 public class Mixed {
                     Date d = new Date();
@@ -116,18 +140,22 @@ class OntologyMigrationEngineTest implements WithAssertions {
                 }
                 """;
 
-        var result = OntologyMigrationEngine.analyze(
-                "Mixed.java", source, Set.of(OntologyMigrationEngine.Category.CONCURRENCY));
+        var result =
+                OntologyMigrationEngine.analyze(
+                        "Mixed.java", source, Set.of(OntologyMigrationEngine.Category.CONCURRENCY));
 
-        assertThat(result.plans()).allSatisfy(
-                p -> assertThat(p.rule().category())
-                        .isEqualTo(OntologyMigrationEngine.Category.CONCURRENCY));
+        assertThat(result.plans())
+                .allSatisfy(
+                        p ->
+                                assertThat(p.rule().category())
+                                        .isEqualTo(OntologyMigrationEngine.Category.CONCURRENCY));
     }
 
     @Test
     @DisplayName("safeUpgrades excludes breaking changes")
     void safeUpgradesExcludesBreaking() {
-        var source = """
+        var source =
+                """
                 import java.util.Date;
                 public class Service {
                     Date d = new Date();
@@ -144,7 +172,8 @@ class OntologyMigrationEngineTest implements WithAssertions {
     @Test
     @DisplayName("byPriority sorts plans by rule priority ascending")
     void byPrioritySortsPlans() {
-        var source = """
+        var source =
+                """
                 import java.util.Date;
                 import java.io.File;
                 public class Multi {
@@ -168,7 +197,8 @@ class OntologyMigrationEngineTest implements WithAssertions {
     @Test
     @DisplayName("describePlan returns human-readable description for each plan type")
     void describePlanReturnsDescription() {
-        var source = """
+        var source =
+                """
                 public class Legacy {
                     new Thread(() -> {}).start();
                 }
@@ -185,7 +215,8 @@ class OntologyMigrationEngineTest implements WithAssertions {
     @Test
     @DisplayName("summary produces non-empty report when migrations found")
     void summaryProducesReport() {
-        var source = """
+        var source =
+                """
                 public class Legacy {
                     new Thread(() -> {}).start();
                 }
@@ -200,9 +231,16 @@ class OntologyMigrationEngineTest implements WithAssertions {
     @DisplayName("MigrationRule rejects invalid priority")
     void migrationRuleRejectsInvalidPriority() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new OntologyMigrationEngine.MigrationRule(
-                        "test", "Test", "pattern", "template",
-                        OntologyMigrationEngine.Category.LANGUAGE, 0, false))
+                .isThrownBy(
+                        () ->
+                                new OntologyMigrationEngine.MigrationRule(
+                                        "test",
+                                        "Test",
+                                        "pattern",
+                                        "template",
+                                        OntologyMigrationEngine.Category.LANGUAGE,
+                                        0,
+                                        false))
                 .withMessageContaining("priority");
     }
 
@@ -235,7 +273,10 @@ class OntologyMigrationEngineTest implements WithAssertions {
                 .anyMatch(
                         p ->
                                 p.rule().id().equals("StaticStateToProc")
-                                        && p instanceof OntologyMigrationEngine.MigrationPlan.GenericMigration);
+                                        && p
+                                                instanceof
+                                                OntologyMigrationEngine.MigrationPlan
+                                                        .GenericMigration);
     }
 
     @Test
@@ -251,8 +292,7 @@ class OntologyMigrationEngineTest implements WithAssertions {
 
         var result = OntologyMigrationEngine.analyze("Context.java", source);
 
-        assertThat(result.plans())
-                .anyMatch(p -> p.rule().id().equals("ThreadLocalToScopedValue"));
+        assertThat(result.plans()).anyMatch(p -> p.rule().id().equals("ThreadLocalToScopedValue"));
     }
 
     @Test
@@ -271,16 +311,16 @@ class OntologyMigrationEngineTest implements WithAssertions {
 
         var result = OntologyMigrationEngine.analyze("Service.java", source);
 
-        assertThat(result.plans())
-                .anyMatch(p -> p.rule().id().equals("CatchToCrashRecovery"));
+        assertThat(result.plans()).anyMatch(p -> p.rule().id().equals("CatchToCrashRecovery"));
     }
 
     @Test
     @DisplayName("allRules() includes the 3 new OTP rules")
     void allRulesIncludesNewOtpRules() {
-        var ids = OntologyMigrationEngine.allRules().stream()
-                .map(OntologyMigrationEngine.MigrationRule::id)
-                .toList();
+        var ids =
+                OntologyMigrationEngine.allRules().stream()
+                        .map(OntologyMigrationEngine.MigrationRule::id)
+                        .toList();
 
         assertThat(ids)
                 .contains("StaticStateToProc", "ThreadLocalToScopedValue", "CatchToCrashRecovery");
@@ -289,11 +329,14 @@ class OntologyMigrationEngineTest implements WithAssertions {
     @Test
     @DisplayName("OTP rules have CONCURRENCY or ERROR_HANDLING category")
     void otpRuleCategories() {
-        var otpRules = OntologyMigrationEngine.allRules().stream()
-                .filter(r -> r.id().startsWith("Static")
-                        || r.id().startsWith("Thread")
-                        || r.id().startsWith("Catch"))
-                .toList();
+        var otpRules =
+                OntologyMigrationEngine.allRules().stream()
+                        .filter(
+                                r ->
+                                        r.id().startsWith("Static")
+                                                || r.id().startsWith("Thread")
+                                                || r.id().startsWith("Catch"))
+                        .toList();
 
         assertThat(otpRules)
                 .allMatch(

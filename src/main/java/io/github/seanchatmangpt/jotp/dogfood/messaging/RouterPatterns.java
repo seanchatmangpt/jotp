@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.dogfood.messaging;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
@@ -77,9 +76,7 @@ public final class RouterPatterns<T> {
      * @return true if the message was routed
      */
     public boolean routeRoundRobin(T message) {
-        var matchingRoutes = routes.stream()
-                .filter(r -> r.condition().test(message))
-                .toList();
+        var matchingRoutes = routes.stream().filter(r -> r.condition().test(message)).toList();
 
         if (matchingRoutes.isEmpty()) {
             return false;

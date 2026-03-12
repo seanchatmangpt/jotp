@@ -70,8 +70,11 @@ class RoutingSlipTest {
                                     var slip = process.msg();
                                     executionOrder.add("Hop-" + hopId);
                                     System.out.println(
-                                            "Hop-" + hopId + ": processing '"
-                                                    + slip.payload().data() + "'");
+                                            "Hop-"
+                                                    + hopId
+                                                    + ": processing '"
+                                                    + slip.payload().data()
+                                                    + "'");
 
                                     // Continue to next hop if slip has more hops
                                     if (!slip.isComplete()) {
@@ -79,8 +82,7 @@ class RoutingSlipTest {
                                         nextHop.tell(slip);
                                     }
 
-                                    return new ProcessState(
-                                            state.name(), state.count() + 1);
+                                    return new ProcessState(state.name(), state.count() + 1);
                                 } else if (msg instanceof TestMessage.GetCount) {
                                     return state;
                                 } else {
@@ -96,8 +98,7 @@ class RoutingSlipTest {
     void testCreateMessageWithSlip() {
         // Act
         var payload = new Payload("test", new ArrayList<>());
-        var message =
-                RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
+        var message = RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
 
         // Assert
         assertThat(message.payload()).isEqualTo(payload);
@@ -118,9 +119,7 @@ class RoutingSlipTest {
 
         // Assert
         assertThat(peeked).isPresent();
-        assertThat(message.remainingHops())
-                .as("Peek should not advance slip")
-                .isEqualTo(3);
+        assertThat(message.remainingHops()).as("Peek should not advance slip").isEqualTo(3);
     }
 
     @Test
@@ -181,9 +180,10 @@ class RoutingSlipTest {
 
         var payload = new Payload("sync-flow", new ArrayList<>());
         @SuppressWarnings("unchecked")
-        var message = (RoutingSlip.MessageWithSlip<Payload, ProcessState>)
-                (RoutingSlip.MessageWithSlip) RoutingSlip.withSlip(
-                        payload, syncHops.toArray(new ProcRef[0]));
+        var message =
+                (RoutingSlip.MessageWithSlip<Payload, ProcessState>)
+                        (RoutingSlip.MessageWithSlip)
+                                RoutingSlip.withSlip(payload, syncHops.toArray(new ProcRef[0]));
 
         // Act
         var result = RoutingSlip.executeSlipSync(message, Duration.ofSeconds(2));
@@ -191,9 +191,7 @@ class RoutingSlipTest {
         // Assert
         assertThat(result).isInstanceOf(Result.Ok.class);
         var okResult = (Result.Ok<List<ProcessState>, Exception>) result;
-        assertThat(okResult.value())
-                .as("Should collect replies from all hops")
-                .hasSize(3);
+        assertThat(okResult.value()).as("Should collect replies from all hops").hasSize(3);
     }
 
     @Test
@@ -223,9 +221,7 @@ class RoutingSlipTest {
         var modified = RoutingSlip.popNext(original);
 
         // Assert
-        assertThat(original.remainingHops())
-                .as("Original should be unchanged")
-                .isEqualTo(3);
+        assertThat(original.remainingHops()).as("Original should be unchanged").isEqualTo(3);
         assertThat(modified.remainingHops()).as("Modified should have one fewer hop").isEqualTo(2);
     }
 
@@ -322,9 +318,7 @@ class RoutingSlipTest {
 
         // Assert
         assertThat(future).isNotNull();
-        assertThat(future.isDone())
-                .as("Future should eventually complete")
-                .isTrue();
+        assertThat(future.isDone()).as("Future should eventually complete").isTrue();
     }
 
     @Test

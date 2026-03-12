@@ -11,13 +11,13 @@
 
     <properties>
         <maven.compiler.release>26</maven.compiler.release>
-        <junit.version>6.0.0</junit.version>
+        <junit.version>5.12.2</junit.version>
         <awaitility.version>4.3.0</awaitility.version>
-        <assertj.version>3.27.6</assertj.version>
+        <assertj.version>3.27.3</assertj.version>
         <jqwik.version>1.9.3</jqwik.version>
         <record.builder.version>41</record.builder.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <instancio.version>5.5.1</instancio.version>
+        <instancio.version>5.4.1</instancio.version>
         <archunit.version>1.4.1</archunit.version>
         <tagNameFormat>v@{project.version}</tagNameFormat>
         <preparationGoals>clean compile test-compile</preparationGoals>
@@ -93,7 +93,7 @@
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
+                <version>3.15.0</version>
                 <configuration>
                     <compilerArgs>
                         <arg>--enable-preview</arg>
@@ -102,14 +102,14 @@
             </plugin>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <configuration>
                     <argLine>--enable-preview --add-reads io.github.seanchatmangpt.jotp=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <executions>
                     <execution>
                         <id>integration-test</id>
@@ -161,7 +161,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <version>0.8.13</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -203,6 +203,27 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <style>AOSP</style>
+                            <version>1.28.0</version>
+                        </googleJavaFormat>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>compile</phase>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
     <profiles>
@@ -218,11 +239,12 @@
                     <plugin>
                         <groupId>com.diffplug.spotless</groupId>
                         <artifactId>spotless-maven-plugin</artifactId>
-                        <version>3.0.0</version>
+                        <version>3.2.0</version>
                         <configuration>
                             <java>
                                 <googleJavaFormat>
                                     <style>AOSP</style>
+                                    <version>1.28.0</version>
                                 </googleJavaFormat>
                             </java>
                         </configuration>

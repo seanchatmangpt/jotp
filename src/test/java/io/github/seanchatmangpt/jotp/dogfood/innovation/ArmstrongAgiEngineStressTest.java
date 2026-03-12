@@ -2,6 +2,11 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.Parallel;
+import io.github.seanchatmangpt.jotp.Result;
+import io.github.seanchatmangpt.jotp.StateMachine;
+import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.AgiAssessment;
+import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.AgiState;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,11 +15,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
-import io.github.seanchatmangpt.jotp.Parallel;
-import io.github.seanchatmangpt.jotp.Result;
-import io.github.seanchatmangpt.jotp.StateMachine;
-import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.AgiAssessment;
-import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.AgiState;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -119,7 +119,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
             // plan always populated
             assertThat(a.plan().summary()).isNotBlank();
             // safe and breaking actions are disjoint
-            assertThat(a.plan().safeActions().stream().noneMatch(a.plan().breakingActions()::contains))
+            assertThat(
+                            a.plan().safeActions().stream()
+                                    .noneMatch(a.plan().breakingActions()::contains))
                     .isTrue();
         }
     }
@@ -131,13 +133,15 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
     void concurrentAsyncAssessments_50_allReachDone() {
         int n = 50;
 
-        List<StateMachine<AgiState, ArmstrongAgiEngine.AgiEvent, ArmstrongAgiEngine.AgiData>> machines =
-                IntStream.range(0, n)
-                        .mapToObj(
-                                i -> ArmstrongAgiEngine.assessAsync(
-                                        ALL_SOURCES.get(i % ALL_SOURCES.size()),
-                                        "StressAsync" + i))
-                        .toList();
+        List<StateMachine<AgiState, ArmstrongAgiEngine.AgiEvent, ArmstrongAgiEngine.AgiData>>
+                machines =
+                        IntStream.range(0, n)
+                                .mapToObj(
+                                        i ->
+                                                ArmstrongAgiEngine.assessAsync(
+                                                        ALL_SOURCES.get(i % ALL_SOURCES.size()),
+                                                        "StressAsync" + i))
+                                .toList();
 
         // Wait until every state machine has reached Done
         await().atMost(Duration.ofSeconds(30))
@@ -234,8 +238,11 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         List<Supplier<AgiAssessment>> tasks =
                 IntStream.range(0, n)
                         .<Supplier<AgiAssessment>>mapToObj(
-                                i -> () -> ArmstrongAgiEngine.assess(
-                                        ALL_SOURCES.get(i % ALL_SOURCES.size()), "Tput" + i))
+                                i ->
+                                        () ->
+                                                ArmstrongAgiEngine.assess(
+                                                        ALL_SOURCES.get(i % ALL_SOURCES.size()),
+                                                        "Tput" + i))
                         .toList();
 
         var startNs = System.nanoTime();
@@ -277,9 +284,11 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
                                     () -> {
                                         try {
                                             latch.await(); // synchronize start
-                                            var a = ArmstrongAgiEngine.assess(
-                                                    ALL_SOURCES.get(idx % ALL_SOURCES.size()),
-                                                    "Barrier" + idx);
+                                            var a =
+                                                    ArmstrongAgiEngine.assess(
+                                                            ALL_SOURCES.get(
+                                                                    idx % ALL_SOURCES.size()),
+                                                            "Barrier" + idx);
                                             results.add(a);
                                         } catch (Exception e) {
                                             errors.incrementAndGet();
@@ -313,14 +322,14 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         // Kick off all machines before polling any — maximizes overlap
         var machines =
                 IntStream.range(0, n)
-                        .mapToObj(
-                                i -> ArmstrongAgiEngine.assessAsync(MULTI, "Observe" + i))
+                        .mapToObj(i -> ArmstrongAgiEngine.assessAsync(MULTI, "Observe" + i))
                         .toList();
 
         // Poll states immediately — at least some should be in a transient state
-        var transientClasses = java.util.Set.of(
-                AgiState.Assessing.class, AgiState.Explaining.class,
-                AgiState.Planning.class, AgiState.Done.class);
+        var transientClasses =
+                java.util.Set.of(
+                        AgiState.Assessing.class, AgiState.Explaining.class,
+                        AgiState.Planning.class, AgiState.Done.class);
 
         for (var sm : machines) {
             // Must be in a valid pipeline state (not stuck in Idle)
@@ -332,8 +341,11 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         // Wait for completion of all
         await().atMost(Duration.ofSeconds(30))
                 .untilAsserted(
-                        () -> machines.forEach(
-                                sm -> assertThat(sm.state()).isInstanceOf(AgiState.Done.class)));
+                        () ->
+                                machines.forEach(
+                                        sm ->
+                                                assertThat(sm.state())
+                                                        .isInstanceOf(AgiState.Done.class)));
 
         // Final data invariants
         for (int i = 0; i < n; i++) {

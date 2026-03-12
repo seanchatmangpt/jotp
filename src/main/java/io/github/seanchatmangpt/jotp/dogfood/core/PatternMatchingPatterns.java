@@ -36,8 +36,7 @@ public final class PatternMatchingPatterns {
 
         record BankTransfer(String iban, String bic, String accountName) implements Payment {}
 
-        record CryptoPay(String walletAddress, String currency, double amount)
-                implements Payment {}
+        record CryptoPay(String walletAddress, String currency, double amount) implements Payment {}
 
         record Voucher(String code, double value, boolean singleUse) implements Payment {}
     }
@@ -56,13 +55,15 @@ public final class PatternMatchingPatterns {
     public static String describe(Payment payment) {
         return switch (payment) {
             case Payment.CreditCard(var num, var holder, _, var limit) ->
-                    "Credit card %s (holder: %s, limit: %.2f)".formatted(maskCard(num), holder, limit);
+                    "Credit card %s (holder: %s, limit: %.2f)"
+                            .formatted(maskCard(num), holder, limit);
             case Payment.BankTransfer(var iban, var bic, var name) ->
                     "Bank transfer via %s/%s (%s)".formatted(iban, bic, name);
             case Payment.CryptoPay(var wallet, var currency, var amount) ->
                     "%.4f %s to %s".formatted(amount, currency, maskWallet(wallet));
             case Payment.Voucher(var code, var value, var single) ->
-                    "Voucher %s (%.2f, %s)".formatted(code, value, single ? "single-use" : "multi-use");
+                    "Voucher %s (%.2f, %s)"
+                            .formatted(code, value, single ? "single-use" : "multi-use");
         };
     }
 

@@ -3,8 +3,8 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 import io.github.seanchatmangpt.jotp.EventManager;
 
 /**
- * ATLAS Advanced Streams broker — OTP {@code gen_event} fan-out to Kafka, InfluxDB, and
- * other engineering data consumers.
+ * ATLAS Advanced Streams broker — OTP {@code gen_event} fan-out to Kafka, InfluxDB, and other
+ * engineering data consumers.
  *
  * <p>In ATLAS, <em>Advanced Streams</em> is the open-data fan-out layer that sits above the SQL
  * Race database. Live engineering values from the RTA gRPC stream are broadcast via a Kafka broker
@@ -17,9 +17,9 @@ import io.github.seanchatmangpt.jotp.EventManager;
  *   <li>Remote team factories (over WAN replication)
  * </ul>
  *
- * <p>This Java 26 / OTP refactor uses an {@link EventManager}{@code <StreamEvent>} to replicate
- * the fan-out semantics. A crashing consumer handler is removed without affecting the stream —
- * exactly OTP's {@code gen_event} fault-isolation guarantee:
+ * <p>This Java 26 / OTP refactor uses an {@link EventManager}{@code <StreamEvent>} to replicate the
+ * fan-out semantics. A crashing consumer handler is removed without affecting the stream — exactly
+ * OTP's {@code gen_event} fault-isolation guarantee:
  *
  * <pre>{@code
  * var streams = AdvancedStreams.start();
@@ -34,8 +34,8 @@ import io.github.seanchatmangpt.jotp.EventManager;
  *
  * <h2>Stream events</h2>
  *
- * <p>{@link StreamEvent} is the sealed event hierarchy broadcast to all registered sinks.
- * In the real ATLAS Advanced Streams library this is the "open data format" schema sent over Kafka.
+ * <p>{@link StreamEvent} is the sealed event hierarchy broadcast to all registered sinks. In the
+ * real ATLAS Advanced Streams library this is the "open data format" schema sent over Kafka.
  */
 public final class AdvancedStreams {
 
@@ -46,8 +46,8 @@ public final class AdvancedStreams {
     /**
      * Typed stream event hierarchy — the open data format for ATLAS Advanced Streams.
      *
-     * <p>In the real system, these map to Kafka topic messages and gRPC proto payloads
-     * ({@code MA.Streaming.Proto.Core}).
+     * <p>In the real system, these map to Kafka topic messages and gRPC proto payloads ({@code
+     * MA.Streaming.Proto.Core}).
      */
     public sealed interface StreamEvent
             permits StreamEvent.SessionStart,
@@ -69,7 +69,7 @@ public final class AdvancedStreams {
          * per-message overhead at 1 kHz rates.
          *
          * @param paramIdentifier SQL Race identifier (e.g. {@code "vCar:Chassis"})
-         * @param values          timestamped sample batch
+         * @param values timestamped sample batch
          */
         record ParameterData(String paramIdentifier, ParameterValues values)
                 implements StreamEvent {}
@@ -96,11 +96,11 @@ public final class AdvancedStreams {
     /**
      * Kafka sink handler — publishes events to a Kafka broker topic.
      *
-     * <p>In the real implementation this wraps the {@code MA.Streaming.Core} gRPC client
-     * ({@code MA.Streaming.Proto.ServerComponent} NuGet package).
+     * <p>In the real implementation this wraps the {@code MA.Streaming.Core} gRPC client ({@code
+     * MA.Streaming.Proto.ServerComponent} NuGet package).
      *
-     * <p>Demonstrates gen_event handler fault isolation: if the Kafka broker is unreachable,
-     * this handler throws and is removed from the event manager without affecting other sinks.
+     * <p>Demonstrates gen_event handler fault isolation: if the Kafka broker is unreachable, this
+     * handler throws and is removed from the event manager without affecting other sinks.
      */
     public static final class KafkaSinkHandler implements EventManager.Handler<StreamEvent> {
         private final String topic;
@@ -198,8 +198,8 @@ public final class AdvancedStreams {
     }
 
     /**
-     * Publish a stream event to all registered sinks asynchronously —
-     * mirrors {@code gen_event:notify/2}.
+     * Publish a stream event to all registered sinks asynchronously — mirrors {@code
+     * gen_event:notify/2}.
      *
      * @param event the event to broadcast
      */
@@ -208,8 +208,8 @@ public final class AdvancedStreams {
     }
 
     /**
-     * Publish synchronously and wait for all sinks to complete —
-     * mirrors {@code gen_event:sync_notify/2}.
+     * Publish synchronously and wait for all sinks to complete — mirrors {@code
+     * gen_event:sync_notify/2}.
      *
      * @param event the event to broadcast
      * @throws InterruptedException if interrupted
@@ -218,9 +218,7 @@ public final class AdvancedStreams {
         manager.syncNotify(event);
     }
 
-    /**
-     * Stop the broker and all registered sinks.
-     */
+    /** Stop the broker and all registered sinks. */
     public void stop() {
         manager.stop();
     }

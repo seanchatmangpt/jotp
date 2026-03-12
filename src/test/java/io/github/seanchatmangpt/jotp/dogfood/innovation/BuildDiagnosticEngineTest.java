@@ -1,8 +1,7 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
-import java.util.List;
-
 import io.github.seanchatmangpt.jotp.dogfood.innovation.BuildDiagnosticEngine.DiagnosticFix;
+import java.util.List;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -32,10 +31,7 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         void detectsMissingListImport() {
             var fixes = BuildDiagnosticEngine.diagnose(MISSING_LIST_IMPORT);
 
-            assertThat(fixes)
-                    .hasSize(1)
-                    .first()
-                    .isInstanceOf(DiagnosticFix.AddImport.class);
+            assertThat(fixes).hasSize(1).first().isInstanceOf(DiagnosticFix.AddImport.class);
 
             var addImport = (DiagnosticFix.AddImport) fixes.getFirst();
             assertThat(addImport.fullyQualifiedClass()).isEqualTo("java.util.List");
@@ -133,10 +129,7 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         void detectsPreviewFeature() {
             var fixes = BuildDiagnosticEngine.diagnose(PREVIEW_ERROR);
 
-            assertThat(fixes)
-                    .hasSize(1)
-                    .first()
-                    .isInstanceOf(DiagnosticFix.EnablePreview.class);
+            assertThat(fixes).hasSize(1).first().isInstanceOf(DiagnosticFix.EnablePreview.class);
 
             var fix = (DiagnosticFix.EnablePreview) fixes.getFirst();
             assertThat(fix.description()).contains("--enable-preview");
@@ -162,10 +155,7 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         void detectsModuleExportNeeded() {
             var fixes = BuildDiagnosticEngine.diagnose(MODULE_NOT_EXPORTED);
 
-            assertThat(fixes)
-                    .hasSize(1)
-                    .first()
-                    .isInstanceOf(DiagnosticFix.AddModuleExport.class);
+            assertThat(fixes).hasSize(1).first().isInstanceOf(DiagnosticFix.AddModuleExport.class);
 
             var fix = (DiagnosticFix.AddModuleExport) fixes.getFirst();
             assertThat(fix.moduleName()).isEqualTo("com.internal");
@@ -192,10 +182,7 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         void detectsIncompatibleTypes() {
             var fixes = BuildDiagnosticEngine.diagnose(INCOMPATIBLE_TYPES);
 
-            assertThat(fixes)
-                    .hasSize(1)
-                    .first()
-                    .isInstanceOf(DiagnosticFix.ChangeType.class);
+            assertThat(fixes).hasSize(1).first().isInstanceOf(DiagnosticFix.ChangeType.class);
 
             var fix = (DiagnosticFix.ChangeType) fixes.getFirst();
             assertThat(fix.fromType()).isEqualTo("String");
@@ -221,10 +208,7 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         void detectsLossyConversion() {
             var fixes = BuildDiagnosticEngine.diagnose(LOSSY_CONVERSION);
 
-            assertThat(fixes)
-                    .hasSize(1)
-                    .first()
-                    .isInstanceOf(DiagnosticFix.CastExpression.class);
+            assertThat(fixes).hasSize(1).first().isInstanceOf(DiagnosticFix.CastExpression.class);
 
             var fix = (DiagnosticFix.CastExpression) fixes.getFirst();
             assertThat(fix.targetType()).isEqualTo("int");
@@ -370,7 +354,8 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         @Test
         @DisplayName("filters fixes by type")
         void filtersFixesByType() {
-            var imports = BuildDiagnosticEngine.diagnose(MIXED_ERRORS, DiagnosticFix.AddImport.class);
+            var imports =
+                    BuildDiagnosticEngine.diagnose(MIXED_ERRORS, DiagnosticFix.AddImport.class);
             assertThat(imports).hasSize(1);
             assertThat(imports.getFirst().fullyQualifiedClass())
                     .isEqualTo("java.util.stream.Stream");
@@ -397,9 +382,10 @@ class BuildDiagnosticEngineTest implements WithAssertions {
         @Test
         @DisplayName("formats fix list with categories")
         void formatsFixList() {
-            List<DiagnosticFix> fixes = List.of(
-                    new DiagnosticFix.AddImport("App.java", "java.util.List"),
-                    new DiagnosticFix.EnablePreview("App.java"));
+            List<DiagnosticFix> fixes =
+                    List.of(
+                            new DiagnosticFix.AddImport("App.java", "java.util.List"),
+                            new DiagnosticFix.EnablePreview("App.java"));
 
             String report = BuildDiagnosticEngine.formatReport(fixes);
 

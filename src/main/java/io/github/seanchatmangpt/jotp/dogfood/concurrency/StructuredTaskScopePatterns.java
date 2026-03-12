@@ -22,8 +22,8 @@ import java.util.function.Function;
  * <h2>Two built-in joiners (Java 26):</h2>
  *
  * <ul>
- *   <li>{@code Joiner.awaitAllSuccessfulOrThrow()} — all subtasks must succeed; first failure
- *       shuts down remaining subtasks
+ *   <li>{@code Joiner.awaitAllSuccessfulOrThrow()} — all subtasks must succeed; first failure shuts
+ *       down remaining subtasks
  *   <li>{@code Joiner.anySuccessfulResultOrThrow()} — first successful result wins; remaining
  *       subtasks are cancelled
  * </ul>
@@ -85,9 +85,7 @@ public final class StructuredTaskScopePatterns {
      */
     public static <T> T raceForFirst(List<Callable<T>> tasks)
             throws ExecutionException, InterruptedException {
-        try (var scope =
-                StructuredTaskScope.open(
-                        StructuredTaskScope.Joiner.<T>awaitAll())) {
+        try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.<T>awaitAll())) {
             List<Subtask<T>> subtasks = new java.util.ArrayList<>();
             for (var task : tasks) subtasks.add(scope.fork(task));
             scope.join();

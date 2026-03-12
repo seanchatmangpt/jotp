@@ -1,6 +1,5 @@
 package io.github.seanchatmangpt.jotp.messagepatterns.channel;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcTimer;
 import java.time.Duration;
 import java.util.List;
@@ -29,8 +28,7 @@ public final class GuaranteedDelivery<T> {
     /** A tracked delivery with unique ID. */
     public record PendingDelivery<T>(String deliveryId, T message, int attempts) {}
 
-    private final ConcurrentHashMap<String, PendingDelivery<T>> pending =
-            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, PendingDelivery<T>> pending = new ConcurrentHashMap<>();
     private final Consumer<T> deliveryTarget;
     private final Duration retryInterval;
     private final int maxRetries;

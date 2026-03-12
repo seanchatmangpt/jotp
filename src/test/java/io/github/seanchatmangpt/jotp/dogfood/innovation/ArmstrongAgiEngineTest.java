@@ -2,12 +2,11 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.AgiAssessment;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.AgiState;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ArmstrongAgiEngine.ExplanationChain;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.GoNoGoEngine.Severity;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.GoNoGoEngine.Verdict;
+import java.time.Duration;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -171,7 +170,10 @@ class ArmstrongAgiEngineTest implements WithAssertions {
 
         ExplanationChain chain =
                 result.plan().explanations().stream()
-                        .filter(e -> e.armstrongPrinciple().equals("Immutability in the Pure Parts"))
+                        .filter(
+                                e ->
+                                        e.armstrongPrinciple()
+                                                .equals("Immutability in the Pure Parts"))
                         .findFirst()
                         .orElseThrow();
         assertThat(chain.otpFix()).isEqualTo("record");
@@ -205,8 +207,7 @@ class ArmstrongAgiEngineTest implements WithAssertions {
         var sm = ArmstrongAgiEngine.assessAsync(STATIC_SHARED_STATE_SOURCE, "SessionCache");
 
         // Wait for Done — the virtual-thread driver fires events as each stage completes
-        await().atMost(Duration.ofSeconds(10))
-                .until(() -> sm.state() instanceof AgiState.Done);
+        await().atMost(Duration.ofSeconds(10)).until(() -> sm.state() instanceof AgiState.Done);
 
         // Once Done, all data fields must be populated
         var data = sm.data();
@@ -237,7 +238,8 @@ class ArmstrongAgiEngineTest implements WithAssertions {
                         .anyMatch(v -> v.ruleName().equals("Fail Loudly"));
 
         // If the quick-fix pattern matches, self-verification should improve the verdict
-        // Note: selfVerified may be false if other violations are present or quick-fix doesn't improve score
+        // Note: selfVerified may be false if other violations are present or quick-fix doesn't
+        // improve score
         // The key assertion is that the assessment completed successfully
         assertThat(hasFailLoudly || result.evidence().violations().isEmpty()).isTrue();
     }
@@ -261,8 +263,7 @@ class ArmstrongAgiEngineTest implements WithAssertions {
         }
 
         // ModernizationScorer result must have a valid score
-        assertThat(result.evidence().score().overallScore())
-                .isBetween(0, 100);
+        assertThat(result.evidence().score().overallScore()).isBetween(0, 100);
     }
 
     @Test
@@ -278,9 +279,12 @@ class ArmstrongAgiEngineTest implements WithAssertions {
         assertThat(plan.breakingActions()).allMatch(cmd -> cmd.breaking());
 
         // No command appears in both lists
-        var safeTemplates = plan.safeActions().stream().map(RefactorEngine.JgenCommand::template).toList();
-        var breakingTemplates = plan.breakingActions().stream().map(RefactorEngine.JgenCommand::template).toList();
+        var safeTemplates =
+                plan.safeActions().stream().map(RefactorEngine.JgenCommand::template).toList();
+        var breakingTemplates =
+                plan.breakingActions().stream().map(RefactorEngine.JgenCommand::template).toList();
         // They may overlap by template name but not by exact reference
-        assertThat(plan.safeActions().stream().noneMatch(plan.breakingActions()::contains)).isTrue();
+        assertThat(plan.safeActions().stream().noneMatch(plan.breakingActions()::contains))
+                .isTrue();
     }
 }

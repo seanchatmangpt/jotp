@@ -28,11 +28,11 @@ public sealed interface PdaMsg
                 PdaMsg.Clear {
 
     /**
-     * Append live ECU samples to the ring buffer. Samples are validated and tagged with
-     * {@link DataStatusType} automatically by the handler.
+     * Append live ECU samples to the ring buffer. Samples are validated and tagged with {@link
+     * DataStatusType} automatically by the handler.
      *
      * @param timestamps nanosecond timestamps (must be monotonically increasing)
-     * @param values     engineering values after conversion
+     * @param values engineering values after conversion
      */
     record AddSamples(long[] timestamps, double[] values) implements PdaMsg {}
 
@@ -40,27 +40,27 @@ public sealed interface PdaMsg
      * Append samples with pre-tagged quality status (from upstream decoder or RDA filter).
      *
      * @param timestamps nanosecond timestamps
-     * @param values     engineering values
-     * @param status     per-sample data status
+     * @param values engineering values
+     * @param status per-sample data status
      */
     record AddSamplesWithStatus(long[] timestamps, double[] values, DataStatusType[] status)
             implements PdaMsg {}
 
     /**
-     * Set the cursor to a specific timestamp.
-     * Subsequent {@link GetNextSamples} calls start from here.
+     * Set the cursor to a specific timestamp. Subsequent {@link GetNextSamples} calls start from
+     * here.
      *
      * @param timestampNs position to seek to (nanoseconds)
      */
     record GoTo(long timestampNs) implements PdaMsg {}
 
     /**
-     * Read the next {@code count} samples from the cursor in the given direction.
-     * The cursor advances past the returned samples.
+     * Read the next {@code count} samples from the cursor in the given direction. The cursor
+     * advances past the returned samples.
      *
-     * @param count     maximum number of samples to return
+     * @param count maximum number of samples to return
      * @param direction {@link StepDirection#Forward} or {@link StepDirection#Reverse}
-     * @param reply     completed with the resulting {@link ParameterValues}
+     * @param reply completed with the resulting {@link ParameterValues}
      */
     record GetNextSamples(
             int count, StepDirection direction, CompletableFuture<ParameterValues> reply)

@@ -6,13 +6,14 @@ import java.util.function.Predicate;
 /**
  * Message Filter — filters/drops messages matching criteria, forwards others to a destination.
  *
- * <p>Vernon: "A Message Filter passes on only messages that match specific criteria and
- * discards all others."
+ * <p>Vernon: "A Message Filter passes on only messages that match specific criteria and discards
+ * all others."
  *
  * <p>Joe Armstrong influence: "Processes share nothing, communicate only by message passing."
  * Filtering is pure predicate-based logic applied to each message before forwarding.
  *
  * <p><strong>Filtering Pattern:</strong>
+ *
  * <ol>
  *   <li>Caller sends message to filter
  *   <li>Filter applies the predicate to the message
@@ -21,6 +22,7 @@ import java.util.function.Predicate;
  * </ol>
  *
  * <p><strong>Usage:</strong>
+ *
  * <pre>{@code
  * // Create a filter that passes only high-priority messages
  * var highPriorityFilter = MessageFilter.create(
@@ -70,8 +72,7 @@ public final class MessageFilter<M> {
     private final Proc<FilterState<M>, FilterCommand<M>> filterProc;
 
     /** Sealed message hierarchy for the filter. */
-    sealed interface FilterCommand<M>
-            permits FilterCommand.FilterMsg, FilterCommand.GetStats {
+    sealed interface FilterCommand<M> permits FilterCommand.FilterMsg, FilterCommand.GetStats {
 
         record FilterMsg<M>(M message) implements FilterCommand<M> {}
 
@@ -112,7 +113,8 @@ public final class MessageFilter<M> {
                         initialState,
                         (state, cmd) -> {
                             return switch (cmd) {
-                                case FilterCommand.FilterMsg<M> fm -> processFilter(state, fm.message());
+                                case FilterCommand.FilterMsg<M> fm ->
+                                        processFilter(state, fm.message());
                                 case FilterCommand.GetStats<M> _gs -> state;
                             };
                         });
@@ -121,8 +123,8 @@ public final class MessageFilter<M> {
     /**
      * Filter a message: forward if predicate matches, drop otherwise.
      *
-     * <p>This is a fire-and-forget operation — messages are forwarded without waiting
-     * for processing confirmation.
+     * <p>This is a fire-and-forget operation — messages are forwarded without waiting for
+     * processing confirmation.
      *
      * @param message the message to filter
      */
@@ -131,16 +133,12 @@ public final class MessageFilter<M> {
         filterProc.tell(new FilterCommand.FilterMsg<>(message));
     }
 
-    /**
-     * Get the filter's process reference (for monitoring or linking).
-     */
+    /** Get the filter's process reference (for monitoring or linking). */
     public Proc<FilterState<M>, FilterCommand<M>> process() {
         return filterProc;
     }
 
-    /**
-     * Process a filter command: apply predicate and forward if true.
-     */
+    /** Process a filter command: apply predicate and forward if true. */
     private FilterState<M> processFilter(FilterState<M> state, M message) {
         long newReceived = state.received() + 1;
         if (state.predicate().test(message)) {

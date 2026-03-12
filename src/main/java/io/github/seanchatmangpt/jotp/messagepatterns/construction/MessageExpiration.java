@@ -11,8 +11,8 @@ import java.time.Instant;
  * the mailbox.
  *
  * <p>Ported from Vaughn Vernon's Reactive Messaging Patterns (Scala/Akka). In the original, {@code
- * PlaceOrder} implements an {@code ExpiringMessage} trait that checks {@code System.currentTimeMillis}
- * against a TTL.
+ * PlaceOrder} implements an {@code ExpiringMessage} trait that checks {@code
+ * System.currentTimeMillis} against a TTL.
  *
  * <p>Usage:
  *

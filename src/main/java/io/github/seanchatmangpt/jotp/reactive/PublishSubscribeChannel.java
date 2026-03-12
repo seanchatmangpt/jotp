@@ -1,8 +1,8 @@
 package io.github.seanchatmangpt.jotp.reactive;
 
+import io.github.seanchatmangpt.jotp.EventManager;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
-import io.github.seanchatmangpt.jotp.EventManager;
 
 /**
  * Publish-subscribe channel: every subscriber receives a copy of every message.

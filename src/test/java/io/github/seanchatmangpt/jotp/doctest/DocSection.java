@@ -8,8 +8,8 @@ import java.lang.annotation.Target;
 /**
  * Marks the start of a documentation section in a {@link DocTestExtension}-driven test class.
  *
- * <p>Inspired by the {@code sayNextSection()} API in
- * <a href="https://github.com/seanchatmangpt/doctester">seanchatmangpt/doctester</a>.
+ * <p>Inspired by the {@code sayNextSection()} API in <a
+ * href="https://github.com/seanchatmangpt/doctester">seanchatmangpt/doctester</a>.
  *
  * <p>Place on a test method or on the test class itself. The generated HTML renders this as an
  * {@code <h2>} headline in the output document.

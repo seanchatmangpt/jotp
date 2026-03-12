@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,8 +11,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Unit tests for {@link Result} — verifies Javadoc documentation matches actual behavior.
  *
- * <p>Tests the sealed Result interface for railway-oriented programming,
- * matching the Erlang/OTP pattern: {ok, Value} | {error, Reason}.
+ * <p>Tests the sealed Result interface for railway-oriented programming, matching the Erlang/OTP
+ * pattern: {ok, Value} | {error, Reason}.
  */
 @DisplayName("Result<T,E> railway-oriented programming")
 class ResultTest implements WithAssertions {
@@ -177,9 +175,11 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("returns Err when supplier throws")
         void returnsErrOnException() {
-            Result<Integer, Exception> result = Result.of(() -> {
-                throw new IllegalStateException("boom");
-            });
+            Result<Integer, Exception> result =
+                    Result.of(
+                            () -> {
+                                throw new IllegalStateException("boom");
+                            });
 
             assertThat(result.isError()).isTrue();
             assertThat(result).isInstanceOf(Result.Err.class);
@@ -188,9 +188,11 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("captures exception as error value")
         void capturesExceptionAsError() {
-            Result<String, Exception> result = Result.of(() -> {
-                throw new IllegalArgumentException("invalid");
-            });
+            Result<String, Exception> result =
+                    Result.of(
+                            () -> {
+                                throw new IllegalArgumentException("invalid");
+                            });
 
             switch (result) {
                 case Result.Err<String, Exception>(var e) -> {
@@ -213,8 +215,7 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("transforms success value")
         void transformsSuccessValue() {
-            Result<Integer, String> result = Result.<Integer, String>ok(5)
-                    .map(x -> x * 2);
+            Result<Integer, String> result = Result.<Integer, String>ok(5).map(x -> x * 2);
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.orElseThrow()).isEqualTo(10);
@@ -233,8 +234,8 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("preserves Err type on short-circuit")
         void preservesErrType() {
-            Result<String, Integer> result = Result.<String, Integer>err(404)
-                    .map(String::toUpperCase);
+            Result<String, Integer> result =
+                    Result.<String, Integer>err(404).map(String::toUpperCase);
 
             assertThat(result).isInstanceOf(Result.Err.class);
         }
@@ -242,8 +243,8 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("preserves Failure type on short-circuit")
         void preservesFailureType() {
-            Result<String, Integer> result = Result.<String, Integer>failure(500)
-                    .map(String::toUpperCase);
+            Result<String, Integer> result =
+                    Result.<String, Integer>failure(500).map(String::toUpperCase);
 
             assertThat(result).isInstanceOf(Result.Failure.class);
         }
@@ -251,10 +252,8 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("chains multiple map operations")
         void chainsMultipleMaps() {
-            Result<Integer, String> result = Result.<Integer, String>ok(1)
-                    .map(x -> x + 1)
-                    .map(x -> x * 2)
-                    .map(x -> x + 3);
+            Result<Integer, String> result =
+                    Result.<Integer, String>ok(1).map(x -> x + 1).map(x -> x * 2).map(x -> x + 3);
 
             assertThat(result.orElseThrow()).isEqualTo(7); // ((1+1)*2)+3 = 7
         }
@@ -267,14 +266,16 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("chains success to next result")
         void chainsSuccess() {
-            Result<Integer, String> result = Result.<String, String>ok("42")
-                    .flatMap(s -> {
-                        try {
-                            return Result.ok(Integer.parseInt(s));
-                        } catch (NumberFormatException e) {
-                            return Result.err("not a number");
-                        }
-                    });
+            Result<Integer, String> result =
+                    Result.<String, String>ok("42")
+                            .flatMap(
+                                    s -> {
+                                        try {
+                                            return Result.ok(Integer.parseInt(s));
+                                        } catch (NumberFormatException e) {
+                                            return Result.err("not a number");
+                                        }
+                                    });
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.orElseThrow()).isEqualTo(42);
@@ -283,8 +284,9 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("short-circuits on failure")
         void shortCircuitsOnFailure() {
-            Result<Integer, String> result = Result.<String, String>err("initial error")
-                    .flatMap(s -> Result.ok(Integer.parseInt(s)));
+            Result<Integer, String> result =
+                    Result.<String, String>err("initial error")
+                            .flatMap(s -> Result.ok(Integer.parseInt(s)));
 
             assertThat(result.isError()).isTrue();
         }
@@ -292,8 +294,9 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("propagates inner failure")
         void propagatesInnerFailure() {
-            Result<Integer, String> result = Result.<String, String>ok("not-a-number")
-                    .flatMap(s -> Result.err("parse error"));
+            Result<Integer, String> result =
+                    Result.<String, String>ok("not-a-number")
+                            .flatMap(s -> Result.err("parse error"));
 
             assertThat(result.isError()).isTrue();
             switch (result) {
@@ -343,10 +346,8 @@ class ResultTest implements WithAssertions {
         void appliesErrorBranch() {
             Result<String, Integer> result = Result.err(404);
 
-            String message = result.fold(
-                    value -> "success: " + value,
-                    error -> "error code: " + error
-            );
+            String message =
+                    result.fold(value -> "success: " + value, error -> "error code: " + error);
 
             assertThat(message).isEqualTo("error code: 404");
         }
@@ -377,16 +378,16 @@ class ResultTest implements WithAssertions {
         @DisplayName("validates and transforms number string")
         void validateAndTransformNumber() {
             // From Javadoc: chained operations without nested if-statements
-            Result<String, String> result = Result.of(() -> "  42  ")
-                    .map(String::strip)
-                    .flatMap(s -> s.matches("\\d+")
-                            ? Result.ok(Integer.parseInt(s))
-                            : Result.err("not a number"))
-                    .map(n -> n * 2)
-                    .fold(
-                            n -> "result=" + n,
-                            e -> "error=" + e
-                    );
+            String result =
+                    Result.of(() -> "  42  ")
+                            .map(String::strip)
+                            .flatMap(
+                                    s ->
+                                            s.matches("\\d+")
+                                                    ? Result.ok(Integer.parseInt(s))
+                                                    : Result.err("not a number"))
+                            .map(n -> n * 2)
+                            .fold(n -> "result=" + n, e -> "error=" + e);
 
             assertThat(result).isEqualTo("result=84");
         }
@@ -394,16 +395,16 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("short-circuits on validation failure")
         void shortCircuitsOnValidationFailure() {
-            Result<String, String> result = Result.of(() -> "  abc  ")
-                    .map(String::strip)
-                    .flatMap(s -> s.matches("\\d+")
-                            ? Result.ok(Integer.parseInt(s))
-                            : Result.err("not a number"))
-                    .map(n -> n * 2) // skipped
-                    .fold(
-                            n -> "result=" + n,
-                            e -> "error=" + e
-                    );
+            String result =
+                    Result.of(() -> "  abc  ")
+                            .map(String::strip)
+                            .flatMap(
+                                    s ->
+                                            s.matches("\\d+")
+                                                    ? Result.ok(Integer.parseInt(s))
+                                                    : Result.err("not a number"))
+                            .map(n -> n * 2) // skipped
+                            .fold(n -> "result=" + n, e -> "error=" + e);
 
             assertThat(result).isEqualTo("error=not a number");
         }
@@ -411,10 +412,12 @@ class ResultTest implements WithAssertions {
         @Test
         @DisplayName("wraps throwing operation in Result.of")
         void wrapsThrowingOperation() {
-            Result<Integer, Exception> result = Result.of(() -> {
-                if (true) throw new RuntimeException("intentional");
-                return 0;
-            });
+            Result<Integer, Exception> result =
+                    Result.of(
+                            () -> {
+                                if (true) throw new RuntimeException("intentional");
+                                return 0;
+                            });
 
             assertThat(result.isError()).isTrue();
         }
@@ -424,12 +427,20 @@ class ResultTest implements WithAssertions {
         void multiStepPipelineWithErrorRecovery() {
             record Order(String id, int quantity, double price) {}
 
-            Result<Order, String> pipeline = Result.of(() -> "order-123")
-                    .map(id -> new Order(id, 10, 99.99))
-                    .flatMap(order -> order.quantity() > 0
-                            ? Result.ok(order)
-                            : Result.err("invalid quantity"))
-                    .map(order -> new Order(order.id(), order.quantity() * 2, order.price()));
+            Result<Order, String> pipeline =
+                    Result.<String, String>of(() -> "order-123")
+                            .map(id -> new Order(id, 10, 99.99))
+                            .flatMap(
+                                    order ->
+                                            order.quantity() > 0
+                                                    ? Result.ok(order)
+                                                    : Result.err("invalid quantity"))
+                            .map(
+                                    order ->
+                                            new Order(
+                                                    order.id(),
+                                                    order.quantity() * 2,
+                                                    order.price()));
 
             assertThat(pipeline.isSuccess()).isTrue();
             assertThat(pipeline.orElseThrow().quantity()).isEqualTo(20);

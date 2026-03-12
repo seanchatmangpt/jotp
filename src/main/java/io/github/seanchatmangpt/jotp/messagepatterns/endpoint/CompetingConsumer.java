@@ -1,6 +1,5 @@
 package io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.LinkedTransferQueue;
@@ -37,17 +36,21 @@ public final class CompetingConsumer<T> {
         this.workers = new ArrayList<>();
         for (int i = 0; i < workerCount; i++) {
             String name = "competing-consumer-" + i;
-            Thread worker = Thread.ofVirtual().name(name).start(() -> {
-                while (running) {
-                    try {
-                        T item = queue.take();
-                        handler.accept(item);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            });
+            Thread worker =
+                    Thread.ofVirtual()
+                            .name(name)
+                            .start(
+                                    () -> {
+                                        while (running) {
+                                            try {
+                                                T item = queue.take();
+                                                handler.accept(item);
+                                            } catch (InterruptedException e) {
+                                                Thread.currentThread().interrupt();
+                                                break;
+                                            }
+                                        }
+                                    });
             workers.add(worker);
         }
     }

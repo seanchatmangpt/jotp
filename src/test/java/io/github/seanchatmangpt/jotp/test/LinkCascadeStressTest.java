@@ -2,6 +2,9 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.ExitSignal;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcessLink;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -10,9 +13,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.ExitSignal;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessLink;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -27,8 +27,8 @@ import org.junit.jupiter.api.Timeout;
  *
  * <ol>
  *   <li><b>Chain depth limit</b> — A→B→C→...→N: how deep before cascade propagation takes > 1s?
- *       Each crash callback fires in the crashed process's virtual thread, then interrupts the next,
- *       which fires its callbacks, etc. This is O(N) virtual thread interrupts in sequence.
+ *       Each crash callback fires in the crashed process's virtual thread, then interrupts the
+ *       next, which fires its callbacks, etc. This is O(N) virtual thread interrupts in sequence.
  *   <li><b>Death star topology</b> — one hub linked to N workers: hub crash → N simultaneous
  *       interrupts. With N = 1000, this floods the JVM scheduler with 1000 concurrent interrupts.
  *   <li><b>Exit signal flood to trapping process</b> — 100 linked processes crash simultaneously;
@@ -64,8 +64,8 @@ class LinkCascadeStressTest implements WithAssertions {
      * <b>Breaking point: chain cascade O(N) propagation time.</b>
      *
      * <p>With N=500, the cascade must complete within 5 seconds. If propagation takes > 10ms per
-     * hop, a 500-depth chain takes 5s — right at the boundary. If it takes > 10ms per hop we have
-     * a real latency problem (each hop is just a thread interrupt, should be < 1ms).
+     * hop, a 500-depth chain takes 5s — right at the boundary. If it takes > 10ms per hop we have a
+     * real latency problem (each hop is just a thread interrupt, should be < 1ms).
      */
     @Test
     void chainCascade_500deep_allDieWithin5s() throws Exception {
@@ -99,10 +99,10 @@ class LinkCascadeStressTest implements WithAssertions {
     /**
      * <b>Breaking point: JVM scheduler under N simultaneous interrupts.</b>
      *
-     * <p>The hub's crash callback fires N times, each interrupting a worker. With N = 1000, the
-     * JVM must schedule 1000 virtual thread exits concurrently. This reveals whether our crash
-     * callback loop (sequential iteration over {@code crashCallbacks}) becomes a bottleneck when
-     * it issues 1000 interrupts back-to-back before yielding.
+     * <p>The hub's crash callback fires N times, each interrupting a worker. With N = 1000, the JVM
+     * must schedule 1000 virtual thread exits concurrently. This reveals whether our crash callback
+     * loop (sequential iteration over {@code crashCallbacks}) becomes a bottleneck when it issues
+     * 1000 interrupts back-to-back before yielding.
      *
      * <p>Expected: all workers dead within 3 seconds. If the loop blocks on each interrupt, this
      * degrades to O(N × interrupt_latency).
@@ -126,8 +126,7 @@ class LinkCascadeStressTest implements WithAssertions {
                 .until(() -> workers.stream().noneMatch(w -> w.thread().isAlive()));
 
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-        System.out.printf(
-                "[death-star] workers=%d elapsed=%d ms%n", workerCount, elapsedMs);
+        System.out.printf("[death-star] workers=%d elapsed=%d ms%n", workerCount, elapsedMs);
 
         // Verify every worker is actually dead
         assertThat(workers).noneMatch(w -> w.thread().isAlive());

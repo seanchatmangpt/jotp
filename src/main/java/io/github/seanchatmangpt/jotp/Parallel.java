@@ -12,8 +12,8 @@ import java.util.function.Supplier;
  *
  * <p>Uses Java 26 {@link StructuredTaskScope#open(StructuredTaskScope.Joiner)}: all tasks run
  * concurrently on virtual threads, and on the <em>first</em> failure the scope cancels all
- * remaining tasks immediately (Armstrong: crash one, crash all). Returns {@code
- * Result<List<T>, Exception>} integrating with the existing railway-oriented {@link Result} type.
+ * remaining tasks immediately (Armstrong: crash one, crash all). Returns {@code Result<List<T>,
+ * Exception>} integrating with the existing railway-oriented {@link Result} type.
  */
 public final class Parallel {
 

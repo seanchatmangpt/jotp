@@ -1,9 +1,16 @@
 package io.github.seanchatmangpt.jotp.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
-import net.jqwik.api.Disabled;
+import io.github.seanchatmangpt.jotp.Result;
+import io.github.seanchatmangpt.jotp.dogfood.api.JavaTimePatterns;
+import io.github.seanchatmangpt.jotp.dogfood.concurrency.ScopedValuePatterns;
+import io.github.seanchatmangpt.jotp.dogfood.core.GathererPatterns;
+import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
@@ -11,17 +18,6 @@ import net.jqwik.api.constraints.NotBlank;
 import net.jqwik.api.constraints.Positive;
 import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
-
-import io.github.seanchatmangpt.jotp.Result;
-import io.github.seanchatmangpt.jotp.dogfood.core.GathererPatterns;
-import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns;
-import io.github.seanchatmangpt.jotp.dogfood.api.JavaTimePatterns;
-import io.github.seanchatmangpt.jotp.dogfood.concurrency.ScopedValuePatterns;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 
 /**
  * Property-based tests (jqwik) for ggen-generated Java development patterns.
@@ -72,7 +68,11 @@ class PatternPropertyTest {
         RuntimeException ex = new RuntimeException(message);
         Result<Integer, RuntimeException> failure = Result.failure(ex);
         AtomicReference<Boolean> called = new AtomicReference<>(false);
-        failure.map(x -> { called.set(true); return x; });
+        failure.map(
+                x -> {
+                    called.set(true);
+                    return x;
+                });
         assertThat(called.get()).isFalse();
     }
 
@@ -81,16 +81,18 @@ class PatternPropertyTest {
     // =========================================================================
 
     @Property(tries = 500)
-    void batchPreservesAllElements(@ForAll @Size(min = 1, max = 50) List<Integer> items,
-                                    @ForAll @IntRange(min = 1, max = 10) int batchSize) {
+    void batchPreservesAllElements(
+            @ForAll @Size(min = 1, max = 50) List<Integer> items,
+            @ForAll @IntRange(min = 1, max = 10) int batchSize) {
         var batches = GathererPatterns.batch(items, batchSize);
         var reconstructed = batches.stream().flatMap(List::stream).toList();
         assertThat(reconstructed).containsExactlyElementsOf(items);
     }
 
     @Property(tries = 500)
-    void batchSizeBounded(@ForAll @Size(min = 1, max = 50) List<Integer> items,
-                           @ForAll @IntRange(min = 1, max = 10) int batchSize) {
+    void batchSizeBounded(
+            @ForAll @Size(min = 1, max = 50) List<Integer> items,
+            @ForAll @IntRange(min = 1, max = 10) int batchSize) {
         var batches = GathererPatterns.batch(items, batchSize);
         for (var batch : batches) {
             assertThat(batch.size()).isLessThanOrEqualTo(batchSize);
@@ -98,14 +100,16 @@ class PatternPropertyTest {
     }
 
     @Property(tries = 500)
-    void runningSumLastEqualsTotal(@ForAll @Size(min = 1, max = 30) List<@IntRange(min = 0, max = 100) Integer> values) {
+    void runningSumLastEqualsTotal(
+            @ForAll @Size(min = 1, max = 30) List<@IntRange(min = 0, max = 100) Integer> values) {
         var sums = GathererPatterns.runningSum(values);
         int total = values.stream().mapToInt(Integer::intValue).sum();
         assertThat(sums.get(sums.size() - 1)).isEqualTo(total);
     }
 
     @Property(tries = 500)
-    void runningSumIsMonotonicallyIncreasing(@ForAll @Size(min = 2, max = 20) List<@IntRange(min = 0, max = 100) Integer> values) {
+    void runningSumIsMonotonicallyIncreasing(
+            @ForAll @Size(min = 2, max = 20) List<@IntRange(min = 0, max = 100) Integer> values) {
         var sums = GathererPatterns.runningSum(values);
         for (int i = 1; i < sums.size(); i++) {
             assertThat(sums.get(i)).isGreaterThanOrEqualTo(sums.get(i - 1));
@@ -113,7 +117,8 @@ class PatternPropertyTest {
     }
 
     @Property(tries = 500)
-    void deduplicateConsecutiveNeverAdjacentDuplicates(@ForAll @Size(min = 1, max = 50) List<@IntRange(min = 0, max = 3) Integer> items) {
+    void deduplicateConsecutiveNeverAdjacentDuplicates(
+            @ForAll @Size(min = 1, max = 50) List<@IntRange(min = 0, max = 3) Integer> items) {
         var result = items.stream().gather(GathererPatterns.deduplicateConsecutive()).toList();
         for (int i = 1; i < result.size(); i++) {
             assertThat(result.get(i)).isNotEqualTo(result.get(i - 1));
@@ -121,7 +126,8 @@ class PatternPropertyTest {
     }
 
     @Property(tries = 500)
-    void mapConcurrentResultCountMatchesInput(@ForAll @Size(min = 0, max = 20) List<Integer> items) {
+    void mapConcurrentResultCountMatchesInput(
+            @ForAll @Size(min = 0, max = 20) List<Integer> items) {
         var results = GathererPatterns.mapConcurrent(items, 4, x -> x * 2);
         assertThat(results).hasSize(items.size());
     }
@@ -132,15 +138,21 @@ class PatternPropertyTest {
 
     @Property(tries = 500)
     void riskLevelAlwaysValid(@ForAll @Positive double limit) {
-        var card = new PatternMatchingPatterns.Payment.CreditCard("1234567890123456", "Holder", 123, limit);
+        var card =
+                new PatternMatchingPatterns.Payment.CreditCard(
+                        "1234567890123456", "Holder", 123, limit);
         var risk = PatternMatchingPatterns.riskLevel(card);
         assertThat(risk).isIn("LOW", "MEDIUM", "HIGH");
     }
 
     @Property(tries = 500)
     void processingFeeAlwaysNonNegative(@ForAll @Positive double amount) {
-        var card = new PatternMatchingPatterns.Payment.CreditCard("1234567890123456", "Holder", 123, 1000.0);
-        var bank = new PatternMatchingPatterns.Payment.BankTransfer("DE89370400440532013000", "BIC", "Name");
+        var card =
+                new PatternMatchingPatterns.Payment.CreditCard(
+                        "1234567890123456", "Holder", 123, 1000.0);
+        var bank =
+                new PatternMatchingPatterns.Payment.BankTransfer(
+                        "DE89370400440532013000", "BIC", "Name");
         var crypto = new PatternMatchingPatterns.Payment.CryptoPay("wallet", "ETH", amount);
         var voucher = new PatternMatchingPatterns.Payment.Voucher("CODE", 100.0, true);
         for (var p : List.<PatternMatchingPatterns.Payment>of(card, bank, crypto, voucher)) {
@@ -194,8 +206,9 @@ class PatternPropertyTest {
     }
 
     @Property(tries = 500)
-    void isWithinSymmetric(@ForAll @IntRange(min = 0, max = 10000) int epochA,
-                            @ForAll @IntRange(min = 0, max = 10000) int epochB) {
+    void isWithinSymmetric(
+            @ForAll @IntRange(min = 0, max = 10000) int epochA,
+            @ForAll @IntRange(min = 0, max = 10000) int epochB) {
         var a = java.time.Instant.ofEpochSecond(epochA);
         var b = java.time.Instant.ofEpochSecond(epochB);
         var window = java.time.Duration.ofSeconds(5000);
@@ -211,22 +224,26 @@ class PatternPropertyTest {
     @Property(tries = 500)
     void scopedUserNotVisibleAfterScope(@ForAll @NotBlank @StringLength(max = 100) String userId) {
         assertThat(ScopedValuePatterns.CURRENT_USER.isBound()).isFalse();
-        ScopedValuePatterns.handleAsUser(userId, () -> {
-            assertThat(ScopedValuePatterns.currentUser()).isEqualTo(userId);
-        });
+        ScopedValuePatterns.handleAsUser(
+                userId,
+                () -> {
+                    assertThat(ScopedValuePatterns.currentUser()).isEqualTo(userId);
+                });
         assertThat(ScopedValuePatterns.CURRENT_USER.isBound()).isFalse();
     }
 
     @Property(tries = 200)
-    void nestedScopeRestoresOuter(@ForAll @NotBlank @StringLength(max = 50) String outer,
-                                   @ForAll @NotBlank @StringLength(max = 50) String inner) {
+    void nestedScopeRestoresOuter(
+            @ForAll @NotBlank @StringLength(max = 50) String outer,
+            @ForAll @NotBlank @StringLength(max = 50) String inner) {
         var outerAfter = new AtomicReference<String>();
         ScopedValuePatterns.nestedScopes(
                 outer,
                 inner,
-                () -> { if (outerAfter.get() == null) outerAfter.set(""); },
-                () -> {}
-        );
+                () -> {
+                    if (outerAfter.get() == null) outerAfter.set("");
+                },
+                () -> {});
         // After nestedScopes completes, scope is unbound
         assertThat(ScopedValuePatterns.CURRENT_USER.isBound()).isFalse();
     }

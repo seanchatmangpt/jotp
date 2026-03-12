@@ -9,13 +9,13 @@ import java.util.function.*;
 /**
  * OTP supervision tree node — hierarchical process supervision with restart strategies.
  *
- * <p>Joe Armstrong: "Supervisors are the key to Erlang's fault tolerance. A supervisor's
- * job is to start, stop, and monitor its children. When a child crashes, the supervisor
- * decides what to do — restart it, restart all children, or give up."
+ * <p>Joe Armstrong: "Supervisors are the key to Erlang's fault tolerance. A supervisor's job is to
+ * start, stop, and monitor its children. When a child crashes, the supervisor decides what to do —
+ * restart it, restart all children, or give up."
  *
  * <p>In OTP, supervisors form a tree where the root supervisor starts application-level
- * supervisors, which in turn start workers. This hierarchical structure ensures that
- * failures are contained and recovered at the appropriate level.
+ * supervisors, which in turn start workers. This hierarchical structure ensures that failures are
+ * contained and recovered at the appropriate level.
  *
  * <p>Java 26 mapping:
  *
@@ -31,15 +31,16 @@ import java.util.function.*;
  * <ul>
  *   <li>{@link Strategy#ONE_FOR_ONE} — Only the crashed child is restarted
  *   <li>{@link Strategy#ONE_FOR_ALL} — All children are restarted when any crashes
- *   <li>{@link Strategy#REST_FOR_ONE} — The crashed child and all children started after it are restarted
+ *   <li>{@link Strategy#REST_FOR_ONE} — The crashed child and all children started after it are
+ *       restarted
  * </ul>
  *
  * <p><strong>Restart Intensity:</strong>
  *
- * <p>The {@code maxRestarts} and {@code window} parameters implement OTP's "max restarts
- * in a time window" feature. If a child crashes more than {@code maxRestarts} times within
- * {@code window}, the supervisor gives up and terminates itself (and by extension, its
- * entire subtree). This prevents infinite restart loops.
+ * <p>The {@code maxRestarts} and {@code window} parameters implement OTP's "max restarts in a time
+ * window" feature. If a child crashes more than {@code maxRestarts} times within {@code window},
+ * the supervisor gives up and terminates itself (and by extension, its entire subtree). This
+ * prevents infinite restart loops.
  *
  * <p><b>Usage:</b>
  *
@@ -73,7 +74,9 @@ public final class Supervisor {
     }
 
     private sealed interface SvEvent permits SvEvent_ChildCrashed, SvEvent_Shutdown {}
+
     private record SvEvent_ChildCrashed(String id, Throwable cause) implements SvEvent {}
+
     private record SvEvent_Shutdown() implements SvEvent {}
 
     @SuppressWarnings("rawtypes")
@@ -87,7 +90,9 @@ public final class Supervisor {
 
         @SuppressWarnings("unchecked")
         ChildEntry(String id, Supplier<?> stateFactory, BiFunction<?, ?, ?> handler) {
-            this.id = id; this.stateFactory = (Supplier<Object>) stateFactory; this.handler = handler;
+            this.id = id;
+            this.stateFactory = (Supplier<Object>) stateFactory;
+            this.handler = handler;
         }
     }
 
@@ -108,7 +113,9 @@ public final class Supervisor {
      * @param window time window for counting restarts
      */
     public Supervisor(Strategy strategy, int maxRestarts, Duration window) {
-        this.strategy = strategy; this.maxRestarts = maxRestarts; this.window = window;
+        this.strategy = strategy;
+        this.maxRestarts = maxRestarts;
+        this.window = window;
         this.supervisorThread = Thread.ofVirtual().name("supervisor").start(this::eventLoop);
     }
 
@@ -121,15 +128,18 @@ public final class Supervisor {
      * @param window time window for counting restarts
      */
     public Supervisor(String name, Strategy strategy, int maxRestarts, Duration window) {
-        this.strategy = strategy; this.maxRestarts = maxRestarts; this.window = window;
-        this.supervisorThread = Thread.ofVirtual().name("supervisor-" + name).start(this::eventLoop);
+        this.strategy = strategy;
+        this.maxRestarts = maxRestarts;
+        this.window = window;
+        this.supervisorThread =
+                Thread.ofVirtual().name("supervisor-" + name).start(this::eventLoop);
     }
 
     /**
      * Supervise a child process with the given ID, initial state, and handler.
      *
-     * <p>The child is started immediately and monitored for crashes. If the child
-     * crashes, the supervisor applies its restart strategy.
+     * <p>The child is started immediately and monitored for crashes. If the child crashes, the
+     * supervisor applies its restart strategy.
      *
      * @param id unique identifier for this child (used in restart strategy)
      * @param initialState initial state for the child process
@@ -139,7 +149,8 @@ public final class Supervisor {
      * @param <M> message type
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public synchronized <S, M> ProcRef<S, M> supervise(String id, S initialState, BiFunction<S, M, S> handler) {
+    public synchronized <S, M> ProcRef<S, M> supervise(
+            String id, S initialState, BiFunction<S, M, S> handler) {
         var entry = new ChildEntry(id, () -> initialState, handler);
         Proc proc = spawnProc(entry, initialState);
         ProcRef ref = new ProcRef<>(proc);
@@ -151,8 +162,8 @@ public final class Supervisor {
     /**
      * Gracefully shut down the supervisor and all its children.
      *
-     * <p>Children are stopped in reverse order of their creation. This method
-     * blocks until all children have terminated.
+     * <p>Children are stopped in reverse order of their creation. This method blocks until all
+     * children have terminated.
      *
      * @throws InterruptedException if interrupted while waiting for children to stop
      */
@@ -162,21 +173,27 @@ public final class Supervisor {
     }
 
     /** Returns {@code true} if the supervisor is still running. */
-    public boolean isRunning() { return running; }
+    public boolean isRunning() {
+        return running;
+    }
 
     /**
      * Returns the fatal error that caused the supervisor to terminate, if any.
      *
      * <p>A non-null value indicates the supervisor exceeded its restart limit.
      */
-    public Throwable fatalError() { return fatalError; }
+    public Throwable fatalError() {
+        return fatalError;
+    }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private Proc spawnProc(ChildEntry entry, Object initialState) {
         Proc proc = new Proc(initialState, entry.handler);
-        proc.addCrashCallback(() -> {
-            if (!entry.stopping) events.add(new SvEvent_ChildCrashed(entry.id, proc.lastError));
-        });
+        proc.addCrashCallback(
+                () -> {
+                    if (!entry.stopping)
+                        events.add(new SvEvent_ChildCrashed(entry.id, proc.lastError));
+                });
         return proc;
     }
 
@@ -186,10 +203,15 @@ public final class Supervisor {
                 SvEvent ev = events.take();
                 switch (ev) {
                     case SvEvent_ChildCrashed(var id, var cause) -> handleCrash(id, cause);
-                    case SvEvent_Shutdown() -> { running = false; stopAll(); }
+                    case SvEvent_Shutdown() -> {
+                        running = false;
+                        stopAll();
+                    }
                 }
             }
-        } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -202,7 +224,10 @@ public final class Supervisor {
         entry.crashTimes.add(now);
 
         if (entry.crashTimes.size() > maxRestarts) {
-            fatalError = cause; running = false; stopAll(); return;
+            fatalError = cause;
+            running = false;
+            stopAll();
+            return;
         }
 
         switch (strategy) {
@@ -215,9 +240,18 @@ public final class Supervisor {
             case REST_FOR_ONE -> {
                 List<ChildEntry> snapshot = List.copyOf(children);
                 boolean found = false;
-                for (ChildEntry c : snapshot) { if (c == entry) { found = true; continue; } if (found) stopChild(c); }
+                for (ChildEntry c : snapshot) {
+                    if (c == entry) {
+                        found = true;
+                        continue;
+                    }
+                    if (found) stopChild(c);
+                }
                 found = false;
-                for (ChildEntry c : snapshot) { if (c == entry) found = true; if (found) restartOne(c); }
+                for (ChildEntry c : snapshot) {
+                    if (c == entry) found = true;
+                    if (found) restartOne(c);
+                }
             }
         }
     }
@@ -232,7 +266,11 @@ public final class Supervisor {
 
     private void stopChild(ChildEntry entry) {
         entry.stopping = true;
-        try { entry.ref.stop(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            entry.ref.stop();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private synchronized void stopAll() {

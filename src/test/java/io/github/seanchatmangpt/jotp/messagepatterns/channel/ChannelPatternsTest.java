@@ -13,9 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * Tests for Channel patterns ported from Vaughn Vernon's Reactive Messaging Patterns.
- */
+/** Tests for Channel patterns ported from Vaughn Vernon's Reactive Messaging Patterns. */
 @DisplayName("Channel Patterns")
 class ChannelPatternsTest implements WithAssertions {
 
@@ -28,10 +26,12 @@ class ChannelPatternsTest implements WithAssertions {
         void singleConsumer() throws InterruptedException {
             var latch = new CountDownLatch(1);
             var received = new AtomicReference<String>();
-            var channel = PointToPoint.<String>create(msg -> {
-                received.set(msg);
-                latch.countDown();
-            });
+            var channel =
+                    PointToPoint.<String>create(
+                            msg -> {
+                                received.set(msg);
+                                latch.countDown();
+                            });
 
             channel.send("Hello");
             assertThat(latch.await(2, TimeUnit.SECONDS)).isTrue();
@@ -90,10 +90,13 @@ class ChannelPatternsTest implements WithAssertions {
             var latch = new CountDownLatch(1);
             var received = new AtomicReference<ProductQuery>();
 
-            var channel = DatatypeChannel.create(ProductQuery.class, q -> {
-                received.set(q);
-                latch.countDown();
-            });
+            var channel =
+                    DatatypeChannel.create(
+                            ProductQuery.class,
+                            q -> {
+                                received.set(q);
+                                latch.countDown();
+                            });
 
             channel.send(new ProductQuery("SKU-001"));
             assertThat(latch.await(2, TimeUnit.SECONDS)).isTrue();
@@ -143,8 +146,9 @@ class ChannelPatternsTest implements WithAssertions {
         @DisplayName("acknowledge removes pending delivery")
         void acknowledgeRemoves() {
             var counter = new AtomicInteger(0);
-            var gd = new GuaranteedDelivery<String>(
-                    msg -> counter.incrementAndGet(), Duration.ofSeconds(1), 3);
+            var gd =
+                    new GuaranteedDelivery<String>(
+                            msg -> counter.incrementAndGet(), Duration.ofSeconds(1), 3);
 
             String id = gd.send("order-1");
             assertThat(counter.get()).isEqualTo(1);
@@ -158,8 +162,9 @@ class ChannelPatternsTest implements WithAssertions {
         @DisplayName("retry re-delivers unacknowledged messages")
         void retryDelivers() {
             var counter = new AtomicInteger(0);
-            var gd = new GuaranteedDelivery<String>(
-                    msg -> counter.incrementAndGet(), Duration.ofSeconds(1), 3);
+            var gd =
+                    new GuaranteedDelivery<String>(
+                            msg -> counter.incrementAndGet(), Duration.ofSeconds(1), 3);
 
             gd.send("order-1");
             gd.retryPending();
@@ -202,14 +207,15 @@ class ChannelPatternsTest implements WithAssertions {
             var latch = new CountDownLatch(1);
             var received = new AtomicReference<String>();
 
-            var bridge = MessagingBridge.create(
-                    Integer.class,
-                    String.class,
-                    i -> "num:" + i,
-                    s -> {
-                        received.set(s);
-                        latch.countDown();
-                    });
+            var bridge =
+                    MessagingBridge.create(
+                            Integer.class,
+                            String.class,
+                            i -> "num:" + i,
+                            s -> {
+                                received.set(s);
+                                latch.countDown();
+                            });
 
             bridge.forward(42);
             assertThat(latch.await(2, TimeUnit.SECONDS)).isTrue();

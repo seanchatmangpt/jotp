@@ -2,9 +2,9 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcessLink;
+import java.time.Duration;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -55,8 +55,7 @@ class ProcessLinkTest implements WithAssertions {
         a.tell(new Msg.Boom());
 
         // B should be interrupted (its virtual thread stops)
-        await().atMost(Duration.ofSeconds(2))
-                .until(() -> !b.thread().isAlive());
+        await().atMost(Duration.ofSeconds(2)).until(() -> !b.thread().isAlive());
     }
 
     // ── Test 2: Symmetric — B crashes → A is interrupted ──────────────────
@@ -69,8 +68,7 @@ class ProcessLinkTest implements WithAssertions {
 
         b.tell(new Msg.Boom());
 
-        await().atMost(Duration.ofSeconds(2))
-                .until(() -> !a.thread().isAlive());
+        await().atMost(Duration.ofSeconds(2)).until(() -> !a.thread().isAlive());
     }
 
     // ── Test 3: Normal stop does NOT propagate to linked partner ──────────
@@ -105,8 +103,7 @@ class ProcessLinkTest implements WithAssertions {
 
         parent.tell(new Msg.Boom());
 
-        await().atMost(Duration.ofSeconds(2))
-                .until(() -> !child.thread().isAlive());
+        await().atMost(Duration.ofSeconds(2)).until(() -> !child.thread().isAlive());
     }
 
     // ── Test 5: spawnLink — child crash kills parent ───────────────────────
@@ -118,8 +115,7 @@ class ProcessLinkTest implements WithAssertions {
 
         child.tell(new Msg.Boom());
 
-        await().atMost(Duration.ofSeconds(2))
-                .until(() -> !parent.thread().isAlive());
+        await().atMost(Duration.ofSeconds(2)).until(() -> !parent.thread().isAlive());
     }
 
     // ── Test 6: Link chain — A→B→C, A crashes → B crashes → C crashes ────
@@ -136,6 +132,10 @@ class ProcessLinkTest implements WithAssertions {
 
         // A crashes → B interrupted → C interrupted
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> !a.thread().isAlive() && !b.thread().isAlive() && !c.thread().isAlive());
+                .until(
+                        () ->
+                                !a.thread().isAlive()
+                                        && !b.thread().isAlive()
+                                        && !c.thread().isAlive());
     }
 }

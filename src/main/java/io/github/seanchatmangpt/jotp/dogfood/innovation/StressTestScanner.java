@@ -15,8 +15,8 @@ import java.util.regex.Pattern;
  * that need immediate stress testing to find where things fail.
  *
  * <p>Joe Armstrong: <em>"A system that has never been stressed is a system whose failure mode you
- * don't know."</em> This engine automates the discovery of what to stress and generates the
- * {@code bin/jgen generate} commands to scaffold the tests.
+ * don't know."</em> This engine automates the discovery of what to stress and generates the {@code
+ * bin/jgen generate} commands to scaffold the tests.
  *
  * <pre>{@code
  * var plan = StressTestScanner.scan(Path.of("./src/main/java"));
@@ -193,7 +193,9 @@ public final class StressTestScanner {
             sb.append("╚════════════════════════════════════════════════════════════════╝\n\n");
 
             if (findings.isEmpty()) {
-                sb.append("No breaking-point patterns detected in ").append(sourceRoot).append("\n");
+                sb.append("No breaking-point patterns detected in ")
+                        .append(sourceRoot)
+                        .append("\n");
                 return sb.toString();
             }
 
@@ -211,9 +213,7 @@ public final class StressTestScanner {
                             .append("  (")
                             .append(f.className())
                             .append(")\n");
-                    sb.append("    Type:     ")
-                            .append(f.getClass().getSimpleName())
-                            .append("\n");
+                    sb.append("    Type:     ").append(f.getClass().getSimpleName()).append("\n");
                     sb.append("    Template: ").append(f.recommendedTemplate()).append("\n");
                     sb.append("    Signals:  ");
                     var signals = f.matchedSignals().stream().limit(3).toList();
@@ -548,7 +548,9 @@ public final class StressTestScanner {
 
         var fileName = file.getFileName().toString();
         var className =
-                fileName.endsWith(".java") ? fileName.substring(0, fileName.length() - 5) : fileName;
+                fileName.endsWith(".java")
+                        ? fileName.substring(0, fileName.length() - 5)
+                        : fileName;
         var packageName = extractPackage(source);
 
         // Group signals by (findingType, priority, template) — multiple rule hits merge

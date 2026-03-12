@@ -86,7 +86,7 @@ public final class SmartProxy<REQ, REP> {
     }
 
     /** Stop the proxy. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

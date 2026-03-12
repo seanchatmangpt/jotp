@@ -38,14 +38,17 @@ public final class PollingConsumer<T> {
     public PollingConsumer(Supplier<T> source, Consumer<T> handler, Duration pollInterval) {
         this.source = source;
         this.handler = handler;
-        this.proc = new Proc<>(0L, (count, msg) -> {
-            T item = source.get();
-            if (item != null) {
-                handler.accept(item);
-                return count + 1;
-            }
-            return count;
-        });
+        this.proc =
+                new Proc<>(
+                        0L,
+                        (count, msg) -> {
+                            T item = source.get();
+                            if (item != null) {
+                                handler.accept(item);
+                                return count + 1;
+                            }
+                            return count;
+                        });
         this.timerRef = ProcTimer.sendInterval(pollInterval.toMillis(), proc, "poll");
     }
 
@@ -54,7 +57,11 @@ public final class PollingConsumer<T> {
         if (timerRef != null) {
             ProcTimer.cancel(timerRef);
         }
-        proc.stop();
+        try {
+            proc.stop();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** Returns the underlying Proc for monitoring. */

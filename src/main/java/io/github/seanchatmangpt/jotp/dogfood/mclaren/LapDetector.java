@@ -1,9 +1,9 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
-import java.util.ArrayList;
-import java.util.List;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.StateMachine.Transition;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Lap detection state machine — OTP {@code gen_statem} mapped to ATLAS lap trigger logic.
@@ -40,8 +40,7 @@ public final class LapDetector {
     // ---------------------------------------------------------------------------
 
     /** Lap detection state — position in the OutLap → FlyingLap → InLap cycle. */
-    public sealed interface LapState
-            permits LapState.OutLap, LapState.FlyingLap, LapState.InLap {
+    public sealed interface LapState permits LapState.OutLap, LapState.FlyingLap, LapState.InLap {
 
         /** Pit-exit out-lap: car is on its warm-up lap before the flying lap. */
         record OutLap() implements LapState {}
@@ -79,8 +78,8 @@ public final class LapDetector {
         record ManualLapTrigger(long timestampNs, String name) implements LapEvent {}
 
         /**
-         * Reset the detector to {@link LapState.OutLap} (e.g. between stints or after
-         * red flag). All accumulated laps are cleared.
+         * Reset the detector to {@link LapState.OutLap} (e.g. between stints or after red flag).
+         * All accumulated laps are cleared.
          */
         record Reset() implements LapEvent {}
     }
@@ -93,9 +92,9 @@ public final class LapDetector {
      * Immutable lap accumulator — carries the lap counter and completed lap list across
      * transitions.
      *
-     * @param lapNumber       current lap number (0 = out-lap, 1+ = flying laps)
-     * @param lastBeaconNs    timestamp of the most recent beacon crossing
-     * @param completedLaps   all laps committed so far (immutable list)
+     * @param lapNumber current lap number (0 = out-lap, 1+ = flying laps)
+     * @param lastBeaconNs timestamp of the most recent beacon crossing
+     * @param completedLaps all laps committed so far (immutable list)
      */
     public record LapData(int lapNumber, long lastBeaconNs, List<SqlRaceLap> completedLaps) {
 
@@ -141,7 +140,8 @@ public final class LapDetector {
      */
     public static LapDetector start() {
         return new LapDetector(
-                new StateMachine<>(new LapState.OutLap(), LapData.empty(), LapDetector::transition));
+                new StateMachine<>(
+                        new LapState.OutLap(), LapData.empty(), LapDetector::transition));
     }
 
     // ---------------------------------------------------------------------------
@@ -220,7 +220,7 @@ public final class LapDetector {
                 yield Transition.keepState(data.withLap(lap).withBeacon(ts));
             }
             case LapEvent.Reset ignored ->
-                Transition.nextState(new LapState.OutLap(), LapData.empty());
+                    Transition.nextState(new LapState.OutLap(), LapData.empty());
         };
     }
 
@@ -241,7 +241,7 @@ public final class LapDetector {
                 yield Transition.keepState(data.withLap(lap).withBeacon(ts));
             }
             case LapEvent.Reset ignored ->
-                Transition.nextState(new LapState.OutLap(), LapData.empty());
+                    Transition.nextState(new LapState.OutLap(), LapData.empty());
         };
     }
 
@@ -257,11 +257,12 @@ public final class LapDetector {
                 yield Transition.nextState(new LapState.OutLap(), data.withLap(inLap));
             }
             case LapEvent.ManualLapTrigger(var ts, var name) -> {
-                var lap = new SqlRaceLap(ts, data.lapNumber, SqlRaceLap.TRIGGER_MANUAL, name, false);
+                var lap =
+                        new SqlRaceLap(ts, data.lapNumber, SqlRaceLap.TRIGGER_MANUAL, name, false);
                 yield Transition.keepState(data.withLap(lap).withBeacon(ts));
             }
             case LapEvent.Reset ignored ->
-                Transition.nextState(new LapState.OutLap(), LapData.empty());
+                    Transition.nextState(new LapState.OutLap(), LapData.empty());
         };
     }
 }

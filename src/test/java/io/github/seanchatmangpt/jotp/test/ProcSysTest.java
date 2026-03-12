@@ -2,10 +2,10 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;

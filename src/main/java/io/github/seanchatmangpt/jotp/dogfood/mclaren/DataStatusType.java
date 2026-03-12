@@ -58,8 +58,8 @@ public enum DataStatusType {
     OutOfRange,
 
     /**
-     * Sample was synthesised by a forward-prediction model (e.g. Kalman filter gap-fill).
-     * Flagged so that statistics pipelines can exclude synthetic data from lap comparisons.
+     * Sample was synthesised by a forward-prediction model (e.g. Kalman filter gap-fill). Flagged
+     * so that statistics pipelines can exclude synthetic data from lap comparisons.
      */
     Predicted,
 }

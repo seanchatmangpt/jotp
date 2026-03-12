@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TransferQueue;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
@@ -158,7 +158,10 @@ public final class Proc<S, M> {
                                         }
                                     }
                                     // Fire termination callbacks (monitor semantics — always)
-                                    Throwable exitReason = (crashedAbnormally || lastError != null) ? lastError : null;
+                                    Throwable exitReason =
+                                            (crashedAbnormally || lastError != null)
+                                                    ? lastError
+                                                    : null;
                                     for (Consumer<Throwable> cb : terminationCallbacks) {
                                         cb.accept(exitReason);
                                     }
@@ -189,8 +192,9 @@ public final class Proc<S, M> {
     /**
      * Timed request-reply — mirrors OTP's {@code gen_server:call(Pid, Msg, Timeout)}.
      *
-     * <p>The returned future completes exceptionally with {@link java.util.concurrent.TimeoutException}
-     * if the process does not respond within {@code timeout}.
+     * <p>The returned future completes exceptionally with {@link
+     * java.util.concurrent.TimeoutException} if the process does not respond within {@code
+     * timeout}.
      *
      * <p>Armstrong: "An unbounded call is a latent deadlock. Every call must have a timeout."
      */
@@ -202,8 +206,8 @@ public final class Proc<S, M> {
      * Enable or disable exit signal trapping — mirrors OTP's {@code process_flag(trap_exit, Flag)}.
      *
      * <p>When {@code true}, EXIT signals from linked processes are delivered as {@link ExitSignal}
-     * messages to this process's mailbox instead of interrupting it. The process stays alive and can
-     * choose how to handle each exit reason.
+     * messages to this process's mailbox instead of interrupting it. The process stays alive and
+     * can choose how to handle each exit reason.
      *
      * <p>When {@code false} (default), EXIT signals kill this process immediately.
      */
@@ -243,7 +247,9 @@ public final class Proc<S, M> {
         terminationCallbacks.add(cb);
     }
 
-    /** Remove a previously registered termination callback (for {@link ProcessMonitor#demonitor}). */
+    /**
+     * Remove a previously registered termination callback (for {@link ProcessMonitor#demonitor}).
+     */
     boolean removeTerminationCallback(Consumer<Throwable> cb) {
         return terminationCallbacks.remove(cb);
     }
@@ -282,16 +288,16 @@ public final class Proc<S, M> {
     }
 
     /**
-     * Package-private: suspend this process — used by {@link ProcSys#suspend}.
-     * The process loop will block after finishing the current message.
+     * Package-private: suspend this process — used by {@link ProcSys#suspend}. The process loop
+     * will block after finishing the current message.
      */
     void suspendProc() {
         suspended = true;
     }
 
     /**
-     * Package-private: resume this process — used by {@link ProcSys#resume}.
-     * The process loop continues immediately.
+     * Package-private: resume this process — used by {@link ProcSys#resume}. The process loop
+     * continues immediately.
      */
     void resumeProc() {
         suspended = false;

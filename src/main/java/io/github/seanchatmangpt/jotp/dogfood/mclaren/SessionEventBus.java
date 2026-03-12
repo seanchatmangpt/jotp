@@ -3,16 +3,16 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 import io.github.seanchatmangpt.jotp.EventManager;
 
 /**
- * SQL Race session event bus — OTP {@code gen_event} mapped to ATLAS {@code SessionManager}
- * event infrastructure.
+ * SQL Race session event bus — OTP {@code gen_event} mapped to ATLAS {@code SessionManager} event
+ * infrastructure.
  *
  * <p>In ATLAS, the SQL Race {@code SessionManager} fires typed events ({@code SessionCreated},
- * {@code LapStarted}, etc.) to all registered listeners. This Java 26 / OTP refactor wraps
- * an {@link EventManager}{@code <SqlRaceSessionEvent>} to provide the same decoupled pub/sub
- * with process-level fault isolation.
+ * {@code LapStarted}, etc.) to all registered listeners. This Java 26 / OTP refactor wraps an
+ * {@link EventManager}{@code <SqlRaceSessionEvent>} to provide the same decoupled pub/sub with
+ * process-level fault isolation.
  *
- * <p>A crashing handler is automatically removed from the bus without affecting other handlers
- * or the bus itself — exactly OTP's {@code gen_event} guarantee:
+ * <p>A crashing handler is automatically removed from the bus without affecting other handlers or
+ * the bus itself — exactly OTP's {@code gen_event} guarantee:
  *
  * <pre>{@code
  * // Register a live display handler — if it crashes, the bus continues
@@ -78,8 +78,8 @@ public final class SessionEventBus {
     }
 
     /**
-     * Broadcast synchronously, blocking until all handlers have processed the event —
-     * mirrors {@code gen_event:sync_notify/2}.
+     * Broadcast synchronously, blocking until all handlers have processed the event — mirrors
+     * {@code gen_event:sync_notify/2}.
      *
      * @param event the event to broadcast
      * @throws InterruptedException if interrupted while waiting
@@ -88,9 +88,7 @@ public final class SessionEventBus {
         manager.syncNotify(event);
     }
 
-    /**
-     * Stop the event bus and remove all handlers.
-     */
+    /** Stop the event bus and remove all handlers. */
     public void stop() {
         manager.stop();
     }
@@ -99,8 +97,8 @@ public final class SessionEventBus {
      * Create a handler that forwards all session events to a target {@link SqlRaceSession}.
      *
      * <p>Useful for wiring the event bus as a front-end dispatcher to a session state machine.
-     * Demonstrates OTP's "forwarding handler" pattern where a gen_event handler translates
-     * events into gen_statem casts.
+     * Demonstrates OTP's "forwarding handler" pattern where a gen_event handler translates events
+     * into gen_statem casts.
      *
      * @param session the target session
      * @return handler suitable for {@link #addHandler(EventManager.Handler)}
