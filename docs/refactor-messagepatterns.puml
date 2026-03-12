@@ -1,0 +1,399 @@
+@startuml messagepatterns-refactoring-overview
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam packageBorderColor #333333
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #E1F5FE
+
+title Messagepatterns Package Refactoring - High Level Architecture
+
+package "io.github.seanchatmangpt.jotp.messagepatterns" {
+
+  package "channel (8 classes)" <<Rectangle>> {
+    note right
+      Proc-Heavy: 4/8
+      EventManager: 1/8
+      Pure Utility: 3/8
+    end note
+
+    class "DatatypeChannel<T>" as DC {
+      {static} +create(Class, Consumer): DatatypeChannel
+      +send(T): void
+      +stop(): void
+      --
+      [Proc<Void, T>] HEAVY
+    }
+
+    class "PublishSubscribe<T>" as PS {
+      +subscribe(Consumer): void
+      +publish(T): void
+      +publishSync(T): void
+      --
+      [EventManager] HEAVY
+    }
+
+    class "PointToPoint<T>" as PP {
+      {static} +create(Consumer): PointToPoint
+      +send(T): void
+      --
+      [Proc<Void/S, T>] HEAVY
+    }
+
+    class "GuaranteedDelivery<T>" as GD {
+      +send(T): void
+      +acknowledge(String): void
+      --
+      [ProcTimer] HEAVY
+    }
+
+    class "DeadLetter<T>" as DL {
+      +dead(T, String): void
+      +drain(): List
+      == PURE UTILITY ==
+    }
+
+    class "InvalidMessageChannel<T>" as IMC {
+      +reject(T, String): void
+      == PURE UTILITY ==
+      (DUPLICATE of DeadLetter)
+    }
+
+    class "MessageBus<T>" as MB {
+      +registerCommandHandler(): void
+      +dispatchCommand(): void
+      == PURE UTILITY ==
+    }
+
+    class "MessagingBridge<A,B>" as MBridge {
+      +forward(A): void
+      --
+      [Proc<Void, A>] HEAVY
+    }
+  }
+
+  package "construction (9 classes)" <<Rectangle>> {
+    note right
+      Proc-Heavy: 2/9
+      Pure Metadata: 6/9
+      Marker Interfaces: 3/9
+    end note
+
+    interface CommandMessage {
+      +executeOn(Proc): void
+    }
+
+    interface DocumentMessage
+    interface EventMessage
+
+    class "CorrelationIdentifier" as CI {
+      {static} +create(): CorrelationIdentifier
+      +matches(): boolean
+      == UUID wrapper ==
+    }
+
+    class "EnvelopeWrapper<T>" as EW {
+      +wrap(T, Map): EnvelopeWrapper
+      +unwrap(): T
+      +header(String): String
+      == Metadata RECORD ==
+    }
+
+    class "RequestReply<S,M>" as RR {
+      +server(S, BiFunction): RequestReply
+      +request(M, Duration): void
+      --
+      [Proc<S, M>] HEAVY
+    }
+
+    class "ReturnAddress<M,R>" as RA {
+      +reply(R): void
+      == RECORD with Proc ==
+    }
+
+    class "ClaimCheck<T>" as CC {
+      +checkIn(T): CheckToken
+      +claim(CheckToken): T
+      == Storage pattern ==
+    }
+
+    class "MessageExpiration" as ME {
+      +isExpired(): boolean
+      +timeToLive(): Duration
+      == Pure TTL ==
+    }
+
+    class "MessageMetadata" as MM {
+      +addEntry(String, String, String, String): void
+      == Audit RECORD ==
+    }
+
+    CommandMessage --|> RR : uses
+    EW --> CI : contains
+    RA --> RR : pairs with
+  }
+
+  package "endpoint (4 classes)" <<Rectangle>> {
+    note right
+      Proc-Heavy: 3/4
+      Thread-Heavy: 1/4
+      Opportunity: use Supervisor
+    end note
+
+    class "SelectiveConsumer<T>" as SEC {
+      {static} +builder(): Builder
+      +send(T): void
+      +stop(): void
+      --
+      [Proc<Void, T>] HEAVY
+    }
+
+    class "PollingConsumer<T>" as PC {
+      +proc(): Proc
+      --
+      [Proc<Long, String>]
+      [ProcTimer] HEAVY
+    }
+
+    class "IdempotentReceiver<T,K>" as IR {
+      +send(T): void
+      --
+      [Proc<Set<K>, T>] HEAVY
+      (Deduplication)
+    }
+
+    class "CompetingConsumer<T>" as CC_EP {
+      {static} +CompetingConsumer(int, Consumer)
+      --
+      [Thread.ofVirtual()]
+      ⚠️ REFACTOR: Use Supervisor
+    }
+  }
+
+  package "routing (9 classes)" <<Rectangle>> {
+    note right
+      Proc-Heavy: 4/9
+      Pure Logic: 4/9
+      Async-Light: 1/9
+    end note
+
+    class "ContentBasedRouter<T>" as CBR {
+      {static} +builder(): Builder
+      +route(T): void
+      == Pure predicate dispatch ==
+    }
+
+    class "MessageRouter<T>" as MR {
+      +route(T): void
+      == Round-robin ==
+    }
+
+    class "DynamicRouter<T>" as DR {
+      +registerInterest(String, Predicate, Consumer)
+      +route(T): void
+      == Hot-reconfigurable ==
+    }
+
+    class "RecipientList<T>" as RL {
+      +register(String, Consumer, Predicate)
+      +route(T): void
+      == Dynamic fan-out ==
+    }
+
+    class "Splitter<T,P>" as SP {
+      +split(T): void
+      == Decomposition ==
+    }
+
+    class "RoutingSlip<T>" as RS {
+      {static} +builder(): Builder
+      +execute(T): void
+      == Sequential chaining ==
+    }
+
+    class "ScatterGather<T,R>" as SG {
+      {static} +builder(): Builder
+      +scatterAndGather(T): R
+      == Async fan-out ==
+      ⚠️ REFACTOR: Use Proc instead of CompletableFuture
+    }
+
+    class "Aggregator<T,K,R>" as AGG {
+      +addPart(T): void
+      --
+      [Proc<Map<K, AggState<T>>>] HEAVY
+      (Order-sensitive accumulation)
+    }
+
+    class "ProcessManager<S,M>" as PM {
+      +startProcess(): void
+      +sendToProcess(String, M): void
+      --
+      [Proc<Map<String, ManagedProcess<S>>, M>] HEAVY
+      ⚠️ REFACTOR: Use Supervisor + StateMachine
+    }
+
+    class "Resequencer<T>" as REQ {
+      +submit(Sequenced<T>): void
+      --
+      [Proc<State<T>, Sequenced<T>>] HEAVY
+      (Order recovery via buffering)
+    }
+
+    SP --> CBR : uses
+  }
+
+  package "management (4 classes)" <<Rectangle>> {
+    note right
+      Proc-Heavy: 2/4
+      Proc-Light: 2/4
+      Opportunity: use ProcMonitor
+    end note
+
+    class "PipesAndFilters<T>" as PnF {
+      {static} +builder(): Builder
+      +process(T): void
+      --
+      [List<Proc<Void, T>>] HEAVY
+    }
+
+    class "WireTap<T>" as WT {
+      +send(T): void
+      +activate(): void
+      --
+      [Proc<Void, T>] HEAVY
+      (Non-intrusive monitoring)
+    }
+
+    class "SmartProxy<REQ,REP>" as SP_MNG {
+      +sendRequest(REQ, Consumer): void
+      +deliverReply(REP): void
+      --
+      [Proc] UNUSED
+      [CorrelationIdentifier] used
+      ⚠️ REFACTOR: Use ProcMonitor for timeout
+    }
+
+    class "TransactionalActor<S,E>" as TA {
+      +apply(E): void
+      +commit(): void
+      +rollback(): void
+      --
+      [Proc] MINIMAL
+      ⚠️ REFACTOR: Use StateMachine<S,E,D>
+    }
+
+    WireTap --> SecureUnaryTransformer : could wrap
+    PnF --> SecureUnaryTransformer : chains
+  }
+
+  package "transformation (3 classes)" <<Rectangle>> {
+    note right
+      Proc-Heavy: 3/3
+      DUPLICATION: Identical structure
+      REFACTOR: Generic UnaryTransformer<T>
+    end note
+
+    class "MessageTranslator<A,B>" as MTrans {
+      +translate(A): void
+      --
+      [Proc<Void, A>] HEAVY
+    }
+
+    class "ContentFilter<A,B>" as CF {
+      +filter(A): void
+      --
+      [Proc<Void, A>] HEAVY
+    }
+
+    class "ContentEnricher<T,R,U>" as CEN {
+      +enrich(T): void
+      --
+      [Proc<Void, T>] HEAVY
+    }
+
+    class "SecureUnaryTransformer<T>" as SUT {
+      <<abstract>> {static} +transform(Function, Consumer)
+      +apply(T): void
+      +stop(): void
+    }
+
+    MTrans --|> SUT : refactor into
+    CF --|> SUT : refactor into
+    CEN --|> SUT : refactor into
+  }
+}
+
+package "io.github.seanchatmangpt.jotp" <<Rectangle>> {
+  class "Proc<S,M>" as JProc {
+    +tell(M): void
+    +ask(M, Duration): Result<?>
+  }
+
+  class "EventManager<E>" as JEM {
+    +notify(E): void
+    +syncNotify(E): void
+  }
+
+  class "ProcTimer" as JPT {
+    +sendAfter(Proc, Message, Duration)
+    +sendInterval(Proc, Message, Duration)
+  }
+
+  class "Supervisor" as JSup {
+    +start(Strategy, ProcSpec)
+    (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)
+  }
+
+  class "StateMachine<S,E,D>" as JSM {
+    +onEvent(E, D): Transition<S,E,D>
+  }
+
+  class "ProcMonitor" as JPM {
+    +monitor(Proc): MonitorRef
+  }
+}
+
+DC -.-> JProc
+PS -.-> JEM
+GD -.-> JPT
+PP -.-> JProc
+MBridge -.-> JProc
+RR -.-> JProc
+RA -.-> JProc
+SEC -.-> JProc
+PC -.-> JProc
+PC -.-> JPT
+IR -.-> JProc
+CC_EP -.-> JSup : ⚠️ should use
+AGG -.-> JProc
+PM -.-> JProc
+PM -.-> JSup : ⚠️ should use
+PM -.-> JSM : ⚠️ should use
+REQ -.-> JProc
+PnF -.-> JProc
+WireTap -.-> JProc
+SP_MNG -.-> JPM : ⚠️ should use
+TA -.-> JSM : ⚠️ should use
+MTrans -.-> JProc
+CF -.-> JProc
+CEN -.-> JProc
+
+note bottom of messagepatterns
+  KEY STATISTICS:
+  • Total Classes: 41
+  • Proc-dependent: 21 (54%)
+  • EventManager-dependent: 1 (2%)
+  • Pure utility: 15 (37%)
+  • JOTP Integration: 24 classes need refactoring
+
+  DUPLICATIONS IDENTIFIED:
+  • DeadLetter ≈ InvalidMessageChannel (merge)
+  • MessageTranslator, ContentFilter, ContentEnricher (→ SecureUnaryTransformer)
+  • CompetingConsumer (→ Supervisor + Proc)
+  • ProcessManager (→ Supervisor + StateMachine)
+  • TransactionalActor (→ StateMachine)
+  • SmartProxy (→ ProcMonitor)
+  • ScatterGather (→ Proc instead of CompletableFuture)
+end note
+
+@enduml

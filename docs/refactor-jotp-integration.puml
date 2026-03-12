@@ -1,0 +1,341 @@
+@startuml messagepatterns-jotp-integration
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam packageBorderColor #1976D2
+skinparam classBorderColor #1976D2
+skinparam classBackgroundColor #E3F2FD
+
+title Messagepatterns - JOTP Primitive Integration Map
+
+package "CURRENT JOTP USAGE" {
+
+  package "1. Proc<S,M> - 21 Classes (54%)" {
+    note left
+      Current Integration: EXCELLENT
+      Usage: Direct mailbox + message handler
+      State: Varies (Void, Set, Map, Boolean)
+      Dispatch: Consumer or Proc.tell()
+    end note
+
+    class "Proc<S,M>" as Proc_SM {
+      +tell(M): void
+      +ask(M, Duration): Result<R>
+      +stop(): void
+      --
+      Virtual thread mailbox
+      Pure state handler
+      Stateless or stateful
+    }
+
+    class "Strong Proc Integration" as SPI {
+      - DatatypeChannel<T>: Proc<Void, T> queue
+      - PointToPoint<T>: Proc<Void/S, T> routing
+      - GuaranteedDelivery<T>: Proc + timer retry
+      - SelectiveConsumer<T>: Proc<Void, T> dispatch
+      - IdempotentReceiver<T,K>: Proc<Set<K>, T> dedup
+      - PollingConsumer<T>: Proc<Long, String> with timer
+      - WireTap<T>: Proc<Void, T> tap
+      - Aggregator<T,K,R>: Proc<Map<K, State>, T>
+      - ProcessManager<S,M>: Proc<Map<S, M>> instance mgmt
+      - Resequencer<T>: Proc<TreeMap, Seq<T>>
+      - ContentEnricher<T,R,U>: Proc<Void, T> enrichment
+      - ContentFilter<A,B>: Proc<Void, A> filtering
+      - MessageTranslator<A,B>: Proc<Void, A> translation
+      - RequestReply<S,M>: Proc<S, M> ask-pattern
+      - MessagingBridge<A,B>: Proc<Void, A> bridge
+      - PipesAndFilters<T>: List<Proc<Void, T>> chain
+      - ReturnAddress<M,R>: holds Proc<?, R>
+      - CommandMessage: uses Proc.tell()
+    }
+  }
+
+  package "2. EventManager<E> - 1 Class (2%)" {
+    note left
+      Current Integration: MINIMAL
+      Opportunity: Under-utilized
+      Use: Gen_event pattern
+    end note
+
+    class "EventManager<E>" as EM_Class {
+      +notify(E): void
+      +syncNotify(E): void
+      +addHandler(H): void
+      +deleteHandler(H): void
+      --
+      Typed event distribution
+      No crash kill propagation
+      Handler exceptions isolated
+    }
+
+    class "PublishSubscribe<T>" as PS_EM {
+      - EventManager<T> delegate
+      + event-based pub/sub
+      + hot subscriber registration
+      + typed event delivery
+    }
+  }
+
+  package "3. ProcTimer - 2 Classes (5%)" {
+    note left
+      Current Integration: FOCUSED
+      Pattern: Delayed + periodic messages
+      Opportunity: Expand to TTL checks
+    end note
+
+    class "ProcTimer" as PT {
+      {static} +sendAfter(Proc, M, Duration): TimerRef
+      {static} +sendInterval(Proc, M, Duration): TimerRef
+      {static} +cancel(TimerRef): void
+    }
+
+    class "Timer Users" as TU {
+      - GuaranteedDelivery: retry after delay
+      - PollingConsumer: periodic poll with timer
+    }
+  }
+
+  package "4. CURRENTLY UNUSED JOTP PRIMITIVES" {
+    note right
+      HIGH PRIORITY FOR INTEGRATION:
+      • Supervisor (2 opportunities)
+      • StateMachine (3 opportunities)
+      • ProcMonitor (1 opportunity)
+      • CrashRecovery (fault tolerance)
+      • ProcRegistry (named processes)
+    end note
+
+    class "Supervisor" as Super {
+      +start(Strategy, specs...): SuperRef
+      +stop(): void
+      --
+      ONE_FOR_ONE: individual restart
+      ONE_FOR_ALL: cascade restart
+      REST_FOR_ONE: sibling restart
+      --
+      USES: Sliding restart window
+      CRASHES: Exponential backoff
+    }
+
+    class "StateMachine<S,E,D>" as StateMach {
+      +onEvent(E, D): Transition<S>
+      --
+      State: Current state S
+      Event: Triggering event E
+      Data: Contextual data D
+      --
+      Sealed Transition hierarchy:
+      → Next(S, List<Action>)
+      → Defer(E, List<Action>)
+      → Stop(Result, List<Action>)
+      → Repeat(List<Action>)
+    }
+
+    class "ProcMonitor" as Monitor {
+      {static} +monitor(Proc): MonitorRef
+      {static} +demonitor(MonitorRef): void
+      --
+      Unilateral observation
+      DOWN message on exit
+      Non-lethal to observer
+    }
+
+    class "CrashRecovery" as CrashRec {
+      {static} +recover(Supplier, RetryPolicy): Result<T>
+      {static} +isolate(Supplier): Result<T>
+      --
+      Isolated virtual thread restart
+      Retry policy: exponential backoff
+      Fail-fast or timeout
+    }
+
+    class "ProcRegistry" as Reg {
+      {static} +register(String, Proc): void
+      {static} +whereis(String): Optional<Proc>
+      {static} +unregister(String): void
+      {static} +registered(): Set<String>
+    }
+  }
+}
+
+package "REFACTORING OPPORTUNITIES" {
+
+  package "HIGH PRIORITY" <<Rectangle>> {
+    note top
+      Estimated impact: 70% of JOTP integration gains
+      Effort: Medium (3-4 weeks)
+    end note
+
+    class "CompetingConsumer (Supervisor)" as CC_Super {
+      -- CURRENT --
+      Thread.ofVirtual() pool
+      Manual exception handling
+      Static size
+      --
+      -- REFACTORED --
+      Supervisor + ONE_FOR_ONE
+      Auto-restart on crash
+      Dynamic scaling with strategy
+      --
+      Benefits:
+      ✓ Let-it-crash semantics
+      ✓ Automatic recovery
+      ✓ Integrated monitoring
+    }
+
+    class "ProcessManager (Supervisor + StateMachine)" as PM_SSM {
+      -- CURRENT --
+      Proc<Map<String, ManagedProcess>> instance mgmt
+      Manual state transitions
+      No lifecycle events
+      --
+      -- REFACTORED --
+      Supervisor tree per process instance
+      StateMachine<ProcessState, Event, Data>
+      Lifecycle: Created → Running → Stopping → Stopped
+      --
+      Benefits:
+      ✓ Type-safe state transitions
+      ✓ Lifecycle guarantees
+      ✓ Supervision tree isolation
+    }
+
+    class "TransactionalActor (StateMachine)" as TA_SM {
+      -- CURRENT --
+      Manual commit/rollback
+      List<E> uncommittedEvents
+      Tentative + committed state
+      --
+      -- REFACTORED --
+      StateMachine<TransactionState, TxnEvent, TxnData>
+      States: Idle → Accumulating → Committing → Committed/RolledBack
+      Events: apply(E), commit(), rollback()
+      --
+      Benefits:
+      ✓ Type-safe transitions
+      ✓ Exhaustive pattern matching
+      ✓ Action composition
+    }
+
+    class "SmartProxy (ProcMonitor)" as SP_Mon {
+      -- CURRENT --
+      Proc field created but unused
+      Manual timeout via CorrelationIdentifier
+      Explicit cleanup needed
+      --
+      -- REFACTORED --
+      ProcMonitor on reply handler Proc
+      Monitor DOWN message triggers timeout
+      Automatic demonitor on reply
+      --
+      Benefits:
+      ✓ Non-intrusive monitoring
+      ✓ Timeout on handler crash
+      ✓ Automatic cleanup
+    }
+  }
+
+  package "MEDIUM PRIORITY" <<Rectangle>> {
+    note top
+      Estimated impact: 20% of JOTP integration gains
+      Effort: Medium-Low (2-3 weeks)
+    end note
+
+    class "ScatterGather (Proc instead of CompletableFuture)" as SG_Proc {
+      -- CURRENT --
+      CompletableFuture<List<R>> aggregation
+      Thread pool for handlers
+      Timeout via CFuture timeout
+      --
+      -- REFACTORED --
+      Proc<AggregationState, ScatterMessage>
+      Parallel Proc instances for each handler
+      ProcTimer for timeout
+      --
+      Benefits:
+      ✓ JOTP-native error handling
+      ✓ Consistent with other patterns
+      ✓ Better monitoring
+    }
+
+    class "GuaranteedDelivery (CrashRecovery + ProcTimer)" as GD_Enhanced {
+      -- CURRENT --
+      Manual ProcTimer retry
+      Limited retry semantics
+      --
+      -- REFACTORED --
+      CrashRecovery for handler crash
+      ProcTimer for message-level TTL
+      Exponential backoff + jitter
+      --
+      Benefits:
+      ✓ Resilient to handler crashes
+      ✓ Better retry semantics
+      ✓ TTL enforcement
+    }
+
+    class "All Endpoints (ProcMonitor health)" as Endpoints_Mon {
+      -- CURRENT --
+      No health monitoring
+      Silent failures possible
+      --
+      -- REFACTORED --
+      Optional ProcMonitor on handler
+      DOWN msg triggers recovery action
+      Health statistics collected
+      --
+      Benefits:
+      ✓ Failure detection
+      ✓ Auto-recovery
+      ✓ Observable systems
+    }
+  }
+
+  package "LOW PRIORITY" <<Rectangle>> {
+    note top
+      Estimated impact: 10% of JOTP integration gains
+      Effort: Low (1-2 weeks)
+    end note
+
+    class "Named Process Patterns (ProcRegistry)" as Named_Reg {
+      -- CURRENT --
+      Proc references only via variable
+      No global lookup
+      --
+      -- REFACTORED --
+      Optional ProcRegistry integration
+      registerProcess(String, Proc)
+      whereis(String): Proc for late binding
+      --
+      Benefits:
+      ✓ Dynamic discovery
+      ✓ Cleaner composition
+    }
+
+    class "Message Statistics (ProcSys)" as Stats_Sys {
+      -- CURRENT --
+      Manual statistics tracking
+      No introspection
+      --
+      -- REFACTORED --
+      ProcSys.getState(Proc): ProcessStats
+      statistics(): HistogramData
+      --
+      Benefits:
+      ✓ Built-in observability
+      ✓ No manual tracking
+    }
+  }
+}
+
+package "INTEGRATION LEGEND" {
+  rectangle "Proc<S,M>" as L1 #E3F2FD
+  rectangle "EventManager<E>" as L2 #F3E5F5
+  rectangle "ProcTimer" as L3 #E0F2F1
+  rectangle "Supervisor" as L4 #FFF3E0
+  rectangle "StateMachine<S,E,D>" as L5 #FCE4EC
+  rectangle "ProcMonitor" as L6 #F1F8E9
+  rectangle "CrashRecovery" as L7 #ECEFF1
+  rectangle "ProcRegistry" as L8 #EDE7F6
+}
+
+@enduml
