@@ -140,11 +140,7 @@
                         <exclude>**/messaging/**</exclude>
                         <!-- Pre-existing compile errors from prior commits — excluded until fixed -->
                         <exclude>**/FactoryMethodPatterns.java</exclude>
-                        <exclude>**/dogfood/otp/ProcessMonitoringExample.java</exclude>
-                        <exclude>**/dogfood/otp/SupervisionTreeExample.java</exclude>
                         <exclude>**/pool/**</exclude>
-                        <exclude>**/dogfood/mclaren/**</exclude>
-                        <exclude>**/GenServer.java</exclude>
                         <exclude>**/MetricsCollector.java</exclude>
                         <exclude>**/SagaOrchestrator.java</exclude>
                         <exclude>**/HealthChecker.java</exclude>
@@ -152,7 +148,6 @@
                         <exclude>**/EventStore.java</exclude>
                         <!-- Pre-existing compile errors from prior PRs — excluded until fixed -->
                         <exclude>**/BulkheadIsolation.java</exclude>
-                        <exclude>**/DistributedActorBridge.java</exclude>
                         <exclude>**/DistributedSagaCoordinator.java</exclude>
                         <exclude>**/EventSourcingAuditLog.java</exclude>
                         <exclude>**/examples/**</exclude>
@@ -170,22 +165,28 @@
                         <testExclude>**/test/EnterpriseCompositionIT.java</testExclude>
                         <!-- Tests for excluded source files — compile errors until source is fixed -->
                         <testExclude>**/PatternsIntegrationTest.java</testExclude>
-                        <testExclude>**/dogfood/mclaren/**</testExclude>
                         <testExclude>**/DistributedSagaCoordinatorTest.java</testExclude>
-                        <testExclude>**/DistributedActorBridgeTest.java</testExclude>
                         <testExclude>**/BulkheadIsolationTest.java</testExclude>
                         <testExclude>**/examples/**</testExclude>
                         <testExclude>**/messagepatterns/**</testExclude>
+                        <!-- Stress / production simulation tests excluded for CI speed -->
                         <testExclude>**/test/AtlasOtpStressTest.java</testExclude>
+                        <testExclude>**/test/JOTPThroughputStressTest.java</testExclude>
+                        <testExclude>**/test/LinkCascadeStressTest.java</testExclude>
+                        <testExclude>**/test/ProcStressTest.java</testExclude>
+                        <testExclude>**/test/RegistryRaceStressTest.java</testExclude>
+                        <testExclude>**/test/SupervisorStormStressTest.java</testExclude>
+                        <testExclude>**/test/ProductionSimulationTest.java</testExclude>
                         <testExclude>**/ApplicationTest.java</testExclude>
                         <testExclude>**/EventSourcingAuditLogTest.java</testExclude>
-                        <testExclude>**/GenServerTest.java</testExclude>
-                        <testExclude>**/test/**</testExclude>
+                        <testExclude>**/test/ReactiveMessagingTest.java</testExclude>
                         <testExclude>**/stress/**</testExclude>
                         <testExclude>**/testing/**</testExclude>
                         <testExclude>**/enterprise/**</testExclude>
                         <testExclude>**/pool/**</testExclude>
-                        <testExclude>**/dogfood/**</testExclude>
+                        <!-- malformed test stubs in test-only package —  structurally broken, spotless excluded separately -->
+                        <testExclude>**/test/ProcLinkTest.java</testExclude>
+                        <testExclude>**/test/ProcRegistryTest.java</testExclude>
                     </testExcludes>
                 </configuration>
             </plugin>
@@ -309,6 +310,9 @@
                         <excludes>
                             <!-- sealed local classes not supported by google-java-format -->
                             <exclude>src/main/java/io/github/seanchatmangpt/jotp/FactoryMethodPatterns.java</exclude>
+                            <!-- malformed test stubs in test-only package, excluded from compilation -->
+                            <exclude>src/test/java/io/github/seanchatmangpt/jotp/test/ProcLinkTest.java</exclude>
+                            <exclude>src/test/java/io/github/seanchatmangpt/jotp/test/ProcRegistryTest.java</exclude>
                         </excludes>
                         <googleJavaFormat>
                             <style>AOSP</style>

@@ -292,7 +292,7 @@ public final class CircuitBreaker<R, V, E extends Exception> {
                 failureTimes.removeIf(t -> t.isBefore(cutoff));
 
                 // If too many failures, open the circuit (unless already open/half-open)
-                if (failureTimes.size() > maxFailures && state == State.CLOSED) {
+                if (failureTimes.size() >= maxFailures && state == State.CLOSED) {
                     state = State.OPEN;
                     openedTime = now;
                 }

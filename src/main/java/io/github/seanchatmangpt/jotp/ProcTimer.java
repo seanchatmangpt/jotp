@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -113,6 +114,37 @@ public final class ProcTimer {
                 SCHEDULER.scheduleAtFixedRate(
                         () -> target.tell(msg), periodMs, periodMs, TimeUnit.MILLISECONDS);
         return new TimerRef(future);
+    }
+
+    /**
+     * Duration-based overload of {@link #sendAfter(long, Proc, Object)}.
+     *
+     * <p>Delegates to the {@code long} millisecond version, keeping the rest of the JOTP API
+     * consistent with {@link java.time.Duration}-based timeouts (e.g., {@link Proc#ask(Object,
+     * Duration)}).
+     *
+     * @param delay how long to wait before delivery
+     * @param target the process that will receive the message
+     * @param msg the message to deliver
+     * @return a {@link TimerRef} that can be used to cancel before delivery
+     */
+    public static <M> TimerRef sendAfter(Duration delay, Proc<?, M> target, M msg) {
+        return sendAfter(delay.toMillis(), target, msg);
+    }
+
+    /**
+     * Duration-based overload of {@link #sendInterval(long, Proc, Object)}.
+     *
+     * <p>Delegates to the {@code long} millisecond version for consistency with the rest of the
+     * JOTP API.
+     *
+     * @param interval period between deliveries
+     * @param target the process that will receive the message on each tick
+     * @param msg the message to deliver on each tick
+     * @return a {@link TimerRef} that can be used to stop the interval
+     */
+    public static <M> TimerRef sendInterval(Duration interval, Proc<?, M> target, M msg) {
+        return sendInterval(interval.toMillis(), target, msg);
     }
 
     /**

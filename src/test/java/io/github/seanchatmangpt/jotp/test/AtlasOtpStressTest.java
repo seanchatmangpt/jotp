@@ -4,7 +4,6 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.AcquisitionSupervisor;
@@ -160,7 +159,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
     @AfterEach
     void resetRegistry() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -241,8 +240,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
     @Test
     @Order(2)
-    @DisplayName(
-            "1 M ProcessRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
+    @DisplayName("1 M ProcRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
     @SuppressWarnings("unchecked")
     void processRegistry_millionLookups_allPdaMsgDelivered() throws Exception {
         // 1 K Proc<AtomicLong, PdaMsg>: counts AddSamples; silently ignores other PdaMsg variants.
@@ -258,7 +256,7 @@ class AtlasOtpStressTest implements WithAssertions {
                                 }
                                 return count;
                             });
-            ProcessRegistry.register("pda-" + i, procs[i]);
+            ProcRegistry.register("pda-" + i, procs[i]);
         }
 
         var successes = new AtomicLong(0);
@@ -270,8 +268,7 @@ class AtlasOtpStressTest implements WithAssertions {
                 CONCURRENCY,
                 idx -> {
                     var ref =
-                            ProcessRegistry.<AtomicLong, PdaMsg>whereis(
-                                    "pda-" + (idx % PARAM_COUNT));
+                            ProcRegistry.<AtomicLong, PdaMsg>whereis("pda-" + (idx % PARAM_COUNT));
                     if (ref.isEmpty()) {
                         empties.incrementAndGet();
                         return;

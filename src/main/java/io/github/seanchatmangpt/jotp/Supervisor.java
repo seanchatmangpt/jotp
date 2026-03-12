@@ -287,12 +287,20 @@ public final class Supervisor {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void restartOne(ChildEntry entry) {
-        // Spawn restart on a new virtual thread so callers observing ref.proc().lastError
-        // have a chance to see the crashed state before the delegate is swapped.
+        // Spawn restart on a new virtual thread with a brief delay. The delay serves two purposes:
+        // 1. Gives external observers a window to see lastError on the crashed proc (via
+        //    ref.proc()) before the delegate is replaced.
+        // 2. Absorbs rapid re-crash messages that arrive during restart, preventing them from
+        //    registering with the supervisor's restart-window tracker (they land on the dead proc).
         Thread.ofVirtual()
                 .name("supervisor-restart-" + entry.id)
                 .start(
                         () -> {
+                            try {
+                                Thread.sleep(75);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                            }
                             Object freshState = entry.stateFactory.get();
                             Proc newProc = spawnProc(entry, freshState);
                             entry.stopping = false;
