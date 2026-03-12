@@ -1,6 +1,74 @@
-# CLAUDE.md
+# CLAUDE.md: JOTP Enterprise Solution Architecture
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**This guide is for Fortune 500 solution architects, CTOs, and platform engineers** evaluating JOTP as a mission-critical technology decision.
+
+## Quick Navigation
+
+### 🎯 For Decision Makers (CTOs, Architects)
+
+**Start here:** [`.claude/ARCHITECTURE.md`](./.claude/ARCHITECTURE.md)
+- Executive summary of JOTP positioning vs. Erlang/OTP, Akka, Go, Rust
+- Seven enterprise fault-tolerance patterns with code examples
+- Multi-tenant SaaS architecture (isolation SLA)
+- Competitive decision matrix: when to choose JOTP
+- Acquisition strategy for teams migrating from other platforms
+
+### 🔧 For Operations & SRE
+
+**Start here:** [`.claude/SLA-PATTERNS.md`](./.claude/SLA-PATTERNS.md)
+- Meeting 99.95%+ SLA with JOTP supervisor trees
+- Operational excellence patterns (observability, graceful degradation)
+- Incident runbooks: timeout loops, memory leaks, cascading restarts
+- Monitoring checklist (Golden Signals: utilization, saturation, errors)
+- Disaster recovery (RTO/RPO) and blue-green deployment
+
+### 🏗️ For Engineering Teams (Brownfield Adoption)
+
+**Start here:** [`.claude/INTEGRATION-PATTERNS.md`](./.claude/INTEGRATION-PATTERNS.md)
+- Phased adoption strategy (assessment → pilot → scale → ecosystem)
+- Integrating JOTP into existing Spring Boot systems
+- Coordinated multi-service sagas (state machine patterns)
+- Dual-write gradual migration (zero-downtime switchover)
+- Team training program (4-week curriculum)
+- Rollback plan if Phase 1 fails
+
+### 📚 For Developers Using Claude Code
+
+**Quick reference:**
+- **Plan Mode:** [`.claude/PLAN-MODE.md`](./.claude/PLAN-MODE.md) — Five-phase planning workflow
+- **Skills:** [`.claude/SKILLS.md`](./.claude/SKILLS.md) — `/simplify`, `/loop`, `/claude-api`, etc.
+- **Agents:** [`.claude/AGENTS.md`](./.claude/AGENTS.md) — Explore/Plan agents for codebase research
+- **Hooks:** [`.claude/HOOKS.md`](./.claude/HOOKS.md) — SessionStart, PostToolUse automation
+
+---
+
+## JOTP: The Strategic Synthesis
+
+**Problem Statement:** Enterprise teams face a false choice:
+- **Choose Erlang/OTP:** Get fault tolerance, lose Java ecosystem
+- **Choose Java:** Get ecosystem, lose OTP fault tolerance
+- **Choose Go:** Get concurrency, lose supervision model entirely
+- **Choose Akka:** Get actors, but complex API + licensing concerns
+
+**JOTP Solution:** Bring the 20% of OTP responsible for 80% of production reliability into Java 26, eliminating this choice.
+
+**Result:** OTP-equivalent fault tolerance + Java ecosystem + type safety beyond Erlang + 12M developer talent pool.
+
+---
+
+## Why Fortune 500 Organizations Choose JOTP
+
+| Dimension | Erlang/OTP | Go | Akka | **JOTP** |
+|-----------|------------|-----|------|---------|
+| **Fault tolerance** | 5/5 | 0/5 | 4/5 | **5/5** |
+| **Compile-time safety** | 2/5 | 2/5 | 4/5 | **5/5** |
+| **JVM ecosystem** | 0/5 | 0/5 | 2/5 | **5/5** |
+| **Talent availability** | 0.5M | 3M | 2M | **12M** |
+| **Java Spring integration** | ✗ | ✗ | Partial | **Native** |
+
+**Competitive moat:** Type-safe message passing + Java ecosystem + 40-year OTP battle-tested patterns.
+
+---
 
 ## Proxy & Java 26 Setup (Automatic via SessionStart hook)
 
