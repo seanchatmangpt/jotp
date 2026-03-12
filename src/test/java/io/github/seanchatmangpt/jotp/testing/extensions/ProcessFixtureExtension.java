@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>Auto-cleanup after test (deregistration, termination)</li>
  *   <li>Supervision strategy configuration (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)</li>
- *   <li>Optional ProcessRegistry registration</li>
+ *   <li>Optional ProcRegistry registration</li>
  *   <li>Message capture during fixture lifecycle</li>
  * </ul>
  */
@@ -58,15 +58,15 @@ public class ProcessFixtureExtension implements TestInstancePostProcessor, Exten
       var key = targetClass.getSimpleName() + "_" + i;
       processInstances.put(key, processInstance);
 
-      // If requested, register in ProcessRegistry
+      // If requested, register in ProcRegistry
       if (annotation.registerInRegistry()) {
         var registryName = annotation.registryName().isEmpty()
             ? targetClass.getSimpleName() + "_" + i
             : annotation.registryName();
-        // Would call ProcessRegistry.register(registryName, processInstance)
+        // Would call ProcRegistry.register(registryName, processInstance)
         // For now, we store the mapping
         cleanupActions.add(() -> {
-          // Would call ProcessRegistry.unregister(registryName)
+          // Would call ProcRegistry.unregister(registryName)
         });
       }
 

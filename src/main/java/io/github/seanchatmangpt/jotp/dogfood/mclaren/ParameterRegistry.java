@@ -2,10 +2,10 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
 import java.util.Optional;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 
 /**
- * SQL Race parameter registry — OTP {@code ProcessRegistry} mapped to parameter identifier lookup.
+ * SQL Race parameter registry — OTP {@code ProcRegistry} mapped to parameter identifier lookup.
  *
  * <p>In ATLAS, parameters are looked up by their SQL Race identifier
  * ({@code "name:ApplicationGroup"}) anywhere in the system — in live display plugins, in
@@ -13,7 +13,7 @@ import io.github.seanchatmangpt.jotp.ProcessRegistry;
  * {@code erlang:register/2} / {@code whereis/1} — a JVM-global name table that maps atom (name)
  * to process.
  *
- * <p>This wrapper translates SQL Race identifiers to {@link ProcessRegistry} keys and
+ * <p>This wrapper translates SQL Race identifiers to {@link ProcRegistry} keys and
  * auto-deregisters when the backing {@link ParameterDataAccess} process terminates.
  *
  * <pre>{@code
@@ -36,7 +36,7 @@ public final class ParameterRegistry {
      * Register a parameter data access process under its SQL Race identifier.
      *
      * <p>The process is automatically unregistered when it terminates (normal or crash) —
-     * mirroring OTP's {@code ProcessRegistry} auto-deregister behaviour.
+     * mirroring OTP's {@code ProcRegistry} auto-deregister behaviour.
      *
      * @param param the parameter whose {@link SqlRaceParameter#identifier()} is used as the key
      * @param proc  the running {@link ParameterDataAccess} process
@@ -44,7 +44,7 @@ public final class ParameterRegistry {
      */
     public static void register(
             SqlRaceParameter param, Proc<ParameterDataAccess.State, PdaMsg> proc) {
-        ProcessRegistry.register(param.identifier(), proc);
+        ProcRegistry.register(param.identifier(), proc);
     }
 
     /**
@@ -55,7 +55,7 @@ public final class ParameterRegistry {
      */
     public static void register(
             String identifier, Proc<ParameterDataAccess.State, PdaMsg> proc) {
-        ProcessRegistry.register(identifier, proc);
+        ProcRegistry.register(identifier, proc);
     }
 
     /**
@@ -66,7 +66,7 @@ public final class ParameterRegistry {
      */
     @SuppressWarnings("unchecked")
     public static Optional<Proc<ParameterDataAccess.State, PdaMsg>> whereis(String identifier) {
-        return ProcessRegistry.<ParameterDataAccess.State, PdaMsg>whereis(identifier);
+        return ProcRegistry.<ParameterDataAccess.State, PdaMsg>whereis(identifier);
     }
 
     /**
@@ -91,7 +91,7 @@ public final class ParameterRegistry {
      * @param identifier SQL Race identifier
      */
     public static void unregister(String identifier) {
-        ProcessRegistry.unregister(identifier);
+        ProcRegistry.unregister(identifier);
     }
 
     /**
@@ -101,13 +101,13 @@ public final class ParameterRegistry {
      * @return snapshot of registered names
      */
     public static java.util.Set<String> registered() {
-        return ProcessRegistry.registered();
+        return ProcRegistry.registered();
     }
 
     /**
-     * Clear all registrations (for test isolation — mirrors {@code ProcessRegistry.reset()}).
+     * Clear all registrations (for test isolation — mirrors {@code ProcRegistry.reset()}).
      */
     public static void reset() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 }

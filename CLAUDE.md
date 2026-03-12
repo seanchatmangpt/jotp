@@ -98,10 +98,10 @@ cd guard-system && cargo build --release
 - `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window
 - `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads
 - `StateMachine<S,E,D>` — gen_statem: state/event/data separation + sealed `Transition` hierarchy
-- `ProcessLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)
+- `ProcLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)
 - `Parallel` — structured fan-out with fail-fast semantics (`StructuredTaskScope`, OTP: `pmap`)
-- `ProcessMonitor` — unilateral DOWN notifications: `monitor(process, Pid)` / `demonitor/1`; fires on any exit (normal or abnormal); does NOT kill the monitoring side (unlike links)
-- `ProcessRegistry` — global name table: `register/2`, `whereis/1`, `unregister/1`, `registered/0`; auto-deregisters when a process terminates
+- `ProcMonitor` — unilateral DOWN notifications: `monitor(process, Pid)` / `demonitor/1`; fires on any exit (normal or abnormal); does NOT kill the monitoring side (unlike links)
+- `ProcRegistry` — global name table: `register/2`, `whereis/1`, `unregister/1`, `registered/0`; auto-deregisters when a process terminates
 - `ProcTimer` — timed message delivery: `timer:send_after/3`, `timer:send_interval/3`, `timer:cancel/1`
 - `ExitSignal` — exit signal record delivered as a mailbox message when a process traps exits (`process_flag(trap_exit, true)`)
 - `ProcSys` — sys module: `get_state`, `suspend`, `resume`, `statistics` — process introspection without stopping

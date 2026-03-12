@@ -11,7 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>Non-invasively spy on message traffic without affecting the main flow.
  * Useful for monitoring, logging, and diagnostics.
  *
- * <p>JOTP Implementation: Uses ProcessMonitor to observe messages
+ * <p>JOTP Implementation: Uses ProcMonitor to observe messages
  * sent to a target process without intercepting them.
  *
  * <p>Example:
@@ -63,7 +63,7 @@ public final class WireTap {
         });
 
         // Monitor the target (receives DOWN when target crashes)
-        ProcessMonitor.monitor(targetProcess, tapProcess);
+        ProcMonitor.monitor(targetProcess, tapProcess);
 
         return tapProcess;
     }

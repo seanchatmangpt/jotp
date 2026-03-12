@@ -1,8 +1,0 @@
-package org.acme.dogfood.mclaren;
-
-/**
- * @deprecated Replaced by {@link SqlRaceParameter} + {@link SqlRaceChannel} in the SQL Race
- *     ground-up refactor. See {@code docs/case-study-mclaren-atlas.md}.
- */
-@Deprecated
-final class TelemetryChannel {}

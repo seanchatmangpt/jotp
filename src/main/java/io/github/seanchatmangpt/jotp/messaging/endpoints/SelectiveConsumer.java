@@ -11,7 +11,7 @@ import java.util.function.Predicate;
  * Others are left in the queue for another consumer.
  *
  * <p>JOTP Implementation: Uses Proc<S,M> with pattern matching predicate
- * and ProcessRegistry for named consumers.
+ * and ProcRegistry for named consumers.
  *
  * <p>Example:
  * <pre>
@@ -66,7 +66,7 @@ public final class SelectiveConsumer {
     }
 
     /**
-     * Creates a selective consumer registered by name in ProcessRegistry.
+     * Creates a selective consumer registered by name in ProcRegistry.
      * Other processes can look it up with whereis(name).
      *
      * @param consumerName Registry name
@@ -80,7 +80,7 @@ public final class SelectiveConsumer {
         java.util.function.Consumer<Message> handler) {
 
         var consumer = create(selector, handler);
-        ProcessRegistry.register(consumerName, consumer);
+        ProcRegistry.register(consumerName, consumer);
         return consumer;
     }
 

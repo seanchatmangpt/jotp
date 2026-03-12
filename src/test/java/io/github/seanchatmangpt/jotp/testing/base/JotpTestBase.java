@@ -16,10 +16,10 @@ import java.util.concurrent.TimeUnit;
  *   <li>Supervisor (supervision tree)</li>
  *   <li>CrashRecovery (let it crash + retry)</li>
  *   <li>StateMachine (state/event/data separation)</li>
- *   <li>ProcessLink (bilateral crash propagation)</li>
+ *   <li>ProcLink (bilateral crash propagation)</li>
  *   <li>Parallel (structured concurrency)</li>
- *   <li>ProcessMonitor (unilateral DOWN notifications)</li>
- *   <li>ProcessRegistry (global name table)</li>
+ *   <li>ProcMonitor (unilateral DOWN notifications)</li>
+ *   <li>ProcRegistry (global name table)</li>
  *   <li>ProcTimer (timed message delivery)</li>
  *   <li>ExitSignal (exit signal record)</li>
  *   <li>ProcSys (introspection: get_state, suspend, resume)</li>
@@ -133,14 +133,14 @@ public abstract class JotpTestBase {
   }
 
   /**
-   * Register process in ProcessRegistry.
+   * Register process in ProcRegistry.
    */
   protected void registerProcess(String name, Object processRef) {
     helper.registerProcess(name, processRef);
   }
 
   /**
-   * Look up process in ProcessRegistry.
+   * Look up process in ProcRegistry.
    */
   protected Object lookupProcess(String name) {
     return helper.lookupProcess(name);

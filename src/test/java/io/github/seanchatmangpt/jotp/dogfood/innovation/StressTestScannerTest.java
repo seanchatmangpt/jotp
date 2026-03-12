@@ -168,15 +168,15 @@ class StressTestScannerTest {
         }
     }
 
-    // ── ProcessRegistry.java — shared-state patterns ──────────────────────────
+    // ── ProcRegistry.java — shared-state patterns ──────────────────────────
 
     @Nested
-    @DisplayName("ProcessRegistry.java")
-    class ProcessRegistryFindings {
+    @DisplayName("ProcRegistry.java")
+    class ProcRegistryFindings {
 
         private List<StressFinding> registryFindings() {
             return plan.findings().stream()
-                    .filter(f -> f.file().getFileName().toString().equals("ProcessRegistry.java"))
+                    .filter(f -> f.file().getFileName().toString().equals("ProcRegistry.java"))
                     .toList();
         }
 
@@ -184,7 +184,7 @@ class StressTestScannerTest {
         @DisplayName("SharedStatePattern detected (ConcurrentHashMap / putIfAbsent)")
         void registry_sharedStatePatternDetected() {
             assertThat(registryFindings())
-                    .as("ProcessRegistry.java must have SharedStatePattern (ConcurrentHashMap/putIfAbsent)")
+                    .as("ProcRegistry.java must have SharedStatePattern (ConcurrentHashMap/putIfAbsent)")
                     .anyMatch(f -> f instanceof StressFinding.SharedStatePattern);
         }
 
@@ -201,7 +201,7 @@ class StressTestScannerTest {
                                             .isEqualTo(Priority.CRITICAL),
                             () ->
                                     assertThat(registryFindings())
-                                            .as("ProcessRegistry must have at least one HIGH SharedStatePattern")
+                                            .as("ProcRegistry must have at least one HIGH SharedStatePattern")
                                             .anyMatch(
                                                     f ->
                                                             f instanceof StressFinding.SharedStatePattern

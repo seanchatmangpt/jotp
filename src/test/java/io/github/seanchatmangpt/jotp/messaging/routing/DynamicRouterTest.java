@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
  * Unit tests for {@link DynamicRouter} — verifies runtime message routing and handler
  * registration.
  *
- * <p>Tests the dynamic router pattern for late-binding message routing using ProcessRegistry.
+ * <p>Tests the dynamic router pattern for late-binding message routing using ProcRegistry.
  */
 @DisplayName("DynamicRouter — runtime destination resolution")
 class DynamicRouterTest implements WithAssertions {
@@ -197,14 +197,14 @@ class DynamicRouterTest implements WithAssertions {
   }
 
   @Nested
-  @DisplayName("Integration with ProcessRegistry")
-  class ProcessRegistryIntegration {
+  @DisplayName("Integration with ProcRegistry")
+  class ProcRegistryIntegration {
 
     @AfterEach
     void cleanup() {
       // Clean up any registered processes
-      for (String name : ProcessRegistry.registered()) {
-        ProcessRegistry.unregister(name);
+      for (String name : ProcRegistry.registered()) {
+        ProcRegistry.unregister(name);
       }
     }
 
@@ -238,7 +238,7 @@ class DynamicRouterTest implements WithAssertions {
       // Verify messages were received
       assertThat(receivedMessages).hasSize(2).contains("first-message", "second-message");
 
-      ProcessRegistry.unregister("message-handler");
+      ProcRegistry.unregister("message-handler");
     }
 
     @Test
@@ -278,8 +278,8 @@ class DynamicRouterTest implements WithAssertions {
       assertThat(orderMessages).contains("order:12345", "order:54321");
       assertThat(paymentMessages).contains("payment:67890");
 
-      ProcessRegistry.unregister("order-service");
-      ProcessRegistry.unregister("payment-service");
+      ProcRegistry.unregister("order-service");
+      ProcRegistry.unregister("payment-service");
     }
   }
 }

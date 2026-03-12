@@ -2,14 +2,14 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Dynamic Router — routes messages to runtime-determined destinations using ProcessRegistry.
+ * Dynamic Router — routes messages to runtime-determined destinations using ProcRegistry.
  *
  * <p><strong>Concept (Vernon's "Dynamic Router"):</strong>
  * Route destination is determined at runtime via a resolver function, enabling late-binding
@@ -19,7 +19,7 @@ import java.util.function.Function;
  *
  * <p><strong>Implementation using JOTP:</strong>
  * <ul>
- *   <li>Uses ProcessRegistry for process lookup by name: {@code whereis(name) -> ProcRef}
+ *   <li>Uses ProcRegistry for process lookup by name: {@code whereis(name) -> ProcRef}
  *   <li>Destination resolver function: {@code Message -> String (process name)}
  *   <li>Route handler receives message and resolves destination at runtime
  *   <li>Supports handler registration for intercepting routed messages
@@ -38,7 +38,7 @@ import java.util.function.Function;
  * }</pre>
  *
  * @param <M> message type
- * @see ProcessRegistry ProcessRegistry for process lookup
+ * @see ProcRegistry ProcRegistry for process lookup
  * @see Proc JOTP process abstraction
  * @see Vernon "Dynamic Router" pattern for Enterprise Integration Patterns
  */
@@ -65,7 +65,7 @@ public class DynamicRouter<M> {
    * Routes a message to a destination determined at runtime.
    *
    * <p>The destination name is obtained by calling {@code destinationResolver.apply(message)}.
-   * The process is then looked up in ProcessRegistry. If found, the message is sent; if not
+   * The process is then looked up in ProcRegistry. If found, the message is sent; if not
    * found, the message is discarded with a warning.
    *
    * @param message the message to route; cannot be null
@@ -85,7 +85,7 @@ public class DynamicRouter<M> {
     }
 
     // Look up process in registry
-    Optional<ProcRef<M, M>> procRef = (Optional<ProcRef<M, M>>) (Optional<?>) ProcessRegistry.whereis(destinationName);
+    Optional<ProcRef<M, M>> procRef = (Optional<ProcRef<M, M>>) (Optional<?>) ProcRegistry.whereis(destinationName);
 
     if (procRef.isPresent()) {
       // Send message asynchronously (fire-and-forget)

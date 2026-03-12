@@ -9,13 +9,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.Optional;
 
 /**
- * Service registry with health tracking and discovery — extends ProcessRegistry with
+ * Service registry with health tracking and discovery — extends ProcRegistry with
  * service mesh capabilities.
  *
  * <p>Joe Armstrong: "In distributed Erlang, nodes discover each other and processes
  * can be addressed by name across nodes. The registry is the heart of location transparency."
  *
- * <p>This registry extends {@link ProcessRegistry} with:
+ * <p>This registry extends {@link ProcRegistry} with:
  * <ul>
  *   <li><b>Service metadata</b> — tags, version, health status</li>
  *   <li><b>Health tracking</b> — last seen timestamp, failure count</li>

@@ -25,7 +25,7 @@ import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.ProcSys;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.StateMachine.Transition;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -77,12 +77,12 @@ class AtlasResiliencePatternsIT implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     // Domain types imported from AtlasDomain - see AtlasDomain class for definitions
@@ -191,7 +191,7 @@ class AtlasResiliencePatternsIT implements WithAssertions {
         }
 
         @Test
-        void supervisionWithProcessMonitor() throws Exception {
+        void supervisionWithProcMonitor() throws Exception {
             var sup = new Supervisor("monitor-sv", Strategy.ONE_FOR_ONE, 10, Duration.ofMinutes(5));
 
             var downReceived = new AtomicBoolean(false);
