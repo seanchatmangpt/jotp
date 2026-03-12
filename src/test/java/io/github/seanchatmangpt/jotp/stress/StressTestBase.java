@@ -96,8 +96,8 @@ public abstract class StressTestBase {
                     future.get(5, TimeUnit.SECONDS);
                 } catch (TimeoutException e) {
                     future.cancel(true);
-                } catch (java.util.concurrent.ExecutionException e) {
-                    // ignore execution exceptions from stress test tasks
+                } catch (java.util.concurrent.ExecutionException | InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
             }
 

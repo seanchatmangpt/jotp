@@ -112,7 +112,11 @@ class ManagementPatternsTest implements WithAssertions {
             assertThat(matched).isTrue();
             assertThat(proxy.pendingCount()).isZero();
             assertThat(replyResult.get().result()).isEqualTo("found");
-            proxy.stop();
+            try {
+                proxy.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

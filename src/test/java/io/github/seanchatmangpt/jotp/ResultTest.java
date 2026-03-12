@@ -126,7 +126,7 @@ class ResultTest implements WithAssertions {
 
             assertThat(r1.isSuccess()).isTrue();
             assertThat(r2.isSuccess()).isTrue();
-            assertThat(r1).isInstanceOf(Result.Success.class);
+            assertThat(r1).isInstanceOf(Result.Ok.class);
             assertThat(r2).isInstanceOf(Result.Ok.class);
         }
 
@@ -136,7 +136,7 @@ class ResultTest implements WithAssertions {
             Result<Integer, String> result = Result.success(99);
 
             switch (result) {
-                case Result.Success<Integer, String>(var v) -> assertThat(v).isEqualTo(99);
+                case Result.Ok<Integer, String>(var v) -> assertThat(v).isEqualTo(99);
                 default -> fail("Expected Success variant");
             }
         }
@@ -154,7 +154,7 @@ class ResultTest implements WithAssertions {
 
             assertThat(r1.isFailure()).isTrue();
             assertThat(r2.isFailure()).isTrue();
-            assertThat(r1).isInstanceOf(Result.Failure.class);
+            assertThat(r1).isInstanceOf(Result.Err.class);
             assertThat(r2).isInstanceOf(Result.Err.class);
         }
 
@@ -164,7 +164,7 @@ class ResultTest implements WithAssertions {
             Result<String, String> result = Result.failure("failed");
 
             switch (result) {
-                case Result.Failure<String, String>(var e) -> assertThat(e).isEqualTo("failed");
+                case Result.Err<String, String>(var e) -> assertThat(e).isEqualTo("failed");
                 default -> fail("Expected Failure variant");
             }
         }
@@ -257,7 +257,7 @@ class ResultTest implements WithAssertions {
             Result<String, Integer> result =
                     Result.<String, Integer>failure(500).map(String::toUpperCase);
 
-            assertThat(result).isInstanceOf(Result.Failure.class);
+            assertThat(result).isInstanceOf(Result.Err.class);
         }
 
         @Test
@@ -812,7 +812,7 @@ class ResultTest implements WithAssertions {
             Result<String, String> success = Result.success("value");
 
             assertThat(ok).isInstanceOf(Result.Ok.class);
-            assertThat(success).isInstanceOf(Result.Success.class);
+            assertThat(success).isInstanceOf(Result.Ok.class);
             assertThat(ok.isSuccess()).isTrue();
             assertThat(success.isSuccess()).isTrue();
         }
@@ -824,7 +824,7 @@ class ResultTest implements WithAssertions {
             Result<String, String> failure = Result.failure("error");
 
             assertThat(err).isInstanceOf(Result.Err.class);
-            assertThat(failure).isInstanceOf(Result.Failure.class);
+            assertThat(failure).isInstanceOf(Result.Err.class);
             assertThat(err.isError()).isTrue();
             assertThat(failure.isError()).isTrue();
         }

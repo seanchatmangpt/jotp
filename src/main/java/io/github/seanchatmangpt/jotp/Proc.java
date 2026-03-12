@@ -35,17 +35,8 @@ import java.util.function.Consumer;
  * into {@link ExitSignal} messages delivered to the mailbox rather than interrupting the process —
  * mirroring OTP's {@code process_flag(trap_exit, true)}.
  *
- * <p>Process introspection is available via {@link ProcSys}: get state, suspend/resume, per-process
- * message statistics, debug tracing, and hot code change — mirroring OTP's {@code sys} module.
- *
- * <p><strong>System message protocol:</strong> A high-priority {@link #sysQueue} is drained before
- * each user message. {@link ProcSys} enqueues {@link SysRequest} values here to implement {@code
- * sys:get_state}, {@code system_code_change}, and related operations without touching internal
- * fields directly — matching the OTP {@code {system, From, Request}} message protocol.
- *
- * <p><strong>Debug tracing:</strong> An optional {@link DebugObserver} fires {@code onIn}/{@code
- * onOut} hooks around each message, enabling external tracing via {@link ProcSys#trace} without
- * modifying the handler.
+ * <p>Process introspection is available via {@link ProcSys}: get state, suspend/resume, and
+ * per-process message statistics — mirroring OTP's {@code sys} module.
  *
  * <p><strong>Message Processing and Stream.Gatherers:</strong> The message loop polls the queue
  * with a 50ms timeout (lines 127–128) rather than blocking indefinitely. While Java 26's {@link
@@ -81,12 +72,10 @@ public final class Proc<S, M> {
     private final TransferQueue<Envelope<M>> mailbox = new LinkedTransferQueue<>();
 
     /**
-     * High-priority system-message channel — drained before each user message. {@link ProcSys}
-     * enqueues {@link SysRequest} values here to implement {@code sys:get_state}, {@code
-     * system_code_change}, and related operations. Mirrors OTP's {@code {system, From, Request}}
-     * protocol where system messages are served with priority over user messages.
+     * Sys channel: {@link ProcSys#getState} offers a future here; the loop completes it with the
+     * current state before processing the next regular message.
      */
-    final TransferQueue<SysRequest> sysQueue = new LinkedTransferQueue<>();
+    final TransferQueue<CompletableFuture<Object>> sysGetState = new LinkedTransferQueue<>();
 
     private final Thread thread;
     private volatile boolean stopped = false;
@@ -105,7 +94,7 @@ public final class Proc<S, M> {
     final LongAdder messagesOut = new LongAdder();
 
     /** The last unhandled exception; set before crash callbacks fire. */
-    public volatile Throwable lastError = null;
+    private volatile Throwable lastError = null;
 
     /** Callbacks fired on abnormal termination (exception, not graceful {@link #stop()}). */
     private final List<Runnable> crashCallbacks = new CopyOnWriteArrayList<>();
@@ -116,13 +105,6 @@ public final class Proc<S, M> {
      * ProcMonitor} and {@link ProcRegistry}.
      */
     private final List<Consumer<Throwable>> terminationCallbacks = new CopyOnWriteArrayList<>();
-
-    /**
-     * Optional external trace observer — installed by {@link ProcSys#trace}. {@code null} when no
-     * trace is active (zero overhead on the hot path). Volatile so that attaching/detaching from
-     * another thread is immediately visible to the process loop.
-     */
-    private volatile DebugObserver<S, M> debugObserver = null;
 
     /**
      * Create and start a process.
@@ -146,6 +128,20 @@ public final class Proc<S, M> {
      * @param initial initial state
      * @param handler {@code (state, message) -> nextState} — pure function, no side-effects
      */
+
+    /**
+     * Spawn a new process — OTP equivalent of {@code spawn/3}.
+     *
+     * @param initialState the initial state
+     * @param handler pure state handler {@code (S state, M msg) -> S}
+     * @param <S> state type
+     * @param <M> message type
+     * @return a running {@link Proc}
+     */
+    public static <S, M> Proc<S, M> spawn(S initialState, BiFunction<S, M, S> handler) {
+        return new Proc<>(initialState, handler);
+    }
+
     public Proc(S initial, BiFunction<S, M, S> handler) {
         thread =
                 Thread.ofVirtual()
@@ -156,26 +152,13 @@ public final class Proc<S, M> {
                                     boolean crashedAbnormally = false;
                                     outer:
                                     while (!stopped || !mailbox.isEmpty()) {
-                                        // 1. Drain sys queue (higher priority than user mailbox).
-                                        //    Implements OTP's {system, From, Request} protocol:
-                                        //    sys operations are served before the next user
-                                        // message.
-                                        SysRequest sysReq;
-                                        while ((sysReq = sysQueue.poll()) != null) {
-                                            switch (sysReq) {
-                                                case SysRequest.GetState r ->
-                                                        r.reply().complete(state);
-                                                case SysRequest.CodeChange r -> {
-                                                    @SuppressWarnings("unchecked")
-                                                    S next = (S) r.fn().apply(state);
-                                                    state = next;
-                                                    r.reply().complete(state);
-                                                }
-                                            }
+                                        // 1. Drain sys get-state requests (higher priority)
+                                        CompletableFuture<Object> stateQ;
+                                        while ((stateQ = sysGetState.poll()) != null) {
+                                            stateQ.complete(state);
                                         }
 
-                                        // 2. Suspend check — block until resumed.
-                                        //    Used during sys:suspend / hot code upgrade.
+                                        // 2. Suspend check — block until resumed
                                         if (suspended) {
                                             synchronized (suspendMonitor) {
                                                 while (suspended) {
@@ -190,26 +173,16 @@ public final class Proc<S, M> {
                                             continue;
                                         }
 
-                                        // 3. Process next user message (poll with timeout so
-                                        //    suspend and sys checks are re-evaluated periodically)
+                                        // 3. Process next message (poll with timeout so suspend
+                                        //    and sys checks are re-evaluated periodically)
+                                        Envelope<M> env = null;
                                         try {
-                                            Envelope<M> env =
-                                                    mailbox.poll(50, TimeUnit.MILLISECONDS);
+                                            env = mailbox.poll(50, TimeUnit.MILLISECONDS);
                                             if (env == null) continue;
                                             messagesIn.increment();
-
-                                            // Debug hook: onIn (mirrors sys:handle_debug {in,Msg})
-                                            DebugObserver<S, M> obs = debugObserver;
-                                            if (obs != null) obs.onIn(env.msg());
-
                                             S next = handler.apply(state, env.msg());
                                             state = next;
                                             messagesOut.increment();
-
-                                            // Debug hook: onOut (mirrors sys:handle_debug
-                                            // {out,...})
-                                            if (obs != null) obs.onOut(next, env.msg());
-
                                             if (env.reply() != null) {
                                                 env.reply().complete(state);
                                             }
@@ -217,22 +190,26 @@ public final class Proc<S, M> {
                                             Thread.currentThread().interrupt();
                                             break;
                                         } catch (RuntimeException e) {
-                                            lastError = e;
-                                            crashedAbnormally = true;
-                                            break;
+                                            // If the message has a reply handle, complete it
+                                            // exceptionally and keep the process alive (OTP:
+                                            // gen_server can handle bad calls without dying).
+                                            // If it is a fire-and-forget (tell), treat as a
+                                            // fatal crash so the supervisor can restart.
+                                            if (env != null && env.reply() != null) {
+                                                env.reply().completeExceptionally(e);
+                                            } else {
+                                                lastError = e;
+                                                crashedAbnormally = true;
+                                                break;
+                                            }
                                         }
                                     }
 
-                                    // Complete pending sys requests exceptionally on termination
-                                    SysRequest pending;
-                                    while ((pending = sysQueue.poll()) != null) {
-                                        var ex = new IllegalStateException("process terminated");
-                                        switch (pending) {
-                                            case SysRequest.GetState r ->
-                                                    r.reply().completeExceptionally(ex);
-                                            case SysRequest.CodeChange r ->
-                                                    r.reply().completeExceptionally(ex);
-                                        }
+                                    // Complete any pending getState requests exceptionally
+                                    CompletableFuture<Object> pending;
+                                    while ((pending = sysGetState.poll()) != null) {
+                                        pending.completeExceptionally(
+                                                new IllegalStateException("process terminated"));
                                     }
 
                                     // Also treat interrupted-with-lastError as abnormal
@@ -306,8 +283,15 @@ public final class Proc<S, M> {
     }
 
     /**
-     * Graceful shutdown: signal the process to stop after draining remaining messages, then wait
-     * for the virtual thread to finish. Does <em>not</em> fire crash callbacks.
+     * Interrupt the process and wait for the virtual thread to finish.
+     *
+     * <p>Sets the stopped flag and immediately interrupts the virtual thread. Any messages still
+     * pending in the mailbox are <strong>dropped</strong> — the process does not drain them before
+     * exiting. Does <em>not</em> fire crash callbacks (normal exit reason).
+     *
+     * <p>If you need to ensure all queued messages are processed before shutdown, drain the mailbox
+     * explicitly (e.g., by sending a sentinel "stop" message and waiting for the process to handle
+     * it) before calling {@code stop()}.
      */
     public void stop() throws InterruptedException {
         stopped = true;
@@ -341,6 +325,13 @@ public final class Proc<S, M> {
      * Deliver an exit signal from a linked process. If this process is trapping exits, the signal
      * is converted to an {@link ExitSignal} message and delivered to the mailbox. Otherwise, the
      * process is interrupted immediately — OTP default behaviour.
+     *
+     * <p><strong>Warning:</strong> When {@link #trapExits(boolean)} is {@code true}, this method
+     * casts the {@link ExitSignal} to {@code M} and enqueues it. This cast is unchecked at compile
+     * time. If the process's message type {@code M} does not include {@link ExitSignal} (or a
+     * common supertype), a {@link ClassCastException} will occur at dispatch time inside the
+     * handler — not at this call site. Ensure that {@code M} can accept {@link ExitSignal} before
+     * enabling exit trapping.
      */
     @SuppressWarnings("unchecked")
     public void deliverExitSignal(Throwable reason) {
@@ -358,6 +349,11 @@ public final class Proc<S, M> {
     void interruptAbnormally(Throwable reason) {
         lastError = reason;
         thread.interrupt();
+    }
+
+    /** Returns the last unhandled exception, or {@code null} if this process has not crashed. */
+    public Throwable lastError() {
+        return lastError;
     }
 
     /** Public: exposes the underlying virtual thread (for joining, etc.). */
@@ -392,31 +388,5 @@ public final class Proc<S, M> {
     /** Package-private: current mailbox depth — used by {@link ProcSys#statistics}. */
     int mailboxSize() {
         return mailbox.size();
-    }
-
-    /**
-     * Package-private: enqueue a sys request — used by {@link ProcSys} to implement the OTP
-     * system-message protocol without reaching into internal fields directly.
-     */
-    void offerSysRequest(SysRequest req) {
-        sysQueue.offer(req);
-    }
-
-    /**
-     * Package-private: install or remove an external debug observer — used by {@link
-     * ProcSys#trace}.
-     *
-     * @param observer the observer to install, or {@code null} to detach
-     */
-    void setDebugObserver(DebugObserver<S, M> observer) {
-        this.debugObserver = observer;
-    }
-
-    /**
-     * Package-private: return the currently installed debug observer, or {@code null} if none. Used
-     * by {@link ProcSys#getLog}.
-     */
-    DebugObserver<S, M> getDebugObserver() {
-        return debugObserver;
     }
 }

@@ -115,7 +115,7 @@ class SupervisorTest {
         // Crash child-1
         ref1.tell(new TestMsg.Crash());
         await().atMost(AWAIT_TIMEOUT)
-                .until(() -> !supervisor.isRunning() || ref1.proc().lastError != null);
+                .until(() -> !supervisor.isRunning() || ref1.proc().lastError() != null);
 
         // Child-2 should still be running and responsive
         ref2.tell(new TestMsg.Increment());
@@ -214,7 +214,7 @@ class SupervisorTest {
 
         // Crash child-1 → ALL children should restart
         ref1.tell(new TestMsg.Crash());
-        await().atMost(AWAIT_TIMEOUT).until(() -> ref1.proc().lastError != null);
+        await().atMost(AWAIT_TIMEOUT).until(() -> ref1.proc().lastError() != null);
 
         // After ONE_FOR_ALL restart, all states should be reset to initial
         var state1After = ref1.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
@@ -280,7 +280,7 @@ class SupervisorTest {
         // Crash child-2 (middle child)
         // Expected: child-2 and child-3 restart; child-1 unaffected
         ref2.tell(new TestMsg.Crash());
-        await().atMost(AWAIT_TIMEOUT).until(() -> ref2.proc().lastError != null);
+        await().atMost(AWAIT_TIMEOUT).until(() -> ref2.proc().lastError() != null);
 
         // Child-1 should maintain its state (not restarted)
         var state1After = ref1.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
@@ -394,7 +394,7 @@ class SupervisorTest {
 
         // Crash
         ref.tell(new TestMsg.Crash());
-        await().atMost(AWAIT_TIMEOUT).until(() -> ref.proc().lastError != null);
+        await().atMost(AWAIT_TIMEOUT).until(() -> ref.proc().lastError() != null);
 
         // Restarted child should accept messages
         ref.tell(new TestMsg.Increment());

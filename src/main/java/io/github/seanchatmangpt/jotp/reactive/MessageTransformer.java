@@ -96,11 +96,7 @@ public final class MessageTransformer<A, B> implements MessageChannel<A> {
         Result<B, Exception> result = Result.of(() -> transform.apply(message));
         switch (result) {
             case Result.Ok<B, Exception>(var value) -> downstream.send(value);
-            case Result.Success<B, Exception>(var value) -> downstream.send(value);
             case Result.Err<B, Exception>(var ignored) -> {
-                if (errorChannel != null) errorChannel.send(message);
-            }
-            case Result.Failure<B, Exception>(var ignored) -> {
                 if (errorChannel != null) errorChannel.send(message);
             }
         }

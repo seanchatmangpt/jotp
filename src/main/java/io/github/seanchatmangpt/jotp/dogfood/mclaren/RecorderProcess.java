@@ -4,12 +4,12 @@ import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcLib;
 import io.github.seanchatmangpt.jotp.ProcLib.StartResult;
+import io.github.seanchatmangpt.jotp.ProcLink;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.ProcTimer;
 import io.github.seanchatmangpt.jotp.ProcTimer.TimerRef;
-import io.github.seanchatmangpt.jotp.ProcessLink;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
-import io.github.seanchatmangpt.jotp.ProcessMonitor.MonitorRef;
 import java.util.function.Consumer;
 
 /**
@@ -112,7 +112,7 @@ public final class RecorderProcess {
 
                 // Spawn and link a connection monitor (demonstrates ProcessLink)
                 Proc<RecorderState, Object> monitor =
-                        ProcessLink.spawnLink(proc, RecorderState.Idle, (state, msg) -> state);
+                        ProcLink.spawnLink(proc, RecorderState.Idle, (state, msg) -> state);
                 // The recorder traps exits so it handles the ExitSignal instead of crashing
                 proc.trapExits(true);
                 yield new RecorderProcess(proc, timer);
@@ -176,16 +176,17 @@ public final class RecorderProcess {
     }
 
     /**
-     * Install a {@link ProcessMonitor} on this recorder process.
+     * Install a {@link io.github.seanchatmangpt.jotp.ProcMonitor} on this recorder process.
      *
      * <p>The {@code downHandler} is called when the recorder terminates (normally or abnormally).
      * This demonstrates OTP {@code erlang:monitor(process, Pid)}.
      *
      * @param downHandler called with {@code null} on normal exit, or the crash reason otherwise
-     * @return a {@link MonitorRef} that can be passed to {@link ProcessMonitor#demonitor}
+     * @return a {@link MonitorRef} that can be passed to {@link
+     *     io.github.seanchatmangpt.jotp.ProcMonitor#demonitor}
      */
     public MonitorRef<RecorderState, Object> monitor(Consumer<Throwable> downHandler) {
-        return ProcessMonitor.monitor(proc, downHandler);
+        return ProcMonitor.monitor(proc, downHandler);
     }
 
     /**
