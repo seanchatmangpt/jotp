@@ -158,16 +158,21 @@ After 10 timeouts/60s: Circuit breaker opens (all requests fail fast)
    ```
 
 2. **Short-term (5-30 min):**
-   ```
-   Option A: Wait for gateway recovery (usually 10-15 min)
-            Backpressure automatically reduces request rate
+   ```java
+   // Get live process statistics via ProcSys
+   ProcSys.Stats stats = ProcSys.statistics(paymentGatewayProc);
+   logger.info("queue_depth={}, messages_in={}, messages_out={}",
+       stats.queueDepth(), stats.messagesIn(), stats.messagesOut());
+   // queue_depth growing with no messages_out → process blocked on upstream
 
-   Option B: Fail-over to backup gateway
-            Update PaymentGatewayConfig
-            New instance: ask(ChargeMsg, 450ms) to backup gateway
+   // Option A: Wait for gateway recovery (usually 10-15 min)
+   //           Backpressure automatically reduces request rate
 
-   Option C: Increase ask() timeout to 600ms (accept slower responses)
-            Risk: p99 latency increases to 600ms (violates SLA)
+   // Option B: Fail-over to backup gateway
+   //           Update PaymentGatewayConfig, restart child under supervisor
+
+   // Option C: Increase ask() timeout to 600ms (accept slower responses)
+   //           Risk: p99 latency increases to 600ms (violates SLA)
    ```
 
 3. **Post-incident:**
@@ -343,22 +348,18 @@ load_balancer.setTarget(CLUSTER_A)  // Revert to Blue
 loadBalancer.deregister(this);
 
 // 2. Wait for in-flight requests to complete
-// Use ProcSys to inspect mailbox sizes across supervised processes
-var deadline = System.currentTimeMillis() + 30_000;
-boolean draining = true;
-while (draining && System.currentTimeMillis() < deadline) {
-    draining = supervisor.supervisedRefs().stream()
-        .map(ref -> ProcSys.of(ref).getStatistics().mailboxSize())
-        .anyMatch(size -> size > 0);
-    if (draining) {
-        logger.info("Draining in-flight requests...");
-        Thread.sleep(1_000);
-    }
+var deadline = Instant.now().plusSeconds(30);
+int queueDepth = ProcSys.statistics(paymentProc).queueDepth();
+
+while (queueDepth > 0 && Instant.now().isBefore(deadline)) {
+    logger.info("Draining {} in-flight requests...", queueDepth);
+    Thread.sleep(1_000);
+    queueDepth = ProcSys.statistics(paymentProc).queueDepth();
 }
 
 // 3. Force kill if timeout exceeded
-if (draining) {
-    logger.warn("Shutdown timeout exceeded — forcing JVM exit with messages in flight");
+if (queueDepth > 0) {
+    logger.warn("Force killing {} pending requests", queueDepth);
 }
 
 // 4. JVM exits
@@ -377,10 +378,51 @@ System.exit(0);
 
 | Component | RTO | RPO | How |
 |-----------|-----|-----|-----|
-| **State machine state** | 30s | 0s | Replay audit log |
-| **In-flight requests** | 30s | >0s | Messages in mailbox at crash time are lost; replay from audit log required for RPO=0 |
+| **State machine state** | 30s | 0s | Replay audit log (if persisted to DB/Kafka) |
+| **In-flight messages** | 30s | **Lost** | Heap memory — `LinkedTransferQueue` is gone on JVM crash; recover via idempotent retry or WAL |
 | **Customer data** | 30s | 0s | DynamoDB (persistent) |
 | **Metrics/analytics** | 5min | 1min | Kafka (replay last 1min) |
+
+### What Is Lost on JVM Crash
+
+When the JVM crashes (SIGKILL, OOM, hardware fault), all heap state is gone:
+
+- **Mailbox messages** (`LinkedTransferQueue`) — lost; callers get `IOException`/timeout
+- **Process state** (`Proc<S,M>` state field) — lost unless checkpointed to durable store
+- **`ProcTimer` scheduled messages** — lost; timers must be re-registered after restart
+- **`ProcRegistry` name table** — lost; rebuilt automatically as processes restart
+- **`ask()` callers** — their `CompletableFuture` never completes; client sees timeout
+
+> **Note:** Within a running JVM, a process crash does NOT lose mailbox messages —
+> the supervisor restarts the process and the queue continues draining. The above
+> only applies to **full JVM termination**.
+
+### Joe Armstrong's Answer: Idempotent Operations + ACK Retry
+
+> *"There are only two hard problems in distributed systems: messages can get lost
+> and processes can die. The solution is not to prevent this — it's to design
+> protocols that survive it."*
+
+Design every operation to be **idempotent** (safe to replay) and have the **sender
+retry until it receives an ACK**. The receiver deduplicates by idempotency key. This
+is how Erlang handles node crashes in distributed systems: the sender monitors the
+node, detects the `DOWN` signal, and resends.
+
+```java
+// Sender: retry until ACK (Joe's model)
+record ChargeMsg(String idempotencyKey, Amount amount) {}
+
+Result<Receipt, Exception> result = CrashRecovery.retry(3, () ->
+    gatewayProc.ask(new ChargeMsg(UUID.randomUUID().toString(), amount),
+                    Duration.ofSeconds(5))
+);
+// If JVM crashed mid-flight, sender retries → same key → receiver deduplicates
+```
+
+**When you need stronger durability (higher RPO requirements):**
+1. **Checkpoint + replay** (RPO: checkpoint interval) — periodically persist state snapshot to DB; reload on restart
+2. **Write-ahead log** (RPO: ~0) — persist each message to Kafka/DB before processing; replay on restart
+3. **Event sourcing** (RPO: 0) — state derived entirely from immutable event log; no checkpoints needed
 
 ### Reconstruction Steps
 
