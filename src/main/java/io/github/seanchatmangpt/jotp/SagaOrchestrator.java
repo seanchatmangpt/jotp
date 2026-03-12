@@ -441,6 +441,17 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
         return name;
     }
 
+    @Override
+    public void onStop(Application<?> app) {
+        try {
+            // Stop the coordinator proc, which drains any in-flight saga messages
+            // and allows virtual-thread workers to finish their current step before exit.
+            shutdown();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     /** Shutdown the saga orchestrator. */
     public void shutdown() throws InterruptedException {
         coordinator.stop();

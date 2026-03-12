@@ -1,7 +1,7 @@
 package io.github.seanchatmangpt.jotp.messaging.system;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.Result;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.StateMachine.Transition;
@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 
 /**
- * Multi-step workflow orchestrator using StateMachine and ProcessRegistry.
+ * Multi-step workflow orchestrator using StateMachine and ProcRegistry.
  *
  * <p>Vernon's "Process Manager" pattern: coordinates work across multiple processes using named
  * process registrations and state machine transitions. Manages step ordering, error recovery, and
@@ -263,7 +263,7 @@ public final class ProcessManager<C> {
 
         this.stateMachine =
                 new StateMachine<>(new WorkflowState.Idle(), workflowData, transitionFn);
-        ProcessRegistry.register(
+        ProcRegistry.register(
                 managerId, (Proc<WorkflowState, WorkflowEvent>) (Object) stateMachine);
 
         // Send initial event
@@ -341,7 +341,7 @@ public final class ProcessManager<C> {
     public void stop() throws InterruptedException {
         if (stateMachine != null) {
             stateMachine.stop();
-            ProcessRegistry.unregister(managerId);
+            ProcRegistry.unregister(managerId);
         }
     }
 

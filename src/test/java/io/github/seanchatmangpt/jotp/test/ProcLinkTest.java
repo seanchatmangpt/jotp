@@ -3,7 +3,7 @@ package io.github.seanchatmangpt.jotp.test;
 import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessLink;
+import io.github.seanchatmangpt.jotp.ProcLink;
 import java.time.Duration;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Timeout;
  * </ol>
  */
 @Timeout(10)
-class ProcessLinkTest implements WithAssertions {
+class ProcLinkTest implements WithAssertions {
 
     /** A process that counts increments and crashes on "BOOM". */
     sealed interface Msg permits Msg.Inc, Msg.Boom, Msg.Ping {
@@ -48,9 +48,9 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void link_crashA_interruptsB() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
-        ProcessLink.link(a, b);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
+        ProcLink.link(a, b);
 
         a.tell(new Msg.Boom());
 
@@ -62,9 +62,9 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void link_crashB_interruptsA() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
-        ProcessLink.link(a, b);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
+        ProcLink.link(a, b);
 
         b.tell(new Msg.Boom());
 
@@ -75,9 +75,9 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void link_normalStopA_doesNotAffectB() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
-        ProcessLink.link(a, b);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
+        ProcLink.link(a, b);
 
         // Graceful stop of a — OTP: normal exit does not propagate
         a.stop();
@@ -98,8 +98,8 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void spawnLink_parentCrash_killsChild() throws Exception {
-        var parent = new Proc<>(0, ProcessLinkTest::handle);
-        var child = ProcessLink.spawnLink(parent, 0, ProcessLinkTest::handle);
+        var parent = new Proc<>(0, ProcLinkTest::handle);
+        var child = ProcLink.spawnLink(parent, 0, ProcLinkTest::handle);
 
         parent.tell(new Msg.Boom());
 
@@ -110,8 +110,8 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void spawnLink_childCrash_killsParent() throws Exception {
-        var parent = new Proc<>(0, ProcessLinkTest::handle);
-        var child = ProcessLink.spawnLink(parent, 0, ProcessLinkTest::handle);
+        var parent = new Proc<>(0, ProcLinkTest::handle);
+        var child = ProcLink.spawnLink(parent, 0, ProcLinkTest::handle);
 
         child.tell(new Msg.Boom());
 
@@ -122,11 +122,11 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void linkChain_oneCrashPropagatesTransitively() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
-        var c = new Proc<>(0, ProcessLinkTest::handle);
-        ProcessLink.link(a, b);
-        ProcessLink.link(b, c);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
+        var c = new Proc<>(0, ProcLinkTest::handle);
+        ProcLink.link(a, b);
+        ProcLink.link(b, c);
 
         a.tell(new Msg.Boom());
 

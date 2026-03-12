@@ -258,9 +258,6 @@
                     <java>
                         <excludes>
                             <!-- sealed local classes not supported by google-java-format -->
-                            <exclude>src/main/java/io/github/seanchatmangpt/jotp/FactoryMethodPatterns.java</exclude>
-                        <!-- Exclude files with syntax that google-java-format cannot parse -->
-                        <excludes>
                             <exclude>**/FactoryMethodPatterns.java</exclude>
                         </excludes>
                         <googleJavaFormat>

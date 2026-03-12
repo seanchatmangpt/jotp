@@ -1,8 +1,8 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
-import io.github.seanchatmangpt.jotp.ProcessMonitor.MonitorRef;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
 import java.util.function.Consumer;
 
 /**
@@ -65,7 +65,7 @@ public final class SessionMonitor {
      */
     public static MonitorRef<ParameterDataAccess.State, PdaMsg> watchParameter(
             Proc<ParameterDataAccess.State, PdaMsg> proc, Consumer<Throwable> downHandler) {
-        return ProcessMonitor.monitor(proc, downHandler);
+        return ProcMonitor.monitor(proc, downHandler);
     }
 
     /**
@@ -80,7 +80,7 @@ public final class SessionMonitor {
      */
     public static MonitorRef<RecorderProcess.RecorderState, Object> watchRecorder(
             RecorderProcess recorder, Consumer<Throwable> downHandler) {
-        return ProcessMonitor.monitor(recorder.proc(), downHandler);
+        return ProcMonitor.monitor(recorder.proc(), downHandler);
     }
 
     /**
@@ -92,6 +92,6 @@ public final class SessionMonitor {
      * @param ref the monitor reference to cancel
      */
     public static void cancel(MonitorRef<?, ?> ref) {
-        ProcessMonitor.demonitor(ref);
+        ProcMonitor.demonitor(ref);
     }
 }

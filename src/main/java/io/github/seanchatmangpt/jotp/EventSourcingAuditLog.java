@@ -292,10 +292,11 @@ public final class EventSourcingAuditLog<S, E, D> {
      *
      * <p>Used by {@link Proc#tell} to deliver audit entries asynchronously.
      */
-    sealed interface AuditMessage permits LogTransition, LogError, ReplayRequest {
-        record LogTransition<S, E, D>(StateChange<S, E, D> entry) implements AuditMessage {}
+    sealed interface AuditMessage
+            permits AuditMessage.LogTransition, AuditMessage.LogError, AuditMessage.ReplayRequest {
+        record LogTransition(StateChange<?, ?, ?> entry) implements AuditMessage {}
 
-        record LogError<S, E>(ErrorEntry<S, E> entry) implements AuditMessage {}
+        record LogError(ErrorEntry<?, ?> entry) implements AuditMessage {}
 
         record ReplayRequest(
                 String entityId, java.util.concurrent.CompletableFuture<List<AuditEntry>> reply)
@@ -320,10 +321,9 @@ public final class EventSourcingAuditLog<S, E, D> {
                         (state, msg) -> {
                             try {
                                 switch (msg) {
-                                    case AuditMessage.LogTransition<?> log ->
+                                    case AuditMessage.LogTransition log ->
                                             backend.append(log.entry());
-                                    case AuditMessage.LogError<?> log ->
-                                            backend.append(log.entry());
+                                    case AuditMessage.LogError log -> backend.append(log.entry());
                                     case AuditMessage.ReplayRequest req -> {
                                         replayLock.readLock().lock();
                                         try {
@@ -363,7 +363,7 @@ public final class EventSourcingAuditLog<S, E, D> {
             Class<? extends S> toState,
             D data) {
         var entry = new StateChange<>(Instant.now(), entityId, fromState, event, toState, data);
-        logger.tell(new AuditMessage.LogTransition<>(entry));
+        logger.tell(new AuditMessage.LogTransition(entry));
     }
 
     /**
@@ -378,7 +378,7 @@ public final class EventSourcingAuditLog<S, E, D> {
      */
     public void logError(String entityId, Class<? extends S> state, Exception exception) {
         var entry = new ErrorEntry<>(Instant.now(), entityId, state, exception);
-        logger.tell(new AuditMessage.LogError<>(entry));
+        logger.tell(new AuditMessage.LogError(entry));
     }
 
     /**
@@ -471,7 +471,7 @@ public final class EventSourcingAuditLog<S, E, D> {
      *
      * @throws InterruptedException if interrupted while stopping the logger process
      */
-    public void close() throws InterruptedException {
+    public void close() throws InterruptedException, java.io.IOException {
         logger.stop();
         backend.close();
     }

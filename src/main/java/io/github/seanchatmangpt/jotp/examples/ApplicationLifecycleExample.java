@@ -4,8 +4,6 @@ import io.github.seanchatmangpt.jotp.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Complete example demonstrating the JOTP Application Lifecycle.
@@ -37,37 +35,43 @@ public class ApplicationLifecycleExample {
      * and managing the supervision tree.
      */
     public static class MyChannelApp implements Application {
-        private static final Logger LOG = LoggerFactory.getLogger(MyChannelApp.class);
+        private static final System.Logger LOG = System.getLogger(MyChannelApp.class.getName());
 
         @Override
-        public Result<ProcRef<?>, Exception> start(StartType type, Object... args) {
+        public Result<Supervisor, Exception> start(StartType type, Object... args) {
             try {
-                LOG.info("Starting MyChannelApp with type: {}", type);
+                LOG.log(System.Logger.Level.INFO, "Starting MyChannelApp with type: " + type);
 
                 // Retrieve configuration from ApplicationConfig
                 var config = ApplicationConfig.getCurrent();
                 int maxChannels = (Integer) config.env().getOrDefault("max_channels", 100);
                 String logLevel = (String) config.env().getOrDefault("log_level", "info");
 
-                LOG.info("Configuration: max_channels={}, log_level={}", maxChannels, logLevel);
+                LOG.log(
+                        System.Logger.Level.INFO,
+                        "Configuration: max_channels=" + maxChannels + ", log_level=" + logLevel);
 
                 // Create the supervision tree
                 var supervisor = ChannelSupervisor.create(maxChannels);
 
-                LOG.info("MyChannelApp started successfully with supervisor: {}", supervisor);
+                LOG.log(
+                        System.Logger.Level.INFO,
+                        "MyChannelApp started successfully with supervisor: " + supervisor);
                 return Result.success(supervisor);
 
             } catch (Exception e) {
-                LOG.error("MyChannelApp startup failed", e);
+                LOG.log(
+                        System.Logger.Level.ERROR,
+                        "MyChannelApp startup failed: " + e.getMessage());
                 return Result.failure(e);
             }
         }
 
         @Override
         public void stop(Object state) {
-            LOG.info("MyChannelApp stopping. State: {}", state);
+            LOG.log(System.Logger.Level.INFO, "MyChannelApp stopping. State: " + state);
             // Cleanup if needed (supervisor shutdown is automatic)
-            LOG.info("MyChannelApp stopped");
+            LOG.log(System.Logger.Level.INFO, "MyChannelApp stopped");
         }
     }
 
@@ -77,30 +81,35 @@ public class ApplicationLifecycleExample {
 
     /** Supervision tree for the channel application. */
     public static class ChannelSupervisor {
-        private static final Logger LOG = LoggerFactory.getLogger(ChannelSupervisor.class);
+        private static final System.Logger LOG =
+                System.getLogger(ChannelSupervisor.class.getName());
 
         /**
          * Create the supervision tree with configurable worker count.
          *
          * @param maxChannels Maximum number of channels to support
-         * @return ProcRef to the root supervisor
+         * @return the root Supervisor managing channel workers
          */
-        public static ProcRef<?> create(int maxChannels) {
-            LOG.debug("Creating ChannelSupervisor with maxChannels={}", maxChannels);
+        public static Supervisor create(int maxChannels) {
+            LOG.log(
+                    System.Logger.Level.DEBUG,
+                    "Creating ChannelSupervisor with maxChannels=" + maxChannels);
 
-            return Supervisor.builder()
-                    .name("channel-supervisor")
-                    .childProcess(
-                            "channel-pool",
-                            state -> new ChannelPool(maxChannels),
-                            Supervisor.RestartStrategy.ONE_FOR_ONE)
-                    .childProcess(
-                            "channel-logger",
-                            state -> new ChannelLogger(),
-                            Supervisor.RestartStrategy.ONE_FOR_ONE)
-                    .maxRestarts(10)
-                    .maxRestartWindow(Duration.ofSeconds(60))
-                    .build();
+            var supervisor =
+                    Supervisor.create(
+                            "channel-supervisor",
+                            Supervisor.Strategy.ONE_FOR_ONE,
+                            10,
+                            Duration.ofSeconds(60));
+            supervisor.supervise(
+                    "channel-pool",
+                    new ChannelPool(maxChannels),
+                    (ChannelPool pool, Object msg) -> pool);
+            supervisor.supervise(
+                    "channel-logger",
+                    new ChannelLogger(),
+                    (ChannelLogger logger, Object msg) -> logger);
+            return supervisor;
         }
     }
 
@@ -110,20 +119,20 @@ public class ApplicationLifecycleExample {
 
     /** Channel pool manager - tracks available channels. */
     public static class ChannelPool {
-        private static final Logger LOG = LoggerFactory.getLogger(ChannelPool.class);
+        private static final System.Logger LOG = System.getLogger(ChannelPool.class.getName());
         private final int maxChannels;
         private final AtomicInteger activeChannels = new AtomicInteger(0);
 
         public ChannelPool(int maxChannels) {
             this.maxChannels = maxChannels;
-            LOG.info("ChannelPool created with capacity {}", maxChannels);
+            LOG.log(System.Logger.Level.INFO, "ChannelPool created with capacity " + maxChannels);
         }
 
         public Result<String, Exception> allocateChannel() {
             if (activeChannels.get() < maxChannels) {
                 int id = activeChannels.incrementAndGet();
                 String channelId = "CHANNEL-" + id;
-                LOG.debug("Allocated channel: {}", channelId);
+                LOG.log(System.Logger.Level.DEBUG, "Allocated channel: " + channelId);
                 return Result.success(channelId);
             }
             return Result.failure(
@@ -133,7 +142,7 @@ public class ApplicationLifecycleExample {
 
         public void releaseChannel(String channelId) {
             activeChannels.decrementAndGet();
-            LOG.debug("Released channel: {}", channelId);
+            LOG.log(System.Logger.Level.DEBUG, "Released channel: " + channelId);
         }
 
         public int getActiveChannels() {
@@ -143,12 +152,12 @@ public class ApplicationLifecycleExample {
 
     /** Channel logger - logs all channel events. */
     public static class ChannelLogger {
-        private static final Logger LOG = LoggerFactory.getLogger(ChannelLogger.class);
+        private static final System.Logger LOG = System.getLogger(ChannelLogger.class.getName());
         private final List<String> eventLog = Collections.synchronizedList(new ArrayList<>());
 
         public void logEvent(String event) {
             eventLog.add(event);
-            LOG.trace("Channel event: {}", event);
+            LOG.log(System.Logger.Level.TRACE, "Channel event: " + event);
         }
 
         public List<String> getEventLog() {
@@ -162,7 +171,7 @@ public class ApplicationLifecycleExample {
 
     /** Creates and manages ApplicationConfig for the channel application. */
     public static class ApplicationSetup {
-        private static final Logger LOG = LoggerFactory.getLogger(ApplicationSetup.class);
+        private static final System.Logger LOG = System.getLogger(ApplicationSetup.class.getName());
 
         /**
          * Create ApplicationConfig for the channel application.
@@ -170,7 +179,7 @@ public class ApplicationLifecycleExample {
          * @return Configured ApplicationConfig instance
          */
         public static ApplicationConfig createConfig() {
-            LOG.info("Creating ApplicationConfig for MyChannelApp");
+            LOG.log(System.Logger.Level.INFO, "Creating ApplicationConfig for MyChannelApp");
 
             return ApplicationConfig.builder()
                     .name("channel-app")
@@ -225,8 +234,8 @@ public class ApplicationLifecycleExample {
 
     /** Demonstrates complete application lifecycle management. */
     public static class ApplicationLifecycleManager {
-        private static final Logger LOG =
-                LoggerFactory.getLogger(ApplicationLifecycleManager.class);
+        private static final System.Logger LOG =
+                System.getLogger(ApplicationLifecycleManager.class.getName());
 
         /**
          * Load an application into the runtime.
@@ -236,9 +245,9 @@ public class ApplicationLifecycleExample {
          */
         public static Result<Void, String> loadApplication(ApplicationConfig config) {
             try {
-                LOG.info("Loading application: {}", config.name());
+                LOG.log(System.Logger.Level.INFO, "Loading application: " + config.name());
                 // In real implementation, this would register with JotpApplicationController
-                LOG.info("Application loaded successfully");
+                LOG.log(System.Logger.Level.INFO, "Application loaded successfully");
                 return Result.success(null);
             } catch (Exception e) {
                 return Result.failure("Failed to load application: " + e.getMessage());
@@ -253,9 +262,9 @@ public class ApplicationLifecycleExample {
          */
         public static Result<Void, String> unloadApplication(String appName) {
             try {
-                LOG.info("Unloading application: {}", appName);
+                LOG.log(System.Logger.Level.INFO, "Unloading application: " + appName);
                 // In real implementation, this would unregister from JotpApplicationController
-                LOG.info("Application unloaded successfully");
+                LOG.log(System.Logger.Level.INFO, "Application unloaded successfully");
                 return Result.success(null);
             } catch (Exception e) {
                 return Result.failure("Failed to unload application: " + e.getMessage());
@@ -271,7 +280,9 @@ public class ApplicationLifecycleExample {
         public static Result<Void, String> startApplication(
                 ApplicationConfig config, StartType type) {
             try {
-                LOG.info("Starting application: {} with type: {}", config.name(), type);
+                LOG.log(
+                        System.Logger.Level.INFO,
+                        "Starting application: " + config.name() + " with type: " + type);
 
                 // Set current config for application to access
                 ApplicationConfig.setCurrent(config);
@@ -281,11 +292,13 @@ public class ApplicationLifecycleExample {
                 var startResult = appCallback.start(type);
 
                 if (startResult.isFailure()) {
-                    return Result.failure(
-                            "Application startup failed: " + startResult.failureReason());
+                    String reason =
+                            startResult.fold(
+                                    v -> "", e -> e != null ? e.getMessage() : "unknown error");
+                    return Result.failure("Application startup failed: " + reason);
                 }
 
-                LOG.info("Application started successfully");
+                LOG.log(System.Logger.Level.INFO, "Application started successfully");
                 return Result.success(null);
 
             } catch (Exception e) {
@@ -301,13 +314,13 @@ public class ApplicationLifecycleExample {
          */
         public static Result<Void, String> stopApplication(ApplicationConfig config) {
             try {
-                LOG.info("Stopping application: {}", config.name());
+                LOG.log(System.Logger.Level.INFO, "Stopping application: " + config.name());
 
                 // Create application callback and call stop
                 var appCallback = (Application) config.mod().getDeclaredConstructor().newInstance();
                 appCallback.stop(null);
 
-                LOG.info("Application stopped successfully");
+                LOG.log(System.Logger.Level.INFO, "Application stopped successfully");
                 return Result.success(null);
 
             } catch (Exception e) {
@@ -471,76 +484,91 @@ public class ApplicationLifecycleExample {
         System.out.println(
                 "╚═══════════════════════════════════════════════════════════════════════════╝\n");
 
-        final Logger LOG = LoggerFactory.getLogger("ApplicationLifecycleExample");
+        final System.Logger LOG = System.getLogger("ApplicationLifecycleExample");
 
         // Step 1: Create ApplicationConfig
-        LOG.info("Step 1: Creating ApplicationConfig");
+        LOG.log(System.Logger.Level.INFO, "Step 1: Creating ApplicationConfig");
         var config = ApplicationSetup.createConfig();
-        LOG.info("  Name: {}", config.name());
-        LOG.info("  Version: {}", config.version());
-        LOG.info("  Description: {}", config.description());
-        LOG.info("  Modules: {}", config.modules().size());
-        LOG.info("  Dependencies: {}", config.dependencies());
-        LOG.info("  Environment: {}", config.env());
+        LOG.log(System.Logger.Level.INFO, "  Name: " + config.name());
+        LOG.log(System.Logger.Level.INFO, "  Version: " + config.version());
+        LOG.log(System.Logger.Level.INFO, "  Description: " + config.description());
+        LOG.log(System.Logger.Level.INFO, "  Modules: " + config.modules().size());
+        LOG.log(System.Logger.Level.INFO, "  Dependencies: " + config.dependencies());
+        LOG.log(System.Logger.Level.INFO, "  Environment: " + config.env());
         System.out.println();
 
         // Step 2: Load the application
-        LOG.info("Step 2: Loading application");
+        LOG.log(System.Logger.Level.INFO, "Step 2: Loading application");
         var loadResult = ApplicationLifecycleManager.loadApplication(config);
         if (loadResult.isFailure()) {
-            LOG.error("  ❌ Load failed: {}", loadResult.failureReason());
+            LOG.log(
+                    System.Logger.Level.ERROR,
+                    "  Load failed: " + loadResult.fold(v -> "", e -> e));
             System.exit(1);
         }
-        LOG.info("  ✅ Application loaded");
+        LOG.log(System.Logger.Level.INFO, "  Application loaded");
         System.out.println();
 
         // Step 3: Start the application (NORMAL mode)
-        LOG.info("Step 3: Starting application (NORMAL mode)");
-        var startResult = ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+        LOG.log(System.Logger.Level.INFO, "Step 3: Starting application (NORMAL mode)");
+        var startResult =
+                ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
         if (startResult.isFailure()) {
-            LOG.error("  ❌ Start failed: {}", startResult.failureReason());
+            LOG.log(
+                    System.Logger.Level.ERROR,
+                    "  Start failed: " + startResult.fold(v -> "", e -> e));
             System.exit(1);
         }
-        LOG.info("  ✅ Application started");
+        LOG.log(System.Logger.Level.INFO, "  Application started");
         System.out.println();
 
         // Step 4: Verify application is running
-        LOG.info("Step 4: Verifying application state");
-        LOG.info(
-                "  Config accessible from application: {}", ApplicationConfig.getCurrent() != null);
+        LOG.log(System.Logger.Level.INFO, "Step 4: Verifying application state");
+        LOG.log(
+                System.Logger.Level.INFO,
+                "  Config accessible from application: "
+                        + (ApplicationConfig.getCurrent() != null));
         System.out.println();
 
         // Step 5: Create variant with custom config
-        LOG.info("Step 5: Creating variant with custom configuration");
+        LOG.log(System.Logger.Level.INFO, "Step 5: Creating variant with custom configuration");
         var customConfig = ApplicationSetup.createConfigWithEnv("debug", 200);
-        LOG.info("  Custom max_channels: {}", customConfig.env().get("max_channels"));
-        LOG.info("  Custom log_level: {}", customConfig.env().get("log_level"));
+        LOG.log(
+                System.Logger.Level.INFO,
+                "  Custom max_channels: " + customConfig.env().get("max_channels"));
+        LOG.log(
+                System.Logger.Level.INFO,
+                "  Custom log_level: " + customConfig.env().get("log_level"));
         System.out.println();
 
         // Step 6: Stop the application
-        LOG.info("Step 6: Stopping application");
+        LOG.log(System.Logger.Level.INFO, "Step 6: Stopping application");
         var stopResult = ApplicationLifecycleManager.stopApplication(config);
         if (stopResult.isFailure()) {
-            LOG.error("  ❌ Stop failed: {}", stopResult.failureReason());
+            LOG.log(
+                    System.Logger.Level.ERROR,
+                    "  Stop failed: " + stopResult.fold(v -> "", e -> e));
             System.exit(1);
         }
-        LOG.info("  ✅ Application stopped");
+        LOG.log(System.Logger.Level.INFO, "  Application stopped");
         System.out.println();
 
         // Step 7: Unload the application
-        LOG.info("Step 7: Unloading application");
+        LOG.log(System.Logger.Level.INFO, "Step 7: Unloading application");
         var unloadResult = ApplicationLifecycleManager.unloadApplication(config.name());
         if (unloadResult.isFailure()) {
-            LOG.error("  ❌ Unload failed: {}", unloadResult.failureReason());
+            LOG.log(
+                    System.Logger.Level.ERROR,
+                    "  Unload failed: " + unloadResult.fold(v -> "", e -> e));
             System.exit(1);
         }
-        LOG.info("  ✅ Application unloaded");
+        LOG.log(System.Logger.Level.INFO, "  Application unloaded");
         System.out.println();
 
         System.out.println(
                 "╔═══════════════════════════════════════════════════════════════════════════╗");
         System.out.println(
-                "║  ✅ Application Lifecycle Example Complete                               ║");
+                "║  Application Lifecycle Example Complete                                  ║");
         System.out.println(
                 "║                                                                           ║");
         System.out.println(
@@ -554,9 +582,9 @@ public class ApplicationLifecycleExample {
         System.out.println(
                 "║  • Environment Configuration Management                                   ║");
         System.out.println(
-                "║  • Application Lifecycle: Load → Start → Stop → Unload                    ║");
+                "║  • Application Lifecycle: Load -> Start -> Stop -> Unload                 ║");
         System.out.println(
-                "║  • StartType Enumeration (NORMAL, TAKEOVER, FAILOVER)                     ║");
+                "║  • StartType Enumeration (Normal, Takeover, Failover)                     ║");
         System.out.println(
                 "║  • Worker Process Management                                              ║");
         System.out.println(
@@ -565,26 +593,26 @@ public class ApplicationLifecycleExample {
                 "╚═══════════════════════════════════════════════════════════════════════════╝");
     }
 
-    /** Enumeration for application start types. */
-    public enum StartType {
-        /** Normal application startup */
-        NORMAL,
-        /** Takeover from another node (distributed) */
-        TAKEOVER,
-        /** Failover from another node (distributed) */
-        FAILOVER
-    }
-
     /** Application interface for lifecycle callbacks. */
     public interface Application {
         /**
          * Start the application.
          *
-         * @param type Start type (NORMAL, TAKEOVER, FAILOVER)
+         * @param type Start type (Normal, Takeover, Failover)
          * @param args Configuration arguments
-         * @return Result with supervisor reference or exception
+         * @return Result with started Supervisor or exception
          */
-        Result<ProcRef<?>, Exception> start(StartType type, Object... args);
+        Result<Supervisor, Exception> start(StartType type, Object... args);
+
+        /**
+         * Convenience overload without varargs.
+         *
+         * @param type Start type
+         * @return Result with started Supervisor or exception
+         */
+        default Result<Supervisor, Exception> start(StartType type) {
+            return start(type, new Object[0]);
+        }
 
         /**
          * Stop the application.

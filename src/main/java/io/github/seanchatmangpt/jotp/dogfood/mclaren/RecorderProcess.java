@@ -4,12 +4,12 @@ import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcLib;
 import io.github.seanchatmangpt.jotp.ProcLib.StartResult;
+import io.github.seanchatmangpt.jotp.ProcLink;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.ProcTimer;
 import io.github.seanchatmangpt.jotp.ProcTimer.TimerRef;
-import io.github.seanchatmangpt.jotp.ProcessLink;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
-import io.github.seanchatmangpt.jotp.ProcessMonitor.MonitorRef;
 import java.util.function.Consumer;
 
 /**
@@ -112,7 +112,7 @@ public final class RecorderProcess {
 
                 // Spawn and link a connection monitor (demonstrates ProcessLink)
                 Proc<RecorderState, Object> monitor =
-                        ProcessLink.spawnLink(proc, RecorderState.Idle, (state, msg) -> state);
+                        ProcLink.spawnLink(proc, RecorderState.Idle, (state, msg) -> state);
                 // The recorder traps exits so it handles the ExitSignal instead of crashing
                 proc.trapExits(true);
                 yield new RecorderProcess(proc, timer);
@@ -185,7 +185,7 @@ public final class RecorderProcess {
      * @return a {@link MonitorRef} that can be passed to {@link ProcessMonitor#demonitor}
      */
     public MonitorRef<RecorderState, Object> monitor(Consumer<Throwable> downHandler) {
-        return ProcessMonitor.monitor(proc, downHandler);
+        return ProcMonitor.monitor(proc, downHandler);
     }
 
     /**

@@ -66,15 +66,15 @@ public class EcommerceOrderService {
 
     /** Order events (sealed hierarchy for exhaustive pattern matching). */
     public sealed interface OrderEvent
-            permits OrderEvent.Created,
-                    OrderEvent.PaymentAuthorized,
-                    OrderEvent.PaymentFailed,
-                    OrderEvent.InventoryReserved,
-                    OrderEvent.InventoryFailed,
-                    OrderEvent.ShippingScheduled,
-                    OrderEvent.ShippingFailed,
-                    OrderEvent.OrderCompleted,
-                    OrderEvent.OrderCancelled {}
+            permits EcommerceOrderService.Created,
+                    EcommerceOrderService.PaymentAuthorized,
+                    EcommerceOrderService.PaymentFailed,
+                    EcommerceOrderService.InventoryReserved,
+                    EcommerceOrderService.InventoryFailed,
+                    EcommerceOrderService.ShippingScheduled,
+                    EcommerceOrderService.ShippingFailed,
+                    EcommerceOrderService.OrderCompleted,
+                    EcommerceOrderService.OrderCancelled {}
 
     // Event records
     public record Created(String orderId, double amount, List<LineItem> items)
@@ -123,27 +123,33 @@ public class EcommerceOrderService {
         }
 
         public Result<String, Exception> charge(Double amount) {
-            return Result.of(
-                    () ->
-                            breaker.execute(
-                                    amount,
-                                    a -> {
-                                        if (simulateFailure) {
-                                            throw new RuntimeException("Simulated payment failure");
-                                        }
-                                        // Simulate 95% success rate
-                                        if (Math.random() > 0.95) {
-                                            throw new RuntimeException("Payment gateway timeout");
-                                        }
-                                        return "TXN-" + System.nanoTime();
-                                    }));
+            var cbResult =
+                    breaker.execute(
+                            amount,
+                            a -> {
+                                if (simulateFailure) {
+                                    throw new RuntimeException("Simulated payment failure");
+                                }
+                                if (Math.random() > 0.95) {
+                                    throw new RuntimeException("Payment gateway timeout");
+                                }
+                                return "TXN-" + System.nanoTime();
+                            });
+            return switch (cbResult) {
+                case CircuitBreaker.CircuitBreakerResult.Success<String, Exception>(var v) ->
+                        Result.success(v);
+                case CircuitBreaker.CircuitBreakerResult.Failure<String, Exception>(var e) ->
+                        Result.failure(e);
+                case CircuitBreaker.CircuitBreakerResult.CircuitOpen<String, Exception>() ->
+                        Result.failure(new RuntimeException("Circuit breaker is open"));
+            };
         }
 
         public CircuitBreaker.State getCircuitState() {
             return breaker.getState();
         }
 
-        void setSimulateFailure(boolean fail) {
+        public void setSimulateFailure(boolean fail) {
             simulateFailure = fail;
         }
     }
@@ -166,13 +172,13 @@ public class EcommerceOrderService {
         }
 
         public Result<String, Exception> reserve(String productId, int quantity) {
-            var sendResult = bulkhead.send(productId, new ReserveRequest(productId, quantity));
+            var sendResult = bulkhead.send(new ReserveRequest(productId, quantity));
 
             return switch (sendResult) {
-                case BulkheadIsolation.Send.Success ignored ->
-                        Result.success("RES-" + System.nanoTime());
-                case BulkheadIsolation.Send.Rejected(var reason) ->
-                        Result.failure(new Exception("Inventory service degraded: " + reason));
+                case BulkheadIsolation.Send.Success() -> Result.success("RES-" + System.nanoTime());
+                case BulkheadIsolation.Send.Rejected rejected ->
+                        Result.failure(
+                                new Exception("Inventory service degraded: " + rejected.reason()));
             };
         }
 
@@ -229,14 +235,14 @@ public class EcommerceOrderService {
         private final PaymentService paymentService;
         private final InventoryService inventoryService;
         private final ShippingService shippingService;
-        private final EventSourcingAuditLog<OrderState> auditLog;
+        private final Proc<Void, OrderEvent> auditLog;
         private final Duration timeout;
 
         public OrderSagaCoordinator(
                 PaymentService paymentService,
                 InventoryService inventoryService,
                 ShippingService shippingService,
-                EventSourcingAuditLog<OrderState> auditLog,
+                Proc<Void, OrderEvent> auditLog,
                 Duration timeout) {
             this.paymentService = paymentService;
             this.inventoryService = inventoryService;
@@ -256,22 +262,30 @@ public class EcommerceOrderService {
             var paymentResult = paymentService.charge(orderData.amount());
             if (paymentResult.isFailure()) {
                 // Payment failed, no compensation needed
-                auditLog.tell(new OrderEvent.PaymentFailed("Payment gateway error"));
-                return Result.failure(
-                        new SagaError(
-                                "Payment failed: " + paymentResult.failureReason(), List.of()));
+                auditLog.tell(new PaymentFailed("Payment gateway error"));
+                String reason =
+                        switch (paymentResult) {
+                            case Result.Err<String, Exception>(var e) -> e.getMessage();
+                            case Result.Failure<String, Exception>(var e) -> e.getMessage();
+                            default -> "unknown error";
+                        };
+                return Result.failure(new SagaError("Payment failed: " + reason, List.of()));
             }
 
-            String transactionId = paymentResult.successValue().orElseThrow();
-            auditLog.tell(new OrderEvent.PaymentAuthorized(transactionId));
+            String transactionId = paymentResult.orElseThrow();
+            auditLog.tell(new PaymentAuthorized(transactionId));
 
             // Step 2: Reserve inventory
             var inventoryResult = inventoryService.reserve(orderData.items().get(0).productId(), 1);
             if (inventoryResult.isFailure()) {
                 // Inventory failed, compensate: refund payment
-                auditLog.tell(
-                        new OrderEvent.InventoryFailed(
-                                "Inventory unavailable: " + inventoryResult.failureReason()));
+                String invReason =
+                        switch (inventoryResult) {
+                            case Result.Err<String, Exception>(var e) -> e.getMessage();
+                            case Result.Failure<String, Exception>(var e) -> e.getMessage();
+                            default -> "unknown error";
+                        };
+                auditLog.tell(new InventoryFailed("Inventory unavailable: " + invReason));
 
                 // Compensation: refund
                 compensatePayment(transactionId);
@@ -280,16 +294,20 @@ public class EcommerceOrderService {
                                 "Inventory failed", List.of("Refunded payment: " + transactionId)));
             }
 
-            String reservationId = inventoryResult.successValue().orElseThrow();
-            auditLog.tell(new OrderEvent.InventoryReserved(List.of(reservationId)));
+            String reservationId = inventoryResult.orElseThrow();
+            auditLog.tell(new InventoryReserved(List.of(reservationId)));
 
             // Step 3: Schedule shipping
             var shippingResult = shippingService.schedule(orderData.shippingAddress());
             if (shippingResult.isFailure()) {
                 // Shipping failed, compensate: release inventory + refund payment
-                auditLog.tell(
-                        new OrderEvent.ShippingFailed(
-                                "Shipping service unavailable: " + shippingResult.failureReason()));
+                String shipReason =
+                        switch (shippingResult) {
+                            case Result.Err<String, Exception>(var e) -> e.getMessage();
+                            case Result.Failure<String, Exception>(var e) -> e.getMessage();
+                            default -> "unknown error";
+                        };
+                auditLog.tell(new ShippingFailed("Shipping service unavailable: " + shipReason));
 
                 // Compensation in LIFO order
                 compensateInventory(reservationId);
@@ -302,9 +320,9 @@ public class EcommerceOrderService {
                                         "Refunded payment: " + transactionId)));
             }
 
-            String trackingNumber = shippingResult.successValue().orElseThrow();
-            auditLog.tell(new OrderEvent.ShippingScheduled(trackingNumber));
-            auditLog.tell(new OrderEvent.OrderCompleted(Instant.now()));
+            String trackingNumber = shippingResult.orElseThrow();
+            auditLog.tell(new ShippingScheduled(trackingNumber));
+            auditLog.tell(new OrderCompleted(Instant.now()));
 
             return Result.success(
                     new SagaOutcome(
@@ -351,7 +369,22 @@ public class EcommerceOrderService {
         var paymentService = new PaymentService("payment-gateway", 5, Duration.ofSeconds(60));
         var inventoryService = new InventoryService("inventory-service", 5, 100);
         var shippingService = new ShippingService();
-        var auditLog = new EventSourcingAuditLog<>("orders", new InMemoryAuditBackend());
+        var eventSourcingLog =
+                EventSourcingAuditLog.<OrderState, OrderEvent, OrderData>builder()
+                        .entityId("orders")
+                        .backend(new InMemoryAuditBackend())
+                        .build();
+        Proc<Void, OrderEvent> auditLog =
+                Proc.spawn(
+                        null,
+                        (state, event) -> {
+                            @SuppressWarnings("unchecked")
+                            Class<? extends OrderEvent> eventClass =
+                                    (Class<? extends OrderEvent>) event.getClass();
+                            eventSourcingLog.logTransition(
+                                    "orders", OrderState.class, eventClass, OrderState.class, null);
+                            return state;
+                        });
 
         var coordinator =
                 new OrderSagaCoordinator(
@@ -379,22 +412,52 @@ public class EcommerceOrderService {
         var result = coordinator.executeOrderCreation(orderData);
 
         System.out.println("\n--- Saga Execution Result ---");
-        if (result.isSuccess()) {
-            var outcome = result.successValue().orElseThrow();
-            System.out.println("✅ Order creation SUCCEEDED");
-            System.out.println("   Message: " + outcome.message());
-            System.out.println("   Steps:");
-            for (var step : outcome.steps()) {
-                System.out.println(
-                        "     - " + step.service() + ": " + step.id() + " [" + step.status() + "]");
+        switch (result) {
+            case Result.Ok<SagaOutcome, SagaError>(var outcome) -> {
+                System.out.println("Order creation SUCCEEDED");
+                System.out.println("   Message: " + outcome.message());
+                System.out.println("   Steps:");
+                for (var step : outcome.steps()) {
+                    System.out.println(
+                            "     - "
+                                    + step.service()
+                                    + ": "
+                                    + step.id()
+                                    + " ["
+                                    + step.status()
+                                    + "]");
+                }
             }
-        } else {
-            var error = result.failureReason().orElseThrow();
-            System.out.println("❌ Order creation FAILED");
-            System.out.println("   Reason: " + error.message());
-            System.out.println("   Compensations applied:");
-            for (var comp : error.compensations()) {
-                System.out.println("     - " + comp);
+            case Result.Success<SagaOutcome, SagaError>(var outcome) -> {
+                System.out.println("Order creation SUCCEEDED");
+                System.out.println("   Message: " + outcome.message());
+                System.out.println("   Steps:");
+                for (var step : outcome.steps()) {
+                    System.out.println(
+                            "     - "
+                                    + step.service()
+                                    + ": "
+                                    + step.id()
+                                    + " ["
+                                    + step.status()
+                                    + "]");
+                }
+            }
+            case Result.Err<SagaOutcome, SagaError>(var error) -> {
+                System.out.println("Order creation FAILED");
+                System.out.println("   Reason: " + error.message());
+                System.out.println("   Compensations applied:");
+                for (var comp : error.compensations()) {
+                    System.out.println("     - " + comp);
+                }
+            }
+            case Result.Failure<SagaOutcome, SagaError>(var error) -> {
+                System.out.println("Order creation FAILED");
+                System.out.println("   Reason: " + error.message());
+                System.out.println("   Compensations applied:");
+                for (var comp : error.compensations()) {
+                    System.out.println("     - " + comp);
+                }
             }
         }
 
@@ -404,20 +467,24 @@ public class EcommerceOrderService {
     }
 
     /** Audit log backend implementation for this example. */
-    public static class InMemoryAuditBackend
-            implements EventSourcingAuditLog.AuditBackend<OrderState> {
-        private final List<OrderEvent> events = new ArrayList<>();
+    public static class InMemoryAuditBackend implements EventSourcingAuditLog.AuditBackend {
+        private final java.util.concurrent.CopyOnWriteArrayList<EventSourcingAuditLog.AuditEntry>
+                entries = new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
-        public void append(Object auditEntry) {
-            if (auditEntry instanceof OrderEvent) {
-                events.add((OrderEvent) auditEntry);
-            }
+        public void append(EventSourcingAuditLog.AuditEntry entry) {
+            entries.add(entry);
         }
 
         @Override
-        public List<Object> getAll() {
-            return new ArrayList<>(events);
+        public java.util.stream.Stream<EventSourcingAuditLog.AuditEntry> entriesFor(
+                String entityId) {
+            return entries.stream().filter(e -> e.entityId().equals(entityId));
+        }
+
+        @Override
+        public void close() {
+            entries.clear();
         }
     }
 }

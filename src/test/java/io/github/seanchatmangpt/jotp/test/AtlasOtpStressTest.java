@@ -4,7 +4,7 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.AcquisitionSupervisor;
@@ -55,7 +55,7 @@ import org.junit.jupiter.api.Timeout;
  * <ol>
  *   <li>{@link AcquisitionSupervisor} — 1 K ONE_FOR_ONE supervised {@code ParameterDataAccess}
  *       processes; 1 M live ECU samples pushed via {@link AcquisitionSupervisor#addSamples}
- *   <li>{@link ProcessRegistry} — 1 K registered {@link PdaMsg}-typed procs; 1 M concurrent {@code
+ *   <li>{@link ProcRegistry} — 1 K registered {@link PdaMsg}-typed procs; 1 M concurrent {@code
  *       whereis()} lookups followed by {@link PdaMsg.AddSamples} fire-and-forget
  *   <li>{@link SqlRaceSession} — 1 K session state machines configured and moved to {@code Live}; 1
  *       M concurrent {@link SqlRaceSessionEvent.AddLap} events; exact lap count verified
@@ -160,7 +160,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
     @AfterEach
     void resetRegistry() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -236,13 +236,12 @@ class AtlasOtpStressTest implements WithAssertions {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // Test 2 — ProcessRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
+    // Test 2 — ProcRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
     @Order(2)
-    @DisplayName(
-            "1 M ProcessRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
+    @DisplayName("1 M ProcRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
     @SuppressWarnings("unchecked")
     void processRegistry_millionLookups_allPdaMsgDelivered() throws Exception {
         // 1 K Proc<AtomicLong, PdaMsg>: counts AddSamples; silently ignores other PdaMsg variants.
@@ -258,7 +257,7 @@ class AtlasOtpStressTest implements WithAssertions {
                                 }
                                 return count;
                             });
-            ProcessRegistry.register("pda-" + i, procs[i]);
+            ProcRegistry.register("pda-" + i, procs[i]);
         }
 
         var successes = new AtomicLong(0);
@@ -270,8 +269,7 @@ class AtlasOtpStressTest implements WithAssertions {
                 CONCURRENCY,
                 idx -> {
                     var ref =
-                            ProcessRegistry.<AtomicLong, PdaMsg>whereis(
-                                    "pda-" + (idx % PARAM_COUNT));
+                            ProcRegistry.<AtomicLong, PdaMsg>whereis("pda-" + (idx % PARAM_COUNT));
                     if (ref.isEmpty()) {
                         empties.incrementAndGet();
                         return;
@@ -284,7 +282,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
         assertThat(errors.get()).as("no lookup should throw").isZero();
         assertThat(empties.get())
-                .as("every PDA proc must be found — ProcessRegistry must return no stale entries")
+                .as("every PDA proc must be found — ProcRegistry must return no stale entries")
                 .isZero();
 
         // Drain: ask(Clear) enqueued AFTER all AddSamples — FIFO guarantees exact count.
@@ -303,7 +301,7 @@ class AtlasOtpStressTest implements WithAssertions {
                         .orElse(0L);
 
         assertThat(totalDelivered)
-                .as("ProcessRegistry must route all 1 M PdaMsg.AddSamples to live procs")
+                .as("ProcRegistry must route all 1 M PdaMsg.AddSamples to live procs")
                 .isEqualTo(N);
 
         for (var p : procs) p.stop();

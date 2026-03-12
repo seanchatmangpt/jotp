@@ -50,9 +50,9 @@ class SupervisionTreeExampleTest {
 
         // Send increments to all workers until w1 crashes (at counter=5)
         for (int i = 0; i < 6; i++) {
-            w1.send(new WorkerMessage.Increment());
-            w2.send(new WorkerMessage.Increment());
-            w3.send(new WorkerMessage.Increment());
+            w1.tell(new WorkerMessage.Increment());
+            w2.tell(new WorkerMessage.Increment());
+            w3.tell(new WorkerMessage.Increment());
             Thread.sleep(50);
         }
 
@@ -64,9 +64,9 @@ class SupervisionTreeExampleTest {
         CompletableFuture<WorkerState> s2 = new CompletableFuture<>();
         CompletableFuture<WorkerState> s3 = new CompletableFuture<>();
 
-        w1.send(new WorkerMessage.GetState(s1));
-        w2.send(new WorkerMessage.GetState(s2));
-        w3.send(new WorkerMessage.GetState(s3));
+        w1.tell(new WorkerMessage.GetState(s1));
+        w2.tell(new WorkerMessage.GetState(s2));
+        w3.tell(new WorkerMessage.GetState(s3));
 
         WorkerState state1 = s1.get(5, TimeUnit.SECONDS);
         WorkerState state2 = s2.get(5, TimeUnit.SECONDS);
@@ -103,7 +103,7 @@ class SupervisionTreeExampleTest {
 
         // Cycle 1: Increment until crash (counter reaches 5)
         for (int i = 0; i < 6; i++) {
-            worker.send(new WorkerMessage.Increment());
+            worker.tell(new WorkerMessage.Increment());
             Thread.sleep(50);
         }
 
@@ -111,7 +111,7 @@ class SupervisionTreeExampleTest {
 
         // Verify: after restart, counter should be 0
         CompletableFuture<WorkerState> stateAfterRestart = new CompletableFuture<>();
-        worker.send(new WorkerMessage.GetState(stateAfterRestart));
+        worker.tell(new WorkerMessage.GetState(stateAfterRestart));
         WorkerState state1 = stateAfterRestart.get(5, TimeUnit.SECONDS);
 
         assertThat(state1.counter()).as("counter reset to 0 after first crash").isEqualTo(0);
@@ -119,7 +119,7 @@ class SupervisionTreeExampleTest {
 
         // Cycle 2: Increment again and crash again
         for (int i = 0; i < 6; i++) {
-            worker.send(new WorkerMessage.Increment());
+            worker.tell(new WorkerMessage.Increment());
             Thread.sleep(50);
         }
 
@@ -127,7 +127,7 @@ class SupervisionTreeExampleTest {
 
         // Verify: counter is reset again, restarts incremented
         CompletableFuture<WorkerState> stateAfterSecondRestart = new CompletableFuture<>();
-        worker.send(new WorkerMessage.GetState(stateAfterSecondRestart));
+        worker.tell(new WorkerMessage.GetState(stateAfterSecondRestart));
         WorkerState state2 = stateAfterSecondRestart.get(5, TimeUnit.SECONDS);
 
         assertThat(state2.counter()).as("counter reset to 0 after second crash").isEqualTo(0);
@@ -162,7 +162,7 @@ class SupervisionTreeExampleTest {
         for (int cycle = 0; cycle < 4; cycle++) {
             for (int i = 0; i < 6; i++) {
                 try {
-                    worker.send(new WorkerMessage.Increment());
+                    worker.tell(new WorkerMessage.Increment());
                 } catch (Exception e) {
                     // Worker may become unresponsive if supervisor has terminated
                     break;
@@ -215,8 +215,8 @@ class SupervisionTreeExampleTest {
                         "w2", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
 
         // Send some messages
-        w1.send(new WorkerMessage.Increment());
-        w2.send(new WorkerMessage.Increment());
+        w1.tell(new WorkerMessage.Increment());
+        w2.tell(new WorkerMessage.Increment());
         Thread.sleep(100);
 
         // Verify supervisor is running

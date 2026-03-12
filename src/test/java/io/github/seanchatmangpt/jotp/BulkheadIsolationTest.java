@@ -73,7 +73,11 @@ class BulkheadIsolationTest {
                         100,
                         (state, msg) -> {
                             if (msg instanceof TestMsg.Process p) {
-                                Thread.sleep(p.delay);
+                                try {
+                                    Thread.sleep(p.delay);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
                             }
                             return state;
                         });

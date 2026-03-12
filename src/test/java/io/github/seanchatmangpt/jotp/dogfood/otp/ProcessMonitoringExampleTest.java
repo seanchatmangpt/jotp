@@ -1,11 +1,10 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.jotp.core.Proc;
-import io.github.seanchatmangpt.jotp.core.ProcMonitor;
-import io.github.seanchatmangpt.jotp.core.ProcSys;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcSys;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
@@ -37,11 +36,14 @@ final class ProcessMonitoringExampleTest {
     @Test
     void testProcMonitorDetectsProcessTermination() throws Exception {
         // Arrange
-        var worker = Proc.spawn(new WorkerState(0, "test-worker"), this::workerBehavior);
+        var worker =
+                Proc.spawn(
+                        new WorkerState(0, "test-worker"),
+                        ProcessMonitoringExampleTest::workerBehavior);
         var downReceived = new CountDownLatch(1);
 
         // Act: Install monitor
-        ProcMonitor.monitor(worker);
+        ProcMonitor.monitor(worker, _ -> {});
 
         // Create a separate process to detect the DOWN signal
         var monitor =
@@ -51,7 +53,7 @@ final class ProcessMonitoringExampleTest {
                             if (msg instanceof String && msg.equals("check-down")) {
                                 // Try to interact with worker to detect if it's down
                                 try {
-                                    worker.send(new WorkerMessage.GetState());
+                                    worker.tell(new WorkerMessage.GetState());
                                 } catch (Exception e) {
                                     downReceived.countDown();
                                 }
@@ -60,48 +62,57 @@ final class ProcessMonitoringExampleTest {
                         });
 
         // Crash the worker
-        worker.send(new WorkerMessage.Crash());
+        worker.tell(new WorkerMessage.Crash());
 
         // Assert: Wait for DOWN notification
         // The downReceived latch should trigger when we try to send to a dead process
         Thread.sleep(100);
-        monitor.send("check-down");
+        monitor.tell("check-down");
 
-        assertTrue(downReceived.getCount() >= 0, "Monitor should detect process termination");
+        assertThat(downReceived.getCount())
+                .as("Monitor should detect process termination")
+                .isGreaterThanOrEqualTo(0);
     }
 
     @Test
     void testProcSysStatisticsReturnsCorrectData() throws Exception {
         // Arrange
-        var worker = Proc.spawn(new WorkerState(0, "stats-test"), this::workerBehavior);
+        var worker =
+                Proc.spawn(
+                        new WorkerState(0, "stats-test"),
+                        ProcessMonitoringExampleTest::workerBehavior);
 
         // Act: Send several messages
-        worker.send(new WorkerMessage.Increment());
-        worker.send(new WorkerMessage.Increment());
-        worker.send(new WorkerMessage.Increment());
+        worker.tell(new WorkerMessage.Increment());
+        worker.tell(new WorkerMessage.Increment());
+        worker.tell(new WorkerMessage.Increment());
         Thread.sleep(50);
 
         // Get statistics without stopping the worker
         var stats = ProcSys.statistics(worker);
 
-        // Assert: Worker should still be operational and stats should be non-empty
-        assertThat(stats).isNotNull().isNotEmpty();
+        // Assert: Worker should still be operational and stats should be non-null
+        assertThat(stats).isNotNull();
+        assertThat(stats.messagesIn()).as("messagesIn should be positive").isGreaterThan(0);
 
         // Send another message to verify worker still works
-        worker.send(new WorkerMessage.Increment());
+        worker.tell(new WorkerMessage.Increment());
         Thread.sleep(50);
     }
 
     @Test
     void testMonitoringDoesntInterfereWithWorkerOperation() throws Exception {
         // Arrange
-        var worker = Proc.spawn(new WorkerState(0, "interference-test"), this::workerBehavior);
+        var worker =
+                Proc.spawn(
+                        new WorkerState(0, "interference-test"),
+                        ProcessMonitoringExampleTest::workerBehavior);
 
         // Act: Install monitor and send messages
-        ProcMonitor.monitor(worker);
+        ProcMonitor.monitor(worker, _ -> {});
         var messageCount = 10;
         for (int i = 0; i < messageCount; i++) {
-            worker.send(new WorkerMessage.Increment());
+            worker.tell(new WorkerMessage.Increment());
         }
         Thread.sleep(100);
 
@@ -115,13 +126,16 @@ final class ProcessMonitoringExampleTest {
     @Test
     void testDownNotificationContainsCrashReason() throws Exception {
         // Arrange
-        var worker = Proc.spawn(new WorkerState(0, "crash-reason-test"), this::workerBehavior);
+        var worker =
+                Proc.spawn(
+                        new WorkerState(0, "crash-reason-test"),
+                        ProcessMonitoringExampleTest::workerBehavior);
         var crashDetected = new CountDownLatch(1);
         final String[] crashReason = {null};
 
         // Act: Monitor and crash
-        ProcMonitor.monitor(worker);
-        worker.send(new WorkerMessage.Crash());
+        ProcMonitor.monitor(worker, _ -> {});
+        worker.tell(new WorkerMessage.Crash());
 
         // Detect the crash
         Thread.sleep(100);
@@ -133,23 +147,31 @@ final class ProcessMonitoringExampleTest {
         }
 
         // Assert: Crash should be detected
-        assertTrue(crashDetected.getCount() >= 0, "Crash should be detected");
+        assertThat(crashDetected.getCount())
+                .as("Crash should be detected")
+                .isGreaterThanOrEqualTo(0);
     }
 
     @Test
     void testMultipleWorkersMonitoredIndependently() throws Exception {
         // Arrange
-        var worker1 = Proc.spawn(new WorkerState(0, "worker-1"), this::workerBehavior);
-        var worker2 = Proc.spawn(new WorkerState(0, "worker-2"), this::workerBehavior);
+        var worker1 =
+                Proc.spawn(
+                        new WorkerState(0, "worker-1"),
+                        ProcessMonitoringExampleTest::workerBehavior);
+        var worker2 =
+                Proc.spawn(
+                        new WorkerState(0, "worker-2"),
+                        ProcessMonitoringExampleTest::workerBehavior);
 
         // Act: Monitor both independently
-        ProcMonitor.monitor(worker1);
-        ProcMonitor.monitor(worker2);
+        ProcMonitor.monitor(worker1, _ -> {});
+        ProcMonitor.monitor(worker2, _ -> {});
 
         // Send messages to both
         for (int i = 0; i < 5; i++) {
-            worker1.send(new WorkerMessage.Increment());
-            worker2.send(new WorkerMessage.Increment());
+            worker1.tell(new WorkerMessage.Increment());
+            worker2.tell(new WorkerMessage.Increment());
         }
         Thread.sleep(100);
 
@@ -158,15 +180,15 @@ final class ProcessMonitoringExampleTest {
         var stats2 = ProcSys.statistics(worker2);
 
         // Assert: Both should be operational and independent
-        assertThat(stats1).isNotNull().isNotEmpty();
-        assertThat(stats2).isNotNull().isNotEmpty();
+        assertThat(stats1).isNotNull();
+        assertThat(stats2).isNotNull();
 
         // Crash one, verify other still works
-        worker1.send(new WorkerMessage.Crash());
+        worker1.tell(new WorkerMessage.Crash());
         Thread.sleep(100);
 
         // Worker2 should still be operational
-        worker2.send(new WorkerMessage.Increment());
+        worker2.tell(new WorkerMessage.Increment());
         var stats2After = ProcSys.statistics(worker2);
         assertThat(stats2After).isNotNull();
     }
@@ -174,14 +196,17 @@ final class ProcessMonitoringExampleTest {
     @Test
     void testDemonitorStopsMonitoring() throws Exception {
         // Arrange
-        var worker = Proc.spawn(new WorkerState(0, "demonitor-test"), this::workerBehavior);
+        var worker =
+                Proc.spawn(
+                        new WorkerState(0, "demonitor-test"),
+                        ProcessMonitoringExampleTest::workerBehavior);
 
         // Act: Monitor, then demonitor
-        var monitorRef = ProcMonitor.monitor(worker);
+        var monitorRef = ProcMonitor.monitor(worker, _ -> {});
         ProcMonitor.demonitor(monitorRef);
 
         // Crash the worker
-        worker.send(new WorkerMessage.Crash());
+        worker.tell(new WorkerMessage.Crash());
         Thread.sleep(100);
 
         // Assert: Process should be down, but we shouldn't receive notifications
@@ -191,6 +216,6 @@ final class ProcessMonitoringExampleTest {
         } catch (Exception e) {
             exceptionThrown = true;
         }
-        assertTrue(exceptionThrown, "Worker should be down after crash");
+        assertThat(exceptionThrown).as("Worker should be down after crash").isTrue();
     }
 }

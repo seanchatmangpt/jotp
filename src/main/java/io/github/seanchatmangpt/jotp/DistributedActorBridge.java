@@ -468,7 +468,7 @@ public final class DistributedActorBridge {
                 var handle =
                         new RemoteActorHandle<S, M>(
                                 location,
-                                name + "@" + host + ":" + port,
+                                host + "@" + host + ":" + port,
                                 Duration.ofSeconds(5),
                                 (MessageCodec<M>) defaultCodec);
                 yield Optional.of(handle);

@@ -3,7 +3,7 @@ package io.github.seanchatmangpt.jotp.test;
 import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Timeout;
  * </ol>
  */
 @Timeout(10)
-class ProcessMonitorTest implements WithAssertions {
+class ProcMonitorTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Ping, Msg.Crash {
         record Ping() implements Msg {}
@@ -52,7 +52,7 @@ class ProcessMonitorTest implements WithAssertions {
         var downReason = new AtomicReference<Throwable>();
         var downFired = new AtomicBoolean(false);
 
-        ProcessMonitor.monitor(
+        ProcMonitor.monitor(
                 target,
                 reason -> {
                     downReason.set(reason);
@@ -75,7 +75,7 @@ class ProcessMonitorTest implements WithAssertions {
         var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
         var downFired = new AtomicBoolean(false);
 
-        ProcessMonitor.monitor(
+        ProcMonitor.monitor(
                 target,
                 reason -> {
                     downReason.set(reason); // should be null for normal exit
@@ -98,7 +98,7 @@ class ProcessMonitorTest implements WithAssertions {
         var watcher = counter();
         var aliveAfterCrash = new AtomicBoolean(false);
 
-        ProcessMonitor.monitor(
+        ProcMonitor.monitor(
                 target,
                 reason -> {
                     // Watcher still runs — tell it a Ping to confirm
@@ -123,9 +123,9 @@ class ProcessMonitorTest implements WithAssertions {
         var target = counter();
         var downFired = new AtomicBoolean(false);
 
-        var ref = ProcessMonitor.monitor(target, _ -> downFired.set(true));
+        var ref = ProcMonitor.monitor(target, _ -> downFired.set(true));
 
-        ProcessMonitor.demonitor(ref); // cancel before crash
+        ProcMonitor.demonitor(ref); // cancel before crash
 
         target.tell(new Msg.Crash());
         target.thread().join();
@@ -145,8 +145,8 @@ class ProcessMonitorTest implements WithAssertions {
         var fired1 = new AtomicBoolean(false);
         var fired2 = new AtomicBoolean(false);
 
-        ProcessMonitor.monitor(target, _ -> fired1.set(true));
-        ProcessMonitor.monitor(target, _ -> fired2.set(true));
+        ProcMonitor.monitor(target, _ -> fired1.set(true));
+        ProcMonitor.monitor(target, _ -> fired2.set(true));
 
         target.tell(new Msg.Crash());
 

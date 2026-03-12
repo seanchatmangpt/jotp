@@ -1,7 +1,7 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.util.Optional;
 
 /**
@@ -43,7 +43,7 @@ public final class ParameterRegistry {
      */
     public static void register(
             SqlRaceParameter param, Proc<ParameterDataAccess.State, PdaMsg> proc) {
-        ProcessRegistry.register(param.identifier(), proc);
+        ProcRegistry.register(param.identifier(), proc);
     }
 
     /**
@@ -53,7 +53,7 @@ public final class ParameterRegistry {
      * @param proc the running process
      */
     public static void register(String identifier, Proc<ParameterDataAccess.State, PdaMsg> proc) {
-        ProcessRegistry.register(identifier, proc);
+        ProcRegistry.register(identifier, proc);
     }
 
     /**
@@ -64,7 +64,7 @@ public final class ParameterRegistry {
      */
     @SuppressWarnings("unchecked")
     public static Optional<Proc<ParameterDataAccess.State, PdaMsg>> whereis(String identifier) {
-        return ProcessRegistry.<ParameterDataAccess.State, PdaMsg>whereis(identifier);
+        return ProcRegistry.<ParameterDataAccess.State, PdaMsg>whereis(identifier);
     }
 
     /**
@@ -89,7 +89,7 @@ public final class ParameterRegistry {
      * @param identifier SQL Race identifier
      */
     public static void unregister(String identifier) {
-        ProcessRegistry.unregister(identifier);
+        ProcRegistry.unregister(identifier);
     }
 
     /**
@@ -99,11 +99,11 @@ public final class ParameterRegistry {
      * @return snapshot of registered names
      */
     public static java.util.Set<String> registered() {
-        return ProcessRegistry.registered();
+        return ProcRegistry.registered();
     }
 
-    /** Clear all registrations (for test isolation — mirrors {@code ProcessRegistry.reset()}). */
+    /** Clear all registrations (for test isolation — mirrors {@code ProcRegistry.reset()}). */
     public static void reset() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 }

@@ -176,7 +176,7 @@ public class MultiTenantSaaSPlatform {
         }
 
         public Result<String, Exception> query(String query) {
-            var sendResult = bulkhead.send("query", new DataRequest("query", query));
+            var sendResult = bulkhead.send(new DataRequest("query", query));
 
             return switch (sendResult) {
                 case BulkheadIsolation.Send.Success ignored ->
@@ -281,10 +281,13 @@ public class MultiTenantSaaSPlatform {
             // Execute data service
             var dataResult = dataService.query((String) request.payload());
             if (dataResult.isFailure()) {
-                return Result.failure("Data service error: " + dataResult.failureReason());
+                return Result.failure(
+                        "Data service error: "
+                                + dataResult.fold(
+                                        v -> "", e -> e != null ? e.getMessage() : "unknown"));
             }
 
-            String result = dataResult.successValue().orElseThrow();
+            String result = dataResult.orElseThrow();
 
             // Cache for future requests
             cacheService.put(request.operation(), result);
@@ -401,7 +404,7 @@ public class MultiTenantSaaSPlatform {
 
     private static void printResult(Result<TenantResponse, String> result, String context) {
         if (result.isSuccess()) {
-            var response = result.successValue().orElseThrow();
+            var response = result.orElseThrow();
             System.out.println(
                     "  ✅ ["
                             + context
@@ -411,7 +414,11 @@ public class MultiTenantSaaSPlatform {
                             + response.processingTimeMs()
                             + "ms)");
         } else {
-            System.out.println("  ❌ [" + context + "] Error: " + result.failureReason());
+            System.out.println(
+                    "  ❌ ["
+                            + context
+                            + "] Error: "
+                            + result.fold(v -> "", e -> e != null ? e : "unknown"));
         }
     }
 }

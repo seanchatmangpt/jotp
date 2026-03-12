@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -257,7 +256,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
             BiFunction<S, E, SagaTransition<S, D>> stateMachine,
             Duration stepTimeout) {
         this.name = name;
-        this.currentState = initialState;
+        this.currentState = new SagaState.Executing<>(initialState, 0, List.of());
         this.currentData = initialData;
         this.stateMachine = stateMachine;
         this.stepTimeout = stepTimeout;
@@ -308,8 +307,11 @@ public final class DistributedSagaCoordinator<S, E, D> {
                             response.orTimeout(stepTimeout.toMillis(), TimeUnit.MILLISECONDS)
                                     .join();
             return Result.ok(result);
-        } catch (TimeoutException e) {
-            return Result.err("Service call timeout: " + serviceName);
+        } catch (java.util.concurrent.CompletionException e) {
+            if (e.getCause() instanceof java.util.concurrent.CancellationException) {
+                return Result.err("Service call timeout: " + serviceName);
+            }
+            return Result.err("Service call failed: " + e.getMessage());
         } catch (Exception e) {
             return Result.err("Service call failed: " + e.getMessage());
         }
@@ -347,7 +349,14 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 response -> {
                     compensationLog.add(compensation);
                     // Return a NextStep transition (caller applies it)
-                    return Result.ok(SagaTransition.nextStep(currentState, currentData));
+                    S innerState =
+                            switch (currentState) {
+                                case SagaState.Executing<S>(var s, var idx, var steps) -> s;
+                                case SagaState.Compensating<S>(var s, var reason, var idx) -> s;
+                                case SagaState.Completed<S>(var s, var steps) -> s;
+                                case SagaState.Failed<S>(var reason, var steps) -> null;
+                            };
+                    return Result.ok(SagaTransition.nextStep(innerState, currentData));
                 },
                 // Failure: trigger compensation
                 error -> Result.err(error));
@@ -413,7 +422,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
      * @return list of compensation actions in execution order
      */
     public List<CompensationAction<D>> compensationLog() {
-        return new ArrayList<>(compensationLog);
+        return compensationLog;
     }
 
     /**
@@ -467,7 +476,11 @@ public final class DistributedSagaCoordinator<S, E, D> {
     public boolean applyTransition(SagaTransition<S, D> transition) {
         switch (transition) {
             case SagaTransition.NextStep<S, D>(var newState, var newData) -> {
-                this.currentState = newState;
+                int nextStep =
+                        currentState instanceof SagaState.Executing<S>(var s, var idx, var steps)
+                                ? idx + 1
+                                : 0;
+                this.currentState = new SagaState.Executing<>(newState, nextStep, List.of());
                 this.currentData = newData;
                 return true;
             }
@@ -476,7 +489,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 return true;
             }
             case SagaTransition.Complete<S, D>(var newState, var newData) -> {
-                this.currentState = newState;
+                this.currentState = new SagaState.Completed<>(newState, List.of());
                 this.currentData = newData;
                 this.running = false;
                 return true;
@@ -487,7 +500,6 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 return false;
             }
         }
-        return false;
     }
 
     /**
@@ -516,14 +528,14 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 new DistributedSagaCoordinator<>(
                         name, initialState, initialData, stateMachine, stepTimeout);
 
-        var proc =
+        Proc<SagaState<S>, SagaCoordinatorMsg<S, D>> proc =
                 new Proc<>(
                         coordinator.currentState,
                         (state, msg) ->
                                 switch (msg) {
-                                    case SagaCoordinatorMsg.GetState<S, D> ignored -> state;
-                                    case SagaCoordinatorMsg.Stop<S, D>(var reason) -> {
-                                        coordinator.stop(reason);
+                                    case SagaCoordinatorMsg.GetState<?, ?> ignored -> state;
+                                    case SagaCoordinatorMsg.Stop<?, ?> stop -> {
+                                        coordinator.stop(stop.reason());
                                         yield state;
                                     }
                                 });

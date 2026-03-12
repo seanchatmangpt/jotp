@@ -118,8 +118,10 @@ class DistributedActorBridgeTest {
     @Test
     @DisplayName("ActorLocation sealed pattern matching: Dispatch on Local vs Remote")
     void testActorLocationPatternMatching() {
-        var local = new DistributedActorBridge.ActorLocation.Local("actor-1");
-        var remote = new DistributedActorBridge.ActorLocation.Remote("host", 9000);
+        DistributedActorBridge.ActorLocation local =
+                new DistributedActorBridge.ActorLocation.Local("actor-1");
+        DistributedActorBridge.ActorLocation remote =
+                new DistributedActorBridge.ActorLocation.Remote("host", 9000);
 
         String localResult =
                 switch (local) {

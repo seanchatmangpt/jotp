@@ -4,7 +4,7 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessLink;
+import io.github.seanchatmangpt.jotp.ProcLink;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Armstrong's link cascade stress tests — finding the breaking points of {@link ProcessLink}.
+ * Armstrong's link cascade stress tests — finding the breaking points of {@link ProcLink}.
  *
  * <p>Joe Armstrong: <em>"Links are the fundamental mechanism for building fault-tolerant systems.
  * But a link chain is also a fault amplifier — one crash propagates to everything connected."</em>
@@ -77,7 +77,7 @@ class LinkCascadeStressTest implements WithAssertions {
         for (int i = 1; i < depth; i++) {
             Proc<Integer, Msg> prev = procs.get(i - 1);
             Proc<Integer, Msg> next = new Proc<>(0, LinkCascadeStressTest::handle);
-            ProcessLink.link(prev, next);
+            ProcLink.link(prev, next);
             procs.add(next);
         }
 
@@ -115,7 +115,7 @@ class LinkCascadeStressTest implements WithAssertions {
 
         for (int i = 0; i < workerCount; i++) {
             Proc<Integer, Msg> worker = new Proc<>(0, LinkCascadeStressTest::handle);
-            ProcessLink.link(hub, worker);
+            ProcLink.link(hub, worker);
             workers.add(worker);
         }
 
@@ -221,7 +221,7 @@ class LinkCascadeStressTest implements WithAssertions {
 
         for (int i = 0; i < workerCount; i++) {
             Proc<Integer, Msg> w = new Proc<>(0, LinkCascadeStressTest::handle);
-            ProcessLink.link(hub, w);
+            ProcLink.link(hub, w);
             workers.add(w);
         }
 
@@ -257,7 +257,7 @@ class LinkCascadeStressTest implements WithAssertions {
         for (int i = 0; i < pairs; i++) {
             var a = new Proc<>(0, LinkCascadeStressTest::handle);
             var b = new Proc<>(0, LinkCascadeStressTest::handle);
-            ProcessLink.link(a, b);
+            ProcLink.link(a, b);
             a.addCrashCallback(allDead::countDown);
             b.addCrashCallback(allDead::countDown);
 
