@@ -8,6 +8,24 @@ JOTP implements **15 Erlang/OTP architectural primitives** in `io.github.seancha
 
 ---
 
+## System Documentation
+
+The **[System Documentation](system/README.md)** is a collection of nine authoritative guides — JOTP's equivalent of the Erlang/OTP system docs at erlang.org/doc/system:
+
+| Guide | Description |
+|-------|-------------|
+| [Installation Guide](system/installation.md) | Install JOTP and its prerequisites on any platform |
+| [Getting Started](system/getting-started.md) | Processes, message passing, supervision — the essentials |
+| [System Principles](system/system-principles.md) | How to structure, start, and operate a JOTP system |
+| [OTP Design Principles](system/otp-design-principles.md) | All 15 JOTP primitives — the authoritative reference |
+| [Programming Examples](system/programming-examples.md) | Java 26 patterns: sealed records, streams, pipelines, error handling |
+| [Reference Manual](system/reference-manual.md) | Module system, language features, complete API quick reference |
+| [Efficiency Guide](system/efficiency-guide.md) | Virtual thread performance, anti-patterns, benchmarking |
+| [Interoperability Guide](system/interoperability.md) | Spring Boot, JDBC, REST, Erlang/Akka/Go migration |
+| [Deployment Guide](system/deployment-guide.md) | Docker, JVM tuning, health checks, graceful shutdown |
+
+---
+
 ## Documentation Navigation
 
 JOTP documentation follows the **[Diataxis framework](https://diataxis.fr/)**, organized into four complementary information types:
