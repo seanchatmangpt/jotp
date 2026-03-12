@@ -101,7 +101,7 @@ public class JotpTestHelper {
     /** Inspect sealed Transition type using Java 26 reflection API. */
     public static Class<?>[] getTransitionVariants(Class<?> sealedTransition) {
         if (sealedTransition.isSealed()) {
-            return sealedTransition.permittedSubclasses();
+            return sealedTransition.getPermittedSubclasses();
         }
         return new Class<?>[0];
     }

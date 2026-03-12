@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * @see EventManager
  * @see MessageStore
  */
-public final class MessageBus implements Application.Infrastructure {
+public final class MessageBus {
 
     /** Subscription handle for cancellation. */
     public interface Subscription {
@@ -300,15 +300,13 @@ public final class MessageBus implements Application.Infrastructure {
                 topicSubscribers.size());
     }
 
-    // ── Infrastructure lifecycle ─────────────────────────────────────────────────
+    // ── Lifecycle ────────────────────────────────────────────────────────────────
 
-    @Override
     public String name() {
         return name;
     }
 
-    @Override
-    public void onStop(Application app) {
+    public void onStop() {
         eventManager.stop();
     }
 

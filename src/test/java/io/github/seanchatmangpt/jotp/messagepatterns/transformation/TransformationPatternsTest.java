@@ -43,7 +43,11 @@ class TransformationPatternsTest implements WithAssertions {
         void syncApply() {
             var translator = new MessageTranslator<Integer, String>(i -> "num:" + i, s -> {});
             assertThat(translator.apply(7)).isEqualTo("num:7");
-            translator.stop();
+            try {
+                translator.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
