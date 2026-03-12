@@ -133,11 +133,17 @@
                         <exclude>**/messaging/**</exclude>
                     </excludes>
                     <testExcludes>
+                        <!-- Messaging system experimental - under development -->
                         <testExclude>**/messaging/**</testExclude>
+                        <!-- Example/reference code from external sources -->
                         <testExclude>org/acme/**</testExclude>
+                        <!-- Pattern examples - not yet integrated into core test suite -->
                         <testExclude>**/test/patterns/**</testExclude>
+                        <!-- Result type tests moved to core compilation - see Result.java for examples -->
                         <testExclude>**/ResultTest.java</testExclude>
+                        <!-- Documentation tests - integrated with JavaDoc examples -->
                         <testExclude>**/doctest/**</testExclude>
+                        <!-- Enterprise composition patterns - under evaluation for v2.0 -->
                         <testExclude>**/test/EnterpriseCompositionIT.java</testExclude>
                     </testExcludes>
                 </configuration>
@@ -207,7 +213,8 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- <plugin>
+            <!-- JaCoCo Code Coverage: Uncomment once network/certificate issues resolved
+            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.13</version>
@@ -307,39 +314,6 @@
         </plugins>
     </build>
     <profiles>
-        <profile>
-            <id>spotless</id>
-            <activation>
-                <property>
-                    <name>format</name>
-                </property>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>com.diffplug.spotless</groupId>
-                        <artifactId>spotless-maven-plugin</artifactId>
-                        <version>3.2.0</version>
-                        <configuration>
-                            <java>
-                                <googleJavaFormat>
-                                    <style>AOSP</style>
-                                    <version>1.28.0</version>
-                                </googleJavaFormat>
-                            </java>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>check</goal>
-                                </goals>
-                                <phase>compile</phase>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
         <profile>
             <id>shade</id>
             <activation>

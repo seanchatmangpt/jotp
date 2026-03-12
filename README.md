@@ -101,6 +101,12 @@ bin/mvndw verify          # Same as above, but faster (Maven Daemon)
 
 - **📖 [Tutorials](docs/tutorials/)** — Step-by-step introduction to JOTP
 - **🔧 [How-to Guides](docs/how-to/)** — Solve specific problems
+  - [Creating Your First Process](docs/how-to/creating-your-first-process.md) — Basic `Proc` spawning and message passing
+  - [Handling Process Crashes](docs/how-to/handling-process-crashes.md) — `Supervisor` strategies for fault tolerance
+  - [Linking Processes](docs/how-to/linking-processes.md) — Bilateral crash propagation and `ExitSignal` handling
+  - [State Machine Workflow](docs/how-to/state-machine-workflow.md) — Complex workflows with `StateMachine`
+  - [Monitoring Without Killing](docs/how-to/monitoring-without-killing.md) — Process observation with `ProcMonitor`
+  - [Concurrent Pipelines](docs/how-to/concurrent-pipelines.md) — Fan-out/fan-in patterns and `Parallel` execution
 - **💡 [Explanations](docs/explanations/)** — Understand architecture & design
 - **📚 [References](docs/reference/)** — API docs, configuration, glossary
 - **🎓 [PhD Thesis](docs/phd-thesis/)** — Formal OTP ↔ Java 26 equivalence
@@ -108,7 +114,7 @@ bin/mvndw verify          # Same as above, but faster (Maven Daemon)
 ## Getting Help
 
 - Check the [tutorials](docs/tutorials/) for learning-oriented guides
-- Browse [how-to guides](docs/how-to/) for task-specific solutions
+- Browse [how-to guides](docs/how-to/) for task-specific solutions (start with [Creating Your First Process](docs/how-to/creating-your-first-process.md))
 - Report issues: [GitHub Issues](https://github.com/seanchatmangpt/jotp/issues)
 
 ---
