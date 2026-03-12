@@ -86,7 +86,7 @@ class EventManagerTimeoutTest implements WithAssertions {
         @Test
         @DisplayName("rejects null timeout")
         void rejectsNullTimeout() {
-            assertThatThrownBy(() -> EventManager.start(null))
+            assertThatThrownBy(() -> EventManager.start((java.time.Duration) null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout cannot be null");
         }

@@ -136,69 +136,7 @@
                     <compilerArgs>
                         <arg>--enable-preview</arg>
                     </compilerArgs>
-                    <excludes>
-                        <!-- Messaging system — experimental, under development -->
-                        <exclude>io/github/seanchatmangpt/jotp/messaging/**</exclude>
-                        <!-- Pre-existing compile errors from prior commits — excluded until fixed -->
-                        <exclude>**/FactoryMethodPatterns.java</exclude>
-                        <exclude>**/dogfood/otp/ProcessMonitoringExample.java</exclude>
-                        <exclude>**/dogfood/otp/SupervisionTreeExample.java</exclude>
-                        <exclude>**/pool/**</exclude>
-                        <exclude>**/dogfood/mclaren/**</exclude>
-                        <exclude>**/dogfood/messaging/**</exclude>
-                        <exclude>**/GenServer.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/MessageBus.java</exclude>
-                        <exclude>**/MetricsCollector.java</exclude>
-                        <exclude>**/SagaOrchestrator.java</exclude>
-                        <exclude>**/HealthChecker.java</exclude>
-                        <exclude>**/DistributedTracer.java</exclude>
-                        <exclude>**/EventStore.java</exclude>
-                        <exclude>**/examples/**</exclude>
-                        <exclude>**/BulkheadIsolation.java</exclude>
-                        <exclude>**/EventSourcingAuditLog.java</exclude>
-                        <exclude>**/DistributedActorBridge.java</exclude>
-                        <exclude>**/DistributedSagaCoordinator.java</exclude>
-                    </excludes>
-                    <testExcludes>
-                        <!-- Messaging system experimental - under development -->
-                        <testExclude>**/messaging/**</testExclude>
-                        <!-- Example/reference code from external sources -->
-                        <testExclude>org/acme/**</testExclude>
-                        <!-- Pattern examples - not yet integrated into core test suite -->
-                        <testExclude>**/test/patterns/**</testExclude>
-                        <!-- Result type tests moved to core compilation - see Result.java for examples -->
-                        <testExclude>**/ResultTest.java</testExclude>
-                        <!-- Enterprise composition patterns - under evaluation for v2.0 -->
-                        <testExclude>**/test/EnterpriseCompositionIT.java</testExclude>
-                        <!-- Pre-existing compile errors in test files — excluded until fixed -->
-                        <testExclude>**/dogfood/mclaren/**</testExclude>
-                        <testExclude>**/dogfood/otp/ProcessMonitoringExampleTest.java</testExclude>
-                        <testExclude>**/dogfood/otp/SupervisionTreeExampleTest.java</testExclude>
-                        <testExclude>**/dogfood/otp/GenServerExampleTest.java</testExclude>
-                        <testExclude>**/dogfood/otp/StateMachineExampleTest.java</testExclude>
-                        <testExclude>**/pool/**</testExclude>
-                        <testExclude>**/test/**</testExclude>
-                        <testExclude>**/examples/**</testExclude>
-                        <testExclude>**/GenServerTest.java</testExclude>
-                        <testExclude>**/ApplicationTest.java</testExclude>
-                        <testExclude>**/ProcTest.java</testExclude>
-                        <testExclude>**/stress/**</testExclude>
-                        <testExclude>**/messagepatterns/**</testExclude>
-                        <testExclude>**/testing/**</testExclude>
-                        <testExclude>**/BulkheadIsolationTest.java</testExclude>
-                        <testExclude>**/DistributedActorBridgeTest.java</testExclude>
-                        <testExclude>**/DistributedSagaCoordinatorTest.java</testExclude>
-                        <testExclude>**/EventSourcingAuditLogTest.java</testExclude>
-                        <testExclude>**/HealthCheckerTest.java</testExclude>
-                        <testExclude>**/MetricsCollectorTest.java</testExclude>
-                        <testExclude>**/SagaOrchestratorTest.java</testExclude>
-                        <testExclude>**/DistributedTracerTest.java</testExclude>
-                        <testExclude>**/EventStoreTest.java</testExclude>
-                        <testExclude>**/MessageBusTest.java</testExclude>
-                        <testExclude>**/FactoryMethodPatternsTest.java</testExclude>
-                        <testExclude>**/enterprise/saga/**</testExclude>
-                        <testExclude>**/PatternsIntegrationTest.java</testExclude>
-                    </testExcludes>
+                 
                 </configuration>
             </plugin>
             <plugin>
@@ -321,6 +259,9 @@
                         <excludes>
                             <!-- sealed local classes not supported by google-java-format -->
                             <exclude>src/main/java/io/github/seanchatmangpt/jotp/FactoryMethodPatterns.java</exclude>
+                        <!-- Exclude files with syntax that google-java-format cannot parse -->
+                        <excludes>
+                            <exclude>**/FactoryMethodPatterns.java</exclude>
                         </excludes>
                         <googleJavaFormat>
                             <style>AOSP</style>
