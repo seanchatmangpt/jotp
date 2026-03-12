@@ -2,23 +2,51 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build Tool: mvnd (Maven Daemon, Maven 4) — REQUIRED
+## Proxy Setup (MUST DO FIRST)
 
-**mvnd is mandatory.** Raw `mvn`/`./mvnw` is not used — mvnd 2.0.0-rc-3 (bundling Maven 4) is the build tool.
+The build environment uses an egress proxy for network access. **Set up the proxy before any Maven commands.**
 
-**Install once:**
+### Option A: Direct proxy in settings.xml (simplest)
+
+Extract proxy credentials from `JAVA_TOOL_OPTIONS` and write `~/.m2/settings.xml`:
+
 ```bash
-# Download mvnd 2.0.0-rc-3 (Linux x86_64)
-# https://github.com/apache/maven-mvnd/releases/download/2.0.0-rc-3/maven-mvnd-2.0.0-rc-3-linux-amd64.tar.gz
-# Symlink: ln -sf /path/to/mvnd/bin/mvnd /usr/local/bin/mvnd
+# Extract proxy host/port/user/password from JAVA_TOOL_OPTIONS
+# Look for -Dhttps.proxyHost=X -Dhttps.proxyPort=Y -Dhttps.proxyUser=U -Dhttps.proxyPassword=P
+export PATH="/usr/bin:/usr/local/bin:$PATH"
+export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
+mkdir -p ~/.m2
 ```
 
-**Start proxy before building** (required when `https_proxy` is active in the environment):
+Write `~/.m2/settings.xml` with the proxy credentials from `JAVA_TOOL_OPTIONS`:
+```xml
+<settings>
+  <proxies>
+    <proxy><id>egress-https</id><active>true</active><protocol>https</protocol>
+      <host>PROXY_HOST</host><port>PROXY_PORT</port>
+      <username>PROXY_USER</username>
+      <password>PROXY_PASSWORD</password>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
+    <proxy><id>egress-http</id><active>true</active><protocol>http</protocol>
+      <host>PROXY_HOST</host><port>PROXY_PORT</port>
+      <username>PROXY_USER</username>
+      <password>PROXY_PASSWORD</password>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
+  </proxies>
+</settings>
+```
+
+Replace `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASSWORD` with values from `JAVA_TOOL_OPTIONS` (look for `-Dhttps.proxyHost=...` etc).
+
+### Option B: Local proxy bridge (when `https_proxy` env var is set)
+
+If `https_proxy` is set in the environment, `maven-proxy-v2.py` bridges to it with auth:
+
 ```bash
 python3 maven-proxy-v2.py &   # starts local proxy on 127.0.0.1:3128
 ```
 
-**Configure Maven to use local proxy** (add to `~/.m2/settings.xml`):
+Then configure Maven to use local proxy (`~/.m2/settings.xml`):
 ```xml
 <settings>
   <proxies>
@@ -30,6 +58,24 @@ python3 maven-proxy-v2.py &   # starts local proxy on 127.0.0.1:3128
       <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>
   </proxies>
 </settings>
+```
+
+If `https_proxy` is NOT set but `JAVA_TOOL_OPTIONS` contains proxy info, extract and set it first:
+```bash
+# Extract from JAVA_TOOL_OPTIONS and set https_proxy
+export https_proxy="http://USER:PASSWORD@HOST:PORT"
+python3 maven-proxy-v2.py &
+```
+
+## Build Tool: mvnd (Maven Daemon, Maven 4) — REQUIRED
+
+**mvnd is mandatory.** Raw `mvn`/`./mvnw` is not used — mvnd 2.0.0-rc-3 (bundling Maven 4) is the build tool.
+
+**Install once:**
+```bash
+# Download mvnd 2.0.0-rc-3 (Linux x86_64)
+# https://github.com/apache/maven-mvnd/releases/download/2.0.0-rc-3/maven-mvnd-2.0.0-rc-3-linux-amd64.tar.gz
+# Symlink: ln -sf /path/to/mvnd/bin/mvnd /usr/local/bin/mvnd
 ```
 
 ## Commands
