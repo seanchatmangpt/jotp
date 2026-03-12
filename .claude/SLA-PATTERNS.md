@@ -148,10 +148,13 @@ After 10 timeouts/60s: Circuit breaker opens (all requests fail fast)
    ```bash
    # Get live metrics
    curl http://localhost:8080/metrics | grep gateway_timeout_rate
+   ```
 
-   # Check supervisor restart count
-   java -jar app.jar --inspect paymentgateway
-   Output: max_restarts_exceeded=true, reason="timeout_loop"
+   ```java
+   // Check supervisor restart count via ProcSys introspection
+   ProcSys sys = ProcSys.of(paymentGatewayRef);
+   var stats = sys.getStatistics();
+   logger.info("Restart count: {}, last error: {}", stats.restartCount(), stats.lastError());
    ```
 
 2. **Short-term (5-30 min):**
@@ -340,18 +343,22 @@ load_balancer.setTarget(CLUSTER_A)  // Revert to Blue
 loadBalancer.deregister(this);
 
 // 2. Wait for in-flight requests to complete
-Duration timeout = Duration.ofSeconds(30);
-int pendingRequests = supervisor.countPendingMessages();
-
-while (pendingRequests > 0 && timeout.isNotExpired()) {
-    logger.info("Draining {} in-flight requests...", pendingRequests);
-    Thread.sleep(1_000);
-    pendingRequests = supervisor.countPendingMessages();
+// Use ProcSys to inspect mailbox sizes across supervised processes
+var deadline = System.currentTimeMillis() + 30_000;
+boolean draining = true;
+while (draining && System.currentTimeMillis() < deadline) {
+    draining = supervisor.supervisedRefs().stream()
+        .map(ref -> ProcSys.of(ref).getStatistics().mailboxSize())
+        .anyMatch(size -> size > 0);
+    if (draining) {
+        logger.info("Draining in-flight requests...");
+        Thread.sleep(1_000);
+    }
 }
 
 // 3. Force kill if timeout exceeded
-if (pendingRequests > 0) {
-    logger.warn("Force killing {} pending requests", pendingRequests);
+if (draining) {
+    logger.warn("Shutdown timeout exceeded — forcing JVM exit with messages in flight");
 }
 
 // 4. JVM exits
@@ -371,7 +378,7 @@ System.exit(0);
 | Component | RTO | RPO | How |
 |-----------|-----|-----|-----|
 | **State machine state** | 30s | 0s | Replay audit log |
-| **In-flight requests** | 30s | 0s | LinkedTransferQueue survives restart |
+| **In-flight requests** | 30s | >0s | Messages in mailbox at crash time are lost; replay from audit log required for RPO=0 |
 | **Customer data** | 30s | 0s | DynamoDB (persistent) |
 | **Metrics/analytics** | 5min | 1min | Kafka (replay last 1min) |
 
