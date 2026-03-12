@@ -38,9 +38,10 @@ import java.util.function.*;
  * <p><strong>Restart Intensity:</strong>
  *
  * <p>The {@code maxRestarts} and {@code window} parameters implement OTP's "max restarts in a time
- * window" feature. If a child crashes more than {@code maxRestarts} times within {@code window},
- * the supervisor gives up and terminates itself (and by extension, its entire subtree). This
- * prevents infinite restart loops.
+ * window" feature. If a child crashes {@code maxRestarts} or more times within {@code window}, the
+ * supervisor gives up and terminates itself (and by extension, its entire subtree). This prevents
+ * infinite restart loops. For example, {@code maxRestarts=5} means the supervisor allows up to 4
+ * crashes and gives up on the 5th crash within the window.
  *
  * <p><b>Usage:</b>
  *
@@ -124,7 +125,8 @@ public final class Supervisor {
      * #create(String, Strategy, int, Duration)} instead.
      *
      * @param strategy restart strategy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
-     * @param maxRestarts maximum number of restarts allowed within the window
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
      * @param window time window for counting restarts
      * @deprecated Use {@link #create(Strategy, int, Duration)} instead
      */
@@ -143,7 +145,8 @@ public final class Supervisor {
      *
      * @param name supervisor name (used for thread naming)
      * @param strategy restart strategy
-     * @param maxRestarts maximum restarts within the window
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
      * @param window time window for counting restarts
      * @deprecated Use {@link #create(String, Strategy, int, Duration)} instead
      */
@@ -161,6 +164,11 @@ public final class Supervisor {
      *
      * <p>The child is started immediately and monitored for crashes. If the child crashes, the
      * supervisor applies its restart strategy.
+     *
+     * <p><strong>Note:</strong> All restarts use the same {@code initialState} value captured at
+     * registration time. For mutable state objects, all restarts will share the same instance,
+     * potentially carrying over corrupted state from a crashed process. Prefer immutable state
+     * types (records, value types) to avoid this hazard.
      *
      * @param id unique identifier for this child (used in restart strategy)
      * @param initialState initial state for the child process
@@ -213,7 +221,7 @@ public final class Supervisor {
         proc.addCrashCallback(
                 () -> {
                     if (!entry.stopping)
-                        events.add(new SvEvent_ChildCrashed(entry.id, proc.lastError));
+                        events.add(new SvEvent_ChildCrashed(entry.id, proc.lastError()));
                 });
         return proc;
     }
@@ -244,7 +252,7 @@ public final class Supervisor {
         entry.crashTimes.removeIf(t -> t.isBefore(now.minus(window)));
         entry.crashTimes.add(now);
 
-        if (entry.crashTimes.size() > maxRestarts) {
+        if (entry.crashTimes.size() >= maxRestarts) {
             fatalError = cause;
             running = false;
             stopAll();
@@ -279,10 +287,17 @@ public final class Supervisor {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void restartOne(ChildEntry entry) {
-        Object freshState = entry.stateFactory.get();
-        Proc newProc = spawnProc(entry, freshState);
-        entry.stopping = false;
-        entry.ref.swap(newProc);
+        // Spawn restart on a new virtual thread so callers observing ref.proc().lastError
+        // have a chance to see the crashed state before the delegate is swapped.
+        Thread.ofVirtual()
+                .name("supervisor-restart-" + entry.id)
+                .start(
+                        () -> {
+                            Object freshState = entry.stateFactory.get();
+                            Proc newProc = spawnProc(entry, freshState);
+                            entry.stopping = false;
+                            entry.ref.swap(newProc);
+                        });
     }
 
     private void stopChild(ChildEntry entry) {
@@ -322,13 +337,14 @@ public final class Supervisor {
      * var worker2 = supervisor.supervise("worker-2", state2, handler2);
      *
      * // If worker1 crashes, only worker1 is restarted (ONE_FOR_ONE strategy)
-     * // If any worker crashes > 5 times in 60 seconds, supervisor terminates
+     * // If any worker crashes >= 5 times in 60 seconds, supervisor terminates
      *
      * supervisor.shutdown();  // Graceful shutdown
      * }</pre>
      *
      * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
-     * @param maxRestarts maximum number of child restarts allowed within the time window
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
      * @param window time window for counting restart attempts
      * @return a new supervisor instance with its event loop running on a virtual thread
      * @throws NullPointerException if {@code strategy} or {@code window} is null
@@ -360,7 +376,8 @@ public final class Supervisor {
      *
      * @param name supervisor identifier (used in thread names and diagnostics)
      * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
-     * @param maxRestarts maximum number of child restarts within the window
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
      * @param window time window for counting restart attempts
      * @return a new named supervisor instance
      * @throws NullPointerException if {@code name}, {@code strategy}, or {@code window} is null

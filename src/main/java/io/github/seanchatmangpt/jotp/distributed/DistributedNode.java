@@ -19,9 +19,11 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li><strong>Takeover</strong> — when a higher-priority node rejoins, it reclaims the app
  * </ul>
  *
- * <p>Uses raw TCP sockets (virtual threads + {@code java.net.ServerSocket}) — the fastest pure-Java
- * networking available. Project Loom transforms blocking I/O to native async I/O (epoll/kqueue)
- * internally, matching NIO performance without the event-loop complexity.
+ * <p>Uses raw TCP sockets (virtual threads + {@code java.net.ServerSocket}). Project Loom parks
+ * virtual threads rather than blocking OS threads during I/O, reducing total thread count. This
+ * approach is simple and performs well for moderate connection counts. For very high connection
+ * counts (&gt;10K concurrent connections), NIO with {@code Selector} may still be more efficient as
+ * it multiplexes many connections onto fewer OS threads.
  *
  * <p>Wire protocol — newline-terminated, one command per connection:
  *
@@ -99,7 +101,11 @@ public final class DistributedNode {
      * @param name human-readable node name (e.g., {@code "cp1"})
      * @param host hostname or IP address this node listens on
      * @param port TCP port to bind ({@code 0} = OS-assigned)
-     * @param config startup synchronization configuration
+     * @param config startup synchronization configuration. <strong>Note:</strong> the {@code
+     *     syncNodesMandatory} and {@code syncNodesOptional} fields in {@link NodeConfig} are stored
+     *     but not yet enforced at startup — the node begins leader election immediately without
+     *     waiting for peer nodes to become reachable. Do not rely on synchronization guarantees
+     *     from these fields in the current implementation.
      * @throws IOException if the server socket cannot be bound
      */
     public DistributedNode(String name, String host, int port, NodeConfig config)
@@ -251,7 +257,9 @@ public final class DistributedNode {
                     entry.currentLeader = self;
                     Thread.ofVirtual()
                             .start(
-                                    () -> entry.callbacks.onStart(new StartMode.Takeover(oldLeader)));
+                                    () ->
+                                            entry.callbacks.onStart(
+                                                    new StartMode.Takeover(oldLeader)));
                 }
                 return;
             }
