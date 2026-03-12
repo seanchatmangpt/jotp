@@ -63,6 +63,13 @@ if [ ! -L /usr/local/bin/mvnd ] || [ "$(readlink /usr/local/bin/mvnd)" != "${MVN
   echo "/usr/local/bin/mvnd -> ${MVND_BIN}"
 fi
 
+# ── /opt/mvnd2/bin symlink (YAWL toolchain expects mvnd here) ────────────
+if [ ! -L /opt/mvnd2/bin/mvnd ] || [ "$(readlink /opt/mvnd2/bin/mvnd)" != "${MVND_BIN}" ]; then
+  mkdir -p /opt/mvnd2/bin
+  ln -sf "${MVND_BIN}" /opt/mvnd2/bin/mvnd
+  echo "/opt/mvnd2/bin/mvnd -> ${MVND_BIN}"
+fi
+
 # ── /opt/jdk symlink (mvnd native binary has /opt/jdk hardcoded as fallback)
 if [ ! -L /opt/jdk ] || [ "$(readlink /opt/jdk)" != "${JDK26_HOME}" ]; then
   mkdir -p /opt
