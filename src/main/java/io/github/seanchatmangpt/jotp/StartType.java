@@ -14,18 +14,24 @@ package io.github.seanchatmangpt.jotp;
  *   <li>{@code {failover, Node}} → {@link Failover}
  * </ul>
  *
- * <p><strong>Usage in a callback:</strong>
+ * <p><strong>Usage in a callback (exhaustive arrow-syntax switch):</strong>
  *
  * <pre>{@code
  * ApplicationCallback<Supervisor> callback = (startType, args) -> {
  *     var supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
  *     return switch (startType) {
- *         case StartType.Normal()         -> supervisor; // standard startup
- *         case StartType.Takeover(var n)  -> supervisor; // take over from node n
- *         case StartType.Failover(var n)  -> supervisor; // failover from crashed node n
+ *         case StartType.Normal()            -> supervisor;              // standard startup
+ *         case StartType.Takeover(var node)  -> takeoverFrom(node);     // take over from node
+ *         case StartType.Failover(var node)  -> failoverFrom(node);     // replace crashed node
  *     };
  * };
  * }</pre>
+ *
+ * <p><strong>Compiler-enforced exhaustiveness:</strong> All three variants — {@link Normal}, {@link
+ * Takeover}, and {@link Failover} — must be handled in a switch expression. Because {@code
+ * StartType} is a sealed interface, the Java compiler rejects any switch that omits a permitted
+ * subtype. There is no need for a {@code default} branch; the absence of one is intentional and
+ * ensures that adding a new variant in the future produces a compile error at every call site.
  *
  * @see ApplicationCallback
  * @see ApplicationController

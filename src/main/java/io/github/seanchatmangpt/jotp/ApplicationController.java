@@ -6,6 +6,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Central coordinator for JOTP applications — the {@code application} module in Java.
  *
+ * <p>Joe Armstrong: <em>"The key idea in Erlang is that we wanted to make fault-tolerant software.
+ * To make a fault-tolerant system, you need at least two computers."</em> The {@code
+ * ApplicationController} is the single-node foundation — one node's application coordinator.
+ *
  * <p>In Erlang/OTP, the {@code application_controller} process (accessed via the {@code
  * application} module) manages loading, starting, stopping, and querying applications. This class
  * provides the same operations as static methods on a global registry.
@@ -27,6 +31,31 @@ import java.util.concurrent.ConcurrentHashMap;
  * application:set_env(ch_app, file, "testlog").  ApplicationController.setEnv("ch-app", "file", "testlog");
  * application:unset_env(ch_app, file).           ApplicationController.unsetEnv("ch-app", "file");
  * application:get_key(ch_app, description).      ApplicationController.getKey("ch-app", "description");
+ * }</pre>
+ *
+ * <p><strong>Quick start — full lifecycle in 10 lines:</strong>
+ *
+ * <pre>{@code
+ * // 1. Define the spec (equivalent to a .app file)
+ * var spec = ApplicationSpec.builder("ch-app")
+ *     .description("Channel allocator")
+ *     .vsn("1")
+ *     .env("file", "/usr/local/log")
+ *     .mod((startType, args) -> new Supervisor(Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60)))
+ *     .build();
+ *
+ * // 2. Load — registers the spec without starting
+ * ApplicationController.load(spec);
+ *
+ * // 3. Start — invokes the callback, marks as running
+ * ApplicationController.start("ch-app", RunType.PERMANENT);
+ *
+ * // 4. Query runtime env
+ * String logFile = (String) ApplicationController.getEnv("ch-app", "file", "/default");
+ *
+ * // 5. Stop and unload
+ * ApplicationController.stop("ch-app");
+ * ApplicationController.unload("ch-app");
  * }</pre>
  *
  * <p><strong>Lifecycle model:</strong>
@@ -64,6 +93,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * @see ApplicationCallback
  * @see RunType
  * @see StartType
+ * @since 1.0
+ * @author JOTP Contributors
  */
 public final class ApplicationController {
 
@@ -267,6 +298,10 @@ public final class ApplicationController {
      * <p>If the application is not currently running (e.g. it was never started or was already
      * stopped), it is started fresh with {@link RunType#TEMPORARY}.
      *
+     * <p><strong>Env overrides are preserved across restart.</strong> Any values set via {@link
+     * #setEnv} remain in effect after the restart — the override map is never cleared by this
+     * method. To discard overrides, call {@link #unsetEnv} explicitly before or after restarting.
+     *
      * @param name the application name (must be loaded)
      * @throws IllegalStateException if the application is not loaded
      * @throws Exception if the stop or start callback throws
@@ -313,21 +348,25 @@ public final class ApplicationController {
     /**
      * Stop a running application, distinguishing normal from abnormal termination.
      *
-     * <p>This overload implements proper OTP {@link RunType#TRANSIENT} semantics:
+     * <p>This overload implements proper OTP {@link RunType#TRANSIENT} semantics. The {@code
+     * abnormal} flag controls whether a {@link RunType#TRANSIENT} application cascades its shutdown
+     * to all other running applications:
      *
      * <ul>
-     *   <li>{@code abnormal=false} (normal stop): {@link RunType#PERMANENT} cascades; {@link
-     *       RunType#TRANSIENT} is logged only (no cascade); {@link RunType#TEMPORARY} is
-     *       unaffected.
-     *   <li>{@code abnormal=true} (abnormal stop): both {@link RunType#PERMANENT} and {@link
-     *       RunType#TRANSIENT} cascade to all other running applications.
+     *   <li><strong>{@code stop(name)}</strong> — normal shutdown ({@code abnormal=false}). {@link
+     *       RunType#PERMANENT} cascades to all others; {@link RunType#TRANSIENT} does <em>not</em>
+     *       cascade (OTP merely logs the clean exit); {@link RunType#TEMPORARY} is unaffected.
+     *   <li><strong>{@code stop(name, true)}</strong> — abnormal termination, equivalent to a
+     *       crash. Both {@link RunType#PERMANENT} and {@link RunType#TRANSIENT} cascade to all
+     *       other running applications, mirroring OTP's behaviour when a TRANSIENT application
+     *       exits with a reason other than {@code normal} or {@code shutdown}.
      * </ul>
      *
      * <p>Already-stopped applications are silently ignored (idempotent).
      *
      * @param name the application name
-     * @param abnormal {@code true} if the termination is abnormal (exception/crash); {@code false}
-     *     for a clean shutdown
+     * @param abnormal {@code true} if the termination is abnormal (exception/crash) — causes
+     *     TRANSIENT cascade; {@code false} for a clean shutdown — TRANSIENT does not cascade
      * @throws Exception if the application callback's {@code stop} throws
      */
     @SuppressWarnings("unchecked")

@@ -138,14 +138,48 @@ public record ApplicationSpec(
         /**
          * Add application dependency names that must be started before this application.
          *
-         * <p>Equivalent to the {@code applications} key in a {@code .app} file.
+         * <p>Equivalent to the {@code applications} key in a {@code .app} file. The names must
+         * match the {@link ApplicationSpec#name()} of other {@link ApplicationSpec} instances that
+         * have already been loaded into {@link ApplicationController} before this application is
+         * started. {@link ApplicationController} will auto-start any loaded (but not yet running)
+         * dependency in declaration order; unloaded dependencies are skipped with a warning.
+         *
+         * <pre>{@code
+         * ApplicationSpec.builder("my-app")
+         *     .applications("kernel-lib", "sasl-compat")   // must match other loaded spec names
+         *     .build();
+         * }</pre>
          */
         public Builder applications(String... deps) {
             this.applications.addAll(Arrays.asList(deps));
             return this;
         }
 
-        /** Set an environment configuration parameter. Equivalent to the {@code env} key. */
+        /**
+         * Set an environment configuration parameter. Equivalent to the {@code env} key in a {@code
+         * .app} file.
+         *
+         * <p>Call this method once per key-value pair. To initialise multiple entries at once,
+         * chain multiple calls or use {@link java.util.Map#of} via the record constructor directly:
+         *
+         * <pre>{@code
+         * // Single key-value pairs (builder style)
+         * ApplicationSpec.builder("my-app")
+         *     .env("file",    "/usr/local/log")
+         *     .env("level",   "info")
+         *     .env("maxSize", 1024)
+         *     .build();
+         *
+         * // Map-based initialisation (record constructor)
+         * new ApplicationSpec("my-app", "", "1",
+         *     List.of(), List.of(), List.of(),
+         *     Map.of("file", "/usr/local/log", "level", "info"),
+         *     callback, null);
+         * }</pre>
+         *
+         * <p>Runtime overrides applied via {@link ApplicationController#setEnv} take precedence
+         * over values set here and are preserved across {@link ApplicationController#restart}.
+         */
         public Builder env(String key, Object value) {
             this.env.put(key, value);
             return this;

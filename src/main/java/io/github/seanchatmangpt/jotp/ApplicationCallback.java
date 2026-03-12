@@ -37,6 +37,25 @@ package io.github.seanchatmangpt.jotp;
  * }
  * }</pre>
  *
+ * <p><strong>Exhaustive sealed {@link StartType} switch (recommended pattern):</strong>
+ *
+ * <p>Because {@link StartType} is a sealed interface, the compiler enforces that every variant is
+ * handled. Use a switch expression in your callback to make distribution-aware startup explicit:
+ *
+ * <pre>{@code
+ * ApplicationSpec.builder("my-app")
+ *     .mod((startType, args) -> switch (startType) {
+ *         case StartType.Normal()            -> startFresh(args);
+ *         case StartType.Takeover(var node)  -> takeoverFrom(node, args);
+ *         case StartType.Failover(var node)  -> failoverFrom(node, args);
+ *     })
+ *     .build();
+ * }</pre>
+ *
+ * <p>The switch is exhaustive — omitting any variant is a compile-time error because {@link
+ * StartType} is sealed and permits exactly {@link StartType.Normal}, {@link StartType.Takeover},
+ * and {@link StartType.Failover}.
+ *
  * <p>The value returned by {@link #start} is passed as-is to {@link #stop} when the application is
  * stopped — equivalent to OTP's optional {@code State} in {@code {ok, Pid, State}}.
  *
