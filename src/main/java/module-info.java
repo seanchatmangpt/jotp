@@ -80,7 +80,8 @@
  * <table border="1">
  *   <tr><th>OTP Concept</th><th>JOTP Class</th><th>Notes</th></tr>
  *   <tr><td>spawn/3</td><td>{@code Proc}</td><td>Virtual thread mailbox + state handler</td></tr>
- *   <tr><td>gen_server</td><td>{@code StateMachine}</td><td>Sealed state/event/data transitions</td></tr>
+ *   <tr><td>gen_server</td><td>{@code Proc}</td><td>Virtual thread mailbox + pure state handler</td></tr>
+ *   <tr><td>gen_statem</td><td>{@code StateMachine}</td><td>Sealed state/event/data transitions</td></tr>
  *   <tr><td>supervisor</td><td>{@code Supervisor}</td><td>Sliding window restart strategies</td></tr>
  *   <tr><td>gen_event</td><td>{@code EventManager}</td><td>Typed event bus with isolated handlers</td></tr>
  *   <tr><td>timer:send_after</td><td>{@code ProcTimer}</td><td>Timed message delivery</td></tr>
@@ -108,7 +109,6 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.otp;
     exports io.github.seanchatmangpt.jotp.dogfood.security;
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
-    // mclaren and messaging excluded from compilation (sources excluded in pom.xml)
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
 
     // Enterprise Patterns

@@ -97,7 +97,7 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("tracks and routes replies to requesters")
-        void tracksReplies() throws InterruptedException {
+        void tracksReplies() throws Exception {
             var serviceReceived = new CopyOnWriteArrayList<Request>();
             var proxy =
                     new SmartProxy<Request, Reply>(Request::id, Reply::id, serviceReceived::add);
@@ -112,7 +112,11 @@ class ManagementPatternsTest implements WithAssertions {
             assertThat(matched).isTrue();
             assertThat(proxy.pendingCount()).isZero();
             assertThat(replyResult.get().result()).isEqualTo("found");
-            proxy.stop();
+            try {
+                proxy.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

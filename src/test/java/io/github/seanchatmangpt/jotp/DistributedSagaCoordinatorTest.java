@@ -202,7 +202,7 @@ class DistributedSagaCoordinatorTest {
     @Test
     @DisplayName("Simple saga: PlaceOrder transition to PaymentProcessing state")
     void testBasicOrderTransition() {
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, OrderEvent, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-1",
                         new OrderState.Init(),
@@ -236,7 +236,7 @@ class DistributedSagaCoordinatorTest {
         assertThat(coordinator.isRunning()).isTrue();
 
         // Apply a transition
-        var transition =
+        DistributedSagaCoordinator.SagaTransition<OrderState, OrderData> transition =
                 DistributedSagaCoordinator.SagaTransition.nextStep(
                         new OrderState.PaymentProcessing(100.0), new OrderData("ORD-001", 100.0));
         boolean success = coordinator.applyTransition(transition);
@@ -252,7 +252,7 @@ class DistributedSagaCoordinatorTest {
         var inventoryService = new InventoryService(true); // Will fail
         var shippingService = new ShippingService(false);
 
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-2",
                         new OrderState.Init(),
@@ -263,7 +263,7 @@ class DistributedSagaCoordinatorTest {
                         Duration.ofSeconds(5));
 
         // Log compensation actions
-        var paymentCompensation =
+        DistributedSagaCoordinator.CompensationAction<OrderData> paymentCompensation =
                 DistributedSagaCoordinator.CompensationAction.rollback(
                         "refund-payment",
                         data -> {
@@ -271,7 +271,7 @@ class DistributedSagaCoordinatorTest {
                             return Result.ok(data.withCompensation("payment-refunded"));
                         });
 
-        var inventoryCompensation =
+        DistributedSagaCoordinator.CompensationAction<OrderData> inventoryCompensation =
                 DistributedSagaCoordinator.CompensationAction.rollback(
                         "restock-inventory",
                         data -> {
@@ -298,7 +298,7 @@ class DistributedSagaCoordinatorTest {
             "State transitions: Init → PaymentProcessing → InventoryReserving → Shipping →"
                     + " Completed")
     void testMultiStepSagaTransitions() {
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-3",
                         new OrderState.Init(),
@@ -337,14 +337,14 @@ class DistributedSagaCoordinatorTest {
                         Duration.ofSeconds(5));
 
         // Step 1: Init -> PaymentProcessing
-        var trans1 =
+        DistributedSagaCoordinator.SagaTransition<OrderState, OrderData> trans1 =
                 DistributedSagaCoordinator.SagaTransition.nextStep(
                         new OrderState.PaymentProcessing(200.0), new OrderData("ORD-003", 200.0));
         assertThat(coordinator.applyTransition(trans1)).isTrue();
         assertThat(coordinator.state()).isInstanceOf(OrderState.PaymentProcessing.class);
 
         // Step 2: PaymentProcessing -> InventoryReserving
-        var trans2 =
+        DistributedSagaCoordinator.SagaTransition<OrderState, OrderData> trans2 =
                 DistributedSagaCoordinator.SagaTransition.nextStep(
                         new OrderState.InventoryReserving(200.0, "PAY-001"),
                         new OrderData("ORD-003", 200.0));
@@ -352,7 +352,7 @@ class DistributedSagaCoordinatorTest {
         assertThat(coordinator.state()).isInstanceOf(OrderState.InventoryReserving.class);
 
         // Step 3: InventoryReserving -> Shipping
-        var trans3 =
+        DistributedSagaCoordinator.SagaTransition<OrderState, OrderData> trans3 =
                 DistributedSagaCoordinator.SagaTransition.nextStep(
                         new OrderState.Shipping(200.0, "PAY-001", "RES-001"),
                         new OrderData("ORD-003", 200.0));
@@ -360,7 +360,7 @@ class DistributedSagaCoordinatorTest {
         assertThat(coordinator.state()).isInstanceOf(OrderState.Shipping.class);
 
         // Step 4: Shipping -> Completed
-        var trans4 =
+        DistributedSagaCoordinator.SagaTransition<OrderState, OrderData> trans4 =
                 DistributedSagaCoordinator.SagaTransition.complete(
                         new OrderState.Completed(200.0, "PAY-001", "RES-001", "SHIP-001"),
                         new OrderData("ORD-003", 200.0));
@@ -373,7 +373,7 @@ class DistributedSagaCoordinatorTest {
     @DisplayName("Service registration and lookup")
     void testServiceRegistration() {
         var paymentService = new PaymentService(false);
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-4",
                         new OrderState.Init(),
@@ -398,7 +398,7 @@ class DistributedSagaCoordinatorTest {
     @Test
     @DisplayName("Compensation log tracks executed steps")
     void testCompensationLogTracking() {
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-5",
                         new OrderState.Init(),
@@ -409,10 +409,11 @@ class DistributedSagaCoordinatorTest {
                         Duration.ofSeconds(5));
 
         // Add compensation actions
-        var action1 =
+        DistributedSagaCoordinator.CompensationAction<OrderData> action1 =
                 DistributedSagaCoordinator.CompensationAction.rollback(
                         "step-1", data -> Result.ok(data));
-        var action2 = DistributedSagaCoordinator.CompensationAction.noop("step-2");
+        DistributedSagaCoordinator.CompensationAction<OrderData> action2 =
+                DistributedSagaCoordinator.CompensationAction.noop("step-2");
 
         var log = coordinator.compensationLog();
         log.add(action1);
@@ -428,7 +429,7 @@ class DistributedSagaCoordinatorTest {
     @Test
     @DisplayName("Saga failure and stop reason tracking")
     void testSagaFailureAndStopReason() {
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-6",
                         new OrderState.Init(),
@@ -450,7 +451,7 @@ class DistributedSagaCoordinatorTest {
     @Test
     @DisplayName("Noop compensation action (step that doesn't need rollback)")
     void testNoopCompensation() {
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-7",
                         new OrderState.Init(),
@@ -461,7 +462,8 @@ class DistributedSagaCoordinatorTest {
                         Duration.ofSeconds(5));
 
         // Add noop compensation for a step that doesn't need rollback
-        var noopCompensation = DistributedSagaCoordinator.CompensationAction.noop("logging-step");
+        DistributedSagaCoordinator.CompensationAction<OrderData> noopCompensation =
+                DistributedSagaCoordinator.CompensationAction.noop("logging-step");
 
         var log = coordinator.compensationLog();
         log.add(noopCompensation);
@@ -476,7 +478,7 @@ class DistributedSagaCoordinatorTest {
     @Test
     @DisplayName("Multiple compensation actions execute in reverse order (LIFO)")
     void testCompensationReverseOrder() {
-        var coordinator =
+        DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-8",
                         new OrderState.Init(),
@@ -489,7 +491,7 @@ class DistributedSagaCoordinatorTest {
         var executionOrder = new ArrayList<String>();
 
         // Add three compensation actions
-        var action1 =
+        DistributedSagaCoordinator.CompensationAction<OrderData> action1 =
                 DistributedSagaCoordinator.CompensationAction.rollback(
                         "step-1",
                         data -> {
@@ -497,7 +499,7 @@ class DistributedSagaCoordinatorTest {
                             return Result.ok(data);
                         });
 
-        var action2 =
+        DistributedSagaCoordinator.CompensationAction<OrderData> action2 =
                 DistributedSagaCoordinator.CompensationAction.rollback(
                         "step-2",
                         data -> {
@@ -505,7 +507,7 @@ class DistributedSagaCoordinatorTest {
                             return Result.ok(data);
                         });
 
-        var action3 =
+        DistributedSagaCoordinator.CompensationAction<OrderData> action3 =
                 DistributedSagaCoordinator.CompensationAction.rollback(
                         "step-3",
                         data -> {

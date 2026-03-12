@@ -286,7 +286,6 @@ class SupervisorStressTest extends StressTestBase {
         try {
             int childCount = 100;
             List<AtomicInteger> counters = new ArrayList<>();
-            AtomicInteger opCounter = new AtomicInteger();
 
             // Supervise 100 children
             for (int i = 0; i < childCount; i++) {
@@ -304,6 +303,7 @@ class SupervisorStressTest extends StressTestBase {
 
             // Load: 1000 messages/sec across all children
             LoadProfile profile = new LoadProfile.ConstantLoad(1000L, Duration.ofSeconds(5));
+            AtomicInteger opCounter = new AtomicInteger();
             MetricsCollector metrics =
                     runStressTest(
                             "Supervisor Latency (100 children)",

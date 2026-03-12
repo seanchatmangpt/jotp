@@ -178,10 +178,12 @@ public class MultiTenantSaaSPlatform {
         public Result<String, Exception> query(String query) {
             var sendResult = bulkhead.send(new DataRequest("query", query));
 
-            if (sendResult instanceof BulkheadIsolation.Send.Rejected(var reason)) {
-                return Result.failure(new Exception("Data service overloaded: " + reason));
-            }
-            return Result.success("RESULT-" + System.nanoTime());
+            return switch (sendResult) {
+                case BulkheadIsolation.Send.Success ignored ->
+                        Result.success("RESULT-" + System.nanoTime());
+                case BulkheadIsolation.Send.Rejected(var reason) ->
+                        Result.failure(new Exception("Data service overloaded: " + reason));
+            };
         }
 
         private Object processData(DataRequest req) {
@@ -279,8 +281,8 @@ public class MultiTenantSaaSPlatform {
             // Execute data service
             var dataResult = dataService.query((String) request.payload());
             if (dataResult.isFailure()) {
-                String errMsg = dataResult.fold(s -> "", e -> e.getMessage());
-                return Result.failure("Data service error: " + errMsg);
+                String reason = dataResult.fold(_ -> "unknown", e -> e.getMessage());
+                return Result.failure("Data service error: " + reason);
             }
 
             String result = dataResult.orElseThrow();
@@ -399,19 +401,29 @@ public class MultiTenantSaaSPlatform {
     }
 
     private static void printResult(Result<TenantResponse, String> result, String context) {
-        if (result.isSuccess()) {
-            var response = result.orElseThrow();
-            System.out.println(
-                    "  ✅ ["
-                            + context
-                            + "] "
-                            + response.status()
-                            + " (response time: "
-                            + response.processingTimeMs()
-                            + "ms)");
-        } else {
-            String err = result.fold(s -> "", e -> e);
-            System.out.println("  ❌ [" + context + "] Error: " + err);
+        switch (result) {
+            case Result.Ok<TenantResponse, String>(var response) ->
+                    System.out.println(
+                            "  ["
+                                    + context
+                                    + "] "
+                                    + response.status()
+                                    + " (response time: "
+                                    + response.processingTimeMs()
+                                    + "ms)");
+            case Result.Success<TenantResponse, String>(var response) ->
+                    System.out.println(
+                            "  ["
+                                    + context
+                                    + "] "
+                                    + response.status()
+                                    + " (response time: "
+                                    + response.processingTimeMs()
+                                    + "ms)");
+            case Result.Err<TenantResponse, String>(var error) ->
+                    System.out.println("  [" + context + "] Error: " + error);
+            case Result.Failure<TenantResponse, String>(var error) ->
+                    System.out.println("  [" + context + "] Error: " + error);
         }
     }
 }

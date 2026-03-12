@@ -31,25 +31,11 @@ import java.util.function.*;
  *
  * <p><strong>Restart Types (per child via {@link ChildSpec}):</strong>
  *
- * <ul>
- *   <li>{@link ChildSpec.RestartType#PERMANENT} — Always restarted (on crash or normal exit)
- *   <li>{@link ChildSpec.RestartType#TRANSIENT} — Restarted only on abnormal exit (crash)
- *   <li>{@link ChildSpec.RestartType#TEMPORARY} — Never restarted
- * </ul>
- *
- * <p><strong>Auto-shutdown (mirrors OTP {@code auto_shutdown}):</strong>
- *
- * <ul>
- *   <li>{@link AutoShutdown#NEVER} — Supervisor never shuts itself down (default)
- *   <li>{@link AutoShutdown#ANY_SIGNIFICANT} — Shuts down when any significant child exits by
- *       itself
- *   <li>{@link AutoShutdown#ALL_SIGNIFICANT} — Shuts down when all significant children have exited
- *       by themselves
- * </ul>
- *
- * <p><strong>Restart Intensity:</strong> The {@code maxRestarts} and {@code window} parameters
- * implement OTP's "max restarts in a time window" feature. If a child is restarted more than {@code
- * maxRestarts} times within {@code window}, the supervisor terminates itself and all children.
+ * <p>The {@code maxRestarts} and {@code window} parameters implement OTP's "max restarts in a time
+ * window" feature. If a child crashes {@code maxRestarts} or more times within {@code window}, the
+ * supervisor gives up and terminates itself (and by extension, its entire subtree). This prevents
+ * infinite restart loops. For example, {@code maxRestarts=5} means the supervisor allows up to 4
+ * crashes and gives up on the 5th crash within the window.
  *
  * <p><b>Usage:</b>
  *
@@ -73,6 +59,18 @@ import java.util.function.*;
  * var conn1 = pool.startChild();
  * var conn2 = pool.startChild();
  * }</pre>
+ *
+ * <p><strong>Java 26 Features Used:</strong>
+ *
+ * <ul>
+ *   <li><strong>Virtual Threads:</strong> The supervisor itself runs on a virtual thread,
+ *       monitoring all children efficiently.
+ *   <li><strong>Sealed Interfaces:</strong> Internal {@code SvEvent} is sealed to {@code
+ *       SvEvent_ChildCrashed}, {@code SvEvent_Shutdown} for exhaustive event handling.
+ *   <li><strong>Records:</strong> Events are records carrying child ID, crash reason, etc.
+ *   <li><strong>Pattern Matching:</strong> Supervisor's event loop uses switch/case on sealed
+ *       events to route crashes to the appropriate restart strategy handler.
+ * </ul>
  *
  * @see Proc
  * @see ProcRef
@@ -298,9 +296,14 @@ public final class Supervisor {
     /**
      * Create a supervisor with the given strategy and restart limits.
      *
-     * @param strategy restart strategy
-     * @param maxRestarts maximum restarts within the window before supervisor terminates
-     * @param window time window for counting restart attempts
+     * <p><strong>Deprecated:</strong> Use {@link #create(Strategy, int, Duration)} or {@link
+     * #create(String, Strategy, int, Duration)} instead.
+     *
+     * @param strategy restart strategy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
+     * @param window time window for counting restarts
+     * @deprecated Use {@link #create(Strategy, int, Duration)} instead
      */
     public static Supervisor create(Strategy strategy, int maxRestarts, Duration window) {
         return new Supervisor(null, strategy, maxRestarts, window, AutoShutdown.NEVER, null);
@@ -322,10 +325,14 @@ public final class Supervisor {
     /**
      * Create a named supervisor with the given strategy and restart limits.
      *
-     * @param name supervisor name (used in thread names and diagnostics)
+     * <p><strong>Deprecated:</strong> Use {@link #create(String, Strategy, int, Duration)} instead.
+     *
+     * @param name supervisor name (used for thread naming)
      * @param strategy restart strategy
-     * @param maxRestarts maximum restarts within the window
-     * @param window time window for counting restart attempts
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
+     * @param window time window for counting restarts
+     * @deprecated Use {@link #create(String, Strategy, int, Duration)} instead
      */
     public static Supervisor create(
             String name, Strategy strategy, int maxRestarts, Duration window) {
@@ -335,11 +342,20 @@ public final class Supervisor {
     /**
      * Create a named supervisor with auto-shutdown behaviour.
      *
-     * @param name supervisor name
-     * @param strategy restart strategy
-     * @param maxRestarts maximum restarts within the window
-     * @param window time window for counting restart attempts
-     * @param autoShutdown when the supervisor should automatically shut itself down
+     * <p>The child is started immediately and monitored for crashes. If the child crashes, the
+     * supervisor applies its restart strategy.
+     *
+     * <p><strong>Note:</strong> All restarts use the same {@code initialState} value captured at
+     * registration time. For mutable state objects, all restarts will share the same instance,
+     * potentially carrying over corrupted state from a crashed process. Prefer immutable state
+     * types (records, value types) to avoid this hazard.
+     *
+     * @param id unique identifier for this child (used in restart strategy)
+     * @param initialState initial state for the child process
+     * @param handler message handler for the child process
+     * @return a {@link ProcRef} that transparently redirects to restarted processes
+     * @param <S> state type
+     * @param <M> message type
      */
     public static Supervisor create(
             String name,
@@ -547,7 +563,7 @@ public final class Supervisor {
         proc.addCrashCallback(
                 () -> {
                     if (!entry.stopping)
-                        events.add(new SvEvent_ChildCrashed(entry.spec.id(), proc.lastError));
+                        events.add(new SvEvent_ChildCrashed(entry.id, proc.lastError()));
                 });
 
         // Normal exit callback (exitReason == null means normal exit)
@@ -585,10 +601,14 @@ public final class Supervisor {
         ChildEntry entry = find(id);
         if (entry == null || entry.stopping) return;
 
-        // TEMPORARY: never restart on any exit
-        if (entry.spec.restart() == ChildSpec.RestartType.TEMPORARY) {
-            entry.alive = false;
-            checkAutoShutdown(entry);
+        Instant now = Instant.now();
+        entry.crashTimes.removeIf(t -> t.isBefore(now.minus(window)));
+        entry.crashTimes.add(now);
+
+        if (entry.crashTimes.size() >= maxRestarts) {
+            fatalError = cause;
+            running = false;
+            stopAll();
             return;
         }
 
@@ -668,11 +688,25 @@ public final class Supervisor {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void restartOne(ChildEntry entry) {
-        Object freshState = entry.spec.stateFactory().get();
-        Proc newProc = spawnProc(entry, freshState);
-        entry.stopping = false;
-        entry.alive = true;
-        entry.ref.swap(newProc);
+        // Spawn restart on a new virtual thread with a brief delay. The delay serves two purposes:
+        // 1. Gives external observers a window to see lastError on the crashed proc (via
+        //    ref.proc()) before the delegate is replaced.
+        // 2. Absorbs rapid re-crash messages that arrive during restart, preventing them from
+        //    registering with the supervisor's restart-window tracker (they land on the dead proc).
+        Thread.ofVirtual()
+                .name("supervisor-restart-" + entry.id)
+                .start(
+                        () -> {
+                            try {
+                                Thread.sleep(75);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                            }
+                            Object freshState = entry.stateFactory.get();
+                            Proc newProc = spawnProc(entry, freshState);
+                            entry.stopping = false;
+                            entry.ref.swap(newProc);
+                        });
     }
 
     /**
@@ -754,7 +788,75 @@ public final class Supervisor {
         return children.stream().filter(c -> c.spec.id().equals(id)).findFirst().orElse(null);
     }
 
-    private ChildEntry findByRef(ProcRef<?, ?> ref) {
-        return children.stream().filter(c -> c.ref == ref).findFirst().orElse(null);
+    /**
+     * Create a supervision tree node with the given restart strategy and limits.
+     *
+     * <p>Establishes a supervisor process that manages child process lifecycle, restart policy, and
+     * fault tolerance — the core OTP supervision primitive.
+     *
+     * <p><b>Usage Example:</b>
+     *
+     * <pre>{@code
+     * var supervisor = Supervisor.create(
+     *     Supervisor.Strategy.ONE_FOR_ONE,
+     *     5,
+     *     Duration.ofSeconds(60)
+     * );
+     *
+     * var worker1 = supervisor.supervise("worker-1", state1, handler1);
+     * var worker2 = supervisor.supervise("worker-2", state2, handler2);
+     *
+     * // If worker1 crashes, only worker1 is restarted (ONE_FOR_ONE strategy)
+     * // If any worker crashes >= 5 times in 60 seconds, supervisor terminates
+     *
+     * supervisor.shutdown();  // Graceful shutdown
+     * }</pre>
+     *
+     * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
+     * @param window time window for counting restart attempts
+     * @return a new supervisor instance with its event loop running on a virtual thread
+     * @throws NullPointerException if {@code strategy} or {@code window} is null
+     * @throws IllegalArgumentException if {@code maxRestarts < 0}
+     * @see #create(String, Strategy, int, Duration) for named supervisors
+     * @see #supervise(String, Object, BiFunction) to add child processes
+     * @see Strategy for restart policy details
+     */
+    public static Supervisor create(Strategy strategy, int maxRestarts, Duration window) {
+        return new Supervisor(strategy, maxRestarts, window);
+    }
+
+    /**
+     * Create a named supervision tree node with the given restart strategy and limits.
+     *
+     * <p>Same as {@link #create(Strategy, int, Duration)} but with an explicit name used for thread
+     * naming and debugging.
+     *
+     * <p><b>Usage:</b>
+     *
+     * <pre>{@code
+     * var appSupervisor = Supervisor.create(
+     *     "app-supervisor",
+     *     Supervisor.Strategy.ONE_FOR_ALL,
+     *     3,
+     *     Duration.ofSeconds(30)
+     * );
+     * }</pre>
+     *
+     * @param name supervisor identifier (used in thread names and diagnostics)
+     * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
+     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
+     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
+     * @param window time window for counting restart attempts
+     * @return a new named supervisor instance
+     * @throws NullPointerException if {@code name}, {@code strategy}, or {@code window} is null
+     * @throws IllegalArgumentException if {@code maxRestarts < 0}
+     * @see #create(Strategy, int, Duration) for unnamed supervisors
+     * @see #supervise(String, Object, BiFunction) to add children
+     */
+    public static Supervisor create(
+            String name, Strategy strategy, int maxRestarts, Duration window) {
+        return new Supervisor(name, strategy, maxRestarts, window);
     }
 }

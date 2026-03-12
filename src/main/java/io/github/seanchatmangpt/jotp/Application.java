@@ -76,6 +76,24 @@ import java.util.function.Supplier;
  */
 public final class Application<S> {
 
+    /**
+     * Marker interface for infrastructure components that integrate with the application lifecycle.
+     *
+     * <p>Implement this interface to register infrastructure components (e.g., message buses,
+     * connection pools) that need a name and graceful shutdown callback.
+     */
+    public interface Infrastructure {
+        /** Returns the name of this infrastructure component. */
+        String name();
+
+        /**
+         * Called when the application stops.
+         *
+         * @param app the application that is stopping
+         */
+        void onStop(Application<?> app);
+    }
+
     /** Sealed hierarchy of application lifecycle phases. */
     public sealed interface ApplicationPhase {
         /** Initializing: running init hooks and preparing state. */

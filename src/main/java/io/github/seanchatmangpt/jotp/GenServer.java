@@ -110,7 +110,7 @@ public final class GenServer<S, M> {
         record Cast<M>(M request) implements GenServerMessage<M> {}
 
         /** Out-of-band message (timeout, external event, etc.) */
-        record Info(Object info) implements GenServerMessage<Object> {}
+        record Info<M>(Object info) implements GenServerMessage<M> {}
     }
 
     /**
@@ -187,7 +187,7 @@ public final class GenServer<S, M> {
                                     var typedCast = (GenServerMessage.Cast<M>) cast;
                                     yield handler.handleCast(typedCast.request(), state);
                                 }
-                                case GenServerMessage.Info info ->
+                                case GenServerMessage.Info<?> info ->
                                         handler.handleInfo(info.info(), state);
                             };
                         });
@@ -216,7 +216,8 @@ public final class GenServer<S, M> {
      * @return a CompletableFuture that completes when the message is enqueued
      */
     public CompletableFuture<Void> cast(M msg) {
-        return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Cast<>(msg)));
+        proc.tell(new GenServerMessage.Cast<>(msg));
+        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -252,7 +253,8 @@ public final class GenServer<S, M> {
      * @return a CompletableFuture that completes when the message is enqueued
      */
     public CompletableFuture<Void> info(Object info) {
-        return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Info(info)));
+        proc.tell(new GenServerMessage.Info(info));
+        return CompletableFuture.completedFuture(null);
     }
 
     /**

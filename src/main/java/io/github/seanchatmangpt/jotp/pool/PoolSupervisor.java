@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
@@ -83,7 +84,7 @@ import java.util.function.Supplier;
 public final class PoolSupervisor<T> {
 
     /** Internal message type for worker tasks. */
-    sealed interface PoolTaskMsg<T> permits PoolTaskMsg.ExecuteTask {}
+    sealed interface PoolTaskMsg<T> permits PoolExecuteTask {}
 
     record PoolExecuteTask<T>(Supplier<T> task, CompletableFuture<T> future)
             implements PoolTaskMsg<T> {
@@ -226,13 +227,13 @@ public final class PoolSupervisor<T> {
             // Spawn worker processes and register them
             for (String workerName : pool.workerNames) {
                 WorkerState workerState = new WorkerState();
-                BiFunction<WorkerState, PoolTaskMsg, WorkerState> handler =
+                BiFunction<WorkerState, PoolTaskMsg<?>, WorkerState> handler =
                         (state, msg) -> {
                             if (msg instanceof PoolExecuteTask task) {
                                 try {
                                     state.busy = true;
                                     state.lastTaskTime = Instant.now();
-                                    T result = task.task().get();
+                                    Object result = task.task().get();
                                     task.future().complete(result);
                                     state.busy = false;
                                     return state;
@@ -245,20 +246,18 @@ public final class PoolSupervisor<T> {
                             return state;
                         };
 
-                @SuppressWarnings("rawtypes")
-                ProcRef workerRef = supervisor.supervise(workerName, workerState, handler);
+                ProcRef<WorkerState, PoolTaskMsg<?>> workerRef =
+                        supervisor.supervise(workerName, workerState, handler);
 
                 // Get the underlying Proc and register in global registry
                 try {
-                    Proc<WorkerState, PoolTaskMsg> proc =
-                            (Proc<WorkerState, PoolTaskMsg>) workerRef;
-                    ProcRegistry.register(workerName, proc);
+                    ProcRegistry.register(workerName, workerRef.proc());
                 } catch (IllegalStateException e) {
                     // Ignore if already registered (shouldn't happen on initial creation)
                 }
             }
 
-            return pool;
+            return (PoolSupervisor<T>) pool;
         }
     }
 
@@ -292,7 +291,9 @@ public final class PoolSupervisor<T> {
 
         try {
             // Look up worker in registry
-            Optional<Proc<WorkerState, PoolTaskMsg<T>>> worker = ProcRegistry.whereis(workerName);
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            Optional<Proc<WorkerState, PoolTaskMsg<?>>> worker =
+                    (Optional) ProcRegistry.<WorkerState, PoolTaskMsg<?>>whereis(workerName);
 
             if (worker.isEmpty()) {
                 resultFuture.completeExceptionally(
@@ -301,7 +302,9 @@ public final class PoolSupervisor<T> {
             }
 
             // Send task to worker
-            Proc<WorkerState, PoolTaskMsg<T>> proc = worker.get();
+            @SuppressWarnings("unchecked")
+            Proc<WorkerState, PoolTaskMsg<T>> proc =
+                    (Proc<WorkerState, PoolTaskMsg<T>>) (Proc<?, ?>) worker.get();
             long startTime = System.currentTimeMillis();
 
             // Create the task message with a future for tracking completion
@@ -360,7 +363,8 @@ public final class PoolSupervisor<T> {
         Duration activeWindow = Duration.ofSeconds(5);
 
         for (String workerName : workerNames) {
-            Optional<Proc<WorkerState, ?>> worker = ProcRegistry.whereis(workerName);
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            Optional<Proc<?, ?>> worker = (Optional) ProcRegistry.whereis(workerName);
             if (worker.isPresent()) {
                 // We can't directly access WorkerState, so use a heuristic:
                 // if the worker thread is alive, count it

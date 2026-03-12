@@ -3,7 +3,7 @@ package io.github.seanchatmangpt.jotp.test;
 import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.time.Duration;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Timeout;
  * </ol>
  */
 @Timeout(10)
-class ProcessRegistryTest implements WithAssertions {
+class ProcRegistryTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Ping, Msg.Crash {
         record Ping() implements Msg {}
@@ -44,7 +44,7 @@ class ProcessRegistryTest implements WithAssertions {
 
     @AfterEach
     void cleanup() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 
     // -------------------------------------------------------------------------
@@ -54,9 +54,9 @@ class ProcessRegistryTest implements WithAssertions {
     @Test
     void register_whereisReturnsProc() throws InterruptedException {
         var proc = counter();
-        ProcessRegistry.register("counter", proc);
+        ProcRegistry.register("counter", proc);
 
-        var found = ProcessRegistry.<Integer, Msg>whereis("counter");
+        var found = ProcRegistry.<Integer, Msg>whereis("counter");
 
         assertThat(found).isPresent().contains(proc);
 
@@ -65,7 +65,7 @@ class ProcessRegistryTest implements WithAssertions {
 
     @Test
     void whereis_unknownName_returnsEmpty() {
-        assertThat(ProcessRegistry.whereis("no-such-process")).isEmpty();
+        assertThat(ProcRegistry.whereis("no-such-process")).isEmpty();
     }
 
     // -------------------------------------------------------------------------
@@ -76,9 +76,9 @@ class ProcessRegistryTest implements WithAssertions {
     void register_duplicate_throws() throws InterruptedException {
         var a = counter();
         var b = counter();
-        ProcessRegistry.register("x", a);
+        ProcRegistry.register("x", a);
 
-        assertThatThrownBy(() -> ProcessRegistry.register("x", b))
+        assertThatThrownBy(() -> ProcRegistry.register("x", b))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("x");
 
@@ -93,12 +93,12 @@ class ProcessRegistryTest implements WithAssertions {
     @Test
     void autoDeregister_onCrash() {
         var proc = counter();
-        ProcessRegistry.register("crasher", proc);
+        ProcRegistry.register("crasher", proc);
 
         proc.tell(new Msg.Crash());
 
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> ProcessRegistry.whereis("crasher").isEmpty());
+                .until(() -> ProcRegistry.whereis("crasher").isEmpty());
     }
 
     // -------------------------------------------------------------------------
@@ -108,12 +108,12 @@ class ProcessRegistryTest implements WithAssertions {
     @Test
     void autoDeregister_onNormalStop() throws InterruptedException {
         var proc = counter();
-        ProcessRegistry.register("stopper", proc);
+        ProcRegistry.register("stopper", proc);
 
         proc.stop();
 
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> ProcessRegistry.whereis("stopper").isEmpty());
+                .until(() -> ProcRegistry.whereis("stopper").isEmpty());
     }
 
     // -------------------------------------------------------------------------
@@ -123,11 +123,11 @@ class ProcessRegistryTest implements WithAssertions {
     @Test
     void unregister_removesName_processStillAlive() throws InterruptedException {
         var proc = counter();
-        ProcessRegistry.register("alive", proc);
+        ProcRegistry.register("alive", proc);
 
-        ProcessRegistry.unregister("alive");
+        ProcRegistry.unregister("alive");
 
-        assertThat(ProcessRegistry.whereis("alive")).isEmpty();
+        assertThat(ProcRegistry.whereis("alive")).isEmpty();
 
         // process still alive — can accept messages
         var count = proc.ask(new Msg.Ping()).join();
@@ -144,10 +144,10 @@ class ProcessRegistryTest implements WithAssertions {
     void registered_returnsAllNames() throws InterruptedException {
         var a = counter();
         var b = counter();
-        ProcessRegistry.register("alpha", a);
-        ProcessRegistry.register("beta", b);
+        ProcRegistry.register("alpha", a);
+        ProcRegistry.register("beta", b);
 
-        var names = ProcessRegistry.registered();
+        var names = ProcRegistry.registered();
 
         assertThat(names).contains("alpha", "beta");
 
@@ -162,16 +162,16 @@ class ProcessRegistryTest implements WithAssertions {
     @Test
     void register_nameReusableAfterDeath() throws InterruptedException {
         var first = counter();
-        ProcessRegistry.register("reusable", first);
+        ProcRegistry.register("reusable", first);
         first.stop();
 
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> ProcessRegistry.whereis("reusable").isEmpty());
+                .until(() -> ProcRegistry.whereis("reusable").isEmpty());
 
         // Now register a new proc under the same name
         var second = counter();
-        ProcessRegistry.register("reusable", second);
-        assertThat(ProcessRegistry.<Integer, Msg>whereis("reusable")).isPresent().contains(second);
+        ProcRegistry.register("reusable", second);
+        assertThat(ProcRegistry.<Integer, Msg>whereis("reusable")).isPresent().contains(second);
 
         second.stop();
     }

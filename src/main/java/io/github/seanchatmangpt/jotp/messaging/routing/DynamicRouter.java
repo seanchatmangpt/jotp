@@ -1,8 +1,7 @@
 package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -86,8 +85,8 @@ public class DynamicRouter<M> {
         }
 
         // Look up process in registry
-        Optional<ProcRef<M, M>> procRef =
-                (Optional<ProcRef<M, M>>) (Optional<?>) ProcessRegistry.whereis(destinationName);
+        Optional<Proc<M, M>> procRef =
+                (Optional<Proc<M, M>>) (Optional<?>) ProcRegistry.whereis(destinationName);
 
         if (procRef.isPresent()) {
             // Send message asynchronously (fire-and-forget)

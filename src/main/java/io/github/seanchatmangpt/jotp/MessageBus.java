@@ -300,13 +300,14 @@ public final class MessageBus {
                 topicSubscribers.size());
     }
 
-    // ── Infrastructure lifecycle ─────────────────────────────────────────────────
+    // ── Lifecycle ────────────────────────────────────────────────────────────────
 
     public String name() {
         return name;
     }
 
-    public void onStop(Application app) {
+    @Override
+    public void onStop(Application<?> app) {
         eventManager.stop();
     }
 

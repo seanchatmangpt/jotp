@@ -83,32 +83,41 @@ public class DistributedPaymentProcessing {
                     PaymentEvent.ChargingFailed,
                     PaymentEvent.NotificationSent,
                     PaymentEvent.PaymentCompleted,
-                    PaymentEvent.PaymentRefunded {}
+                    PaymentEvent.PaymentRefunded {
 
-    // Event records
-    public record Received(String paymentId, double amount) implements PaymentEvent {}
+        record Received(String paymentId, double amount) implements PaymentEvent {}
 
-    public record ValidationPassed() implements PaymentEvent {}
+        record ValidationPassed() implements PaymentEvent {}
 
-    public record ValidationFailed(String reason) implements PaymentEvent {}
+        record ValidationFailed(String reason) implements PaymentEvent {}
 
-    public record RiskAnalysisPassed(String riskScore) implements PaymentEvent {}
+        record RiskAnalysisPassed(String riskScore) implements PaymentEvent {}
 
-    public record RiskAnalysisFailed(String reason) implements PaymentEvent {}
+        record RiskAnalysisFailed(String reason) implements PaymentEvent {}
 
-    public record ChargingSucceeded(String transactionId) implements PaymentEvent {}
+        record ChargingSucceeded(String transactionId) implements PaymentEvent {}
 
-    public record ChargingFailed(String reason) implements PaymentEvent {}
+        record ChargingFailed(String reason) implements PaymentEvent {}
 
-    public record NotificationSent(String notificationId) implements PaymentEvent {}
+        record NotificationSent(String notificationId) implements PaymentEvent {}
 
-    public record PaymentCompleted(Instant completedAt) implements PaymentEvent {}
+        record PaymentCompleted(Instant completedAt) implements PaymentEvent {}
 
-    public record PaymentRefunded(String refundId) implements PaymentEvent {}
+        record PaymentRefunded(String refundId) implements PaymentEvent {}
+    }
 
     // Domain record
     public record PaymentData(
             String paymentId, String customerId, double amount, String cardToken, String email) {}
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════════
+    // Audit log interface for payment events
+    // ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+    /** Simple audit log interface for recording payment events. */
+    public interface PaymentAuditLog {
+        void record(PaymentEvent event);
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
     // Remote Services (Simulated, would be on different nodes)
@@ -145,16 +154,32 @@ public class DistributedPaymentProcessing {
 
         public Result<String, Exception> charge(PaymentData payment) {
             return Result.of(
-                    () ->
-                            breaker.execute(
-                                    payment,
-                                    p -> {
-                                        // Simulate charging (96% success rate)
-                                        if (Math.random() > 0.96) {
-                                            throw new RuntimeException("Payment gateway timeout");
-                                        }
-                                        return "TXN-" + System.nanoTime();
-                                    }));
+                    () -> {
+                        var cbResult =
+                                breaker.execute(
+                                        payment,
+                                        p -> {
+                                            // Simulate charging (96% success rate)
+                                            if (Math.random() > 0.96) {
+                                                throw new RuntimeException(
+                                                        "Payment gateway timeout");
+                                            }
+                                            return "TXN-" + System.nanoTime();
+                                        });
+                        return switch (cbResult) {
+                            case CircuitBreaker.CircuitBreakerResult.Success<String, Exception>(
+                                            var v) ->
+                                    v;
+                            case CircuitBreaker.CircuitBreakerResult.Failure<String, Exception>(
+                                            var e) ->
+                                    throw (e instanceof RuntimeException re)
+                                            ? re
+                                            : new RuntimeException(e);
+                            case CircuitBreaker.CircuitBreakerResult.CircuitOpen<String, Exception>
+                                            ignored ->
+                                    throw new RuntimeException("Circuit breaker open");
+                        };
+                    });
         }
 
         public CircuitBreaker.State getCircuitState() {
@@ -201,7 +226,7 @@ public class DistributedPaymentProcessing {
      *   <li>Analyze risk on remote node (RiskAnalyzerService)
      *   <li>Charge payment on remote gateway (PaymentGatewayService)
      *   <li>Send confirmation on remote notification service
-     *   <li>Log audit trail locally (EventSourcingAuditLog)
+     *   <li>Log audit trail locally (PaymentAuditLog)
      * </ol>
      *
      * <p>Compensation on failure:
@@ -217,10 +242,10 @@ public class DistributedPaymentProcessing {
         private final RiskAnalyzerService riskAnalyzer;
         private final PaymentGatewayService gateway;
         private final NotificationService notificationService;
-        private final EventSourcingAuditLog<PaymentState> auditLog;
+        private final PaymentAuditLog auditLog;
         private volatile long transactionCount = 0;
 
-        public PaymentSagaCoordinator(EventSourcingAuditLog<PaymentState> auditLog) {
+        public PaymentSagaCoordinator(PaymentAuditLog auditLog) {
             this.riskAnalyzer = new RiskAnalyzerService();
             this.gateway = new PaymentGatewayService();
             this.notificationService = new NotificationService();
@@ -236,52 +261,54 @@ public class DistributedPaymentProcessing {
             transactionCount++;
 
             // Log receipt
-            auditLog.tell(new PaymentEvent.Received(payment.paymentId(), payment.amount()));
+            auditLog.record(new PaymentEvent.Received(payment.paymentId(), payment.amount()));
 
             // Step 1: Validate payment locally
             var validationResult = validatePayment(payment);
             if (validationResult.isFailure()) {
-                auditLog.tell(new PaymentEvent.ValidationFailed(validationResult.failureReason()));
+                String reason =
+                        validationResult.fold(v -> "", e -> e != null ? e.toString() : "unknown");
+                auditLog.record(new PaymentEvent.ValidationFailed(reason));
                 return Result.failure(
                         new PaymentError(
-                                payment.paymentId(),
-                                "Validation failed: " + validationResult.failureReason(),
-                                List.of()));
+                                payment.paymentId(), "Validation failed: " + reason, List.of()));
             }
-            auditLog.tell(new PaymentEvent.ValidationPassed());
+            auditLog.record(new PaymentEvent.ValidationPassed());
 
             // Step 2: Analyze risk (remote service)
             var riskResult = riskAnalyzer.analyzeRisk(payment);
             if (riskResult.isFailure()) {
-                auditLog.tell(new PaymentEvent.RiskAnalysisFailed(riskResult.failureReason()));
+                String reason =
+                        riskResult.fold(v -> "", e -> e != null ? e.getMessage() : "unknown");
+                auditLog.record(new PaymentEvent.RiskAnalysisFailed(reason));
                 return Result.failure(
                         new PaymentError(
-                                payment.paymentId(),
-                                "Risk analysis failed: " + riskResult.failureReason(),
-                                List.of()));
+                                payment.paymentId(), "Risk analysis failed: " + reason, List.of()));
             }
-            String riskScore = riskResult.successValue().orElseThrow();
-            auditLog.tell(new PaymentEvent.RiskAnalysisPassed(riskScore));
+            String riskScore = riskResult.orElseThrow();
+            auditLog.record(new PaymentEvent.RiskAnalysisPassed(riskScore));
 
             // Step 3: Charge payment (remote gateway)
             var chargeResult = gateway.charge(payment);
             if (chargeResult.isFailure()) {
-                auditLog.tell(new PaymentEvent.ChargingFailed(chargeResult.failureReason()));
+                String reason =
+                        chargeResult.fold(v -> "", e -> e != null ? e.getMessage() : "unknown");
+                auditLog.record(new PaymentEvent.ChargingFailed(reason));
                 return Result.failure(
                         new PaymentError(
                                 payment.paymentId(),
-                                "Payment charging failed: " + chargeResult.failureReason(),
+                                "Payment charging failed: " + reason,
                                 List.of("No refund needed (charge was not successful)")));
             }
-            String transactionId = chargeResult.successValue().orElseThrow();
-            auditLog.tell(new PaymentEvent.ChargingSucceeded(transactionId));
+            String transactionId = chargeResult.orElseThrow();
+            auditLog.record(new PaymentEvent.ChargingSucceeded(transactionId));
 
             // Step 4: Send notification (remote service)
             var notificationResult = notificationService.sendConfirmation(payment, transactionId);
             if (notificationResult.isFailure()) {
                 // Notification failed, but charge succeeded
                 // Compensation: refund the charge
-                auditLog.tell(new PaymentEvent.NotificationSent("FAILED"));
+                auditLog.record(new PaymentEvent.NotificationSent("FAILED"));
                 compensateCharge(transactionId);
                 return Result.failure(
                         new PaymentError(
@@ -290,9 +317,9 @@ public class DistributedPaymentProcessing {
                                 List.of("Refunded charge: " + transactionId)));
             }
 
-            String notificationId = notificationResult.successValue().orElseThrow();
-            auditLog.tell(new PaymentEvent.NotificationSent(notificationId));
-            auditLog.tell(new PaymentEvent.PaymentCompleted(Instant.now()));
+            String notificationId = notificationResult.orElseThrow();
+            auditLog.record(new PaymentEvent.NotificationSent(notificationId));
+            auditLog.record(new PaymentEvent.PaymentCompleted(Instant.now()));
 
             return Result.success(
                     new PaymentOutcome(
@@ -385,40 +412,40 @@ public class DistributedPaymentProcessing {
         System.out.println("Total Transactions: " + coordinator.getTransactionCount());
         System.out.println(
                 "Payment Gateway Circuit Breaker: " + coordinator.getGatewayCircuitState());
-        System.out.println("\n✅ Distributed payment processing demonstration complete!");
+        System.out.println("\nDistributed payment processing demonstration complete!");
     }
 
     private static void printPaymentResult(Result<PaymentOutcome, PaymentError> result) {
         if (result.isSuccess()) {
-            var outcome = result.successValue().orElseThrow();
-            System.out.println("  ✅ Payment SUCCESSFUL");
+            var outcome = result.orElseThrow();
+            System.out.println("  Payment SUCCESSFUL");
             System.out.println("     Transaction ID: " + outcome.transactionId());
             System.out.println("     Steps:");
             for (var step : outcome.steps()) {
                 System.out.println("       - " + step.name() + ": " + step.result());
             }
         } else {
-            var error = result.failureReason().orElseThrow();
-            System.out.println("  ❌ Payment FAILED");
-            System.out.println("     Reason: " + error.message());
-            if (!error.compensations().isEmpty()) {
-                System.out.println("     Compensations:");
-                for (var comp : error.compensations()) {
-                    System.out.println("       - " + comp);
+            var error = result.fold(v -> null, e -> e);
+            System.out.println("  Payment FAILED");
+            if (error != null) {
+                System.out.println("     Reason: " + error.message());
+                if (!error.compensations().isEmpty()) {
+                    System.out.println("     Compensations:");
+                    for (var comp : error.compensations()) {
+                        System.out.println("       - " + comp);
+                    }
                 }
             }
         }
     }
 
     /** Audit log implementation for this example. */
-    public static class InMemoryPaymentAuditLog implements EventSourcingAuditLog<PaymentState> {
+    public static class InMemoryPaymentAuditLog implements PaymentAuditLog {
         private final List<PaymentEvent> events = new ArrayList<>();
 
         @Override
-        public void tell(Object auditEntry) {
-            if (auditEntry instanceof PaymentEvent) {
-                events.add((PaymentEvent) auditEntry);
-            }
+        public void record(PaymentEvent event) {
+            events.add(event);
         }
 
         public List<PaymentEvent> getEvents() {
