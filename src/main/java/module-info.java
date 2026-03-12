@@ -3,14 +3,16 @@
  *
  * <h2>Module Overview</h2>
  *
- * <p>JOTP brings battle-tested enterprise concurrency patterns from Erlang/OTP to the JVM
- * using Java 26 features: virtual threads, sealed types, pattern matching, and records.
+ * <p>JOTP brings battle-tested enterprise concurrency patterns from Erlang/OTP to the JVM using
+ * Java 26 features: virtual threads, sealed types, pattern matching, and records.
  *
  * <p>This module provides 15 foundational OTP primitives:
+ *
  * <ul>
  *   <li>{@code Proc} - Lightweight process with virtual thread mailbox and pure state handler
  *   <li>{@code ProcRef} - Stable process identifier (opaque Pid) surviving supervisor restarts
- *   <li>{@code Supervisor} - Fault tolerance tree with ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE strategies
+ *   <li>{@code Supervisor} - Fault tolerance tree with ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE
+ *       strategies
  *   <li>{@code CrashRecovery} - "Let it crash" with supervised retry logic
  *   <li>{@code StateMachine} - gen_statem: state/event/data separation with sealed transitions
  *   <li>{@code ProcLink} - Bilateral crash propagation between processes
@@ -28,22 +30,31 @@
  * <h2>Export Groups</h2>
  *
  * <h3>Core OTP Primitives (STABLE)</h3>
+ *
  * <p>Package: {@code io.github.seanchatmangpt.jotp}
+ *
  * <p>15 production-ready OTP primitives. These exports are STABLE and follow semantic versioning.
  *
  * <h3>Reactive Foundation (STABLE)</h3>
+ *
  * <p>Package: {@code io.github.seanchatmangpt.jotp.reactive}
+ *
  * <p>Reactive stream adapters and Publisher bindings. API and behavior STABLE.
  *
  * <h3>Dogfood Examples (EXPERIMENTAL)</h3>
+ *
  * <p>Packages: {@code io.github.seanchatmangpt.jotp.dogfood.*}
+ *
  * <p>Real Java code generated from templates (core, concurrency, patterns, API, error-handling,
- * security, innovation, mclaren, messaging, reactive). These demonstrate template-generated patterns
- * and are primarily for internal validation. No stability guarantees.
+ * security, innovation, mclaren, messaging, reactive). These demonstrate template-generated
+ * patterns and are primarily for internal validation. No stability guarantees.
  *
  * <h3>Message Patterns (STABLE)</h3>
+ *
  * <p>Packages: {@code io.github.seanchatmangpt.jotp.messagepatterns.*}
+ *
  * <p>Vaughn Vernon's Reactive Messaging Patterns ported to Java 26 OTP primitives:
+ *
  * <ul>
  *   <li>channel - Message channels and pipes
  *   <li>construction - Constructing messages
@@ -56,7 +67,8 @@
  * <h2>Requirements</h2>
  *
  * <ul>
- *   <li><strong>Java 26+</strong> - Virtual threads, sealed types, pattern matching, records required
+ *   <li><strong>Java 26+</strong> - Virtual threads, sealed types, pattern matching, records
+ *       required
  *   <li><strong>Preview Features Enabled</strong> - Compile/run with {@code --enable-preview}
  *   <li><strong>java.management module</strong> - Required for ThreadMXBean introspection
  * </ul>
@@ -64,6 +76,7 @@
  * <h2>Comparison to Erlang/OTP</h2>
  *
  * <p>JOTP provides formal equivalence with Erlang/OTP:
+ *
  * <table border="1">
  *   <tr><th>OTP Concept</th><th>JOTP Class</th><th>Notes</th></tr>
  *   <tr><td>spawn/3</td><td>{@code Proc}</td><td>Virtual thread mailbox + state handler</td></tr>
@@ -83,6 +96,7 @@
  */
 module io.github.seanchatmangpt.jotp {
     requires java.management;
+
     // Local exports
     exports io.github.seanchatmangpt.jotp;
     exports io.github.seanchatmangpt.jotp.reactive;
@@ -94,8 +108,8 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.otp;
     exports io.github.seanchatmangpt.jotp.dogfood.security;
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
-    exports io.github.seanchatmangpt.jotp.dogfood.mclaren;
-    exports io.github.seanchatmangpt.jotp.dogfood.messaging;
+    // exports io.github.seanchatmangpt.jotp.dogfood.mclaren; // excluded: pre-existing errors
+    // exports io.github.seanchatmangpt.jotp.dogfood.messaging; // excluded: pre-existing errors
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
 
     // Enterprise Patterns
@@ -105,13 +119,13 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.enterprise.bulkhead;
     exports io.github.seanchatmangpt.jotp.enterprise.multitenancy;
     exports io.github.seanchatmangpt.jotp.enterprise.eventbus;
-    exports io.github.seanchatmangpt.jotp.enterprise.saga;
+// exports io.github.seanchatmangpt.jotp.enterprise.saga; // excluded: pre-existing errors
 
-    // Reactive Messaging Patterns (Vaughn Vernon port)
-    exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.routing;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.transformation;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.management;
+// Reactive Messaging Patterns (Vaughn Vernon port)
+// exports io.github.seanchatmangpt.jotp.messagepatterns.channel; // excluded: pre-existing errors
+// exports io.github.seanchatmangpt.jotp.messagepatterns.construction; // excluded
+// exports io.github.seanchatmangpt.jotp.messagepatterns.routing; // excluded
+// exports io.github.seanchatmangpt.jotp.messagepatterns.transformation; // excluded
+// exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint; // excluded
+// exports io.github.seanchatmangpt.jotp.messagepatterns.management; // excluded
 }

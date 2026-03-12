@@ -308,7 +308,7 @@ public final class MessageBus implements Application.Infrastructure {
     }
 
     @Override
-    public void onStop(Application app) {
+    public void onStop(Application<?> app) {
         eventManager.stop();
     }
 

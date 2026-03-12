@@ -1,12 +1,8 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -81,8 +77,8 @@ public final class SupervisionTreeExample {
      * Worker handler: defines how a worker processes messages.
      *
      * <p>The handler is a pure function: {@code (state, message) -> nextState}. It simulates a
-     * crash by throwing an exception after the counter reaches 5 increments. The supervisor
-     * catches the crash and restarts the worker with fresh state (counter = 0).
+     * crash by throwing an exception after the counter reaches 5 increments. The supervisor catches
+     * the crash and restarts the worker with fresh state (counter = 0).
      */
     static final java.util.function.BiFunction<WorkerState, WorkerMessage, WorkerState>
             WORKER_HANDLER =
@@ -96,8 +92,7 @@ public final class SupervisionTreeExample {
                                                 + ", restarts="
                                                 + state.restarts());
                                 if (nextCounter >= 5) {
-                                    throw new IllegalStateException(
-                                            "Simulated crash at counter=5");
+                                    throw new IllegalStateException("Simulated crash at counter=5");
                                 }
                                 yield new WorkerState(nextCounter, state.restarts());
                             }
@@ -109,8 +104,8 @@ public final class SupervisionTreeExample {
                     };
 
     /**
-     * Main example: creates a supervision tree with 3 workers, sends messages, observes crashes
-     * and restarts.
+     * Main example: creates a supervision tree with 3 workers, sends messages, observes crashes and
+     * restarts.
      *
      * <pre>{@code
      * Supervisor supervisor = Supervisor.create(
@@ -137,10 +132,7 @@ public final class SupervisionTreeExample {
         // Max 3 restarts per child within 10 seconds
         Supervisor supervisor =
                 Supervisor.create(
-                        "tree-1",
-                        Supervisor.Strategy.ONE_FOR_ONE,
-                        3,
-                        Duration.ofSeconds(10));
+                        "tree-1", Supervisor.Strategy.ONE_FOR_ONE, 3, Duration.ofSeconds(10));
 
         System.out.println("Created supervisor with ONE_FOR_ONE strategy");
         System.out.println("Max restarts: 3 per worker, window: 10 seconds\n");

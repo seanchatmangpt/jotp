@@ -1,10 +1,9 @@
 package io.github.seanchatmangpt.jotp.pool;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.ProcRef;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.Supervisor;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -19,18 +18,20 @@ import java.util.function.Supplier;
  * <p><strong>Worker Pool Pattern:</strong>
  *
  * <p>A {@code PoolSupervisor<T>} manages a fixed set of worker processes that execute tasks
- * supplied by callers. Each task is routed to an available worker via round-robin distribution.
- * If a worker crashes, the supervision tree automatically restarts it. Callers receive results
- * as {@link CompletableFuture} values, enabling non-blocking task submission and result retrieval.
+ * supplied by callers. Each task is routed to an available worker via round-robin distribution. If
+ * a worker crashes, the supervision tree automatically restarts it. Callers receive results as
+ * {@link CompletableFuture} values, enabling non-blocking task submission and result retrieval.
  *
  * <p><strong>Architecture:</strong>
  *
  * <ul>
- *   <li><strong>Supervisor:</strong> Manages worker lifecycle with {@link Supervisor.Strategy#ONE_FOR_ONE}
- *       restart policy — only crashed workers are restarted, not the entire pool.
- *   <li><strong>Workers:</strong> Lightweight processes (virtual threads) registered in {@link ProcRegistry}
- *       with names like {@code "worker-0"}, {@code "worker-1"}, etc.
- *   <li><strong>Round-Robin:</strong> Tasks are distributed sequentially across workers to balance load.
+ *   <li><strong>Supervisor:</strong> Manages worker lifecycle with {@link
+ *       Supervisor.Strategy#ONE_FOR_ONE} restart policy — only crashed workers are restarted, not
+ *       the entire pool.
+ *   <li><strong>Workers:</strong> Lightweight processes (virtual threads) registered in {@link
+ *       ProcRegistry} with names like {@code "worker-0"}, {@code "worker-1"}, etc.
+ *   <li><strong>Round-Robin:</strong> Tasks are distributed sequentially across workers to balance
+ *       load.
  *   <li><strong>Task Messages:</strong> Workers receive tasks as {@link PoolTaskMsg} messages and
  *       execute supplier-based work.
  * </ul>
@@ -66,8 +67,8 @@ import java.util.function.Supplier;
  * <p><strong>Error Handling:</strong>
  *
  * <ul>
- *   <li><strong>Worker Crash:</strong> Supervisor automatically restarts the worker via
- *       {@code ONE_FOR_ONE} strategy.
+ *   <li><strong>Worker Crash:</strong> Supervisor automatically restarts the worker via {@code
+ *       ONE_FOR_ONE} strategy.
  *   <li><strong>Task Timeout:</strong> {@link CompletableFuture#orTimeout(long, TimeUnit)} ensures
  *       results or timeout exceptions are returned within the specified duration.
  *   <li><strong>Pool Shutdown:</strong> {@link #shutdown()} gracefully stops all workers and
@@ -81,9 +82,7 @@ import java.util.function.Supplier;
  */
 public final class PoolSupervisor<T> {
 
-    /**
-     * Internal message type for worker tasks.
-     */
+    /** Internal message type for worker tasks. */
     sealed interface PoolTaskMsg<T> permits PoolTaskMsg.ExecuteTask {}
 
     record PoolExecuteTask<T>(Supplier<T> task, CompletableFuture<T> future)
@@ -93,9 +92,7 @@ public final class PoolSupervisor<T> {
         }
     }
 
-    /**
-     * Worker state: tracks if a worker is busy and provides basic lifecycle info.
-     */
+    /** Worker state: tracks if a worker is busy and provides basic lifecycle info. */
     private static final class WorkerState {
         volatile boolean busy = false;
         volatile Instant lastTaskTime = null;
@@ -118,8 +115,8 @@ public final class PoolSupervisor<T> {
     /**
      * Create a pool supervisor instance.
      *
-     * <p>This constructor is package-private; use {@link #builder(String, int, Supplier)} to
-     * create instances.
+     * <p>This constructor is package-private; use {@link #builder(String, int, Supplier)} to create
+     * instances.
      *
      * @param name pool name (for identification)
      * @param supervisor the underlying supervisor managing worker processes
@@ -127,11 +124,7 @@ public final class PoolSupervisor<T> {
      * @param taskTimeout default timeout for task execution
      */
     private PoolSupervisor(
-            String name,
-            Supervisor supervisor,
-            int workerCount,
-            Duration taskTimeout
-    ) {
+            String name, Supervisor supervisor, int workerCount, Duration taskTimeout) {
         this.name = name;
         this.supervisor = supervisor;
         this.workerCount = workerCount;
@@ -155,10 +148,7 @@ public final class PoolSupervisor<T> {
      * @param <T> result type
      */
     public static <T> PoolSupervisorBuilder<T> builder(
-            String name,
-            int workerCount,
-            Supplier<?> initialStateFactory
-    ) {
+            String name, int workerCount, Supplier<?> initialStateFactory) {
         return new PoolSupervisorBuilder<>(name, workerCount, initialStateFactory);
     }
 
@@ -176,11 +166,7 @@ public final class PoolSupervisor<T> {
         private Duration restartWindow = Duration.ofSeconds(60);
         private Duration taskTimeout = Duration.ofSeconds(30);
 
-        private PoolSupervisorBuilder(
-                String name,
-                int workerCount,
-                Supplier<?> stateFactory
-        ) {
+        private PoolSupervisorBuilder(String name, int workerCount, Supplier<?> stateFactory) {
             this.name = name;
             this.workerCount = workerCount;
             this.stateFactory = stateFactory;
@@ -224,19 +210,16 @@ public final class PoolSupervisor<T> {
         /**
          * Build and return a new {@code PoolSupervisor<T>}.
          *
-         * <p>This method creates the supervisor, spawns worker processes, and registers them
-         * in the global {@link ProcRegistry}.
+         * <p>This method creates the supervisor, spawns worker processes, and registers them in the
+         * global {@link ProcRegistry}.
          *
          * @return a new, initialized pool supervisor
          */
         @SuppressWarnings({"unchecked", "rawtypes"})
         public PoolSupervisor<T> build() {
-            var supervisor = Supervisor.create(
-                    name + "-supervisor",
-                    restartStrategy,
-                    maxRestarts,
-                    restartWindow
-            );
+            var supervisor =
+                    Supervisor.create(
+                            name + "-supervisor", restartStrategy, maxRestarts, restartWindow);
 
             var pool = new PoolSupervisor<>(name, supervisor, workerCount, taskTimeout);
 
@@ -263,15 +246,12 @@ public final class PoolSupervisor<T> {
                         };
 
                 @SuppressWarnings("rawtypes")
-                ProcRef workerRef = supervisor.supervise(
-                        workerName,
-                        workerState,
-                        handler
-                );
+                ProcRef workerRef = supervisor.supervise(workerName, workerState, handler);
 
                 // Get the underlying Proc and register in global registry
                 try {
-                    Proc<WorkerState, PoolTaskMsg> proc = (Proc<WorkerState, PoolTaskMsg>) workerRef;
+                    Proc<WorkerState, PoolTaskMsg> proc =
+                            (Proc<WorkerState, PoolTaskMsg>) workerRef;
                     ProcRegistry.register(workerName, proc);
                 } catch (IllegalStateException e) {
                     // Ignore if already registered (shouldn't happen on initial creation)
@@ -285,9 +265,9 @@ public final class PoolSupervisor<T> {
     /**
      * Submit a task to the pool for execution.
      *
-     * <p>The task is routed to the next worker in round-robin order. Returns a
-     * {@link CompletableFuture} that completes with the task result or a timeout exception
-     * if the timeout is exceeded.
+     * <p>The task is routed to the next worker in round-robin order. Returns a {@link
+     * CompletableFuture} that completes with the task result or a timeout exception if the timeout
+     * is exceeded.
      *
      * @param task the supplier providing the task to execute
      * @param timeout maximum time to wait for the task to complete
@@ -299,8 +279,7 @@ public final class PoolSupervisor<T> {
         synchronized (shutdownLock) {
             if (!running) {
                 return CompletableFuture.failedFuture(
-                        new IllegalStateException("Pool is shut down")
-                );
+                        new IllegalStateException("Pool is shut down"));
             }
         }
 
@@ -313,13 +292,11 @@ public final class PoolSupervisor<T> {
 
         try {
             // Look up worker in registry
-            Optional<Proc<WorkerState, PoolTaskMsg<T>>> worker =
-                    ProcRegistry.whereis(workerName);
+            Optional<Proc<WorkerState, PoolTaskMsg<T>>> worker = ProcRegistry.whereis(workerName);
 
             if (worker.isEmpty()) {
                 resultFuture.completeExceptionally(
-                        new IllegalStateException("Worker not available: " + workerName)
-                );
+                        new IllegalStateException("Worker not available: " + workerName));
                 return resultFuture;
             }
 
@@ -336,11 +313,12 @@ public final class PoolSupervisor<T> {
             // Apply timeout to the result
             resultFuture
                     .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-                    .whenComplete((result, ex) -> {
-                        long elapsed = System.currentTimeMillis() - startTime;
-                        completedTasks.incrementAndGet();
-                        totalResponseTimeMs.addAndGet(elapsed);
-                    });
+                    .whenComplete(
+                            (result, ex) -> {
+                                long elapsed = System.currentTimeMillis() - startTime;
+                                completedTasks.incrementAndGet();
+                                totalResponseTimeMs.addAndGet(elapsed);
+                            });
 
             return resultFuture;
         } catch (Exception e) {
@@ -352,8 +330,8 @@ public final class PoolSupervisor<T> {
     /**
      * Gracefully shut down the pool.
      *
-     * <p>This method stops all worker processes and prevents new task submission. Pending
-     * tasks will receive a failure with {@link IllegalStateException}.
+     * <p>This method stops all worker processes and prevents new task submission. Pending tasks
+     * will receive a failure with {@link IllegalStateException}.
      *
      * @throws InterruptedException if interrupted while waiting for workers to stop
      */
@@ -367,16 +345,14 @@ public final class PoolSupervisor<T> {
     /**
      * Get current pool statistics.
      *
-     * <p>Statistics include the number of active (busy) workers, total completed tasks,
-     * and average response time.
+     * <p>Statistics include the number of active (busy) workers, total completed tasks, and average
+     * response time.
      *
      * @return a {@link PoolStats} object with current pool metrics
      */
     public PoolStats getStats() {
         long completed = completedTasks.get();
-        long avgResponseTime = completed > 0
-                ? totalResponseTimeMs.get() / completed
-                : 0;
+        long avgResponseTime = completed > 0 ? totalResponseTimeMs.get() / completed : 0;
 
         // Count active workers (those with lastTaskTime recently set)
         int activeWorkers = 0;

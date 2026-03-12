@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Demonstration of standardized factory method patterns across all OTP primitives.
@@ -12,7 +11,8 @@ import java.util.concurrent.CompletableFuture;
  * patterns are:
  *
  * <ul>
- *   <li><strong>Lightweight process:</strong> {@link Proc#spawn(Object, java.util.function.BiFunction)}
+ *   <li><strong>Lightweight process:</strong> {@link Proc#spawn(Object,
+ *       java.util.function.BiFunction)}
  *   <li><strong>Supervision tree:</strong> {@link Supervisor#create(Supervisor.Strategy, int,
  *       Duration)} or {@link Supervisor#create(String, Supervisor.Strategy, int, Duration)}
  *   <li><strong>State machine:</strong> {@link StateMachine#create(Object, Object,
@@ -20,10 +20,12 @@ import java.util.concurrent.CompletableFuture;
  *   <li><strong>Event manager:</strong> {@link EventManager#start()} or {@link
  *       EventManager#start(Duration)}
  *   <li><strong>Parallel execution:</strong> {@link Parallel#all(List)}
- *   <li><strong>Crash recovery:</strong> {@link CrashRecovery#retry(int, java.util.function.Supplier)}
+ *   <li><strong>Crash recovery:</strong> {@link CrashRecovery#retry(int,
+ *       java.util.function.Supplier)}
  * </ul>
  *
  * <p>All factory methods are:
+ *
  * <ul>
  *   <li><strong>Explicit:</strong> Factory method names clearly indicate intent (spawn, create,
  *       start, all, retry)
@@ -39,6 +41,48 @@ import java.util.concurrent.CompletableFuture;
 public final class FactoryMethodPatterns {
 
     private FactoryMethodPatterns() {}
+
+    sealed interface CounterMsg {
+        record Increment() implements CounterMsg {}
+
+        record Reset() implements CounterMsg {}
+    }
+
+    record Counter(int value) {}
+
+    sealed interface LockState {
+        record Locked() implements LockState {}
+
+        record Open() implements LockState {}
+    }
+
+    sealed interface LockEvent {
+        record PushButton(char digit) implements LockEvent {}
+
+        record Lock() implements LockEvent {}
+    }
+
+    record LockData(String entered, String code) {
+        LockData withEntered(String entered) {
+            return new LockData(entered, code);
+        }
+    }
+
+    sealed interface LogEvent {
+        record ErrorEvent(String msg) implements LogEvent {}
+
+        record WarningEvent(String msg) implements LogEvent {}
+    }
+
+    sealed interface IntegrationCounterMsg {
+        record Increment() implements IntegrationCounterMsg {}
+    }
+
+    record IntegrationCounter(int value) {}
+
+    sealed interface IntegrationEvent {
+        record Processing() implements IntegrationEvent {}
+    }
 
     /**
      * Example 1: Lightweight process creation using {@link Proc#spawn(Object,
@@ -70,22 +114,13 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleProcSpawn() {
-        // State and messages
-        record Counter(int value) {}
-
-        sealed interface CounterMsg {
-            record Increment() implements CounterMsg {}
-            record Reset() implements CounterMsg {}
-        }
-
         // Spawn using factory (NOT: new Proc(...))
         Proc<Counter, CounterMsg> counter =
                 Proc.spawn(
                         new Counter(0),
                         (state, msg) ->
                                 switch (msg) {
-                                    case CounterMsg.Increment _ ->
-                                            new Counter(state.value() + 1);
+                                    case CounterMsg.Increment _ -> new Counter(state.value() + 1);
                                     case CounterMsg.Reset _ -> new Counter(0);
                                 });
 
@@ -95,8 +130,8 @@ public final class FactoryMethodPatterns {
     }
 
     /**
-     * Example 2: Supervision tree creation using {@link Supervisor#create(Supervisor.Strategy,
-     * int, Duration)}.
+     * Example 2: Supervision tree creation using {@link Supervisor#create(Supervisor.Strategy, int,
+     * Duration)}.
      *
      * <p>Establishes a hierarchy of supervised processes with automatic restart strategies
      * (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE).
@@ -122,16 +157,15 @@ public final class FactoryMethodPatterns {
     public static void exampleSupervisorCreate() {
         // Create supervisor using factory (NOT: new Supervisor(...))
         Supervisor supervisor =
-                Supervisor.create(
-                        Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+                Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
 
         // Supervise children (would add actual handlers in practice)
         // var child1 = supervisor.supervise("child-1", state1, handler1);
     }
 
     /**
-     * Example 3: Named supervision tree using {@link Supervisor#create(String,
-     * Supervisor.Strategy, int, Duration)}.
+     * Example 3: Named supervision tree using {@link Supervisor#create(String, Supervisor.Strategy,
+     * int, Duration)}.
      *
      * <p>Same as {@link #exampleSupervisorCreate()} but with an explicit name for better
      * diagnostics.
@@ -202,24 +236,6 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleStateMachineCreate() {
-        sealed interface LockState {
-            record Locked() implements LockState {}
-
-            record Open() implements LockState {}
-        }
-
-        sealed interface LockEvent {
-            record PushButton(char digit) implements LockEvent {}
-
-            record Lock() implements LockEvent {}
-        }
-
-        record LockData(String entered, String code) {
-            LockData withEntered(String entered) {
-                return new LockData(entered, code);
-            }
-        }
-
         // Create state machine using factory (NOT: new StateMachine(...))
         StateMachine<LockState, LockEvent, LockData> sm =
                 StateMachine.create(
@@ -238,16 +254,14 @@ public final class FactoryMethodPatterns {
                                                             : StateMachine.Transition.keepState(
                                                                     data.withEntered(entered));
                                                 }
-                                                default ->
-                                                        StateMachine.Transition.keepState(data);
+                                                default -> StateMachine.Transition.keepState(data);
                                             };
                                     case LockState.Open _ ->
                                             switch (event) {
                                                 case LockEvent.Lock _ ->
                                                         StateMachine.Transition.nextState(
                                                                 new LockState.Locked(), data);
-                                                default ->
-                                                        StateMachine.Transition.keepState(data);
+                                                default -> StateMachine.Transition.keepState(data);
                                             };
                                 });
     }
@@ -282,12 +296,6 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleEventManagerStart() {
-        sealed interface LogEvent {
-            record ErrorEvent(String msg) implements LogEvent {}
-
-            record WarningEvent(String msg) implements LogEvent {}
-        }
-
         // Start event manager using factory (NOT: new EventManager(...))
         EventManager<LogEvent> manager = EventManager.start();
 
@@ -332,11 +340,7 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleParallelAll() {
-        var tasks =
-                List.of(
-                        () -> "result1",
-                        () -> "result2",
-                        () -> "result3");
+        var tasks = List.of(() -> "result1", () -> "result2", () -> "result3");
 
         // Run all tasks in parallel
         Result<List<String>, Exception> result = Parallel.all(tasks);
@@ -370,8 +374,7 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleCrashRecoveryRetry() {
-        Result<String, Exception> result =
-                CrashRecovery.retry(3, () -> "result from attempt");
+        Result<String, Exception> result = CrashRecovery.retry(3, () -> "result from attempt");
 
         switch (result) {
             case Result.Success(var value) -> System.out.println("Success: " + value);
@@ -382,9 +385,9 @@ public final class FactoryMethodPatterns {
     /**
      * Example 8: Complete integration showing all factory patterns together.
      *
-     * <p>Demonstrates a typical OTP-style application: supervisors manage processes, processes
-     * send messages and handle crashes, state machines coordinate complex workflows, event
-     * managers decouple producers and consumers.
+     * <p>Demonstrates a typical OTP-style application: supervisors manage processes, processes send
+     * messages and handle crashes, state machines coordinate complex workflows, event managers
+     * decouple producers and consumers.
      *
      * <pre>{@code
      * // 1. Create a supervisor hierarchy
@@ -421,37 +424,24 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleCompleteIntegration() {
-        record Counter(int value) {}
-
-        sealed interface CounterMsg {
-            record Increment() implements CounterMsg {}
-        }
-
         // 1. Create supervisor using factory
         Supervisor supervisor =
                 Supervisor.create(
-                        "app",
-                        Supervisor.Strategy.ONE_FOR_ALL,
-                        5,
-                        Duration.ofSeconds(60));
+                        "app", Supervisor.Strategy.ONE_FOR_ALL, 5, Duration.ofSeconds(60));
 
         // 2. Supervise a worker process
-        ProcRef<Counter, CounterMsg> counter =
+        ProcRef<IntegrationCounter, IntegrationCounterMsg> counter =
                 supervisor.supervise(
                         "counter",
-                        new Counter(0),
+                        new IntegrationCounter(0),
                         (state, msg) ->
                                 switch (msg) {
-                                    case CounterMsg.Increment _ ->
-                                            new Counter(state.value() + 1);
+                                    case IntegrationCounterMsg.Increment _ ->
+                                            new IntegrationCounter(state.value() + 1);
                                 });
 
         // 3. Create event manager
-        sealed interface Event {
-            record Processing() implements Event {}
-        }
-
-        EventManager<Event> events = EventManager.start();
+        EventManager<IntegrationEvent> events = EventManager.start();
 
         // 4. Run tasks in parallel
         var results = Parallel.all(List.of(() -> 1, () -> 2));
