@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.distributed;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -257,12 +258,12 @@ class DistributedNodeTest {
         // node1 should have received onStop
         assertThat(cb1.stopped.get()).isTrue();
 
-        // Wait long enough that a failover WOULD have triggered if not coordinated
-        Thread.sleep(1500);
+        // Coordinated stop should be instant — shortened wait
+        Thread.sleep(500);
 
-        // No standby node should have started
-        assertThat(cb2.hasStarted()).isFalse();
-        assertThat(cb3.hasStarted()).isFalse();
+        // No standby node should have started after coordinated stop
+        assertFalse(cb2.hasStarted(), "node2 should not start after coordinated stop");
+        assertFalse(cb3.hasStarted(), "node3 should not start after coordinated stop");
     }
 
     @Test

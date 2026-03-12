@@ -163,6 +163,12 @@ public final class DistributedNode {
         AppEntry entry = apps.get(appName);
         if (entry == null) return;
         entry.coordinatedStop = true;
+        // Broadcast STOP to all peer nodes so they don't trigger spurious failover
+        for (NodeId peer : entry.spec.priorityList()) {
+            if (!peer.equals(self)) {
+                send(peer, "STOP " + appName);
+            }
+        }
         interruptMonitor(entry);
         AppStatus prev = entry.status.getAndSet(AppStatus.STOPPED);
         if (prev == AppStatus.RUNNING) {
@@ -208,6 +214,12 @@ public final class DistributedNode {
 
         List<NodeId> priority = entry.spec.priorityList();
 
+        int selfIdx = priority.indexOf(self);
+        if (selfIdx == -1) {
+            // This node is not in the priority list for this app
+            return;
+        }
+
         // Pass 1: find a higher-priority live node — defer to it
         for (NodeId candidate : priority) {
             if (candidate.equals(self)) break; // no higher-priority live node found
@@ -229,25 +241,28 @@ public final class DistributedNode {
         }
 
         // Check for lower-priority RUNNING nodes (takeover needed)
-        int myIndex = priority.indexOf(self);
-        for (int i = myIndex + 1; i < priority.size(); i++) {
+        for (int i = selfIdx + 1; i < priority.size(); i++) {
             NodeId lower = priority.get(i);
             if (ping(lower) && "RUNNING".equals(queryStatus(lower, appName))) {
                 // Take over from the lower-priority node
-                send(lower, "START " + appName + " takeover " + self.wire());
-                NodeId oldLeader = lower;
-                entry.currentLeader = self;
-                entry.status.set(AppStatus.RUNNING);
-                Thread.ofVirtual()
-                        .start(() -> entry.callbacks.onStart(new StartMode.Takeover(oldLeader)));
+                if (entry.status.compareAndSet(AppStatus.STANDBY, AppStatus.RUNNING)) {
+                    send(lower, "START " + appName + " takeover " + self.wire());
+                    NodeId oldLeader = lower;
+                    entry.currentLeader = self;
+                    Thread.ofVirtual()
+                            .start(
+                                    () -> entry.callbacks.onStart(new StartMode.Takeover(oldLeader)));
+                }
                 return;
             }
         }
 
         // No lower-priority node running — start normally
         entry.currentLeader = self;
-        entry.status.set(AppStatus.RUNNING);
-        Thread.ofVirtual().start(() -> entry.callbacks.onStart(new StartMode.Normal()));
+        if (entry.status.compareAndSet(AppStatus.STANDBY, AppStatus.RUNNING)
+                || entry.status.compareAndSet(AppStatus.STOPPED, AppStatus.RUNNING)) {
+            Thread.ofVirtual().start(() -> entry.callbacks.onStart(new StartMode.Normal()));
+        }
     }
 
     // ── Monitor (Standby → Failover Detection) ────────────────────────────────

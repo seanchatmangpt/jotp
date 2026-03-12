@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.distributed;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Configuration for a distributed application — which nodes can run it and in what priority order.
@@ -28,6 +29,15 @@ import java.util.List;
  *     primary goes down; Erlang default is 0 (immediate)
  */
 public record DistributedAppSpec(String name, List<List<NodeId>> nodes, Duration failoverTimeout) {
+
+    public DistributedAppSpec {
+        Objects.requireNonNull(name, "name must not be null");
+        Objects.requireNonNull(nodes, "nodes must not be null");
+        Objects.requireNonNull(failoverTimeout, "failoverTimeout must not be null");
+        if (nodes.isEmpty()) throw new IllegalArgumentException("nodes must not be empty");
+        if (failoverTimeout.isNegative())
+            throw new IllegalArgumentException("failoverTimeout must not be negative");
+    }
 
     /**
      * Flattens the priority groups into a single ordered list.
