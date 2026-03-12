@@ -25,12 +25,6 @@
     </properties>
 
     <dependencies>
-        <!-- JOTP - Java OTP Framework (external library) -->
-        <dependency>
-            <groupId>io.github.seanchatmangpt</groupId>
-            <artifactId>jotp</artifactId>
-            <version>1.0.0</version>
-        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
