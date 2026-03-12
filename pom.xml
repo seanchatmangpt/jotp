@@ -157,7 +157,7 @@
                         <exclude>**/BulkheadIsolation.java</exclude>
                         <exclude>**/EventSourcingAuditLog.java</exclude>
                         <exclude>**/DistributedActorBridge.java</exclude>
-                        <exclude>**/enterprise/saga/DistributedSagaCoordinator.java</exclude>
+                        <exclude>**/DistributedSagaCoordinator.java</exclude>
                     </excludes>
                     <testExcludes>
                         <!-- Messaging system experimental - under development -->
