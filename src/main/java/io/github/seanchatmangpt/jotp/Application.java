@@ -76,20 +76,6 @@ import java.util.function.Supplier;
  */
 public final class Application<S> {
 
-    /**
-     * Lifecycle interface for infrastructure components managed by an {@link Application}.
-     *
-     * <p>Implementing classes are registered as named infrastructure in the application and receive
-     * a shutdown callback when the application stops.
-     */
-    public interface Infrastructure {
-        /** Returns the unique name of this infrastructure component. */
-        String name();
-
-        /** Called when the application is stopping — release resources and shut down gracefully. */
-        void onStop(Application<?> app);
-    }
-
     /** Sealed hierarchy of application lifecycle phases. */
     public sealed interface ApplicationPhase {
         /** Initializing: running init hooks and preparing state. */
@@ -110,6 +96,20 @@ public final class Application<S> {
          * @param error non-null if shutdown failed unexpectedly
          */
         record STOPPED(Throwable error) implements ApplicationPhase {}
+    }
+
+    /**
+     * Lifecycle contract for infrastructure components managed by an Application.
+     *
+     * <p>Implementations provide a human-readable name and a hook called when the Application
+     * stops.
+     */
+    public interface Infrastructure {
+        /** Human-readable component name for logging and diagnostics. */
+        String name();
+
+        /** Invoked by the Application during graceful shutdown. Default: no-op. */
+        default void onStop(Application<?> app) {}
     }
 
     private final String name;
