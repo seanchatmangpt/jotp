@@ -7,13 +7,14 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Format Indicator (Vernon: "Format Indicator")
  *
- * <p>Adds format metadata to messages, allowing receivers to know
- * how to deserialize the message body.
+ * <p>Adds format metadata to messages, allowing receivers to know how to deserialize the message
+ * body.
  *
- * <p>Pattern: Message carries a "format" header indicating its encoding
- * (JSON, XML, PROTOBUF, etc.).
+ * <p>Pattern: Message carries a "format" header indicating its encoding (JSON, XML, PROTOBUF,
+ * etc.).
  *
  * <p>Example:
+ *
  * <pre>
  * var msg = Message.event("ORDER", order);
  * var formatted = FormatIndicator.withFormat(msg, "JSON");
@@ -22,14 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class FormatIndicator {
 
-    /**
-     * Message wrapper with format metadata.
-     */
-    public record FormattedMessage(
-        Message message,
-        String format,
-        Map<String, String> metadata
-    ) {
+    /** Message wrapper with format metadata. */
+    public record FormattedMessage(Message message, String format, Map<String, String> metadata) {
         public FormattedMessage {
             if (format == null || format.isBlank()) {
                 throw new IllegalArgumentException("format must not be blank");
@@ -50,23 +45,22 @@ public final class FormatIndicator {
         FORMAT_ALIASES.put("plain", "text/plain");
     }
 
-    private FormatIndicator() {
-    }
+    private FormatIndicator() {}
 
     /**
      * Wraps a message with format indicator.
      *
      * @param message The message
-     * @param format  Format code (JSON, XML, PROTOBUF, etc.)
+     * @param format Format code (JSON, XML, PROTOBUF, etc.)
      * @return FormattedMessage with metadata
      */
     public static FormattedMessage withFormat(Message message, String format) {
         var mimeType = FORMAT_ALIASES.getOrDefault(format.toLowerCase(), format);
-        var metadata = Map.of(
-            "format", format,
-            "mime-type", mimeType,
-            "timestamp", String.valueOf(System.currentTimeMillis())
-        );
+        var metadata =
+                Map.of(
+                        "format", format,
+                        "mime-type", mimeType,
+                        "timestamp", String.valueOf(System.currentTimeMillis()));
         return new FormattedMessage(message, format, metadata);
     }
 
@@ -94,7 +88,7 @@ public final class FormatIndicator {
      * Registers a new format alias.
      *
      * @param shortName Short name (e.g., "json")
-     * @param mimeType  MIME type (e.g., "application/json")
+     * @param mimeType MIME type (e.g., "application/json")
      */
     public static void registerFormat(String shortName, String mimeType) {
         FORMAT_ALIASES.put(shortName.toLowerCase(), mimeType);
@@ -114,7 +108,7 @@ public final class FormatIndicator {
     /**
      * Converts format indicator (transcode).
      *
-     * @param formatted  The formatted message
+     * @param formatted The formatted message
      * @param targetFormat Target format code
      * @return New FormattedMessage with target format
      */
@@ -130,7 +124,7 @@ public final class FormatIndicator {
      * @return True if format is registered
      */
     public static boolean isSupported(String format) {
-        return FORMAT_ALIASES.containsKey(format.toLowerCase()) ||
-               FORMAT_ALIASES.containsValue(format);
+        return FORMAT_ALIASES.containsKey(format.toLowerCase())
+                || FORMAT_ALIASES.containsValue(format);
     }
 }

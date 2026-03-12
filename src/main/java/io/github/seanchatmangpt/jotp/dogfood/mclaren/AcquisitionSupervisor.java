@@ -1,26 +1,26 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.Result;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 /**
- * Acquisition supervisor — OTP {@code supervisor} ONE_FOR_ONE over all
- * {@link ParameterDataAccess} processes for a single SQL Race session.
+ * Acquisition supervisor — OTP {@code supervisor} ONE_FOR_ONE over all {@link ParameterDataAccess}
+ * processes for a single SQL Race session.
  *
- * <p>In ATLAS, each ECU parameter is acquired by an independent subsystem. A hardware fault on
- * one sensor channel must never stop acquisition of all others. The OTP ONE_FOR_ONE strategy
- * maps directly to this requirement: only the crashed parameter process is restarted; the
- * remaining processes continue unaffected.
+ * <p>In ATLAS, each ECU parameter is acquired by an independent subsystem. A hardware fault on one
+ * sensor channel must never stop acquisition of all others. The OTP ONE_FOR_ONE strategy maps
+ * directly to this requirement: only the crashed parameter process is restarted; the remaining
+ * processes continue unaffected.
  *
  * <pre>
  *   AcquisitionSupervisor
@@ -56,14 +56,13 @@ public final class AcquisitionSupervisor implements AutoCloseable {
     private final Supervisor supervisor;
 
     /**
-     * Stable handles keyed by SQL Race parameter identifier (e.g. {@code "vCar:Chassis"}).
-     * Each {@link ProcRef} survives supervisor restarts — callers never need to re-fetch.
+     * Stable handles keyed by SQL Race parameter identifier (e.g. {@code "vCar:Chassis"}). Each
+     * {@link ProcRef} survives supervisor restarts — callers never need to re-fetch.
      */
     private final Map<String, ProcRef<ParameterDataAccess.State, PdaMsg>> refs;
 
     private AcquisitionSupervisor(
-            Supervisor supervisor,
-            Map<String, ProcRef<ParameterDataAccess.State, PdaMsg>> refs) {
+            Supervisor supervisor, Map<String, ProcRef<ParameterDataAccess.State, PdaMsg>> refs) {
         this.supervisor = supervisor;
         this.refs = Map.copyOf(refs);
     }
@@ -71,17 +70,20 @@ public final class AcquisitionSupervisor implements AutoCloseable {
     /**
      * Start an acquisition supervisor for a list of parameter/channel pairs.
      *
-     * <p>Each pair is registered as a ONE_FOR_ONE child. The supervisor tolerates
-     * {@value #MAX_RESTARTS} restarts within {@value #WINDOW_SECS} seconds.
+     * <p>Each pair is registered as a ONE_FOR_ONE child. The supervisor tolerates {@value
+     * #MAX_RESTARTS} restarts within {@value #WINDOW_SECS} seconds.
      *
      * @param pairs parameter + channel pairs to supervise
      * @return running supervisor with stable {@link ProcRef} handles
      */
     public static AcquisitionSupervisor start(List<ParamChannelPair> pairs) {
-        var sv = new Supervisor("AcquisitionSupervisor", Strategy.ONE_FOR_ONE, MAX_RESTARTS,
-                Duration.ofSeconds(WINDOW_SECS));
-        var refs = new LinkedHashMap<
-                String, ProcRef<ParameterDataAccess.State, PdaMsg>>();
+        var sv =
+                new Supervisor(
+                        "AcquisitionSupervisor",
+                        Strategy.ONE_FOR_ONE,
+                        MAX_RESTARTS,
+                        Duration.ofSeconds(WINDOW_SECS));
+        var refs = new LinkedHashMap<String, ProcRef<ParameterDataAccess.State, PdaMsg>>();
         for (var pair : pairs) {
             var param = pair.parameter();
             var channel = pair.channel();
@@ -99,7 +101,7 @@ public final class AcquisitionSupervisor implements AutoCloseable {
     /**
      * Factory convenience: build pair list from parallel parameter and channel lists.
      *
-     * @param params   parameter definitions
+     * @param params parameter definitions
      * @param channels backing channels (must align by index)
      * @return running supervisor
      * @throws IllegalArgumentException if list sizes differ
@@ -140,8 +142,8 @@ public final class AcquisitionSupervisor implements AutoCloseable {
      * Push samples to a specific parameter process — fire-and-forget.
      *
      * @param paramIdentifier SQL Race identifier
-     * @param timestamps      nanosecond timestamps
-     * @param values          engineering values after conversion
+     * @param timestamps nanosecond timestamps
+     * @param values engineering values after conversion
      */
     public void addSamples(String paramIdentifier, long[] timestamps, double[] values) {
         var ref = refs.get(paramIdentifier);
@@ -153,45 +155,47 @@ public final class AcquisitionSupervisor implements AutoCloseable {
     /**
      * Load a historical time range from all supervised parameters concurrently.
      *
-     * <p>Uses {@link Parallel#all} (OTP {@code pmap}) to fan out {@code GetNextSamples}
-     * queries across all parameter processes simultaneously, then collects all results.
+     * <p>Uses {@link Parallel#all} (OTP {@code pmap}) to fan out {@code GetNextSamples} queries
+     * across all parameter processes simultaneously, then collects all results.
      *
-     * @param paramIdentifiers   list of identifiers to query
-     * @param startNs            range start (nanoseconds)
-     * @param endNs              range end (nanoseconds)
-     * @param samplesPerParam    maximum samples per parameter
-     * @return {@code Result.success(map)} mapping identifier → values, or
-     *         {@code Result.failure(e)} if any query fails
+     * @param paramIdentifiers list of identifiers to query
+     * @param startNs range start (nanoseconds)
+     * @param endNs range end (nanoseconds)
+     * @param samplesPerParam maximum samples per parameter
+     * @return {@code Result.success(map)} mapping identifier → values, or {@code Result.failure(e)}
+     *     if any query fails
      */
     public Result<Map<String, ParameterValues>, Exception> loadHistoricalBatch(
-            List<String> paramIdentifiers,
-            long startNs,
-            long endNs,
-            int samplesPerParam) {
+            List<String> paramIdentifiers, long startNs, long endNs, int samplesPerParam) {
         List<Supplier<Map.Entry<String, ParameterValues>>> tasks = new ArrayList<>();
         for (var id : paramIdentifiers) {
             var ref = refs.get(id);
             if (ref == null) continue;
-            tasks.add(() -> {
-                // Seek to start, then read forward
-                ref.tell(new PdaMsg.GoTo(startNs));
-                var future = new java.util.concurrent.CompletableFuture<ParameterValues>();
-                ref.tell(new PdaMsg.GetNextSamples(samplesPerParam, StepDirection.Forward, future));
-                try {
-                    return Map.entry(id, future.get(5, java.util.concurrent.TimeUnit.SECONDS));
-                } catch (Exception e) {
-                    throw new RuntimeException("batch load failed for " + id, e);
-                }
-            });
+            tasks.add(
+                    () -> {
+                        // Seek to start, then read forward
+                        ref.tell(new PdaMsg.GoTo(startNs));
+                        var future = new java.util.concurrent.CompletableFuture<ParameterValues>();
+                        ref.tell(
+                                new PdaMsg.GetNextSamples(
+                                        samplesPerParam, StepDirection.Forward, future));
+                        try {
+                            return Map.entry(
+                                    id, future.get(5, java.util.concurrent.TimeUnit.SECONDS));
+                        } catch (Exception e) {
+                            throw new RuntimeException("batch load failed for " + id, e);
+                        }
+                    });
         }
         return Parallel.all(tasks)
-                .map(entries -> {
-                    Map<String, ParameterValues> result = new LinkedHashMap<>();
-                    for (var entry : entries) {
-                        result.put(entry.getKey(), entry.getValue());
-                    }
-                    return result;
-                });
+                .map(
+                        entries -> {
+                            Map<String, ParameterValues> result = new LinkedHashMap<>();
+                            for (var entry : entries) {
+                                result.put(entry.getKey(), entry.getValue());
+                            }
+                            return result;
+                        });
     }
 
     /**
@@ -213,7 +217,8 @@ public final class AcquisitionSupervisor implements AutoCloseable {
             ref.tell(new PdaMsg.GetStats(future));
             try {
                 var pdaStats = future.get(2, java.util.concurrent.TimeUnit.SECONDS);
-                result.put(entry.getKey(),
+                result.put(
+                        entry.getKey(),
                         new ProcSys.Stats(pdaStats.totalSamples(), pdaStats.totalSamples(), 0));
             } catch (Exception ignored) {
                 // Process may be mid-restart; skip its stats this cycle

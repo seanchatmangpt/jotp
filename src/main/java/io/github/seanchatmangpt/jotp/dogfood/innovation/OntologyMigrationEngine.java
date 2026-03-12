@@ -3,27 +3,24 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Predicate;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
  * Ontology-driven migration engine that analyzes legacy Java source code and identifies
- * modernization opportunities based on the RDF migration ontology ({@code schema/java-migration.ttl}).
+ * modernization opportunities based on the RDF migration ontology ({@code
+ * schema/java-migration.ttl}).
  *
  * <p>Instead of hard-coded rules, this engine models every migration as a {@link MigrationRule}
  * record derived from the ontology's {@code jmig:MigrationRule} class. Source analysis uses
- * pattern-matching heuristics that mirror what an AI agent would extract via SPARQL queries
- * against the knowledge graph.
+ * pattern-matching heuristics that mirror what an AI agent would extract via SPARQL queries against
+ * the knowledge graph.
  *
  * <p>The sealed {@link MigrationPlan} hierarchy represents the output: a typed, exhaustive
- * description of recommended migrations that downstream code generators (Tera templates)
- * can consume.
+ * description of recommended migrations that downstream code generators (Tera templates) can
+ * consume.
  */
 public final class OntologyMigrationEngine {
 
@@ -192,10 +189,7 @@ public final class OntologyMigrationEngine {
                 return fileName + ": no migration opportunities found.";
             }
             var sb = new StringBuilder();
-            sb.append(fileName)
-                    .append(": ")
-                    .append(plans.size())
-                    .append(" migration(s) found\n");
+            sb.append(fileName).append(": ").append(plans.size()).append(" migration(s) found\n");
             for (var plan : byPriority()) {
                 sb.append("  [P")
                         .append(plan.rule().priority())
@@ -230,8 +224,7 @@ public final class OntologyMigrationEngine {
                 case MigrationPlan.NioMigration n ->
                         java.util.Optional.of("types: " + n.legacyTypes());
                 case MigrationPlan.StreamMigration ignored -> java.util.Optional.empty();
-                case MigrationPlan.GenericMigration g ->
-                        java.util.Optional.of(g.description());
+                case MigrationPlan.GenericMigration g -> java.util.Optional.of(g.description());
             };
         }
     }
@@ -418,7 +411,8 @@ public final class OntologyMigrationEngine {
 
     // Regex patterns used by detectors
     private static final Pattern PRIVATE_FIELD =
-            Pattern.compile("^\\s*private\\s+(final\\s+)?\\w[\\w<>,\\s]*\\s+(\\w+)\\s*;",
+            Pattern.compile(
+                    "^\\s*private\\s+(final\\s+)?\\w[\\w<>,\\s]*\\s+(\\w+)\\s*;",
                     Pattern.MULTILINE);
     private static final Pattern GETTER =
             Pattern.compile("public\\s+\\w+\\s+get(\\w+)\\s*\\(\\s*\\)");
@@ -429,32 +423,29 @@ public final class OntologyMigrationEngine {
     private static final Pattern TOSTRING_METHOD =
             Pattern.compile("public\\s+String\\s+toString\\s*\\(");
 
-    private static final Pattern ANON_CLASS =
-            Pattern.compile("new\\s+(\\w+)\\s*\\(\\s*\\)\\s*\\{");
+    private static final Pattern ANON_CLASS = Pattern.compile("new\\s+(\\w+)\\s*\\(\\s*\\)\\s*\\{");
 
     private static final Pattern INSTANCEOF_CAST =
-            Pattern.compile(
-                    "instanceof\\s+(\\w+)\\b(?!\\s+\\w+\\s*[)&|])");
+            Pattern.compile("instanceof\\s+(\\w+)\\b(?!\\s+\\w+\\s*[)&|])");
 
-    private static final Pattern IF_ELSE_CHAIN =
-            Pattern.compile("\\}\\s*else\\s+if\\s*\\(");
+    private static final Pattern IF_ELSE_CHAIN = Pattern.compile("\\}\\s*else\\s+if\\s*\\(");
 
     private static final Pattern FOR_LOOP =
             Pattern.compile("for\\s*\\(\\s*(\\w+)\\s+\\w+\\s*:\\s*");
 
-    private static final Pattern NEW_THREAD =
-            Pattern.compile("new\\s+Thread\\s*\\(");
-    private static final Pattern THREAD_SUBCLASS =
-            Pattern.compile("extends\\s+Thread\\b");
+    private static final Pattern NEW_THREAD = Pattern.compile("new\\s+Thread\\s*\\(");
+    private static final Pattern THREAD_SUBCLASS = Pattern.compile("extends\\s+Thread\\b");
 
     private static final Pattern FIXED_THREAD_POOL =
             Pattern.compile("Executors\\s*\\.\\s*new(Fixed|Cached|Single)ThreadPool");
 
     private static final Pattern LEGACY_DATE =
-            Pattern.compile("\\b(java\\.util\\.)?(Date|Calendar|GregorianCalendar|SimpleDateFormat)\\b");
+            Pattern.compile(
+                    "\\b(java\\.util\\.)?(Date|Calendar|GregorianCalendar|SimpleDateFormat)\\b");
 
     private static final Pattern LEGACY_FILE =
-            Pattern.compile("\\b(java\\.io\\.)?(File|FileInputStream|FileOutputStream|FileReader|FileWriter)\\b");
+            Pattern.compile(
+                    "\\b(java\\.io\\.)?(File|FileInputStream|FileOutputStream|FileReader|FileWriter)\\b");
 
     private static final Pattern JUNIT4_ANNOTATION =
             Pattern.compile("@(org\\.junit\\.)?Test\\b|@RunWith\\b|@Rule\\b");
@@ -464,8 +455,7 @@ public final class OntologyMigrationEngine {
     private static final Pattern JAVAX_IMPORT =
             Pattern.compile("import\\s+javax\\.(servlet|persistence|annotation|inject|ws)\\b");
 
-    private static final Pattern NULL_CHECK =
-            Pattern.compile("(!= null|== null)");
+    private static final Pattern NULL_CHECK = Pattern.compile("(!= null|== null)");
 
     // OTP-rule patterns
     private static final Pattern STATIC_MUTABLE_COLLECTION =
@@ -473,8 +463,7 @@ public final class OntologyMigrationEngine {
                     "static\\s+(?:final\\s+)?(?:Map|HashMap|LinkedHashMap|ConcurrentHashMap"
                             + "|List|ArrayList|LinkedList|Set|HashSet)\\s*[<\\s]");
 
-    private static final Pattern THREAD_LOCAL =
-            Pattern.compile("\\bThreadLocal\\s*<");
+    private static final Pattern THREAD_LOCAL = Pattern.compile("\\bThreadLocal\\s*<");
 
     private static final Pattern SWALLOWED_CATCH =
             Pattern.compile(
@@ -520,11 +509,10 @@ public final class OntologyMigrationEngine {
     }
 
     /**
-     * Analyzes a source file with a category filter. Only rules in the given categories are
-     * checked — mirrors a SPARQL {@code FILTER} on {@code jmig:hasCategory}.
+     * Analyzes a source file with a category filter. Only rules in the given categories are checked
+     * — mirrors a SPARQL {@code FILTER} on {@code jmig:hasCategory}.
      */
-    public static AnalysisResult analyze(
-            String fileName, String source, Set<Category> categories) {
+    public static AnalysisResult analyze(String fileName, String source, Set<Category> categories) {
         var full = analyze(fileName, source);
         var filtered =
                 full.plans().stream()
@@ -575,9 +563,7 @@ public final class OntologyMigrationEngine {
 
         if (!hasGetters) return java.util.Optional.empty();
         int boilerplateCount =
-                Stream.of(hasEquals, hasHashCode, hasToString)
-                        .mapToInt(b -> b ? 1 : 0)
-                        .sum();
+                Stream.of(hasEquals, hasHashCode, hasToString).mapToInt(b -> b ? 1 : 0).sum();
         if (boilerplateCount < 2) return java.util.Optional.empty();
 
         var fields = new ArrayList<String>();
@@ -587,7 +573,8 @@ public final class OntologyMigrationEngine {
         }
 
         return java.util.Optional.of(
-                new MigrationPlan.RecordMigration(POJO_TO_RECORD, fieldSignals, List.copyOf(fields)));
+                new MigrationPlan.RecordMigration(
+                        POJO_TO_RECORD, fieldSignals, List.copyOf(fields)));
     }
 
     private static java.util.Optional<MigrationPlan> detectAnonymousClassToLambda(
@@ -632,14 +619,11 @@ public final class OntologyMigrationEngine {
             String source, String[] lines) {
         var threadSignals = findSignals(lines, NEW_THREAD);
         var subclassSignals = findSignals(lines, THREAD_SUBCLASS);
-        var combined =
-                Stream.concat(threadSignals.stream(), subclassSignals.stream()).toList();
+        var combined = Stream.concat(threadSignals.stream(), subclassSignals.stream()).toList();
         if (combined.isEmpty()) return java.util.Optional.empty();
-        var pattern =
-                !threadSignals.isEmpty() ? "new Thread()" : "Thread subclass";
+        var pattern = !threadSignals.isEmpty() ? "new Thread()" : "Thread subclass";
         return java.util.Optional.of(
-                new MigrationPlan.VirtualThreadMigration(
-                        PLATFORM_TO_VIRTUAL, combined, pattern));
+                new MigrationPlan.VirtualThreadMigration(PLATFORM_TO_VIRTUAL, combined, pattern));
     }
 
     private static java.util.Optional<MigrationPlan> detectThreadPool(
@@ -665,17 +649,14 @@ public final class OntologyMigrationEngine {
         var signals = findSignals(lines, LEGACY_FILE);
         if (signals.isEmpty()) return java.util.Optional.empty();
         var types = extractUniqueGroups(source, LEGACY_FILE, 2);
-        return java.util.Optional.of(
-                new MigrationPlan.NioMigration(FILE_TO_NIO, signals, types));
+        return java.util.Optional.of(new MigrationPlan.NioMigration(FILE_TO_NIO, signals, types));
     }
 
-    private static java.util.Optional<MigrationPlan> detectJUnit4(
-            String source, String[] lines) {
+    private static java.util.Optional<MigrationPlan> detectJUnit4(String source, String[] lines) {
         var importSignals = findSignals(lines, JUNIT4_IMPORT);
         if (importSignals.isEmpty()) return java.util.Optional.empty();
         var annotationSignals = findSignals(lines, JUNIT4_ANNOTATION);
-        var combined =
-                Stream.concat(importSignals.stream(), annotationSignals.stream()).toList();
+        var combined = Stream.concat(importSignals.stream(), annotationSignals.stream()).toList();
         return java.util.Optional.of(
                 new MigrationPlan.GenericMigration(
                         JUNIT4_TO_JUNIT5,

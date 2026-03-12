@@ -8,8 +8,8 @@ import java.lang.annotation.Target;
 /**
  * Attaches a prose note to a test method for inclusion in the generated HTML documentation.
  *
- * <p>Inspired by the {@code say(text)} API in
- * <a href="https://github.com/seanchatmangpt/doctester">seanchatmangpt/doctester</a>.
+ * <p>Inspired by the {@code say(text)} API in <a
+ * href="https://github.com/seanchatmangpt/doctester">seanchatmangpt/doctester</a>.
  *
  * <p>The note text is rendered as a {@code <p>} paragraph in the output document, appearing
  * directly above the test result block.

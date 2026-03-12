@@ -4,30 +4,27 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.CrashRecovery;
 import io.github.seanchatmangpt.jotp.Parallel;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Result;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.ScopedValuePatterns;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.StructuredTaskScopePatterns;
 import io.github.seanchatmangpt.jotp.dogfood.core.GathererPatterns;
 import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * Concurrency stress tests for ggen-generated Java development patterns.
@@ -55,20 +52,22 @@ class PatternStressTest {
         int messageCount = 10_000;
         var counter = new AtomicInteger(0);
         var latch = new CountDownLatch(messageCount);
-        var actor = new Proc<Integer, Void>(
-                0,
-                (state, _) -> {
-                    counter.incrementAndGet();
-                    latch.countDown();
-                    return state + 1;
-                });
+        var actor =
+                new Proc<Integer, Void>(
+                        0,
+                        (state, _) -> {
+                            counter.incrementAndGet();
+                            latch.countDown();
+                            return state + 1;
+                        });
 
         // 10 concurrent senders, 1000 messages each
         try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int sender = 0; sender < 10; sender++) {
-                exec.submit(() -> {
-                    for (int i = 0; i < 1000; i++) actor.tell(null);
-                });
+                exec.submit(
+                        () -> {
+                            for (int i = 0; i < 1000; i++) actor.tell(null);
+                        });
             }
         }
 
@@ -88,43 +87,50 @@ class PatternStressTest {
         var restartCounts = new AtomicInteger[5];
         for (int i = 0; i < 5; i++) restartCounts[i] = new AtomicInteger(0);
 
-        var supervisor = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 30, Duration.ofSeconds(10));
+        var supervisor =
+                new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 30, Duration.ofSeconds(10));
         var refs = new ProcRef[5];
 
         for (int i = 0; i < 5; i++) {
             final int idx = i;
-            refs[i] = supervisor.supervise(
-                    "child-" + i,
-                    0,
-                    (state, msg) -> {
-                        if ("crash".equals(msg)) {
-                            restartCounts[idx].incrementAndGet();
-                            throw new RuntimeException("deliberate crash");
-                        }
-                        return state;
-                    });
+            refs[i] =
+                    supervisor.supervise(
+                            "child-" + i,
+                            0,
+                            (state, msg) -> {
+                                if ("crash".equals(msg)) {
+                                    restartCounts[idx].incrementAndGet();
+                                    throw new RuntimeException("deliberate crash");
+                                }
+                                return state;
+                            });
         }
 
         // Send 20 crashes to each of 5 children = 100 total crashes
         try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int c = 0; c < 5; c++) {
                 final int childIdx = c;
-                exec.submit(() -> {
-                    for (int j = 0; j < 20; j++) {
-                        try {
-                            refs[childIdx].tell("crash");
-                            Thread.sleep(5);
-                        } catch (Exception ignored) {}
-                    }
-                });
+                exec.submit(
+                        () -> {
+                            for (int j = 0; j < 20; j++) {
+                                try {
+                                    refs[childIdx].tell("crash");
+                                    Thread.sleep(5);
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        });
             }
         }
 
-        await().atMost(20, SECONDS).untilAsserted(() -> {
-            int total = 0;
-            for (var rc : restartCounts) total += rc.get();
-            assertThat(total).isGreaterThanOrEqualTo(50); // at least 50 crashes processed
-        });
+        await().atMost(20, SECONDS)
+                .untilAsserted(
+                        () -> {
+                            int total = 0;
+                            for (var rc : restartCounts) total += rc.get();
+                            assertThat(total)
+                                    .isGreaterThanOrEqualTo(50); // at least 50 crashes processed
+                        });
 
         assertThat(supervisor.isRunning()).isTrue();
         supervisor.shutdown();
@@ -144,14 +150,18 @@ class PatternStressTest {
 
         for (int run = 0; run < 20; run++) {
             boolean shouldFail = RNG.nextInt(100) < 30; // 30% failure rate
-            List<Supplier<Integer>> tasks = IntStream.range(0, taskCount)
-                    .<Supplier<Integer>>mapToObj(i -> () -> {
-                        if (shouldFail && i == taskCount / 2) {
-                            throw new RuntimeException("injected failure at " + i);
-                        }
-                        return i;
-                    })
-                    .toList();
+            List<Supplier<Integer>> tasks =
+                    IntStream.range(0, taskCount)
+                            .<Supplier<Integer>>mapToObj(
+                                    i ->
+                                            () -> {
+                                                if (shouldFail && i == taskCount / 2) {
+                                                    throw new RuntimeException(
+                                                            "injected failure at " + i);
+                                                }
+                                                return i;
+                                            })
+                            .toList();
 
             Result<List<Integer>, Exception> result = Parallel.all(tasks);
             if (shouldFail) {
@@ -159,10 +169,12 @@ class PatternStressTest {
                 failedCount++;
             } else {
                 assertThat(result).isInstanceOf(Result.Success.class);
-                result.fold(values -> {
-                    assertThat(values).hasSize(taskCount);
-                    return null;
-                }, _ -> null);
+                result.fold(
+                        values -> {
+                            assertThat(values).hasSize(taskCount);
+                            return null;
+                        },
+                        _ -> null);
                 passedCount++;
             }
         }
@@ -187,15 +199,23 @@ class PatternStressTest {
 
         try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int c = 0; c < callerCount; c++) {
-                exec.submit(() -> {
-                    var attempts = new AtomicInteger(0);
-                    Result<String, Exception> result = CrashRecovery.retry(3, () -> {
-                        if (attempts.incrementAndGet() < 2) throw new RuntimeException("retry me");
-                        return "success-" + Thread.currentThread().getName();
-                    });
-                    result.fold(_ -> successCount.incrementAndGet(), _ -> failureCount.incrementAndGet());
-                    latch.countDown();
-                });
+                exec.submit(
+                        () -> {
+                            var attempts = new AtomicInteger(0);
+                            Result<String, Exception> result =
+                                    CrashRecovery.retry(
+                                            3,
+                                            () -> {
+                                                if (attempts.incrementAndGet() < 2)
+                                                    throw new RuntimeException("retry me");
+                                                return "success-"
+                                                        + Thread.currentThread().getName();
+                                            });
+                            result.fold(
+                                    _ -> successCount.incrementAndGet(),
+                                    _ -> failureCount.incrementAndGet());
+                            latch.countDown();
+                        });
             }
         }
 
@@ -210,7 +230,8 @@ class PatternStressTest {
 
     @Test
     @Timeout(30)
-    @DisplayName("ScopedValue: 200 concurrent scopes — each sees its own user (no cross-contamination)")
+    @DisplayName(
+            "ScopedValue: 200 concurrent scopes — each sees its own user (no cross-contamination)")
     void scopedValueStress_concurrentIsolation() throws Exception {
         int threadCount = 200;
         var violations = new AtomicInteger(0);
@@ -219,16 +240,24 @@ class PatternStressTest {
         try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int i = 0; i < threadCount; i++) {
                 final String userId = "user-" + i;
-                exec.submit(() -> {
-                    ScopedValuePatterns.handleAsUser(userId, () -> {
-                        String seen = ScopedValuePatterns.currentUser();
-                        if (!userId.equals(seen)) violations.incrementAndGet();
-                        // Simulate some work
-                        try { Thread.sleep(1); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                        if (!userId.equals(ScopedValuePatterns.currentUser())) violations.incrementAndGet();
-                    });
-                    latch.countDown();
-                });
+                exec.submit(
+                        () -> {
+                            ScopedValuePatterns.handleAsUser(
+                                    userId,
+                                    () -> {
+                                        String seen = ScopedValuePatterns.currentUser();
+                                        if (!userId.equals(seen)) violations.incrementAndGet();
+                                        // Simulate some work
+                                        try {
+                                            Thread.sleep(1);
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                        }
+                                        if (!userId.equals(ScopedValuePatterns.currentUser()))
+                                            violations.incrementAndGet();
+                                    });
+                            latch.countDown();
+                        });
             }
         }
 
@@ -298,25 +327,29 @@ class PatternStressTest {
     @DisplayName("PatternMatching: 100K dispatches — exhaustive switch never throws MatchException")
     void patternMatchingStress_noMatchException() throws Exception {
         int count = 100_000;
-        var payments = List.of(
-                new PatternMatchingPatterns.Payment.CreditCard("4111111111111111", "Alice", 123, 5000),
-                new PatternMatchingPatterns.Payment.BankTransfer("DE89370400440532013000", "COBADEFFXXX", "Bob"),
-                new PatternMatchingPatterns.Payment.CryptoPay("1A2b3C4d", "BTC", 0.5),
-                new PatternMatchingPatterns.Payment.Voucher("SAVE10", 10.0, true));
+        var payments =
+                List.of(
+                        new PatternMatchingPatterns.Payment.CreditCard(
+                                "4111111111111111", "Alice", 123, 5000),
+                        new PatternMatchingPatterns.Payment.BankTransfer(
+                                "DE89370400440532013000", "COBADEFFXXX", "Bob"),
+                        new PatternMatchingPatterns.Payment.CryptoPay("1A2b3C4d", "BTC", 0.5),
+                        new PatternMatchingPatterns.Payment.Voucher("SAVE10", 10.0, true));
 
         var exceptions = new AtomicInteger(0);
         try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int i = 0; i < count; i++) {
                 final var payment = payments.get(i % 4);
-                exec.submit(() -> {
-                    try {
-                        PatternMatchingPatterns.describe(payment);
-                        PatternMatchingPatterns.riskLevel(payment);
-                        PatternMatchingPatterns.route(payment);
-                    } catch (Exception e) {
-                        exceptions.incrementAndGet();
-                    }
-                });
+                exec.submit(
+                        () -> {
+                            try {
+                                PatternMatchingPatterns.describe(payment);
+                                PatternMatchingPatterns.riskLevel(payment);
+                                PatternMatchingPatterns.route(payment);
+                            } catch (Exception e) {
+                                exceptions.incrementAndGet();
+                            }
+                        });
             }
         }
 

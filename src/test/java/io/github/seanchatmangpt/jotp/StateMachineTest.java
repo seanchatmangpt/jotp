@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Timeout;
 /**
  * Tests for {@link StateMachine} — the gen_statem equivalent.
  *
- * <p>The classic gen_statem example from OTP docs is a code lock:
- * locked → open (when correct code entered) → locked (when re-locked).
+ * <p>The classic gen_statem example from OTP docs is a code lock: locked → open (when correct code
+ * entered) → locked (when re-locked).
  *
  * <p>See: https://www.erlang.org/doc/design_principles/statem.html
  */
@@ -25,16 +25,20 @@ class StateMachineTest implements WithAssertions {
 
     sealed interface LockState permits LockState.Locked, LockState.Open {
         record Locked() implements LockState {}
-        record Open()   implements LockState {}
+
+        record Open() implements LockState {}
     }
 
     sealed interface LockEvent permits LockEvent.PushButton, LockEvent.Lock {
         record PushButton(char button) implements LockEvent {}
-        record Lock()                  implements LockEvent {}
+
+        record Lock() implements LockEvent {}
     }
 
     record LockData(String code, String entered) {
-        LockData withEntered(String e) { return new LockData(code, e); }
+        LockData withEntered(String e) {
+            return new LockData(code, e);
+        }
     }
 
     /** Build a code lock state machine with the given code. */
@@ -42,25 +46,30 @@ class StateMachineTest implements WithAssertions {
         return new StateMachine<>(
                 new LockState.Locked(),
                 new LockData(code, ""),
-                (state, event, data) -> switch (state) {
-                    case LockState.Locked() -> switch (event) {
-                        case LockEvent.PushButton(var b) -> {
-                            var entered = data.entered() + b;
-                            yield entered.equals(data.code())
-                                    ? StateMachine.Transition.nextState(
-                                            new LockState.Open(), data.withEntered(""))
-                                    : StateMachine.Transition.keepState(
-                                            data.withEntered(entered));
-                        }
-                        default -> StateMachine.Transition.keepState(data);
-                    };
-                    case LockState.Open() -> switch (event) {
-                        case LockEvent.Lock() ->
-                                StateMachine.Transition.nextState(
-                                        new LockState.Locked(), data.withEntered(""));
-                        default -> StateMachine.Transition.keepState(data);
-                    };
-                });
+                (state, event, data) ->
+                        switch (state) {
+                            case LockState.Locked() ->
+                                    switch (event) {
+                                        case LockEvent.PushButton(var b) -> {
+                                            var entered = data.entered() + b;
+                                            yield entered.equals(data.code())
+                                                    ? StateMachine.Transition.nextState(
+                                                            new LockState.Open(),
+                                                            data.withEntered(""))
+                                                    : StateMachine.Transition.keepState(
+                                                            data.withEntered(entered));
+                                        }
+                                        default -> StateMachine.Transition.keepState(data);
+                                    };
+                            case LockState.Open() ->
+                                    switch (event) {
+                                        case LockEvent.Lock() ->
+                                                StateMachine.Transition.nextState(
+                                                        new LockState.Locked(),
+                                                        data.withEntered(""));
+                                        default -> StateMachine.Transition.keepState(data);
+                                    };
+                        });
     }
 
     // ── Initial state ─────────────────────────────────────────────────────────
@@ -150,25 +159,29 @@ class StateMachineTest implements WithAssertions {
     /** A state machine that stops on a specific event. */
     sealed interface SimpleState permits SimpleState.Running, SimpleState.Done {
         record Running() implements SimpleState {}
-        record Done()    implements SimpleState {}
+
+        record Done() implements SimpleState {}
     }
 
     sealed interface SimpleEvent permits SimpleEvent.Work, SimpleEvent.Quit {
         record Work(int n) implements SimpleEvent {}
-        record Quit()      implements SimpleEvent {}
+
+        record Quit() implements SimpleEvent {}
     }
 
     @Test
     void stop_transition_terminatesMachine() throws Exception {
-        var sm = new StateMachine<SimpleState, SimpleEvent, Integer>(
-                new SimpleState.Running(),
-                0,
-                (state, event, data) -> switch (event) {
-                    case SimpleEvent.Work(var n) ->
-                            StateMachine.Transition.keepState(data + n);
-                    case SimpleEvent.Quit() ->
-                            StateMachine.Transition.stop("normal");
-                });
+        var sm =
+                new StateMachine<SimpleState, SimpleEvent, Integer>(
+                        new SimpleState.Running(),
+                        0,
+                        (state, event, data) ->
+                                switch (event) {
+                                    case SimpleEvent.Work(var n) ->
+                                            StateMachine.Transition.keepState(data + n);
+                                    case SimpleEvent.Quit() ->
+                                            StateMachine.Transition.stop("normal");
+                                });
 
         sm.send(new SimpleEvent.Work(10));
         sm.send(new SimpleEvent.Work(5));
@@ -186,21 +199,22 @@ class StateMachineTest implements WithAssertions {
 
     @Test
     void call_afterStop_failsWithException() throws Exception {
-        var sm = new StateMachine<SimpleState, SimpleEvent, Integer>(
-                new SimpleState.Running(),
-                0,
-                (state, event, data) -> StateMachine.Transition.stop("done"));
+        var sm =
+                new StateMachine<SimpleState, SimpleEvent, Integer>(
+                        new SimpleState.Running(),
+                        0,
+                        (state, event, data) -> StateMachine.Transition.stop("done"));
 
         // Trigger stop via call — the call itself may fail
         try {
             sm.call(new SimpleEvent.Quit()).get(5, TimeUnit.SECONDS);
-        } catch (ExecutionException ignored) {}
+        } catch (ExecutionException ignored) {
+        }
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !sm.isRunning());
 
         // Any subsequent call must fail
-        assertThat(sm.call(new SimpleEvent.Work(1)))
-                .isCompletedExceptionally();
+        assertThat(sm.call(new SimpleEvent.Work(1))).isCompletedExceptionally();
     }
 
     // ── nextState vs keepState data ───────────────────────────────────────────
@@ -305,13 +319,17 @@ class StateMachineTest implements WithAssertions {
 
     @Test
     void stop_transition_viaCall_failsFuture() {
-        var sm = new StateMachine<SimpleState, SimpleEvent, Integer>(
-                new SimpleState.Running(),
-                0,
-                (state, event, data) -> switch (event) {
-                    case SimpleEvent.Quit() -> StateMachine.Transition.stop("crash");
-                    case SimpleEvent.Work(var n) -> StateMachine.Transition.keepState(data + n);
-                });
+        var sm =
+                new StateMachine<SimpleState, SimpleEvent, Integer>(
+                        new SimpleState.Running(),
+                        0,
+                        (state, event, data) ->
+                                switch (event) {
+                                    case SimpleEvent.Quit() ->
+                                            StateMachine.Transition.stop("crash");
+                                    case SimpleEvent.Work(var n) ->
+                                            StateMachine.Transition.keepState(data + n);
+                                });
 
         var future = sm.call(new SimpleEvent.Quit());
         assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS))

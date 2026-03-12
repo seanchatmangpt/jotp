@@ -37,127 +37,128 @@ import java.util.function.Predicate;
  * // Result: "[HELLO WORLD]"
  * }</pre>
  *
- * <p><strong>Joe Armstrong influence:</strong> Promotes composition over inheritance,
- * mirroring pipe-and-filter architecture. Functions are pure and side-effect-free.
+ * <p><strong>Joe Armstrong influence:</strong> Promotes composition over inheritance, mirroring
+ * pipe-and-filter architecture. Functions are pure and side-effect-free.
  */
 public final class ComposedMessageProcessor<M> implements Function<M, M> {
 
-  private final List<Function<M, M>> pipeline;
-  private final List<Predicate<M>> filters;
+    private final List<Function<M, M>> pipeline;
+    private final List<Predicate<M>> filters;
 
-  private ComposedMessageProcessor(List<Function<M, M>> pipeline, List<Predicate<M>> filters) {
-    this.pipeline = new ArrayList<>(pipeline);
-    this.filters = new ArrayList<>(filters);
-  }
-
-  /**
-   * Compose multiple message processors into a single pipeline.
-   *
-   * @param processors variable number of router functions
-   * @return a new ComposedMessageProcessor
-   */
-  @SafeVarargs
-  public static <M> ComposedMessageProcessor<M> compose(Function<M, M>... processors) {
-    List<Function<M, M>> pipeline = new ArrayList<>();
-    for (Function<M, M> p : processors) {
-      if (p != null) {
-        pipeline.add(p);
-      }
-    }
-    return new ComposedMessageProcessor<>(pipeline, new ArrayList<>());
-  }
-
-  /**
-   * Add a filter predicate to the pipeline. Messages failing the predicate are rejected.
-   *
-   * @param predicate filter condition
-   * @return this processor (fluent API)
-   */
-  public ComposedMessageProcessor<M> thenFilter(Predicate<M> predicate) {
-    this.filters.add(predicate);
-    return this;
-  }
-
-  /**
-   * Add a router function to transform the message further.
-   *
-   * @param router transformation function
-   * @return this processor (fluent API)
-   */
-  public ComposedMessageProcessor<M> thenRoute(Function<M, M> router) {
-    if (router != null) {
-      this.pipeline.add(router);
-    }
-    return this;
-  }
-
-  /**
-   * Apply the composed pipeline to a message. Routers are applied first, then filters are
-   * checked. If any filter rejects the message, {@code null} is returned.
-   *
-   * @param message the input message
-   * @return the transformed message, or {@code null} if rejected by a filter
-   */
-  @Override
-  public M apply(M message) {
-    if (message == null) {
-      return null;
+    private ComposedMessageProcessor(List<Function<M, M>> pipeline, List<Predicate<M>> filters) {
+        this.pipeline = new ArrayList<>(pipeline);
+        this.filters = new ArrayList<>(filters);
     }
 
-    // Apply all routers sequentially
-    M current = message;
-    for (Function<M, M> router : pipeline) {
-      current = router.apply(current);
-      if (current == null) {
-        return null;
-      }
+    /**
+     * Compose multiple message processors into a single pipeline.
+     *
+     * @param processors variable number of router functions
+     * @return a new ComposedMessageProcessor
+     */
+    @SafeVarargs
+    public static <M> ComposedMessageProcessor<M> compose(Function<M, M>... processors) {
+        List<Function<M, M>> pipeline = new ArrayList<>();
+        for (Function<M, M> p : processors) {
+            if (p != null) {
+                pipeline.add(p);
+            }
+        }
+        return new ComposedMessageProcessor<>(pipeline, new ArrayList<>());
     }
 
-    // Apply all filters
-    for (Predicate<M> filter : filters) {
-      if (!filter.test(current)) {
-        return null;
-      }
+    /**
+     * Add a filter predicate to the pipeline. Messages failing the predicate are rejected.
+     *
+     * @param predicate filter condition
+     * @return this processor (fluent API)
+     */
+    public ComposedMessageProcessor<M> thenFilter(Predicate<M> predicate) {
+        this.filters.add(predicate);
+        return this;
     }
 
-    return current;
-  }
+    /**
+     * Add a router function to transform the message further.
+     *
+     * @param router transformation function
+     * @return this processor (fluent API)
+     */
+    public ComposedMessageProcessor<M> thenRoute(Function<M, M> router) {
+        if (router != null) {
+            this.pipeline.add(router);
+        }
+        return this;
+    }
 
-  /**
-   * Convenience: apply this processor and unwrap null (returns Optional-like behavior).
-   * Useful for nullable returns in stream operations.
-   *
-   * @param message the input message
-   * @return the transformed message wrapped in Optional
-   */
-  public java.util.Optional<M> applyOptional(M message) {
-    return java.util.Optional.ofNullable(apply(message));
-  }
+    /**
+     * Apply the composed pipeline to a message. Routers are applied first, then filters are
+     * checked. If any filter rejects the message, {@code null} is returned.
+     *
+     * @param message the input message
+     * @return the transformed message, or {@code null} if rejected by a filter
+     */
+    @Override
+    public M apply(M message) {
+        if (message == null) {
+            return null;
+        }
 
-  /**
-   * Chain this processor with another, creating a new composite.
-   *
-   * @param next the next processor in the chain
-   * @return a new processor that applies this, then next
-   */
-  public ComposedMessageProcessor<M> andThen(ComposedMessageProcessor<M> next) {
-    ComposedMessageProcessor<M> combined = new ComposedMessageProcessor<>(pipeline, filters);
-    combined.pipeline.addAll(next.pipeline);
-    combined.filters.addAll(next.filters);
-    return combined;
-  }
+        // Apply all routers sequentially
+        M current = message;
+        for (Function<M, M> router : pipeline) {
+            current = router.apply(current);
+            if (current == null) {
+                return null;
+            }
+        }
 
-  /**
-   * Apply a side-effect function (e.g., logging) without modifying the message.
-   *
-   * @param observer side-effect function
-   * @return this processor
-   */
-  public ComposedMessageProcessor<M> peek(java.util.function.Consumer<M> observer) {
-    this.pipeline.add(msg -> {
-      observer.accept(msg);
-      return msg;
-    });
-    return this;
-  }
+        // Apply all filters
+        for (Predicate<M> filter : filters) {
+            if (!filter.test(current)) {
+                return null;
+            }
+        }
+
+        return current;
+    }
+
+    /**
+     * Convenience: apply this processor and unwrap null (returns Optional-like behavior). Useful
+     * for nullable returns in stream operations.
+     *
+     * @param message the input message
+     * @return the transformed message wrapped in Optional
+     */
+    public java.util.Optional<M> applyOptional(M message) {
+        return java.util.Optional.ofNullable(apply(message));
+    }
+
+    /**
+     * Chain this processor with another, creating a new composite.
+     *
+     * @param next the next processor in the chain
+     * @return a new processor that applies this, then next
+     */
+    public ComposedMessageProcessor<M> andThen(ComposedMessageProcessor<M> next) {
+        ComposedMessageProcessor<M> combined = new ComposedMessageProcessor<>(pipeline, filters);
+        combined.pipeline.addAll(next.pipeline);
+        combined.filters.addAll(next.filters);
+        return combined;
+    }
+
+    /**
+     * Apply a side-effect function (e.g., logging) without modifying the message.
+     *
+     * @param observer side-effect function
+     * @return this processor
+     */
+    public ComposedMessageProcessor<M> peek(java.util.function.Consumer<M> observer) {
+        this.pipeline.add(
+                msg -> {
+                    observer.accept(msg);
+                    return msg;
+                });
+        return this;
+    }
 }

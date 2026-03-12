@@ -21,6 +21,7 @@ class CommandMessageTest implements WithAssertions {
 
     // Test domain types
     record CreateUserCmd(String username, String email) implements Serializable {}
+
     record UpdateProfileCmd(String userId, String bio) implements Serializable {}
 
     record MockReplyAddress() {}
@@ -39,12 +40,9 @@ class CommandMessageTest implements WithAssertions {
             CreateUserCmd payload = new CreateUserCmd("alice", "alice@example.com");
             Object replyTo = new MockReplyAddress();
 
-            CommandMessage<?> msg =
-                    CommandMessage.create("CreateUser", payload, replyTo);
+            CommandMessage<?> msg = CommandMessage.create("CreateUser", payload, replyTo);
 
-            assertThat(msg)
-                    .isNotNull()
-                    .isInstanceOf(CommandMessage.class);
+            assertThat(msg).isNotNull().isInstanceOf(CommandMessage.class);
             assertThat(msg.commandType()).isEqualTo("CreateUser");
             assertThat(msg.payload()).isEqualTo(payload);
             assertThat(msg.replyTo()).isEqualTo(replyTo);

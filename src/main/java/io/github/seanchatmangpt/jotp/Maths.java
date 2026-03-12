@@ -3,8 +3,8 @@ package io.github.seanchatmangpt.jotp;
 /**
  * Simple arithmetic operations — demonstration class for testing patterns.
  *
- * <p>This class demonstrates the Java 26 record patterns and serves as a
- * simple example for testing the build system and test infrastructure.
+ * <p>This class demonstrates the Java 26 record patterns and serves as a simple example for testing
+ * the build system and test infrastructure.
  *
  * <p><strong>Usage:</strong>
  *

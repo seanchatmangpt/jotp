@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.reactive;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -10,11 +9,10 @@ import java.util.function.Predicate;
  * Composable message processing pipeline: a linear chain of stages where each stage transforms,
  * filters, or splits messages before passing them to the next stage.
  *
- * <p>Enterprise Integration Pattern: <em>Pipes and Filters</em> (EIP §7). Erlang analog: a chain
- * of processes where each process receives from a predecessor and sends to a successor — the
- * classic OTP pipeline topology used in protocol stacks (TCP/IP layers, codec chains, SASL
- * handlers). Joe Armstrong called this the "plumber's pattern" — each pipe section knows nothing
- * about the others.
+ * <p>Enterprise Integration Pattern: <em>Pipes and Filters</em> (EIP §7). Erlang analog: a chain of
+ * processes where each process receives from a predecessor and sends to a successor — the classic
+ * OTP pipeline topology used in protocol stacks (TCP/IP layers, codec chains, SASL handlers). Joe
+ * Armstrong called this the "plumber's pattern" — each pipe section knows nothing about the others.
  *
  * <p>{@code MessagePipeline} provides a <em>fluent builder</em> for constructing typed pipeline
  * graphs without manually wiring channels:
@@ -46,8 +44,7 @@ public final class MessagePipeline<A, B> {
      * Internal pipeline stage descriptor — sealed so the terminal {@link #sink} call can
      * reflectively construct the channel chain.
      */
-    private sealed interface Stage<X, Y>
-            permits Stage.Transform, Stage.Filter, Stage.SplitInto {
+    private sealed interface Stage<X, Y> permits Stage.Transform, Stage.Filter, Stage.SplitInto {
 
         record Transform<X, Y>(Function<X, Y> fn) implements Stage<X, Y> {}
 
@@ -102,8 +99,8 @@ public final class MessagePipeline<A, B> {
     /**
      * Append a filter stage that drops messages failing the predicate.
      *
-     * <p>Corresponds to an Erlang selective-receive guard — only matching messages advance down
-     * the pipeline.
+     * <p>Corresponds to an Erlang selective-receive guard — only matching messages advance down the
+     * pipeline.
      *
      * @param predicate the acceptance condition; messages failing are silently dropped
      * @return a new pipeline with this filter appended
@@ -112,8 +109,7 @@ public final class MessagePipeline<A, B> {
         @SuppressWarnings("unchecked")
         MessagePipeline<B, B> next =
                 new MessagePipeline<>(
-                        (MessagePipeline<?, B>) this,
-                        (Stage<B, B>) new Stage.Filter<>(predicate));
+                        (MessagePipeline<?, B>) this, (Stage<B, B>) new Stage.Filter<>(predicate));
         return (MessagePipeline<A, B>) (Object) next;
     }
 
@@ -166,10 +162,8 @@ public final class MessagePipeline<A, B> {
 
             MessageChannel<Object> stageChannel =
                     switch (node.stage) {
-                        case Stage.Transform(var fn) ->
-                                MessageTransformer.of(fn, downstream);
-                        case Stage.Filter(var pred) ->
-                                MessageFilter.of(pred, downstream);
+                        case Stage.Transform(var fn) -> MessageTransformer.of(fn, downstream);
+                        case Stage.Filter(var pred) -> MessageFilter.of(pred, downstream);
                         case Stage.SplitInto(var splitter) ->
                                 MessageSplitter.of(splitter, downstream);
                     };
@@ -184,8 +178,8 @@ public final class MessagePipeline<A, B> {
     /**
      * Stop all channels in the pipeline, waiting for each to drain.
      *
-     * <p>Call this after the entry-point channel's {@link MessageChannel#stop()} to ensure the
-     * full chain shuts down cleanly.
+     * <p>Call this after the entry-point channel's {@link MessageChannel#stop()} to ensure the full
+     * chain shuts down cleanly.
      *
      * @throws InterruptedException if interrupted while waiting
      */

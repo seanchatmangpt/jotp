@@ -4,9 +4,7 @@ import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/**
- * Dogfood: tests for TextTransformStrategy generated from patterns/strategy-functional.tera.
- */
+/** Dogfood: tests for TextTransformStrategy generated from patterns/strategy-functional.tera. */
 @DisplayName("TextTransformStrategy")
 class TextTransformStrategyTest implements WithAssertions {
 
@@ -74,9 +72,10 @@ class TextTransformStrategyTest implements WithAssertions {
     @Test
     @DisplayName("strategies work as Function via apply")
     void strategiesWorkAsFunction() {
-        var result = java.util.List.of("Hello", "World").stream()
-                .map(TextTransformStrategy.UPPER_CASE)
-                .toList();
+        var result =
+                java.util.List.of("Hello", "World").stream()
+                        .map(TextTransformStrategy.UPPER_CASE)
+                        .toList();
         assertThat(result).containsExactly("HELLO", "WORLD");
     }
 }

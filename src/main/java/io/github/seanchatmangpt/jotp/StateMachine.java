@@ -130,8 +130,8 @@ public final class StateMachine<S, E, D> {
     // ── TransitionFn ─────────────────────────────────────────────────────────
 
     /**
-     * The pure transition function — equivalent to OTP's {@code handle_event/4} in
-     * {@code handle_event_function} callback mode.
+     * The pure transition function — equivalent to OTP's {@code handle_event/4} in {@code
+     * handle_event_function} callback mode.
      *
      * <p>OTP: {@code handle_event(EventType, EventContent, State, Data) -> Transition}
      *
@@ -161,18 +161,19 @@ public final class StateMachine<S, E, D> {
     // ── Constructor ───────────────────────────────────────────────────────────
 
     /**
-     * Create and immediately start the state machine.
+     * Create and immediately start the state machine using the static {@link #create(Object,
+     * Object, TransitionFn)} factory.
      *
      * @param initialState initial state value (OTP: returned from {@code init/1} as first element)
-     * @param initialData  initial data value (OTP: returned from {@code init/1} as second element)
-     * @param fn           transition function
+     * @param initialData initial data value (OTP: returned from {@code init/1} as second element)
+     * @param fn transition function
+     * @deprecated Use {@link #create(Object, Object, TransitionFn)} instead
      */
+    @Deprecated(since = "1.0", forRemoval = true)
     public StateMachine(S initialState, D initialData, TransitionFn<S, E, D> fn) {
         this.currentState = initialState;
-        this.currentData  = initialData;
-        this.thread = Thread.ofVirtual()
-                .name("statem")
-                .start(() -> loop(fn));
+        this.currentData = initialData;
+        this.thread = Thread.ofVirtual().name("statem").start(() -> loop(fn));
     }
 
     // ── Event API ─────────────────────────────────────────────────────────────
@@ -193,8 +194,8 @@ public final class StateMachine<S, E, D> {
      *
      * <p>OTP: {@code gen_statem:call(Pid, Event)}
      *
-     * @return future completing with {@link D} after the transition, or failing with
-     *         {@link IllegalStateException} if the machine stopped
+     * @return future completing with {@link D} after the transition, or failing with {@link
+     *     IllegalStateException} if the machine stopped
      */
     @SuppressWarnings("unchecked")
     public CompletableFuture<D> call(E event) {
@@ -246,6 +247,73 @@ public final class StateMachine<S, E, D> {
         thread.join();
     }
 
+    /**
+     * Create and start a new state machine with the given initial state, data, and transition
+     * function.
+     *
+     * <p>Initializes a state machine that separates state, event, and data concerns — the OTP
+     * {@code gen_statem} pattern for more sophisticated process control than simple message
+     * handlers.
+     *
+     * <p><b>Usage Example — code lock:</b>
+     *
+     * <pre>{@code
+     * sealed interface LockState permits Locked, Open {}
+     * record Locked() implements LockState {}
+     * record Open() implements LockState {}
+     *
+     * sealed interface LockEvent permits PushButton, Lock {}
+     * record PushButton(char digit) implements LockEvent {}
+     * record Lock() implements LockEvent {}
+     *
+     * record LockData(String entered, String code) {}
+     *
+     * var sm = StateMachine.create(
+     *     new Locked(),  // initial state
+     *     new LockData("", "1234"),  // initial data
+     *     (state, event, data) -> switch (state) {
+     *         case Locked _ -> switch (event) {
+     *             case PushButton(var b) -> {
+     *                 var entered = data.entered() + b;
+     *                 yield entered.equals(data.code())
+     *                     ? Transition.nextState(new Open(), data.withEntered(""))
+     *                     : Transition.keepState(data.withEntered(entered));
+     *             }
+     *             default -> Transition.keepState(data);
+     *         };
+     *         case Open _ -> switch (event) {
+     *             case Lock _ -> Transition.nextState(new Locked(), data);
+     *             default -> Transition.keepState(data);
+     *         };
+     *     }
+     * );
+     *
+     * sm.send(new PushButton('1'));
+     * sm.send(new PushButton('2'));
+     * sm.send(new PushButton('3'));
+     * sm.send(new PushButton('4'));
+     * LockData result = sm.call(new Lock()).join();
+     * }</pre>
+     *
+     * @param <S> state type (use a sealed interface of records for exhaustive pattern matching)
+     * @param <E> event type (use a sealed interface of records)
+     * @param <D> data type (immutable record recommended)
+     * @param initialState the machine's starting state
+     * @param initialData the machine's starting data
+     * @param fn pure transition function: {@code (state, event, data) -> Transition<S,D>}
+     * @return a new state machine instance with its virtual thread already running
+     * @throws NullPointerException if any parameter is null
+     * @see Transition for transition return types
+     * @see #send(Object) for asynchronous event delivery
+     * @see #call(Object) for synchronous request-reply
+     * @see #state() for querying current state
+     * @see #data() for querying current data
+     */
+    public static <S, E, D> StateMachine<S, E, D> create(
+            S initialState, D initialData, TransitionFn<S, E, D> fn) {
+        return new StateMachine<>(initialState, initialData, fn);
+    }
+
     // ── Internal loop ─────────────────────────────────────────────────────────
 
     private void loop(TransitionFn<S, E, D> fn) {
@@ -257,7 +325,7 @@ public final class StateMachine<S, E, D> {
                 switch (transition) {
                     case Transition.NextState<S, D>(var newState, var newData) -> {
                         currentState = newState;
-                        currentData  = newData;
+                        currentData = newData;
                         if (env.reply() != null) env.reply().complete(newData);
                     }
                     case Transition.KeepState<S, D>(var newData) -> {
@@ -268,8 +336,10 @@ public final class StateMachine<S, E, D> {
                         stopReason = reason;
                         running = false;
                         if (env.reply() != null) {
-                            env.reply().completeExceptionally(
-                                    new IllegalStateException("state machine stopped: " + reason));
+                            env.reply()
+                                    .completeExceptionally(
+                                            new IllegalStateException(
+                                                    "state machine stopped: " + reason));
                         }
                         // drain remaining mailbox, failing pending calls
                         drainMailbox();
@@ -287,8 +357,9 @@ public final class StateMachine<S, E, D> {
         Envelope<E> env;
         while ((env = mailbox.poll()) != null) {
             if (env.reply() != null) {
-                env.reply().completeExceptionally(
-                        new IllegalStateException("state machine stopped: " + stopReason));
+                env.reply()
+                        .completeExceptionally(
+                                new IllegalStateException("state machine stopped: " + stopReason));
             }
         }
     }

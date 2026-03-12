@@ -9,13 +9,14 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Correlation ID (Vernon: "Correlation Identifier")
  *
- * <p>Links related messages together (e.g., request ↔ reply, saga steps).
- * Enables tracking message flows across systems.
+ * <p>Links related messages together (e.g., request ↔ reply, saga steps). Enables tracking message
+ * flows across systems.
  *
- * <p>Pattern: Message carries a correlation UUID that associates it with
- * a logical conversation or transaction.
+ * <p>Pattern: Message carries a correlation UUID that associates it with a logical conversation or
+ * transaction.
  *
  * <p>Example:
+ *
  * <pre>
  * var correlationId = CorrelationId.generate();
  * var msg1 = CorrelationId.withId(message1, correlationId);
@@ -25,15 +26,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CorrelationId {
 
-    /**
-     * Message wrapper with correlation tracking.
-     */
+    /** Message wrapper with correlation tracking. */
     public record CorrelatedMessage(
-        Message message,
-        UUID correlationId,
-        UUID causationId,  // Parent message ID that caused this one
-        Map<String, String> metadata
-    ) {
+            Message message,
+            UUID correlationId,
+            UUID causationId, // Parent message ID that caused this one
+            Map<String, String> metadata) {
         public CorrelatedMessage {
             if (correlationId == null) {
                 throw new IllegalArgumentException("correlationId must not be null");
@@ -43,11 +41,9 @@ public final class CorrelationId {
 
     // Correlation tracking: for distributed tracing
     private static final Map<UUID, CorrelationContext> CORRELATION_CONTEXTS =
-        new ConcurrentHashMap<>();
+            new ConcurrentHashMap<>();
 
-    /**
-     * Correlation context: tracks all messages in a correlation.
-     */
+    /** Correlation context: tracks all messages in a correlation. */
     public static class CorrelationContext {
         public final UUID correlationId;
         public final Map<UUID, CorrelatedMessage> messages = new HashMap<>();
@@ -71,8 +67,7 @@ public final class CorrelationId {
         }
     }
 
-    private CorrelationId() {
-    }
+    private CorrelationId() {}
 
     /**
      * Generates a new correlation ID.
@@ -92,14 +87,12 @@ public final class CorrelationId {
      */
     public static CorrelatedMessage withId(Message message, UUID correlationId) {
         return new CorrelatedMessage(
-            message,
-            correlationId,
-            null,  // No parent
-            Map.of(
-                "timestamp", String.valueOf(System.currentTimeMillis()),
-                "trace-id", correlationId.toString()
-            )
-        );
+                message,
+                correlationId,
+                null, // No parent
+                Map.of(
+                        "timestamp", String.valueOf(System.currentTimeMillis()),
+                        "trace-id", correlationId.toString()));
     }
 
     /**
@@ -111,15 +104,13 @@ public final class CorrelationId {
      */
     public static CorrelatedMessage withParent(CorrelatedMessage parent, Message message) {
         return new CorrelatedMessage(
-            message,
-            parent.correlationId,  // Same correlation
-            parent.message.messageId(),  // Record parent
-            Map.of(
-                "timestamp", String.valueOf(System.currentTimeMillis()),
-                "trace-id", parent.correlationId.toString(),
-                "parent-id", parent.message.messageId().toString()
-            )
-        );
+                message,
+                parent.correlationId, // Same correlation
+                parent.message.messageId(), // Record parent
+                Map.of(
+                        "timestamp", String.valueOf(System.currentTimeMillis()),
+                        "trace-id", parent.correlationId.toString(),
+                        "parent-id", parent.message.messageId().toString()));
     }
 
     /**

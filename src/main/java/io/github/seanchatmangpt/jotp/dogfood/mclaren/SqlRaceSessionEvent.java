@@ -3,8 +3,8 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 import java.util.List;
 
 /**
- * SQL Race session events — the {@code E} type parameter for {@link SqlRaceSession}'s
- * {@code StateMachine}.
+ * SQL Race session events — the {@code E} type parameter for {@link SqlRaceSession}'s {@code
+ * StateMachine}.
  *
  * <p>Each record maps directly to an ATLAS SQL Race operation:
  *
@@ -17,8 +17,8 @@ import java.util.List;
  * </ul>
  *
  * <p>OTP equivalence: these are the messages sent via {@code gen_statem:cast/2} (fire-and-forget)
- * or {@code gen_statem:call/3} (synchronous). {@code StateMachine.send(event)} is cast;
- * {@code StateMachine.call(event)} is the synchronous form.
+ * or {@code gen_statem:call/3} (synchronous). {@code StateMachine.send(event)} is cast; {@code
+ * StateMachine.call(event)} is the synchronous form.
  */
 public sealed interface SqlRaceSessionEvent
         permits SqlRaceSessionEvent.Configure,
@@ -30,12 +30,12 @@ public sealed interface SqlRaceSessionEvent
     /**
      * Commit session configuration: channels, parameters, conversions, and groups.
      *
-     * <p>Triggers the {@code Initializing → Live} transition. Equivalent to calling
-     * {@code config.Commit()} in SQL Race after adding all channels and parameters.
+     * <p>Triggers the {@code Initializing → Live} transition. Equivalent to calling {@code
+     * config.Commit()} in SQL Race after adding all channels and parameters.
      *
-     * @param parameters   parameter definitions to register
-     * @param channels     data channels backing those parameters
-     * @param conversions  rational conversion functions
+     * @param parameters parameter definitions to register
+     * @param channels data channels backing those parameters
+     * @param conversions rational conversion functions
      */
     record Configure(
             List<SqlRaceParameter> parameters,
@@ -46,8 +46,8 @@ public sealed interface SqlRaceSessionEvent
     /**
      * Append a completed lap to the session.
      *
-     * <p>Fires while in {@code Live} state; keeps state, appends to laps list.
-     * OTP: {@code {keep_state, Data#{laps := [Lap | Laps]}}}.
+     * <p>Fires while in {@code Live} state; keeps state, appends to laps list. OTP: {@code
+     * {keep_state, Data#{laps := [Lap | Laps]}}}.
      *
      * @param lap the lap to append
      */
@@ -71,9 +71,8 @@ public sealed interface SqlRaceSessionEvent
     /**
      * Close the session permanently.
      *
-     * <p>If in {@code Closing}: transitions to {@code Closed}.
-     * If in any other state: {@code Transition.stop("session closed")} — the gen_statem process
-     * terminates.
+     * <p>If in {@code Closing}: transitions to {@code Closed}. If in any other state: {@code
+     * Transition.stop("session closed")} — the gen_statem process terminates.
      */
     record Close() implements SqlRaceSessionEvent {}
 }

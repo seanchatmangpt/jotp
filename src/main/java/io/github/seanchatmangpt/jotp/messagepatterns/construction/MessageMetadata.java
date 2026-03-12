@@ -13,8 +13,8 @@ import java.util.List;
  * message, what happened, and why.
  *
  * <p>Ported from Vaughn Vernon's Reactive Messaging Patterns (Scala/Akka). In the original, {@code
- * SomeMessage} carries a {@code Metadata(entries: List[Entry])} where each entry has who/what/where/
- * when/why fields.
+ * SomeMessage} carries a {@code Metadata(entries: List[Entry])} where each entry has
+ * who/what/where/ when/why fields.
  *
  * <p>Usage:
  *

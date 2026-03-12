@@ -6,14 +6,16 @@ import java.lang.annotation.*;
  * Marks a test that validates message correlation ID tracking across process boundaries.
  *
  * <p>Automatically:
+ *
  * <ul>
- *   <li>Injects {@code CorrelationIdTracker} for causality validation</li>
- *   <li>Tracks request → routing → reply chains</li>
- *   <li>Validates no "orphaned" messages</li>
- *   <li>Reports causality graphs for debugging</li>
+ *   <li>Injects {@code CorrelationIdTracker} for causality validation
+ *   <li>Tracks request → routing → reply chains
+ *   <li>Validates no "orphaned" messages
+ *   <li>Reports causality graphs for debugging
  * </ul>
  *
  * <p>Usage:
+ *
  * <pre>{@code
  * @CorrelationTest
  * class ProcessManagerTest {
@@ -35,31 +37,31 @@ import java.lang.annotation.*;
 @Documented
 public @interface CorrelationTest {
 
-  /**
-   * Enable automatic correlation ID generation for tests.
-   *
-   * @return true to auto-generate correlation IDs
-   */
-  boolean autoGenerate() default true;
+    /**
+     * Enable automatic correlation ID generation for tests.
+     *
+     * @return true to auto-generate correlation IDs
+     */
+    boolean autoGenerate() default true;
 
-  /**
-   * Report causality graphs (verbose).
-   *
-   * @return true to generate causality graphs on failure
-   */
-  boolean reportGraphs() default false;
+    /**
+     * Report causality graphs (verbose).
+     *
+     * @return true to generate causality graphs on failure
+     */
+    boolean reportGraphs() default false;
 
-  /**
-   * Maximum expected depth in causality chain.
-   *
-   * @return max chain depth (0 = unlimited)
-   */
-  int maxChainDepth() default 0;
+    /**
+     * Maximum expected depth in causality chain.
+     *
+     * @return max chain depth (0 = unlimited)
+     */
+    int maxChainDepth() default 0;
 
-  /**
-   * Validate distributed tracing (request, reply, trace IDs).
-   *
-   * @return true to validate tracing headers
-   */
-  boolean validateDistributedTracing() default true;
+    /**
+     * Validate distributed tracing (request, reply, trace IDs).
+     *
+     * @return true to validate tracing headers
+     */
+    boolean validateDistributedTracing() default true;
 }

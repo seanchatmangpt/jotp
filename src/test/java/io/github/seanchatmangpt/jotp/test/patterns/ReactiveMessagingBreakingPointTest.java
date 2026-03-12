@@ -2,28 +2,19 @@ package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
+import io.github.seanchatmangpt.jotp.EventManager;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcSys;
+import io.github.seanchatmangpt.jotp.ProcessLink;
+import io.github.seanchatmangpt.jotp.ProcessMonitor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
-
-import io.github.seanchatmangpt.jotp.EventManager;
-import io.github.seanchatmangpt.jotp.Parallel;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcLink;
-import io.github.seanchatmangpt.jotp.ProcMonitor;
-import io.github.seanchatmangpt.jotp.ProcSys;
-import io.github.seanchatmangpt.jotp.Supervisor;
-import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +29,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * Breaking Point Tests for Reactive Messaging Patterns.
  *
  * <p>These tests identify system limits and failure modes:
+ *
  * <ul>
  *   <li>Mailbox Overflow — Memory limits under message flooding
  *   <li>Handler Saturation — Thread pool exhaustion
@@ -59,12 +51,12 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
     }
 
     // ── Utility Methods ───────────────────────────────────────────────────────────
@@ -75,7 +67,11 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
     private static void gc() {
         System.gc();
-        try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -92,10 +88,17 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             gc();
             long startMem = usedMemoryMB();
 
-            var proc = new Proc<>(0L, (Long s, Object msg) -> {
-                try { Thread.sleep(1); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                return s + 1;
-            });
+            var proc =
+                    new Proc<>(
+                            0L,
+                            (Long s, Object msg) -> {
+                                try {
+                                    Thread.sleep(1);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                                return s + 1;
+                            });
 
             int sent = 0;
             int batchSize = 100_000;
@@ -126,13 +129,17 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             long endMem = usedMemoryMB();
             long processed = ProcSys.statistics(proc).messagesIn();
 
-            System.out.printf("[mailbox-overflow] sent=%,d processed=%,d memory_start=%dMB memory_end=%dMB delta=%dMB%n",
+            System.out.printf(
+                    "[mailbox-overflow] sent=%,d processed=%,d memory_start=%dMB memory_end=%dMB delta=%dMB%n",
                     sent, processed, startMem, endMem, endMem - startMem);
-            System.out.printf("[mailbox-overflow] elapsed=%d ms rate=%,.0f msg/s%n",
+            System.out.printf(
+                    "[mailbox-overflow] elapsed=%d ms rate=%,.0f msg/s%n",
                     elapsed / 1_000_000, sent * 1_000_000_000.0 / elapsed);
 
             if (overflowDetected) {
-                System.out.printf("[mailbox-overflow] BREAKING POINT: %,d messages caused memory pressure%n", overflowCount);
+                System.out.printf(
+                        "[mailbox-overflow] BREAKING POINT: %,d messages caused memory pressure%n",
+                        overflowCount);
             }
 
             assertThat(sent).as("Should handle at least 100K messages").isGreaterThan(100_000);
@@ -154,10 +161,13 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             // Create handlers
             long createStart = System.nanoTime();
             for (int i = 0; i < handlerCount; i++) {
-                handlers.add(new Proc<>(0L, (Long s, String msg) -> {
-                    processed.increment();
-                    return s + 1;
-                }));
+                handlers.add(
+                        new Proc<>(
+                                0L,
+                                (Long s, String msg) -> {
+                                    processed.increment();
+                                    return s + 1;
+                                }));
             }
             long createElapsed = System.nanoTime() - createStart;
 
@@ -178,14 +188,18 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             }
             long waitElapsed = System.nanoTime() - waitStart;
 
-            System.out.printf("[handler-saturation] handlers=%d messages/handler=%d total=%,d%n",
+            System.out.printf(
+                    "[handler-saturation] handlers=%d messages/handler=%d total=%,d%n",
                     handlerCount, messagesPerHandler, processed.sum());
-            System.out.printf("[handler-saturation] create_time=%d ms send_time=%d ms wait_time=%d ms%n",
+            System.out.printf(
+                    "[handler-saturation] create_time=%d ms send_time=%d ms wait_time=%d ms%n",
                     createElapsed / 1_000_000, sendElapsed / 1_000_000, waitElapsed / 1_000_000);
-            System.out.printf("[handler-saturation] throughput=%,.0f msg/s%n",
+            System.out.printf(
+                    "[handler-saturation] throughput=%,.0f msg/s%n",
                     processed.sum() * 1_000_000_000.0 / (sendElapsed + waitElapsed));
 
-            assertThat(processed.sum()).as("Should process at least 90% of messages")
+            assertThat(processed.sum())
+                    .as("Should process at least 90% of messages")
                     .isGreaterThan(handlerCount * messagesPerHandler * 90 / 100);
 
             for (var h : handlers) h.stop();
@@ -205,21 +219,24 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
             // Build chain
             for (int i = 0; i < depth; i++) {
-                var proc = new Proc<>(0, (Integer s, String msg) -> {
-                    if (msg.equals("boom")) throw new RuntimeException("crash");
-                    return s + 1;
-                });
+                var proc =
+                        new Proc<>(
+                                0,
+                                (Integer s, String msg) -> {
+                                    if (msg.equals("boom")) throw new RuntimeException("crash");
+                                    return s + 1;
+                                });
                 procs.add(proc);
             }
 
             // Link all processes
             for (int i = 1; i < depth; i++) {
-                ProcLink.link(procs.get(i - 1), procs.get(i));
+                ProcessLink.link(procs.get(i - 1), procs.get(i));
             }
 
             // Monitor the last process to detect cascade completion
             var lastProc = procs.get(depth - 1);
-            ProcMonitor.monitor(lastProc, (down) -> deadCount.incrementAndGet());
+            ProcessMonitor.monitor(lastProc, (down) -> deadCount.incrementAndGet());
 
             long start = System.nanoTime();
             procs.get(0).tell("boom");
@@ -230,10 +247,12 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             }
             long elapsed = System.nanoTime() - start;
 
-            System.out.printf("[cascade-failure] depth=%d propagation_time=%d ms = %.2f μs/hop%n",
+            System.out.printf(
+                    "[cascade-failure] depth=%d propagation_time=%d ms = %.2f μs/hop%n",
                     depth, elapsed / 1_000_000, (double) elapsed / depth / 1000);
 
-            assertThat(elapsed / 1_000_000).as("1000-deep cascade should propagate in < 500ms")
+            assertThat(elapsed / 1_000_000)
+                    .as("1000-deep cascade should propagate in < 500ms")
                     .isLessThan(500);
         }
     }
@@ -269,15 +288,20 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             }
             long waitElapsed = System.nanoTime() - waitStart;
 
-            System.out.printf("[fan-out-storm] handlers=%d received=%,d%n", handlerCount, received.sum());
-            System.out.printf("[fan-out-storm] add_time=%d ms send_time=%d μs delivery_time=%d ms%n",
+            System.out.printf(
+                    "[fan-out-storm] handlers=%d received=%,d%n", handlerCount, received.sum());
+            System.out.printf(
+                    "[fan-out-storm] add_time=%d ms send_time=%d μs delivery_time=%d ms%n",
                     addElapsed / 1_000_000, sendElapsed / 1000, waitElapsed / 1_000_000);
-            System.out.printf("[fan-out-storm] delivery_rate=%,.0f deliveries/s%n",
+            System.out.printf(
+                    "[fan-out-storm] delivery_rate=%,.0f deliveries/s%n",
                     received.sum() * 1_000_000_000.0 / waitElapsed);
 
-            assertThat(received.sum()).as("Should deliver to at least 99% of handlers")
+            assertThat(received.sum())
+                    .as("Should deliver to at least 99% of handlers")
                     .isGreaterThan(handlerCount * 99 / 100);
-            assertThat(waitElapsed / 1_000_000).as("10000-handler fanout should complete in < 2s")
+            assertThat(waitElapsed / 1_000_000)
+                    .as("10000-handler fanout should complete in < 2s")
                     .isLessThan(2000);
 
             em.stop();
@@ -295,11 +319,20 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             long startMem = usedMemoryMB();
 
             var processed = new LongAdder();
-            var worker = new Proc<>(0L, (Long s, String item) -> { processed.increment(); return s + 1; });
-            var splitter = new Proc<>(worker, (Proc<Long, String> w, List<String> batch) -> {
-                for (String item : batch) w.tell(item);
-                return w;
-            });
+            var worker =
+                    new Proc<>(
+                            0L,
+                            (Long s, String item) -> {
+                                processed.increment();
+                                return s + 1;
+                            });
+            var splitter =
+                    new Proc<>(
+                            worker,
+                            (Proc<Long, String> w, List<String> batch) -> {
+                                for (String item : batch) w.tell(item);
+                                return w;
+                            });
 
             // Create 1M item batch
             int batchSize = 1_000_000;
@@ -315,20 +348,25 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             // Wait for processing (with timeout)
             long waitStart = System.nanoTime();
             int timeout = 60; // seconds
-            while (processed.sum() < batchSize * 0.95 && (System.nanoTime() - waitStart) < timeout * 1_000_000_000L) {
+            while (processed.sum() < batchSize * 0.95
+                    && (System.nanoTime() - waitStart) < timeout * 1_000_000_000L) {
                 Thread.sleep(100);
             }
             long waitElapsed = System.nanoTime() - waitStart;
 
             long endMem = usedMemoryMB();
 
-            System.out.printf("[batch-explosion] batch_size=%,d processed=%,d%n", batchSize, processed.sum());
-            System.out.printf("[batch-explosion] send_time=%d ms wait_time=%d ms memory_delta=%dMB%n",
+            System.out.printf(
+                    "[batch-explosion] batch_size=%,d processed=%,d%n", batchSize, processed.sum());
+            System.out.printf(
+                    "[batch-explosion] send_time=%d ms wait_time=%d ms memory_delta=%dMB%n",
                     sendElapsed / 1_000_000, waitElapsed / 1_000_000, endMem - startMem);
-            System.out.printf("[batch-explosion] throughput=%,.0f items/s%n",
+            System.out.printf(
+                    "[batch-explosion] throughput=%,.0f items/s%n",
                     processed.sum() * 1_000_000_000.0 / waitElapsed);
 
-            assertThat(processed.sum()).as("Should process at least 95% of batch items")
+            assertThat(processed.sum())
+                    .as("Should process at least 95% of batch items")
                     .isGreaterThan(batchSize * 95 / 100);
 
             worker.stop();
@@ -347,10 +385,13 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             long startMem = usedMemoryMB();
 
             var correlations = new ConcurrentHashMap<UUID, Long>();
-            var proc = new Proc<>(correlations, (ConcurrentHashMap<UUID, Long> map, UUID id) -> {
-                map.put(id, System.nanoTime());
-                return map;
-            });
+            var proc =
+                    new Proc<>(
+                            correlations,
+                            (ConcurrentHashMap<UUID, Long> map, UUID id) -> {
+                                map.put(id, System.nanoTime());
+                                return map;
+                            });
 
             int count = 1_000_000;
 
@@ -370,14 +411,16 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             long endMem = usedMemoryMB();
             long memoryPerCorrelation = ((endMem - startMem) * 1_000_000L) / count;
 
-            System.out.printf("[correlation-table] correlations=%,d map_size=%,d%n",
+            System.out.printf(
+                    "[correlation-table] correlations=%,d map_size=%,d%n",
                     count, correlations.size());
-            System.out.printf("[correlation-table] send_time=%d ms total_time=%d ms memory_delta=%dMB%n",
+            System.out.printf(
+                    "[correlation-table] send_time=%d ms total_time=%d ms memory_delta=%dMB%n",
                     sendElapsed / 1_000_000, waitElapsed / 1_000_000, endMem - startMem);
-            System.out.printf("[correlation-table] memory_per_correlation=%d bytes%n", memoryPerCorrelation);
+            System.out.printf(
+                    "[correlation-table] memory_per_correlation=%d bytes%n", memoryPerCorrelation);
 
-            assertThat(endMem - startMem).as("1M correlations should use < 500MB")
-                    .isLessThan(500);
+            assertThat(endMem - startMem).as("1M correlations should use < 500MB").isLessThan(500);
 
             proc.stop();
         }
@@ -396,24 +439,29 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
             record SeqMsg(long seq) {}
             record SeqState(long next, Map<Long, Boolean> buffer) {
-                static SeqState initial() { return new SeqState(0, new HashMap<>()); }
+                static SeqState initial() {
+                    return new SeqState(0, new HashMap<>());
+                }
             }
 
-            var resequencer = new Proc<>(SeqState.initial(), (SeqState s, SeqMsg msg) -> {
-                processed.increment();
-                var newBuffer = new HashMap<>(s.buffer());
-                newBuffer.put(msg.seq(), true);
-                long next = s.next();
-                while (newBuffer.containsKey(next)) {
-                    newBuffer.remove(next);
-                    next++;
-                }
-                // Count gaps (when buffer size grows)
-                if (newBuffer.size() > s.buffer().size() + 1) {
-                    gaps.increment();
-                }
-                return new SeqState(next, newBuffer);
-            });
+            var resequencer =
+                    new Proc<>(
+                            SeqState.initial(),
+                            (SeqState s, SeqMsg msg) -> {
+                                processed.increment();
+                                var newBuffer = new HashMap<>(s.buffer());
+                                newBuffer.put(msg.seq(), true);
+                                long next = s.next();
+                                while (newBuffer.containsKey(next)) {
+                                    newBuffer.remove(next);
+                                    next++;
+                                }
+                                // Count gaps (when buffer size grows)
+                                if (newBuffer.size() > s.buffer().size() + 1) {
+                                    gaps.increment();
+                                }
+                                return new SeqState(next, newBuffer);
+                            });
 
             // Send completely random sequence numbers (maximum gap scenario)
             var random = new java.util.Random(42);
@@ -430,14 +478,18 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             }
             long waitElapsed = System.nanoTime() - sendStart;
 
-            System.out.printf("[sequence-gap-storm] messages=%,d processed=%,d gaps=%,d%n",
+            System.out.printf(
+                    "[sequence-gap-storm] messages=%,d processed=%,d gaps=%,d%n",
                     count, processed.sum(), gaps.sum());
-            System.out.printf("[sequence-gap-storm] send_time=%d ms total_time=%d ms%n",
+            System.out.printf(
+                    "[sequence-gap-storm] send_time=%d ms total_time=%d ms%n",
                     sendElapsed / 1_000_000, waitElapsed / 1_000_000);
-            System.out.printf("[sequence-gap-storm] throughput=%,.0f msg/s%n",
+            System.out.printf(
+                    "[sequence-gap-storm] throughput=%,.0f msg/s%n",
                     processed.sum() * 1_000_000_000.0 / waitElapsed);
 
-            assertThat(waitElapsed / 1_000_000).as("10K random sequence should process in < 15s")
+            assertThat(waitElapsed / 1_000_000)
+                    .as("10K random sequence should process in < 15s")
                     .isLessThan(15000);
 
             resequencer.stop();
@@ -453,7 +505,13 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
         void measureTimerWheelSaturation() throws Exception {
             int timerCount = 100_000;
             var fired = new LongAdder();
-            var proc = new Proc<>(0L, (Long s, String msg) -> { fired.increment(); return s + 1; });
+            var proc =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                fired.increment();
+                                return s + 1;
+                            });
 
             long start = System.nanoTime();
 
@@ -469,14 +527,18 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             }
             long elapsed = System.nanoTime() - start;
 
-            System.out.printf("[timer-wheel] timers=%,d fired=%,d in %d ms%n",
+            System.out.printf(
+                    "[timer-wheel] timers=%,d fired=%,d in %d ms%n",
                     timerCount, fired.sum(), elapsed / 1_000_000);
-            System.out.printf("[timer-wheel] throughput=%,.0f timer/s%n",
+            System.out.printf(
+                    "[timer-wheel] throughput=%,.0f timer/s%n",
                     fired.sum() * 1_000_000_000.0 / elapsed);
 
-            assertThat(fired.sum()).as("Should process at least 95% of timer messages")
+            assertThat(fired.sum())
+                    .as("Should process at least 95% of timer messages")
                     .isGreaterThan(timerCount * 95 / 100);
-            assertThat(elapsed / 1_000_000).as("100K timers should process in < 3s")
+            assertThat(elapsed / 1_000_000)
+                    .as("100K timers should process in < 3s")
                     .isLessThan(3000);
 
             proc.stop();
@@ -506,18 +568,21 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
             // Create saga managers
             for (int i = 0; i < sagaCount; i++) {
-                var manager = new Proc<>(SagaState.start("SAGA-" + i), (SagaState s, String msg) -> {
-                    var newCompleted = s.completed().clone();
-                    if (msg.equals("step1")) newCompleted[0] = true;
-                    else if (msg.equals("step2")) newCompleted[1] = true;
-                    else if (msg.equals("step3")) newCompleted[2] = true;
-                    else if (msg.equals("step4")) newCompleted[3] = true;
-                    else if (msg.equals("step5")) {
-                        newCompleted[4] = true;
-                        completed.increment();
-                    }
-                    return new SagaState(s.orderId(), s.step() + 1, newCompleted);
-                });
+                var manager =
+                        new Proc<>(
+                                SagaState.start("SAGA-" + i),
+                                (SagaState s, String msg) -> {
+                                    var newCompleted = s.completed().clone();
+                                    if (msg.equals("step1")) newCompleted[0] = true;
+                                    else if (msg.equals("step2")) newCompleted[1] = true;
+                                    else if (msg.equals("step3")) newCompleted[2] = true;
+                                    else if (msg.equals("step4")) newCompleted[3] = true;
+                                    else if (msg.equals("step5")) {
+                                        newCompleted[4] = true;
+                                        completed.increment();
+                                    }
+                                    return new SagaState(s.orderId(), s.step() + 1, newCompleted);
+                                });
                 sagaManagers.add(manager);
             }
 
@@ -538,16 +603,19 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
             long endMem = usedMemoryMB();
 
-            System.out.printf("[saga-explosion] sagas=%,d completed=%,d%n", sagaCount, completed.sum());
-            System.out.printf("[saga-explosion] process_time=%d ms memory_delta=%dMB%n",
+            System.out.printf(
+                    "[saga-explosion] sagas=%,d completed=%,d%n", sagaCount, completed.sum());
+            System.out.printf(
+                    "[saga-explosion] process_time=%d ms memory_delta=%dMB%n",
                     processElapsed / 1_000_000, endMem - startMem);
-            System.out.printf("[saga-explosion] memory_per_saga=%d bytes%n",
+            System.out.printf(
+                    "[saga-explosion] memory_per_saga=%d bytes%n",
                     ((endMem - startMem) * 1_000_000L) / sagaCount);
 
-            assertThat(completed.sum()).as("Should complete at least 95% of sagas")
+            assertThat(completed.sum())
+                    .as("Should complete at least 95% of sagas")
                     .isGreaterThan(sagaCount * 95 / 100);
-            assertThat(endMem - startMem).as("10000 sagas should use < 200MB")
-                    .isLessThan(200);
+            assertThat(endMem - startMem).as("10000 sagas should use < 200MB").isLessThan(200);
 
             for (var m : sagaManagers) m.stop();
         }
@@ -581,7 +649,8 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
             System.out.printf("Max Memory: %d MB%n", maxMemory);
             System.out.printf("Total Memory: %d MB%n", totalMemory);
             System.out.printf("Free Memory: %d MB%n", freeMemory);
-            System.out.printf("Used Heap: %d MB / %d MB (%.1f%%)%n",
+            System.out.printf(
+                    "Used Heap: %d MB / %d MB (%.1f%%)%n",
                     usedHeap, maxHeap, (usedHeap * 100.0 / maxHeap));
             System.out.println("════════════════════════════════════════════════════════════");
             System.out.println("BREAKING POINT LIMITS (measured):");

@@ -2,6 +2,10 @@ package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.jotp.EventManager;
+import io.github.seanchatmangpt.jotp.Parallel;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcSys;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -11,22 +15,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import io.github.seanchatmangpt.jotp.EventManager;
-import io.github.seanchatmangpt.jotp.Parallel;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcSys;
-import io.github.seanchatmangpt.jotp.Supervisor;
-import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,15 +37,16 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * <p>Targets real-world throughput numbers for production readiness validation.
  *
  * <h2>Pattern Categories</h2>
+ *
  * <ul>
- *   <li>Foundation Patterns (10) — Message Channel, Command, Document, Event, Request-Reply,
- *       Return Address, Correlation ID, Message Sequence, Message Expiration, Format Indicator
- *   <li>Routing Patterns (9) — Router, Content-Based Router, Recipient List, Splitter,
- *       Aggregator, Resequencer, Scatter-Gather, Routing Slip, Process Manager
+ *   <li>Foundation Patterns (10) — Message Channel, Command, Document, Event, Request-Reply, Return
+ *       Address, Correlation ID, Message Sequence, Message Expiration, Format Indicator
+ *   <li>Routing Patterns (9) — Router, Content-Based Router, Recipient List, Splitter, Aggregator,
+ *       Resequencer, Scatter-Gather, Routing Slip, Process Manager
  *   <li>Endpoint Patterns (14) — Channel Adapter, Messaging Bridge, Message Bus, Pipes and Filters,
  *       Message Dispatcher, Event-Driven Consumer, Competing Consumers, Selective Consumer,
- *       Idempotent Receiver, Service Activator, Message Translator, Content Filter,
- *       Claim Check, Normalizer
+ *       Idempotent Receiver, Service Activator, Message Translator, Content Filter, Claim Check,
+ *       Normalizer
  * </ul>
  */
 @Timeout(300)
@@ -61,19 +56,29 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
 
     // ── Message Types ───────────────────────────────────────────────────────────
 
-    sealed interface Msg permits Msg.Inc, Msg.Get, Msg.Doc, Msg.Evt, Msg.Seq, Msg.Req, Msg.Cmd, Msg.Boom {
+    sealed interface Msg
+            permits Msg.Inc, Msg.Get, Msg.Doc, Msg.Evt, Msg.Seq, Msg.Req, Msg.Cmd, Msg.Boom {
         record Inc(int by) implements Msg {}
+
         record Get() implements Msg {}
+
         record Doc(String payload, int version) implements Msg {}
+
         record Evt(String type, String source) implements Msg {}
+
         record Seq(int num, String payload) implements Msg {}
+
         record Req(UUID id, String query) implements Msg {}
+
         record Cmd(String action) implements Msg {}
+
         record Boom() implements Msg {}
     }
 
     record State(int counter, List<String> log, int lastSeq) {
-        static State initial() { return new State(0, new ArrayList<>(), -1); }
+        static State initial() {
+            return new State(0, new ArrayList<>(), -1);
+        }
     }
 
     private static State handler(State s, Msg msg) {
@@ -138,10 +143,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (ProcSys.statistics(proc).messagesIn() < count * 0.99) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-channel] %,d messages in %,d ns = %,.0f msg/s%n",
+            System.out.printf(
+                    "[message-channel] %,d messages in %,d ns = %,.0f msg/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Message Channel should exceed 2M msg/s").isGreaterThan(2_000_000);
+            assertThat(throughput)
+                    .as("Message Channel should exceed 2M msg/s")
+                    .isGreaterThan(2_000_000);
             proc.stop();
         }
 
@@ -162,10 +170,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (ProcSys.statistics(proc).messagesIn() < count + 5_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[command-message] %,d commands in %,d ns = %,.0f cmd/s%n",
+            System.out.printf(
+                    "[command-message] %,d commands in %,d ns = %,.0f cmd/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Command Message should exceed 1M cmd/s").isGreaterThan(1_000_000);
+            assertThat(throughput)
+                    .as("Command Message should exceed 1M cmd/s")
+                    .isGreaterThan(1_000_000);
             proc.stop();
         }
 
@@ -186,10 +197,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (ProcSys.statistics(proc).messagesIn() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[document-message] %,d documents in %,d ns = %,.0f doc/s%n",
+            System.out.printf(
+                    "[document-message] %,d documents in %,d ns = %,.0f doc/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Document Message should exceed 500K doc/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Document Message should exceed 500K doc/s")
+                    .isGreaterThan(500_000);
             proc.stop();
         }
 
@@ -211,10 +225,17 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (received.sum() < expectedDeliveries * 0.99) Thread.sleep(10);
 
             double deliveriesPerSec = expectedDeliveries * 1_000_000_000.0 / elapsed;
-            System.out.printf("[event-message] handlers=%d events=%d deliveries=%,d in %d ms = %,.0f deliveries/s%n",
-                    handlerCount, eventCount, received.sum(), elapsed / 1_000_000, deliveriesPerSec);
+            System.out.printf(
+                    "[event-message] handlers=%d events=%d deliveries=%,d in %d ms = %,.0f deliveries/s%n",
+                    handlerCount,
+                    eventCount,
+                    received.sum(),
+                    elapsed / 1_000_000,
+                    deliveriesPerSec);
 
-            assertThat(deliveriesPerSec).as("Event Message should exceed 1M deliveries/s").isGreaterThan(1_000_000);
+            assertThat(deliveriesPerSec)
+                    .as("Event Message should exceed 1M deliveries/s")
+                    .isGreaterThan(1_000_000);
             em.stop();
         }
 
@@ -232,7 +253,8 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             long elapsed = System.nanoTime() - start;
 
             double rtPerSec = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[request-reply] %,d round-trips in %,d ns = %,.0f rt/s%n",
+            System.out.printf(
+                    "[request-reply] %,d round-trips in %,d ns = %,.0f rt/s%n",
                     count, elapsed, rtPerSec);
 
             assertThat(rtPerSec).as("Request-Reply should exceed 50K rt/s").isGreaterThan(50_000);
@@ -244,13 +266,22 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         void returnAddress_50KReplies_500KPerSecond() throws Exception {
             int count = 50_000;
             var replies = new LongAdder();
-            var replyHandler = new Proc<>(0, (Integer s, String msg) -> { replies.increment(); return s + 1; });
+            var replyHandler =
+                    new Proc<>(
+                            0,
+                            (Integer s, String msg) -> {
+                                replies.increment();
+                                return s + 1;
+                            });
 
             record ReplyMsg(String payload, Proc<Integer, String> replyTo) {}
-            var proc = new Proc<>(replyHandler, (Proc<Integer, String> rh, ReplyMsg msg) -> {
-                rh.tell("reply:" + msg.payload());
-                return rh;
-            });
+            var proc =
+                    new Proc<>(
+                            replyHandler,
+                            (Proc<Integer, String> rh, ReplyMsg msg) -> {
+                                rh.tell("reply:" + msg.payload());
+                                return rh;
+                            });
 
             // Warm up
             for (int i = 0; i < 500; i++) proc.tell(new ReplyMsg("warmup-" + i, replyHandler));
@@ -263,10 +294,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (replies.sum() < count + 500) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[return-address] %,d replies in %,d ns = %,.0f reply/s%n",
+            System.out.printf(
+                    "[return-address] %,d replies in %,d ns = %,.0f reply/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Return Address should exceed 500K reply/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Return Address should exceed 500K reply/s")
+                    .isGreaterThan(500_000);
             replyHandler.stop();
             proc.stop();
         }
@@ -279,27 +313,35 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var processed = new LongAdder();
 
             record CorrelatedMsg(UUID correlationId, String payload) {}
-            var proc = new Proc<>(correlations, (ConcurrentHashMap<UUID, Boolean> map, CorrelatedMsg msg) -> {
-                map.put(msg.correlationId(), true);
-                processed.increment();
-                return map;
-            });
+            var proc =
+                    new Proc<>(
+                            correlations,
+                            (ConcurrentHashMap<UUID, Boolean> map, CorrelatedMsg msg) -> {
+                                map.put(msg.correlationId(), true);
+                                processed.increment();
+                                return map;
+                            });
 
             // Warm up
-            for (int i = 0; i < 1_000; i++) proc.tell(new CorrelatedMsg(UUID.randomUUID(), "warmup"));
+            for (int i = 0; i < 1_000; i++)
+                proc.tell(new CorrelatedMsg(UUID.randomUUID(), "warmup"));
             Thread.sleep(50);
 
             long start = System.nanoTime();
-            for (int i = 0; i < count; i++) proc.tell(new CorrelatedMsg(UUID.randomUUID(), "msg-" + i));
+            for (int i = 0; i < count; i++)
+                proc.tell(new CorrelatedMsg(UUID.randomUUID(), "msg-" + i));
             long elapsed = System.nanoTime() - start;
 
             while (processed.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[correlation-id] %,d correlations in %,d ns = %,.0f corr/s%n",
+            System.out.printf(
+                    "[correlation-id] %,d correlations in %,d ns = %,.0f corr/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Correlation ID should exceed 200K corr/s").isGreaterThan(200_000);
+            assertThat(throughput)
+                    .as("Correlation ID should exceed 200K corr/s")
+                    .isGreaterThan(200_000);
             proc.stop();
         }
 
@@ -320,10 +362,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (ProcSys.statistics(proc).messagesIn() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-sequence] %,d ordered messages in %,d ns = %,.0f msg/s%n",
+            System.out.printf(
+                    "[message-sequence] %,d ordered messages in %,d ns = %,.0f msg/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Message Sequence should exceed 500K msg/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Message Sequence should exceed 500K msg/s")
+                    .isGreaterThan(500_000);
             proc.stop();
         }
 
@@ -331,10 +376,17 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         @DisplayName("9. Message Expiration: 1K timeout scenarios — target 500/s")
         void messageExpiration_1KTimeouts_500PerSecond() throws Exception {
             int count = 1_000;
-            var proc = new Proc<>(State.initial(), (State s, Msg msg) -> {
-                try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                return s;
-            });
+            var proc =
+                    new Proc<>(
+                            State.initial(),
+                            (State s, Msg msg) -> {
+                                try {
+                                    Thread.sleep(100);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                                return s;
+                            });
 
             var timedOut = new LongAdder();
             long start = System.nanoTime();
@@ -349,48 +401,59 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             long elapsed = System.nanoTime() - start;
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-expiration] %,d timeouts in %,d ns = %,.0f timeout/s%n",
+            System.out.printf(
+                    "[message-expiration] %,d timeouts in %,d ns = %,.0f timeout/s%n",
                     count, elapsed, throughput);
 
-            assertThat(timedOut.sum()).as("Most requests should timeout").isGreaterThan((long) (count * 0.9));
-            assertThat(throughput).as("Message Expiration should exceed 500 timeout/s").isGreaterThan(500.0);
+            assertThat(timedOut.sum())
+                    .as("Most requests should timeout")
+                    .isGreaterThan((long) (count * 0.9));
+            assertThat(throughput)
+                    .as("Message Expiration should exceed 500 timeout/s")
+                    .isGreaterThan(500.0);
             proc.stop();
         }
 
         @Test
-        @DisplayName("10. Format Indicator: 1M sealed interface dispatches — target 10M+ dispatch/s")
+        @DisplayName(
+                "10. Format Indicator: 1M sealed interface dispatches — target 10M+ dispatch/s")
         void formatIndicator_1MDispatches_10MPerSecond() throws Exception {
             int count = 1_000_000;
             var dispatches = new LongAdder();
 
             long start = System.nanoTime();
             for (int i = 0; i < count; i++) {
-                Msg msg = switch (i % 5) {
-                    case 0 -> new Msg.Inc(i);
-                    case 1 -> new Msg.Get();
-                    case 2 -> new Msg.Doc("doc", i);
-                    case 3 -> new Msg.Evt("type", "source");
-                    case 4 -> new Msg.Cmd("cmd");
-                    default -> new Msg.Get();
-                };
+                Msg msg =
+                        switch (i % 5) {
+                            case 0 -> new Msg.Inc(i);
+                            case 1 -> new Msg.Get();
+                            case 2 -> new Msg.Doc("doc", i);
+                            case 3 -> new Msg.Evt("type", "source");
+                            case 4 -> new Msg.Cmd("cmd");
+                            default -> new Msg.Get();
+                        };
                 // Pattern match dispatch
-                String result = switch (msg) {
-                    case Msg.Inc(int by) -> "inc:" + by;
-                    case Msg.Get _ -> "get";
-                    case Msg.Doc(String p, int v) -> "doc:" + v;
-                    case Msg.Evt(String t, String s) -> "evt:" + t;
-                    case Msg.Cmd(String a) -> "cmd:" + a;
-                    default -> "other";
-                };
+                String result =
+                        switch (msg) {
+                            case Msg.Inc(int by) -> "inc:" + by;
+                            case Msg.Get _ -> "get";
+                            case Msg.Doc(String p, int v) -> "doc:" + v;
+                            case Msg.Evt(String t, String s) -> "evt:" + t;
+                            case Msg.Cmd(String a) -> "cmd:" + a;
+                            default -> "other";
+                        };
                 dispatches.increment();
             }
             long elapsed = System.nanoTime() - start;
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[format-indicator] %,d sealed dispatches in %,d ns = %,.0f dispatch/s%n",
+            System.out.printf(
+                    "[format-indicator] %,d sealed dispatches in %,d ns = %,.0f dispatch/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Format Indicator should exceed 10M dispatch/s").isGreaterThan(10_000_000);
+            assertThat(throughput)
+                    .as("Format Indicator should exceed 10M dispatch/s")
+                    .isGreaterThan(10_000_000);
         }
     }
 
@@ -408,31 +471,50 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int count = 100_000;
             var orderCount = new LongAdder();
             var paymentCount = new LongAdder();
-            var orderHandler = new Proc<>(0L, (Long s, String msg) -> { orderCount.increment(); return s + 1; });
-            var paymentHandler = new Proc<>(0L, (Long s, String msg) -> { paymentCount.increment(); return s + 1; });
+            var orderHandler =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                orderCount.increment();
+                                return s + 1;
+                            });
+            var paymentHandler =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                paymentCount.increment();
+                                return s + 1;
+                            });
 
             record Dest(Proc<Long, String> orders, Proc<Long, String> payments) {}
-            var router = new Proc<>(new Dest(orderHandler, paymentHandler), (Dest d, String msg) -> {
-                if (msg.startsWith("O:")) d.orders().tell(msg);
-                else if (msg.startsWith("P:")) d.payments().tell(msg);
-                return d;
-            });
+            var router =
+                    new Proc<>(
+                            new Dest(orderHandler, paymentHandler),
+                            (Dest d, String msg) -> {
+                                if (msg.startsWith("O:")) d.orders().tell(msg);
+                                else if (msg.startsWith("P:")) d.payments().tell(msg);
+                                return d;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) router.tell(i % 2 == 0 ? "O:w" + i : "P:w" + i);
             Thread.sleep(50);
 
             long start = System.nanoTime();
-            for (int i = 0; i < count; i++) router.tell(i % 2 == 0 ? "O:order" + i : "P:payment" + i);
+            for (int i = 0; i < count; i++)
+                router.tell(i % 2 == 0 ? "O:order" + i : "P:payment" + i);
             long elapsed = System.nanoTime() - start;
 
             while (orderCount.sum() + paymentCount.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-router] %,d routed in %,d ns = %,.0f route/s%n",
+            System.out.printf(
+                    "[message-router] %,d routed in %,d ns = %,.0f route/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Message Router should exceed 500K route/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Message Router should exceed 500K route/s")
+                    .isGreaterThan(500_000);
             orderHandler.stop();
             paymentHandler.stop();
             router.stop();
@@ -444,31 +526,53 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int count = 100_000;
             var standardCount = new LongAdder();
             var expressCount = new LongAdder();
-            var standardHandler = new Proc<>(0L, (Long s, String msg) -> { standardCount.increment(); return s + 1; });
-            var expressHandler = new Proc<>(0L, (Long s, String msg) -> { expressCount.increment(); return s + 1; });
+            var standardHandler =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                standardCount.increment();
+                                return s + 1;
+                            });
+            var expressHandler =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                expressCount.increment();
+                                return s + 1;
+                            });
 
             record Handlers(Proc<Long, String> std, Proc<Long, String> exp) {}
-            var router = new Proc<>(new Handlers(standardHandler, expressHandler), (Handlers h, String msg) -> {
-                if (msg.contains("express") || msg.contains("urgent") || msg.contains("priority")) h.exp().tell(msg);
-                else h.std().tell(msg);
-                return h;
-            });
+            var router =
+                    new Proc<>(
+                            new Handlers(standardHandler, expressHandler),
+                            (Handlers h, String msg) -> {
+                                if (msg.contains("express")
+                                        || msg.contains("urgent")
+                                        || msg.contains("priority")) h.exp().tell(msg);
+                                else h.std().tell(msg);
+                                return h;
+                            });
 
             // Warm up
-            for (int i = 0; i < 1_000; i++) router.tell(i % 3 == 0 ? "express-" + i : "standard-" + i);
+            for (int i = 0; i < 1_000; i++)
+                router.tell(i % 3 == 0 ? "express-" + i : "standard-" + i);
             Thread.sleep(50);
 
             long start = System.nanoTime();
-            for (int i = 0; i < count; i++) router.tell(i % 3 == 0 ? "express-" + i : "standard-" + i);
+            for (int i = 0; i < count; i++)
+                router.tell(i % 3 == 0 ? "express-" + i : "standard-" + i);
             long elapsed = System.nanoTime() - start;
 
             while (standardCount.sum() + expressCount.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[content-based-router] %,d routed by content in %,d ns = %,.0f route/s%n",
+            System.out.printf(
+                    "[content-based-router] %,d routed by content in %,d ns = %,.0f route/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Content-Based Router should exceed 300K route/s").isGreaterThan(300_000);
+            assertThat(throughput)
+                    .as("Content-Based Router should exceed 300K route/s")
+                    .isGreaterThan(300_000);
             standardHandler.stop();
             expressHandler.stop();
             router.stop();
@@ -496,10 +600,17 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (received.sum() < expectedDeliveries * 0.99) Thread.sleep(10);
 
             double deliveriesPerSec = expectedDeliveries * 1_000_000_000.0 / elapsed;
-            System.out.printf("[recipient-list] recipients=%d messages=%d deliveries=%,d in %d ms = %,.0f deliveries/s%n",
-                    recipientCount, msgCount, received.sum(), elapsed / 1_000_000, deliveriesPerSec);
+            System.out.printf(
+                    "[recipient-list] recipients=%d messages=%d deliveries=%,d in %d ms = %,.0f deliveries/s%n",
+                    recipientCount,
+                    msgCount,
+                    received.sum(),
+                    elapsed / 1_000_000,
+                    deliveriesPerSec);
 
-            assertThat(deliveriesPerSec).as("Recipient List should exceed 1M deliveries/s").isGreaterThan(1_000_000);
+            assertThat(deliveriesPerSec)
+                    .as("Recipient List should exceed 1M deliveries/s")
+                    .isGreaterThan(1_000_000);
             em.stop();
         }
 
@@ -511,11 +622,20 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int totalItems = batchCount * itemsPerBatch;
             var processed = new LongAdder();
 
-            var worker = new Proc<>(0L, (Long s, String item) -> { processed.increment(); return s + 1; });
-            var splitter = new Proc<>(worker, (Proc<Long, String> w, List<String> batch) -> {
-                for (String item : batch) w.tell(item);
-                return w;
-            });
+            var worker =
+                    new Proc<>(
+                            0L,
+                            (Long s, String item) -> {
+                                processed.increment();
+                                return s + 1;
+                            });
+            var splitter =
+                    new Proc<>(
+                            worker,
+                            (Proc<Long, String> w, List<String> batch) -> {
+                                for (String item : batch) w.tell(item);
+                                return w;
+                            });
 
             // Warm up
             var warmupBatch = IntStream.range(0, 50).mapToObj(i -> "w" + i).toList();
@@ -525,7 +645,10 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             long start = System.nanoTime();
             for (int i = 0; i < batchCount; i++) {
                 final int batchIdx = i;
-                var batch = IntStream.range(0, itemsPerBatch).mapToObj(j -> "item-" + batchIdx + "-" + j).toList();
+                var batch =
+                        IntStream.range(0, itemsPerBatch)
+                                .mapToObj(j -> "item-" + batchIdx + "-" + j)
+                                .toList();
                 splitter.tell(batch);
             }
             long elapsed = System.nanoTime() - start;
@@ -533,7 +656,8 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (processed.sum() < totalItems * 0.95) Thread.sleep(10);
 
             double throughput = totalItems * 1_000_000_000.0 / elapsed;
-            System.out.printf("[splitter] batches=%d items/batch=%d total=%,d in %d ms = %,.0f items/s%n",
+            System.out.printf(
+                    "[splitter] batches=%d items/batch=%d total=%,d in %d ms = %,.0f items/s%n",
                     batchCount, itemsPerBatch, processed.sum(), elapsed / 1_000_000, throughput);
 
             assertThat(throughput).as("Splitter should exceed 1M items/s").isGreaterThan(1_000_000);
@@ -547,15 +671,18 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int count = 100_000;
             var aggregated = new LongAdder();
 
-            var aggregator = new Proc<>(new ArrayList<Integer>(), (List<Integer> list, Integer msg) -> {
-                var newList = new ArrayList<>(list);
-                newList.add(msg);
-                if (newList.size() >= 1000) {
-                    aggregated.increment();
-                    return new ArrayList<>(); // Reset
-                }
-                return newList;
-            });
+            var aggregator =
+                    new Proc<>(
+                            new ArrayList<Integer>(),
+                            (List<Integer> list, Integer msg) -> {
+                                var newList = new ArrayList<>(list);
+                                newList.add(msg);
+                                if (newList.size() >= 1000) {
+                                    aggregated.increment();
+                                    return new ArrayList<>(); // Reset
+                                }
+                                return newList;
+                            });
 
             // Warm up
             for (int i = 0; i < 500; i++) aggregator.tell(i);
@@ -568,7 +695,8 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (ProcSys.statistics(aggregator).messagesIn() < count + 500) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[aggregator] %,d aggregations in %,d ns = %,.0f agg/s%n",
+            System.out.printf(
+                    "[aggregator] %,d aggregations in %,d ns = %,.0f agg/s%n",
                     count, elapsed, throughput);
 
             assertThat(throughput).as("Aggregator should exceed 200K agg/s").isGreaterThan(200_000);
@@ -583,20 +711,25 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
 
             record SeqMsg(int seq) {}
             record ReseqState(int next, Map<Integer, Boolean> buffer) {
-                static ReseqState initial() { return new ReseqState(0, new HashMap<>()); }
+                static ReseqState initial() {
+                    return new ReseqState(0, new HashMap<>());
+                }
             }
 
-            var resequencer = new Proc<>(ReseqState.initial(), (ReseqState s, SeqMsg msg) -> {
-                var newBuffer = new HashMap<>(s.buffer());
-                newBuffer.put(msg.seq(), true);
-                int next = s.next();
-                while (newBuffer.containsKey(next)) {
-                    reordered.increment();
-                    newBuffer.remove(next);
-                    next++;
-                }
-                return new ReseqState(next, newBuffer);
-            });
+            var resequencer =
+                    new Proc<>(
+                            ReseqState.initial(),
+                            (ReseqState s, SeqMsg msg) -> {
+                                var newBuffer = new HashMap<>(s.buffer());
+                                newBuffer.put(msg.seq(), true);
+                                int next = s.next();
+                                while (newBuffer.containsKey(next)) {
+                                    reordered.increment();
+                                    newBuffer.remove(next);
+                                    next++;
+                                }
+                                return new ReseqState(next, newBuffer);
+                            });
 
             // Warm up with in-order messages
             for (int i = 0; i < 100; i++) resequencer.tell(new SeqMsg(i));
@@ -606,17 +739,20 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             long start = System.nanoTime();
             for (int i = 0; i < count / 2; i++) {
                 resequencer.tell(new SeqMsg(100 + i * 2 + 1)); // odd first
-                resequencer.tell(new SeqMsg(100 + i * 2));     // even second
+                resequencer.tell(new SeqMsg(100 + i * 2)); // even second
             }
             long elapsed = System.nanoTime() - start;
 
             while (reordered.sum() < count + 100) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[resequencer] %,d reordered in %,d ns = %,.0f reorder/s%n",
+            System.out.printf(
+                    "[resequencer] %,d reordered in %,d ns = %,.0f reorder/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Resequencer should exceed 100K reorder/s").isGreaterThan(100_000);
+            assertThat(throughput)
+                    .as("Resequencer should exceed 100K reorder/s")
+                    .isGreaterThan(100_000);
             resequencer.stop();
         }
 
@@ -627,21 +763,28 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var completed = new LongAdder();
 
             long start = System.nanoTime();
-            var tasks = IntStream.range(0, taskCount)
-                    .mapToObj(i -> (java.util.function.Supplier<Integer>) () -> {
-                        completed.increment();
-                        return i * i;
-                    })
-                    .collect(Collectors.toList());
+            var tasks =
+                    IntStream.range(0, taskCount)
+                            .mapToObj(
+                                    i ->
+                                            (java.util.function.Supplier<Integer>)
+                                                    () -> {
+                                                        completed.increment();
+                                                        return i * i;
+                                                    })
+                            .collect(Collectors.toList());
             var result = Parallel.all(tasks);
             long elapsed = System.nanoTime() - start;
 
             assertThat(result.isSuccess()).isTrue();
             double throughput = taskCount * 1_000_000_000.0 / elapsed;
-            System.out.printf("[scatter-gather] tasks=%d in %d ms = %,.0f tasks/s%n",
+            System.out.printf(
+                    "[scatter-gather] tasks=%d in %d ms = %,.0f tasks/s%n",
                     taskCount, elapsed / 1_000_000, throughput);
 
-            assertThat(throughput).as("Scatter-Gather should exceed 100K tasks/s").isGreaterThan(100_000);
+            assertThat(throughput)
+                    .as("Scatter-Gather should exceed 100K tasks/s")
+                    .isGreaterThan(100_000);
         }
 
         @Test
@@ -654,15 +797,19 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             record RoutingSlip(List<String> steps, int current) {}
 
             final Proc<Long, RoutingSlip>[] routerHolder = new Proc[1];
-            routerHolder[0] = new Proc<>(0L, (Long s, RoutingSlip slip) -> {
-                if (slip.current() < slip.steps().size()) {
-                    traversals.increment();
-                    if (slip.current() + 1 < slip.steps().size()) {
-                        routerHolder[0].tell(new RoutingSlip(slip.steps(), slip.current() + 1));
-                    }
-                }
-                return s + 1;
-            });
+            routerHolder[0] =
+                    new Proc<>(
+                            0L,
+                            (Long s, RoutingSlip slip) -> {
+                                if (slip.current() < slip.steps().size()) {
+                                    traversals.increment();
+                                    if (slip.current() + 1 < slip.steps().size()) {
+                                        routerHolder[0].tell(
+                                                new RoutingSlip(slip.steps(), slip.current() + 1));
+                                    }
+                                }
+                                return s + 1;
+                            });
 
             // Warm up
             for (int i = 0; i < 100; i++) routerHolder[0].tell(new RoutingSlip(steps, 0));
@@ -676,10 +823,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (traversals.sum() < (long) count * steps.size() * 0.95) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[routing-slip] %,d slips in %,d ns = %,.0f slip/s (%,d step traversals)%n",
+            System.out.printf(
+                    "[routing-slip] %,d slips in %,d ns = %,.0f slip/s (%,d step traversals)%n",
                     count, elapsed, throughput, traversals.sum());
 
-            assertThat(throughput).as("Routing Slip should exceed 100K slip/s").isGreaterThan(100_000);
+            assertThat(throughput)
+                    .as("Routing Slip should exceed 100K slip/s")
+                    .isGreaterThan(100_000);
             routerHolder[0].stop();
         }
 
@@ -690,18 +840,26 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var completed = new LongAdder();
 
             record SagaState(String orderId, boolean paid, boolean reserved, boolean shipped) {
-                static SagaState start(String id) { return new SagaState(id, false, false, false); }
+                static SagaState start(String id) {
+                    return new SagaState(id, false, false, false);
+                }
             }
 
-            var sagaManager = new Proc<>(SagaState.start("init"), (SagaState s, String msg) -> {
-                if (msg.equals("inventory")) return new SagaState(s.orderId(), s.paid(), true, s.shipped());
-                if (msg.equals("payment")) return new SagaState(s.orderId(), true, s.reserved(), s.shipped());
-                if (msg.equals("ship") && s.paid() && s.reserved()) {
-                    completed.increment();
-                    return new SagaState(s.orderId(), true, true, true);
-                }
-                return s;
-            });
+            var sagaManager =
+                    new Proc<>(
+                            SagaState.start("init"),
+                            (SagaState s, String msg) -> {
+                                if (msg.equals("inventory"))
+                                    return new SagaState(s.orderId(), s.paid(), true, s.shipped());
+                                if (msg.equals("payment"))
+                                    return new SagaState(
+                                            s.orderId(), true, s.reserved(), s.shipped());
+                                if (msg.equals("ship") && s.paid() && s.reserved()) {
+                                    completed.increment();
+                                    return new SagaState(s.orderId(), true, true, true);
+                                }
+                                return s;
+                            });
 
             // Warm up
             for (int i = 0; i < 100; i++) {
@@ -722,10 +880,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (completed.sum() < count + 100) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[process-manager] %,d sagas in %,d ns = %,.0f saga/s%n",
+            System.out.printf(
+                    "[process-manager] %,d sagas in %,d ns = %,.0f saga/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Process Manager should exceed 50K saga/s").isGreaterThan(50_000);
+            assertThat(throughput)
+                    .as("Process Manager should exceed 50K saga/s")
+                    .isGreaterThan(50_000);
             sagaManager.stop();
         }
     }
@@ -744,17 +905,31 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int count = 100_000;
             var externalQueue = new LinkedTransferQueue<String>();
             var processed = new LongAdder();
-            var processor = new Proc<>(0L, (Long s, String msg) -> { processed.increment(); return s + 1; });
+            var processor =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                processed.increment();
+                                return s + 1;
+                            });
             var running = new AtomicBoolean(true);
 
-            var adapter = Thread.ofVirtual().start(() -> {
-                while (running.get()) {
-                    try {
-                        var msg = externalQueue.poll(10, TimeUnit.MILLISECONDS);
-                        if (msg != null) processor.tell(msg);
-                    } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-                }
-            });
+            var adapter =
+                    Thread.ofVirtual()
+                            .start(
+                                    () -> {
+                                        while (running.get()) {
+                                            try {
+                                                var msg =
+                                                        externalQueue.poll(
+                                                                10, TimeUnit.MILLISECONDS);
+                                                if (msg != null) processor.tell(msg);
+                                            } catch (InterruptedException e) {
+                                                Thread.currentThread().interrupt();
+                                                break;
+                                            }
+                                        }
+                                    });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) externalQueue.put("warmup-" + i);
@@ -767,10 +942,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (processed.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[channel-adapter] %,d adapted in %,d ns = %,.0f adapt/s%n",
+            System.out.printf(
+                    "[channel-adapter] %,d adapted in %,d ns = %,.0f adapt/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Channel Adapter should exceed 200K adapt/s").isGreaterThan(200_000);
+            assertThat(throughput)
+                    .as("Channel Adapter should exceed 200K adapt/s")
+                    .isGreaterThan(200_000);
 
             running.set(false);
             adapter.join(1000);
@@ -782,8 +960,20 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         void messagingBridge_100KBridge_500KPerSecond() throws Exception {
             int count = 100_000;
             var received = new LongAdder();
-            var channel2 = new Proc<>(0L, (Long s, String msg) -> { received.increment(); return s + 1; });
-            var bridge = new Proc<>(channel2, (Proc<Long, String> ch2, String msg) -> { ch2.tell("bridged:" + msg); return ch2; });
+            var channel2 =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                received.increment();
+                                return s + 1;
+                            });
+            var bridge =
+                    new Proc<>(
+                            channel2,
+                            (Proc<Long, String> ch2, String msg) -> {
+                                ch2.tell("bridged:" + msg);
+                                return ch2;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) bridge.tell("warmup-" + i);
@@ -796,10 +986,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (received.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[messaging-bridge] %,d bridged in %,d ns = %,.0f bridge/s%n",
+            System.out.printf(
+                    "[messaging-bridge] %,d bridged in %,d ns = %,.0f bridge/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Messaging Bridge should exceed 500K bridge/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Messaging Bridge should exceed 500K bridge/s")
+                    .isGreaterThan(500_000);
             channel2.stop();
             bridge.stop();
         }
@@ -826,10 +1019,17 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (received.sum() < expectedDeliveries * 0.99) Thread.sleep(10);
 
             double deliveriesPerSec = expectedDeliveries * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-bus] handlers=%d events=%d deliveries=%,d in %d ms = %,.0f deliveries/s%n",
-                    handlerCount, eventCount, received.sum(), elapsed / 1_000_000, deliveriesPerSec);
+            System.out.printf(
+                    "[message-bus] handlers=%d events=%d deliveries=%,d in %d ms = %,.0f deliveries/s%n",
+                    handlerCount,
+                    eventCount,
+                    received.sum(),
+                    elapsed / 1_000_000,
+                    deliveriesPerSec);
 
-            assertThat(deliveriesPerSec).as("Message Bus should exceed 1M deliveries/s").isGreaterThan(1_000_000);
+            assertThat(deliveriesPerSec)
+                    .as("Message Bus should exceed 1M deliveries/s")
+                    .isGreaterThan(1_000_000);
             bus.stop();
         }
 
@@ -840,11 +1040,41 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var completed = new LongAdder();
 
             // 5-stage pipeline using a shared sink
-            var sink = new Proc<>(0L, (Long s, String msg) -> { completed.increment(); return s + 1; });
-            var filter4 = new Proc<>(sink, (Proc<Long, String> next, String msg) -> { next.tell("f4:" + msg); return next; });
-            var filter3 = new Proc<>(sink, (Proc<Long, String> next, String msg) -> { next.tell("f3:" + msg); return next; });
-            var filter2 = new Proc<>(sink, (Proc<Long, String> next, String msg) -> { next.tell("f2:" + msg); return next; });
-            var filter1 = new Proc<>(sink, (Proc<Long, String> next, String msg) -> { next.tell("f1:" + msg); return next; });
+            var sink =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                completed.increment();
+                                return s + 1;
+                            });
+            var filter4 =
+                    new Proc<>(
+                            sink,
+                            (Proc<Long, String> next, String msg) -> {
+                                next.tell("f4:" + msg);
+                                return next;
+                            });
+            var filter3 =
+                    new Proc<>(
+                            sink,
+                            (Proc<Long, String> next, String msg) -> {
+                                next.tell("f3:" + msg);
+                                return next;
+                            });
+            var filter2 =
+                    new Proc<>(
+                            sink,
+                            (Proc<Long, String> next, String msg) -> {
+                                next.tell("f2:" + msg);
+                                return next;
+                            });
+            var filter1 =
+                    new Proc<>(
+                            sink,
+                            (Proc<Long, String> next, String msg) -> {
+                                next.tell("f1:" + msg);
+                                return next;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) filter1.tell("warmup-" + i);
@@ -857,10 +1087,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (completed.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[pipes-and-filters] %,d × 5-stage in %,d ns = %,.0f pipeline/s%n",
+            System.out.printf(
+                    "[pipes-and-filters] %,d × 5-stage in %,d ns = %,.0f pipeline/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Pipes and Filters should exceed 100K pipeline/s").isGreaterThan(100_000);
+            assertThat(throughput)
+                    .as("Pipes and Filters should exceed 100K pipeline/s")
+                    .isGreaterThan(100_000);
             sink.stop();
             filter1.stop();
             filter2.stop();
@@ -877,13 +1110,22 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
 
             var workers = new ArrayList<Proc<Long, String>>();
             for (int i = 0; i < workerCount; i++) {
-                workers.add(new Proc<>(0L, (Long s, String msg) -> { dispatched.increment(); return s + 1; }));
+                workers.add(
+                        new Proc<>(
+                                0L,
+                                (Long s, String msg) -> {
+                                    dispatched.increment();
+                                    return s + 1;
+                                }));
             }
 
-            var dispatcher = new Proc<>(0, (Integer idx, String msg) -> {
-                workers.get(idx % workerCount).tell(msg);
-                return idx + 1;
-            });
+            var dispatcher =
+                    new Proc<>(
+                            0,
+                            (Integer idx, String msg) -> {
+                                workers.get(idx % workerCount).tell(msg);
+                                return idx + 1;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) dispatcher.tell("warmup-" + i);
@@ -896,10 +1138,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (dispatched.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-dispatcher] workers=%d messages=%,d in %,d ns = %,.0f dispatch/s%n",
+            System.out.printf(
+                    "[message-dispatcher] workers=%d messages=%,d in %,d ns = %,.0f dispatch/s%n",
                     workerCount, count, elapsed, throughput);
 
-            assertThat(throughput).as("Message Dispatcher should exceed 500K dispatch/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Message Dispatcher should exceed 500K dispatch/s")
+                    .isGreaterThan(500_000);
             for (var w : workers) w.stop();
             dispatcher.stop();
         }
@@ -910,7 +1155,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int count = 100_000;
             var handled = new LongAdder();
 
-            var consumer = new Proc<>(0L, (Long s, String msg) -> { handled.increment(); return s + 1; });
+            var consumer =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                handled.increment();
+                                return s + 1;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) consumer.tell("warmup-" + i);
@@ -923,10 +1174,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (handled.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[event-driven-consumer] %,d handled in %,d ns = %,.0f handle/s%n",
+            System.out.printf(
+                    "[event-driven-consumer] %,d handled in %,d ns = %,.0f handle/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Event-Driven Consumer should exceed 300K handle/s").isGreaterThan(300_000);
+            assertThat(throughput)
+                    .as("Event-Driven Consumer should exceed 300K handle/s")
+                    .isGreaterThan(300_000);
             consumer.stop();
         }
 
@@ -940,14 +1194,19 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var running = new AtomicBoolean(true);
 
             for (int i = 0; i < consumerCount; i++) {
-                Thread.ofVirtual().start(() -> {
-                    while (running.get()) {
-                        try {
-                            var msg = queue.poll(10, TimeUnit.MILLISECONDS);
-                            if (msg != null) consumed.increment();
-                        } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-                    }
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    while (running.get()) {
+                                        try {
+                                            var msg = queue.poll(10, TimeUnit.MILLISECONDS);
+                                            if (msg != null) consumed.increment();
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                            break;
+                                        }
+                                    }
+                                });
             }
 
             // Warm up
@@ -961,10 +1220,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (consumed.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[competing-consumers] consumers=%d messages=%,d in %,d ns = %,.0f consume/s%n",
+            System.out.printf(
+                    "[competing-consumers] consumers=%d messages=%,d in %,d ns = %,.0f consume/s%n",
                     consumerCount, count, elapsed, throughput);
 
-            assertThat(throughput).as("Competing Consumers should exceed 200K consume/s").isGreaterThan(200_000);
+            assertThat(throughput)
+                    .as("Competing Consumers should exceed 200K consume/s")
+                    .isGreaterThan(200_000);
 
             running.set(false);
         }
@@ -976,27 +1238,36 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var accepted = new LongAdder();
             var rejected = new LongAdder();
 
-            var consumer = new Proc<>(0L, (Long s, String msg) -> {
-                if (msg.contains("priority") || msg.contains("urgent")) accepted.increment();
-                else rejected.increment();
-                return s + 1;
-            });
+            var consumer =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                if (msg.contains("priority") || msg.contains("urgent"))
+                                    accepted.increment();
+                                else rejected.increment();
+                                return s + 1;
+                            });
 
             // Warm up
-            for (int i = 0; i < 1_000; i++) consumer.tell(i % 3 == 0 ? "priority-w" + i : "normal-w" + i);
+            for (int i = 0; i < 1_000; i++)
+                consumer.tell(i % 3 == 0 ? "priority-w" + i : "normal-w" + i);
             Thread.sleep(50);
 
             long start = System.nanoTime();
-            for (int i = 0; i < count; i++) consumer.tell(i % 3 == 0 ? "priority-" + i : "normal-" + i);
+            for (int i = 0; i < count; i++)
+                consumer.tell(i % 3 == 0 ? "priority-" + i : "normal-" + i);
             long elapsed = System.nanoTime() - start;
 
             while (accepted.sum() + rejected.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[selective-consumer] %,d filtered in %,d ns = %,.0f filter/s (accepted=%,d, rejected=%,d)%n",
+            System.out.printf(
+                    "[selective-consumer] %,d filtered in %,d ns = %,.0f filter/s (accepted=%,d, rejected=%,d)%n",
                     count, elapsed, throughput, accepted.sum(), rejected.sum());
 
-            assertThat(throughput).as("Selective Consumer should exceed 300K filter/s").isGreaterThan(300_000);
+            assertThat(throughput)
+                    .as("Selective Consumer should exceed 300K filter/s")
+                    .isGreaterThan(300_000);
             consumer.stop();
         }
 
@@ -1007,12 +1278,15 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var unique = new LongAdder();
             var duplicates = new LongAdder();
 
-            var receiver = new Proc<>(new HashSet<String>(), (Set<String> seen, String msg) -> {
-                var newSet = new HashSet<>(seen);
-                if (newSet.add(msg)) unique.increment();
-                else duplicates.increment();
-                return newSet;
-            });
+            var receiver =
+                    new Proc<>(
+                            new HashSet<String>(),
+                            (Set<String> seen, String msg) -> {
+                                var newSet = new HashSet<>(seen);
+                                if (newSet.add(msg)) unique.increment();
+                                else duplicates.increment();
+                                return newSet;
+                            });
 
             // Warm up
             for (int i = 0; i < 500; i++) receiver.tell("warmup-" + i);
@@ -1029,11 +1303,16 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (unique.sum() + duplicates.sum() < count + 500) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[idempotent-receiver] %,d total in %,d ns = %,.0f dedup/s (unique=%,d, dups=%,d)%n",
+            System.out.printf(
+                    "[idempotent-receiver] %,d total in %,d ns = %,.0f dedup/s (unique=%,d, dups=%,d)%n",
                     count, elapsed, throughput, unique.sum(), duplicates.sum());
 
-            assertThat(throughput).as("Idempotent Receiver should exceed 200K dedup/s").isGreaterThan(200_000);
-            assertThat(duplicates.sum()).as("Should have detected duplicates").isGreaterThan(count / 4);
+            assertThat(throughput)
+                    .as("Idempotent Receiver should exceed 200K dedup/s")
+                    .isGreaterThan(200_000);
+            assertThat(duplicates.sum())
+                    .as("Should have detected duplicates")
+                    .isGreaterThan(count / 4);
             receiver.stop();
         }
 
@@ -1043,10 +1322,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             int count = 100_000;
             var activations = new LongAdder();
 
-            var activator = new Proc<>(0L, (Long s, String msg) -> {
-                if (msg.startsWith("activate:")) activations.increment();
-                return s + 1;
-            });
+            var activator =
+                    new Proc<>(
+                            0L,
+                            (Long s, String msg) -> {
+                                if (msg.startsWith("activate:")) activations.increment();
+                                return s + 1;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) activator.tell("activate:warmup-" + i);
@@ -1059,10 +1341,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (activations.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[service-activator] %,d activations in %,d ns = %,.0f activate/s%n",
+            System.out.printf(
+                    "[service-activator] %,d activations in %,d ns = %,.0f activate/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Service Activator should exceed 500K activate/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Service Activator should exceed 500K activate/s")
+                    .isGreaterThan(500_000);
             activator.stop();
         }
 
@@ -1075,11 +1360,14 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             record Legacy(String id, double amt) {}
             record Modern(String orderId, double amount) {}
 
-            var translator = new Proc<>(0L, (Long s, Legacy legacy) -> {
-                var modern = new Modern(legacy.id(), legacy.amt());
-                translated.increment();
-                return s + 1;
-            });
+            var translator =
+                    new Proc<>(
+                            0L,
+                            (Long s, Legacy legacy) -> {
+                                var modern = new Modern(legacy.id(), legacy.amt());
+                                translated.increment();
+                                return s + 1;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) translator.tell(new Legacy("w" + i, i * 1.0));
@@ -1092,10 +1380,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (translated.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[message-translator] %,d translations in %,d ns = %,.0f translate/s%n",
+            System.out.printf(
+                    "[message-translator] %,d translations in %,d ns = %,.0f translate/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Message Translator should exceed 500K translate/s").isGreaterThan(500_000);
+            assertThat(throughput)
+                    .as("Message Translator should exceed 500K translate/s")
+                    .isGreaterThan(500_000);
             translator.stop();
         }
 
@@ -1108,8 +1399,8 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             record Full(String id, String customer, String address, double total) {}
             record Filtered(String id, String customer, double total) {}
 
-            java.util.function.Function<Full, Filtered> filter = full ->
-                    new Filtered(full.id(), full.customer(), full.total());
+            java.util.function.Function<Full, Filtered> filter =
+                    full -> new Filtered(full.id(), full.customer(), full.total());
 
             long start = System.nanoTime();
             for (int i = 0; i < count; i++) {
@@ -1120,10 +1411,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             long elapsed = System.nanoTime() - start;
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[content-filter] %,d extractions in %,d ns = %,.0f filter/s%n",
+            System.out.printf(
+                    "[content-filter] %,d extractions in %,d ns = %,.0f filter/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Content Filter should exceed 1M filter/s").isGreaterThan(1_000_000);
+            assertThat(throughput)
+                    .as("Content Filter should exceed 1M filter/s")
+                    .isGreaterThan(1_000_000);
         }
 
         @Test
@@ -1133,11 +1427,14 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             var store = new ConcurrentHashMap<String, Object>();
             var checked = new LongAdder();
 
-            var receiver = new Proc<>(0L, (Long s, String checkId) -> {
-                var payload = store.get(checkId);
-                if (payload != null) checked.increment();
-                return s + 1;
-            });
+            var receiver =
+                    new Proc<>(
+                            0L,
+                            (Long s, String checkId) -> {
+                                var payload = store.get(checkId);
+                                if (payload != null) checked.increment();
+                                return s + 1;
+                            });
 
             // Warm up
             for (int i = 0; i < 1_000; i++) {
@@ -1158,10 +1455,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             while (checked.sum() < count + 1_000) Thread.sleep(10);
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[claim-check] %,d checks in %,d ns = %,.0f check/s%n",
+            System.out.printf(
+                    "[claim-check] %,d checks in %,d ns = %,.0f check/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Claim Check should exceed 100K check/s").isGreaterThan(100_000);
+            assertThat(throughput)
+                    .as("Claim Check should exceed 100K check/s")
+                    .isGreaterThan(100_000);
             receiver.stop();
         }
 
@@ -1175,10 +1475,14 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             record JsonOrder(String orderId, Map<String, Object> properties) {}
             record XmlOrder(String id, String customer, String amount) {}
 
-            java.util.function.Function<JsonOrder, Canonical> fromJson = json ->
-                    new Canonical(json.orderId(), "JSON", json.properties());
-            java.util.function.Function<XmlOrder, Canonical> fromXml = xml ->
-                    new Canonical(xml.id(), "XML", Map.of("customer", xml.customer(), "amount", xml.amount()));
+            java.util.function.Function<JsonOrder, Canonical> fromJson =
+                    json -> new Canonical(json.orderId(), "JSON", json.properties());
+            java.util.function.Function<XmlOrder, Canonical> fromXml =
+                    xml ->
+                            new Canonical(
+                                    xml.id(),
+                                    "XML",
+                                    Map.of("customer", xml.customer(), "amount", xml.amount()));
 
             long start = System.nanoTime();
             for (int i = 0; i < count; i++) {
@@ -1194,10 +1498,13 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             long elapsed = System.nanoTime() - start;
 
             double throughput = count * 1_000_000_000.0 / elapsed;
-            System.out.printf("[normalizer] %,d normalizations in %,d ns = %,.0f normalize/s%n",
+            System.out.printf(
+                    "[normalizer] %,d normalizations in %,d ns = %,.0f normalize/s%n",
                     count, elapsed, throughput);
 
-            assertThat(throughput).as("Normalizer should exceed 200K normalize/s").isGreaterThan(200_000);
+            assertThat(throughput)
+                    .as("Normalizer should exceed 200K normalize/s")
+                    .isGreaterThan(200_000);
         }
     }
 }

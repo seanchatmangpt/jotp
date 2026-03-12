@@ -12,7 +12,8 @@ import java.util.concurrent.CompletableFuture;
  * <em>observable</em> at runtime. This class provides the Java 26 equivalents:
  *
  * <ul>
- *   <li>{@code sys:get_state(Pid)} → {@link #getState(Proc)} — snapshot current state asynchronously
+ *   <li>{@code sys:get_state(Pid)} → {@link #getState(Proc)} — snapshot current state
+ *       asynchronously
  *   <li>{@code sys:suspend(Pid)} → {@link #suspend(Proc)} — pause message processing
  *   <li>{@code sys:resume(Pid)} → {@link #resume(Proc)} — resume message processing
  *   <li>{@code sys:statistics(Pid, get)} → {@link #statistics(Proc)} — message throughput snapshot
@@ -20,8 +21,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>All operations are non-blocking for the caller. {@link #getState} returns a future that
  * completes after the process finishes its current message — guaranteeing the snapshot is
- * consistent. {@link #suspend} and {@link #resume} take effect before the next message is
- * dequeued.
+ * consistent. {@link #suspend} and {@link #resume} take effect before the next message is dequeued.
  */
 public final class ProcSys {
 
@@ -64,8 +64,8 @@ public final class ProcSys {
      * Pause message processing — mirrors OTP {@code sys:suspend(Pid)}.
      *
      * <p>After this call returns, the process will not dequeue any further messages until {@link
-     * #resume} is called. Messages continue to accumulate in the mailbox. Used in OTP for
-     * hot-code upgrades: suspend → swap code → resume.
+     * #resume} is called. Messages continue to accumulate in the mailbox. Used in OTP for hot-code
+     * upgrades: suspend → swap code → resume.
      *
      * @param proc the process to suspend
      */
@@ -93,7 +93,6 @@ public final class ProcSys {
      * @return statistics snapshot
      */
     public static Stats statistics(Proc<?, ?> proc) {
-        return new Stats(
-                proc.messagesIn.sum(), proc.messagesOut.sum(), proc.mailboxSize());
+        return new Stats(proc.messagesIn.sum(), proc.messagesOut.sum(), proc.mailboxSize());
     }
 }

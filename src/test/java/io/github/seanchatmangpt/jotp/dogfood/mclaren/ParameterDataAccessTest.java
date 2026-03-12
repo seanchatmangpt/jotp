@@ -1,14 +1,14 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
-import java.util.concurrent.TimeUnit;
 import io.github.seanchatmangpt.jotp.Proc;
+import java.util.concurrent.TimeUnit;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link ParameterDataAccess} — the gen_server Proc that implements SQL Race
- * {@code IParameterDataAccess}.
+ * Unit tests for {@link ParameterDataAccess} — the gen_server Proc that implements SQL Race {@code
+ * IParameterDataAccess}.
  *
  * <p>Tests cover: sample ingestion, data status tagging, GoTo/GetNextSamples, ring buffer cap,
  * stats, and the {@link org.acme.CrashRecovery}-backed spawn.
@@ -72,9 +72,10 @@ class ParameterDataAccessTest implements WithAssertions {
     void multipleSamplesInBatch() throws Exception {
         proc = ParameterDataAccess.spawnOrThrow(vCar(), vCarChannel());
 
-        proc.tell(new PdaMsg.AddSamples(
-                new long[] {1L, 2L, 3L, 4L, 5L},
-                new double[] {100.0, 150.0, 200.0, 250.0, 300.0}));
+        proc.tell(
+                new PdaMsg.AddSamples(
+                        new long[] {1L, 2L, 3L, 4L, 5L},
+                        new double[] {100.0, 150.0, 200.0, 250.0, 300.0}));
         Thread.sleep(20);
         proc.tell(new PdaMsg.GoTo(0L));
         var values = ParameterDataAccess.getNextSamples(proc, 10, StepDirection.Forward);
@@ -103,10 +104,11 @@ class ParameterDataAccessTest implements WithAssertions {
     void invalidDataTaggedForNonFiniteValues() throws Exception {
         proc = ParameterDataAccess.spawnOrThrow(vCar(), vCarChannel());
 
-        proc.tell(new PdaMsg.AddSamplesWithStatus(
-                new long[] {1L},
-                new double[] {Double.NaN},
-                new DataStatusType[] {DataStatusType.InvalidData}));
+        proc.tell(
+                new PdaMsg.AddSamplesWithStatus(
+                        new long[] {1L},
+                        new double[] {Double.NaN},
+                        new DataStatusType[] {DataStatusType.InvalidData}));
         Thread.sleep(20);
         assertThat(proc.thread().isAlive()).isTrue();
 
@@ -120,9 +122,10 @@ class ParameterDataAccessTest implements WithAssertions {
     @Test
     void goToSetsStartPositionForForwardScan() throws Exception {
         proc = ParameterDataAccess.spawnOrThrow(vCar(), vCarChannel());
-        proc.tell(new PdaMsg.AddSamples(
-                new long[] {10L, 20L, 30L, 40L, 50L},
-                new double[] {1.0, 2.0, 3.0, 4.0, 5.0}));
+        proc.tell(
+                new PdaMsg.AddSamples(
+                        new long[] {10L, 20L, 30L, 40L, 50L},
+                        new double[] {1.0, 2.0, 3.0, 4.0, 5.0}));
         Thread.sleep(20);
 
         proc.tell(new PdaMsg.GoTo(25L)); // seek to between 20 and 30
@@ -137,9 +140,10 @@ class ParameterDataAccessTest implements WithAssertions {
     @Test
     void reverseStepReturnsDescendingOrder() throws Exception {
         proc = ParameterDataAccess.spawnOrThrow(vCar(), vCarChannel());
-        proc.tell(new PdaMsg.AddSamples(
-                new long[] {10L, 20L, 30L, 40L, 50L},
-                new double[] {1.0, 2.0, 3.0, 4.0, 5.0}));
+        proc.tell(
+                new PdaMsg.AddSamples(
+                        new long[] {10L, 20L, 30L, 40L, 50L},
+                        new double[] {1.0, 2.0, 3.0, 4.0, 5.0}));
         Thread.sleep(20);
 
         proc.tell(new PdaMsg.GoTo(45L));
@@ -192,9 +196,10 @@ class ParameterDataAccessTest implements WithAssertions {
     @Test
     void getStatsReturnsAccurateCounts() throws Exception {
         proc = ParameterDataAccess.spawnOrThrow(vCar(), vCarChannel());
-        proc.tell(new PdaMsg.AddSamples(
-                new long[] {1L, 2L, 3L},
-                new double[] {100.0, 450.0, 200.0})); // 450 is out-of-range
+        proc.tell(
+                new PdaMsg.AddSamples(
+                        new long[] {1L, 2L, 3L},
+                        new double[] {100.0, 450.0, 200.0})); // 450 is out-of-range
         Thread.sleep(20);
 
         var stats = ParameterDataAccess.getStats(proc);
@@ -210,8 +215,8 @@ class ParameterDataAccessTest implements WithAssertions {
     @Test
     void clearEmptiesBuffer() throws Exception {
         proc = ParameterDataAccess.spawnOrThrow(vCar(), vCarChannel());
-        proc.tell(new PdaMsg.AddSamples(new long[] {1L, 2L, 3L},
-                new double[] {100.0, 200.0, 300.0}));
+        proc.tell(
+                new PdaMsg.AddSamples(new long[] {1L, 2L, 3L}, new double[] {100.0, 200.0, 300.0}));
         Thread.sleep(20);
 
         proc.tell(new PdaMsg.Clear());

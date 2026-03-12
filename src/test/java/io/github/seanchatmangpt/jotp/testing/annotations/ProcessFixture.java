@@ -6,14 +6,16 @@ import java.lang.annotation.*;
  * Auto-generates Proc/Supervisor test fixtures via Java 26 reflection API.
  *
  * <p>The framework:
+ *
  * <ul>
- *   <li>Reflects on sealed Message hierarchy to discover types</li>
- *   <li>Creates test factories for each message variant</li>
- *   <li>Automatically cleans up processes (termination, deregistration)</li>
- *   <li>Supports supervisor supervision strategies</li>
+ *   <li>Reflects on sealed Message hierarchy to discover types
+ *   <li>Creates test factories for each message variant
+ *   <li>Automatically cleans up processes (termination, deregistration)
+ *   <li>Supports supervisor supervision strategies
  * </ul>
  *
  * <p>Usage:
+ *
  * <pre>{@code
  * @ProcessFixture(ContentBasedRouter.class)
  * class RouterTest {
@@ -34,52 +36,52 @@ import java.lang.annotation.*;
 @Documented
 public @interface ProcessFixture {
 
-  /**
-   * The process/pattern class to create fixtures for.
-   *
-   * @return class object (must have Proc-compatible constructor)
-   */
-  Class<?> value();
+    /**
+     * The process/pattern class to create fixtures for.
+     *
+     * @return class object (must have Proc-compatible constructor)
+     */
+    Class<?> value();
 
-  /**
-   * Number of process instances to create.
-   *
-   * @return instance count (default: 1)
-   */
-  int instances() default 1;
+    /**
+     * Number of process instances to create.
+     *
+     * @return instance count (default: 1)
+     */
+    int instances() default 1;
 
-  /**
-   * Supervision strategy (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE).
-   *
-   * @return strategy name
-   */
-  String supervisionStrategy() default "ONE_FOR_ONE";
+    /**
+     * Supervision strategy (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE).
+     *
+     * @return strategy name
+     */
+    String supervisionStrategy() default "ONE_FOR_ONE";
 
-  /**
-   * Auto-cleanup after test (default: true).
-   *
-   * @return true to auto-terminate processes
-   */
-  boolean autoCleanup() default true;
+    /**
+     * Auto-cleanup after test (default: true).
+     *
+     * @return true to auto-terminate processes
+     */
+    boolean autoCleanup() default true;
 
-  /**
-   * Enable message capturing during fixture lifecycle.
-   *
-   * @return true to capture all messages
-   */
-  boolean captureMessages() default false;
+    /**
+     * Enable message capturing during fixture lifecycle.
+     *
+     * @return true to capture all messages
+     */
+    boolean captureMessages() default false;
 
-  /**
-   * Register process in ProcRegistry (default: false).
-   *
-   * @return true to auto-register
-   */
-  boolean registerInRegistry() default false;
+    /**
+     * Register process in ProcessRegistry (default: false).
+     *
+     * @return true to auto-register
+     */
+    boolean registerInRegistry() default false;
 
-  /**
-   * Registry name (if registerInRegistry = true).
-   *
-   * @return registered name
-   */
-  String registryName() default "";
+    /**
+     * Registry name (if registerInRegistry = true).
+     *
+     * @return registered name
+     */
+    String registryName() default "";
 }

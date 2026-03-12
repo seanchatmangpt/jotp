@@ -3,9 +3,9 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 /**
  * Logical parameter group — mirrors {@code MESL.SqlRace.Domain.ParameterGroup}.
  *
- * <p>In ATLAS, a {@code ParameterGroup} is a named container that organises related parameters
- * for display and querying. Groups are referenced by their {@link #identifier()} from
- * {@link SqlRaceParameter#parameterGroupIdentifier()}.
+ * <p>In ATLAS, a {@code ParameterGroup} is a named container that organises related parameters for
+ * display and querying. Groups are referenced by their {@link #identifier()} from {@link
+ * SqlRaceParameter#parameterGroupIdentifier()}.
  *
  * <p>A typical F1 session might contain groups:
  *

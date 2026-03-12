@@ -60,29 +60,33 @@ public final class Aggregator<T, K, R> {
         this.aggregateFunction = aggregateFunction;
         this.resultConsumer = resultConsumer;
 
-        this.proc = new Proc<>(new HashMap<>(), (state, msg) -> {
-            if (msg instanceof Aggregator.ExpectParts<?> expect) {
-                var updated = new HashMap<>(state);
-                updated.put(
-                        (K) expect.correlationKey(),
-                        new AggregationState<>(expect.expectedCount(), new ArrayList<>()));
-                return updated;
-            }
-            T part = (T) msg;
-            K key = correlationKeyExtractor.apply(part);
-            var group = state.get(key);
-            if (group == null) return state;
+        this.proc =
+                new Proc<>(
+                        new HashMap<>(),
+                        (state, msg) -> {
+                            if (msg instanceof Aggregator.ExpectParts<?> expect) {
+                                var updated = new HashMap<>(state);
+                                updated.put(
+                                        (K) expect.correlationKey(),
+                                        new AggregationState<>(
+                                                expect.expectedCount(), new ArrayList<>()));
+                                return updated;
+                            }
+                            T part = (T) msg;
+                            K key = correlationKeyExtractor.apply(part);
+                            var group = state.get(key);
+                            if (group == null) return state;
 
-            var updated = new HashMap<>(state);
-            var newGroup = group.withPart(part);
-            if (newGroup.isComplete()) {
-                updated.remove(key);
-                resultConsumer.accept(aggregateFunction.apply(newGroup.parts()));
-            } else {
-                updated.put(key, newGroup);
-            }
-            return updated;
-        });
+                            var updated = new HashMap<>(state);
+                            var newGroup = group.withPart(part);
+                            if (newGroup.isComplete()) {
+                                updated.remove(key);
+                                resultConsumer.accept(aggregateFunction.apply(newGroup.parts()));
+                            } else {
+                                updated.put(key, newGroup);
+                            }
+                            return updated;
+                        });
     }
 
     /** Declare expected number of parts for a correlation group. */
@@ -100,7 +104,7 @@ public final class Aggregator<T, K, R> {
     }
 
     /** Stop the aggregator. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

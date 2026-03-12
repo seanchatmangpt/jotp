@@ -4,6 +4,15 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.CrashRecovery;
+import io.github.seanchatmangpt.jotp.EventManager;
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcRef;
+import io.github.seanchatmangpt.jotp.ProcessLink;
+import io.github.seanchatmangpt.jotp.ProcessMonitor;
+import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.Supervisor;
+import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,23 +25,10 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
-
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.DoubleRange;
 import net.jqwik.api.constraints.IntRange;
-
-import io.github.seanchatmangpt.jotp.CrashRecovery;
-import io.github.seanchatmangpt.jotp.EventManager;
-import io.github.seanchatmangpt.jotp.Parallel;
-import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcLink;
-import io.github.seanchatmangpt.jotp.ProcMonitor;
-import io.github.seanchatmangpt.jotp.ProcRegistry;
-import io.github.seanchatmangpt.jotp.ProcTimer;
-import io.github.seanchatmangpt.jotp.Supervisor;
-import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,8 +58,11 @@ class ProductionSimulationTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Work, Msg.Crash, Msg.Get, Msg.Set {
         record Work(int payload) implements Msg {}
+
         record Crash(String reason) implements Msg {}
+
         record Get() implements Msg {}
+
         record Set(int value) implements Msg {}
     }
 
@@ -86,7 +85,7 @@ class ProductionSimulationTest implements WithAssertions {
 
     @AfterEach
     void cleanup() {
-        ProcRegistry.reset();
+        ProcessRegistry.reset();
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -105,12 +104,14 @@ class ProductionSimulationTest implements WithAssertions {
             double crashProbability = 0.05;
             Random random = new Random(42);
 
-            var supervisor = new Supervisor("chaos-sv", Strategy.ONE_FOR_ONE, 1000, Duration.ofMinutes(5));
+            var supervisor =
+                    new Supervisor("chaos-sv", Strategy.ONE_FOR_ONE, 1000, Duration.ofMinutes(5));
 
             @SuppressWarnings("unchecked")
             ProcRef<Integer, Msg>[] workers = new ProcRef[workerCount];
             for (int i = 0; i < workerCount; i++) {
-                workers[i] = supervisor.supervise("worker-" + i, 0, ProductionSimulationTest::handler);
+                workers[i] =
+                        supervisor.supervise("worker-" + i, 0, ProductionSimulationTest::handler);
             }
 
             AtomicInteger crashCount = new AtomicInteger(0);
@@ -138,7 +139,8 @@ class ProductionSimulationTest implements WithAssertions {
             }
             assertThat(reachableCount).isEqualTo(workerCount);
 
-            System.out.printf("[chaos] workers=%d messages=%d crashes=%d%n",
+            System.out.printf(
+                    "[chaos] workers=%d messages=%d crashes=%d%n",
                     workerCount, messageCount, crashCount.get());
 
             supervisor.shutdown();
@@ -147,17 +149,23 @@ class ProductionSimulationTest implements WithAssertions {
         @Property(tries = 10)
         void chaosStabilityThreshold(
                 @ForAll @DoubleRange(min = 0.01, max = 0.15) double crashProbability,
-                @ForAll @IntRange(min = 10, max = 30) int workerCount) throws Exception {
+                @ForAll @IntRange(min = 10, max = 30) int workerCount)
+                throws Exception {
             int messageCount = 500;
             Random random = new Random(12345);
 
-            var supervisor = new Supervisor("prop-chaos-sv", Strategy.ONE_FOR_ONE,
-                    messageCount * workerCount, Duration.ofMinutes(10));
+            var supervisor =
+                    new Supervisor(
+                            "prop-chaos-sv",
+                            Strategy.ONE_FOR_ONE,
+                            messageCount * workerCount,
+                            Duration.ofMinutes(10));
 
             @SuppressWarnings("unchecked")
             ProcRef<Integer, Msg>[] workers = new ProcRef[workerCount];
             for (int i = 0; i < workerCount; i++) {
-                workers[i] = supervisor.supervise("pworker-" + i, 0, ProductionSimulationTest::handler);
+                workers[i] =
+                        supervisor.supervise("pworker-" + i, 0, ProductionSimulationTest::handler);
             }
 
             for (int i = 0; i < messageCount; i++) {
@@ -195,7 +203,7 @@ class ProductionSimulationTest implements WithAssertions {
 
             // Link services in a chain
             for (int i = 1; i < serviceCount; i++) {
-                ProcLink.link(services.get(i - 1), services.get(i));
+                ProcessLink.link(services.get(i - 1), services.get(i));
             }
 
             // Crash the last service
@@ -225,35 +233,44 @@ class ProductionSimulationTest implements WithAssertions {
             LongAdder processedCount = new LongAdder();
             LongAdder sentCount = new LongAdder();
 
-            var consumer = new Proc<>(0, (Integer state, Msg msg) -> {
-                return switch (msg) {
-                    case Msg.Work(var p) -> {
-                        try { Thread.sleep(1); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                        processedCount.increment();
-                        yield state + p;
-                    }
-                    case Msg.Get() -> state;
-                    default -> state;
-                };
-            });
+            var consumer =
+                    new Proc<>(
+                            0,
+                            (Integer state, Msg msg) -> {
+                                return switch (msg) {
+                                    case Msg.Work(var p) -> {
+                                        try {
+                                            Thread.sleep(1);
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                        }
+                                        processedCount.increment();
+                                        yield state + p;
+                                    }
+                                    case Msg.Get() -> state;
+                                    default -> state;
+                                };
+                            });
 
             var startLatch = new CountDownLatch(1);
             var doneLatch = new CountDownLatch(producerCount);
 
             for (int p = 0; p < producerCount; p++) {
-                Thread.ofVirtual().start(() -> {
-                    try {
-                        startLatch.await();
-                        for (int m = 0; m < messagesPerProducer; m++) {
-                            consumer.tell(new Msg.Work(1));
-                            sentCount.increment();
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        doneLatch.countDown();
-                    }
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    try {
+                                        startLatch.await();
+                                        for (int m = 0; m < messagesPerProducer; m++) {
+                                            consumer.tell(new Msg.Work(1));
+                                            sentCount.increment();
+                                        }
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    } finally {
+                                        doneLatch.countDown();
+                                    }
+                                });
             }
 
             startLatch.countDown();
@@ -263,7 +280,8 @@ class ProductionSimulationTest implements WithAssertions {
                     .until(() -> processedCount.sum() >= sentCount.sum());
 
             assertThat(processedCount.sum()).isEqualTo(sentCount.sum());
-            System.out.printf("[backpressure] sent=%d processed=%d%n", sentCount.sum(), processedCount.sum());
+            System.out.printf(
+                    "[backpressure] sent=%d processed=%d%n", sentCount.sum(), processedCount.sum());
 
             consumer.stop();
         }
@@ -273,13 +291,16 @@ class ProductionSimulationTest implements WithAssertions {
         void extremeLoad_consumerResponsive() throws Exception {
             int messageCount = 100_000;
 
-            var worker = new Proc<>(0, (Integer state, Msg msg) -> {
-                return switch (msg) {
-                    case Msg.Work(var p) -> state + p;
-                    case Msg.Get() -> state;
-                    default -> state;
-                };
-            });
+            var worker =
+                    new Proc<>(
+                            0,
+                            (Integer state, Msg msg) -> {
+                                return switch (msg) {
+                                    case Msg.Work(var p) -> state + p;
+                                    case Msg.Get() -> state;
+                                    default -> state;
+                                };
+                            });
 
             long start = System.nanoTime();
             for (int i = 0; i < messageCount; i++) {
@@ -309,26 +330,32 @@ class ProductionSimulationTest implements WithAssertions {
         void primaryStandbyFailover_withMonitor() throws Exception {
             var sharedState = new AtomicInteger(0);
 
-            var primary = new Proc<>(0, (Integer state, Msg msg) -> {
-                return switch (msg) {
-                    case Msg.Work(var p) -> {
-                        int newState = state + p;
-                        sharedState.set(newState);
-                        yield newState;
-                    }
-                    case Msg.Get() -> state;
-                    case Msg.Crash(var reason) -> throw new RuntimeException(reason);
-                    default -> state;
-                };
-            });
+            var primary =
+                    new Proc<>(
+                            0,
+                            (Integer state, Msg msg) -> {
+                                return switch (msg) {
+                                    case Msg.Work(var p) -> {
+                                        int newState = state + p;
+                                        sharedState.set(newState);
+                                        yield newState;
+                                    }
+                                    case Msg.Get() -> state;
+                                    case Msg.Crash(var reason) ->
+                                            throw new RuntimeException(reason);
+                                    default -> state;
+                                };
+                            });
 
             var standby = new Proc<>(0, ProductionSimulationTest::handler);
 
             var primaryDead = new AtomicBoolean(false);
-            ProcMonitor.monitor(primary, (down) -> {
-                primaryDead.set(true);
-                standby.tell(new Msg.Set(sharedState.get()));
-            });
+            ProcessMonitor.monitor(
+                    primary,
+                    (down) -> {
+                        primaryDead.set(true);
+                        standby.tell(new Msg.Set(sharedState.get()));
+                    });
 
             for (int i = 0; i < 100; i++) {
                 primary.tell(new Msg.Work(1));
@@ -346,7 +373,8 @@ class ProductionSimulationTest implements WithAssertions {
             assertThat(standbyState).isEqualTo(100);
 
             long failoverMs = (System.nanoTime() - failoverStart) / 1_000_000;
-            System.out.printf("[failover] primary_state=%d standby_state=%d failover=%dms%n",
+            System.out.printf(
+                    "[failover] primary_state=%d standby_state=%d failover=%dms%n",
                     primaryState, standbyState, failoverMs);
 
             standby.stop();
@@ -367,27 +395,39 @@ class ProductionSimulationTest implements WithAssertions {
             int threadCountBefore = Thread.activeCount();
             AtomicInteger processed = new AtomicInteger(0);
 
-            var worker = new Proc<>(0, (Integer state, Msg msg) -> {
-                return switch (msg) {
-                    case Msg.Work(var p) -> {
-                        processed.incrementAndGet();
-                        yield state + p;
-                    }
-                    case Msg.Get() -> state;
-                    default -> state;
-                };
-            });
+            var worker =
+                    new Proc<>(
+                            0,
+                            (Integer state, Msg msg) -> {
+                                return switch (msg) {
+                                    case Msg.Work(var p) -> {
+                                        processed.incrementAndGet();
+                                        yield state + p;
+                                    }
+                                    case Msg.Get() -> state;
+                                    default -> state;
+                                };
+                            });
 
             long startTime = System.currentTimeMillis();
             long duration = 10_000;
             AtomicBoolean running = new AtomicBoolean(true);
 
-            Thread producer = Thread.ofVirtual().start(() -> {
-                while (running.get() && System.currentTimeMillis() - startTime < duration) {
-                    worker.tell(new Msg.Work(1));
-                    try { Thread.sleep(1); } catch (InterruptedException e) { break; }
-                }
-            });
+            Thread producer =
+                    Thread.ofVirtual()
+                            .start(
+                                    () -> {
+                                        while (running.get()
+                                                && System.currentTimeMillis() - startTime
+                                                        < duration) {
+                                            worker.tell(new Msg.Work(1));
+                                            try {
+                                                Thread.sleep(1);
+                                            } catch (InterruptedException e) {
+                                                break;
+                                            }
+                                        }
+                                    });
 
             for (int i = 0; i < 10; i++) {
                 Thread.sleep(1000);
@@ -402,7 +442,8 @@ class ProductionSimulationTest implements WithAssertions {
             Thread.sleep(500);
             assertThat(Thread.activeCount()).isLessThanOrEqualTo(threadCountBefore + 10);
 
-            System.out.printf("[stability] duration=10s processed=%d thread_delta=%d%n",
+            System.out.printf(
+                    "[stability] duration=10s processed=%d thread_delta=%d%n",
                     processed.get(), Thread.activeCount() - threadCountBefore);
         }
     }
@@ -426,7 +467,7 @@ class ProductionSimulationTest implements WithAssertions {
                 var w = new Proc<>(i, ProductionSimulationTest::handler);
                 workers.add(w);
                 alive.put(w, true);
-                ProcMonitor.monitor(w, (down) -> alive.remove(w));
+                ProcessMonitor.monitor(w, (down) -> alive.remove(w));
             }
 
             for (int i = 0; i < initialWorkers - 1; i++) {
@@ -456,13 +497,18 @@ class ProductionSimulationTest implements WithAssertions {
         @DisplayName("Wide supervisor tree — 100 children, concurrent crashes")
         void wideTree_100Children_concurrentCrashes() throws Exception {
             int childCount = 100;
-            var supervisor = new Supervisor("wide-sv", Strategy.ONE_FOR_ONE,
-                    childCount * 10, Duration.ofMinutes(5));
+            var supervisor =
+                    new Supervisor(
+                            "wide-sv",
+                            Strategy.ONE_FOR_ONE,
+                            childCount * 10,
+                            Duration.ofMinutes(5));
 
             @SuppressWarnings("unchecked")
             ProcRef<Integer, Msg>[] children = new ProcRef[childCount];
             for (int i = 0; i < childCount; i++) {
-                children[i] = supervisor.supervise("child-" + i, 0, ProductionSimulationTest::handler);
+                children[i] =
+                        supervisor.supervise("child-" + i, 0, ProductionSimulationTest::handler);
             }
 
             var startLatch = new CountDownLatch(1);
@@ -470,31 +516,35 @@ class ProductionSimulationTest implements WithAssertions {
 
             for (int i = 0; i < childCount / 2; i++) {
                 final int idx = i * 2;
-                Thread.ofVirtual().start(() -> {
-                    try {
-                        startLatch.await();
-                        children[idx].tell(new Msg.Crash("wide-crash-" + idx));
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        doneLatch.countDown();
-                    }
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    try {
+                                        startLatch.await();
+                                        children[idx].tell(new Msg.Crash("wide-crash-" + idx));
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    } finally {
+                                        doneLatch.countDown();
+                                    }
+                                });
             }
 
             startLatch.countDown();
             doneLatch.await(5, SECONDS);
 
             await().atMost(Duration.ofSeconds(10))
-                    .until(() -> {
-                        for (ProcRef<Integer, Msg> child : children) {
-                            if (tryGet(child) == Integer.MIN_VALUE) return false;
-                        }
-                        return true;
-                    });
+                    .until(
+                            () -> {
+                                for (ProcRef<Integer, Msg> child : children) {
+                                    if (tryGet(child) == Integer.MIN_VALUE) return false;
+                                }
+                                return true;
+                            });
 
             assertThat(supervisor.isRunning()).isTrue();
-            System.out.printf("[wide-tree] children=%d crashed=%d all_reachable=true%n",
+            System.out.printf(
+                    "[wide-tree] children=%d crashed=%d all_reachable=true%n",
                     childCount, childCount / 2);
 
             supervisor.shutdown();
@@ -504,13 +554,15 @@ class ProductionSimulationTest implements WithAssertions {
         @DisplayName("ONE_FOR_ALL with 50 children — single crash restarts all")
         void oneForAll_50children_singleCrashRestartsAll() throws Exception {
             int childCount = 50;
-            var supervisor = new Supervisor("ofa-sv", Strategy.ONE_FOR_ALL,
-                    5, Duration.ofMinutes(5));
+            var supervisor =
+                    new Supervisor("ofa-sv", Strategy.ONE_FOR_ALL, 5, Duration.ofMinutes(5));
 
             @SuppressWarnings("unchecked")
             ProcRef<Integer, Msg>[] children = new ProcRef[childCount];
             for (int i = 0; i < childCount; i++) {
-                children[i] = supervisor.supervise("ofa-child-" + i, 0, ProductionSimulationTest::handler);
+                children[i] =
+                        supervisor.supervise(
+                                "ofa-child-" + i, 0, ProductionSimulationTest::handler);
             }
 
             for (int i = 0; i < childCount; i++) {
@@ -520,12 +572,13 @@ class ProductionSimulationTest implements WithAssertions {
             children[0].tell(new Msg.Crash("ofa-trigger"));
 
             await().atMost(Duration.ofSeconds(10))
-                    .until(() -> {
-                        for (ProcRef<Integer, Msg> child : children) {
-                            if (tryGet(child) == Integer.MIN_VALUE) return false;
-                        }
-                        return true;
-                    });
+                    .until(
+                            () -> {
+                                for (ProcRef<Integer, Msg> child : children) {
+                                    if (tryGet(child) == Integer.MIN_VALUE) return false;
+                                }
+                                return true;
+                            });
 
             for (int i = 0; i < childCount; i++) {
                 assertThat(tryGet(children[i])).isNotEqualTo(Integer.MIN_VALUE);
@@ -555,27 +608,35 @@ class ProductionSimulationTest implements WithAssertions {
             var doneLatch = new CountDownLatch(callerCount);
 
             for (int c = 0; c < callerCount; c++) {
-                Thread.ofVirtual().start(() -> {
-                    try {
-                        startLatch.await();
-                        var result = CrashRecovery.retry(3, () -> {
-                            if (Math.random() < 0.5) throw new RuntimeException("transient");
-                            return "success";
-                        });
-                        if (result.isSuccess()) successCount.incrementAndGet();
-                        else exhaustCount.incrementAndGet();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        doneLatch.countDown();
-                    }
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    try {
+                                        startLatch.await();
+                                        var result =
+                                                CrashRecovery.retry(
+                                                        3,
+                                                        () -> {
+                                                            if (Math.random() < 0.5)
+                                                                throw new RuntimeException(
+                                                                        "transient");
+                                                            return "success";
+                                                        });
+                                        if (result.isSuccess()) successCount.incrementAndGet();
+                                        else exhaustCount.incrementAndGet();
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    } finally {
+                                        doneLatch.countDown();
+                                    }
+                                });
             }
 
             startLatch.countDown();
             doneLatch.await(30, SECONDS);
 
-            System.out.printf("[crash-recovery] callers=%d success=%d exhausted=%d%n",
+            System.out.printf(
+                    "[crash-recovery] callers=%d success=%d exhausted=%d%n",
                     callerCount, successCount.get(), exhaustCount.get());
 
             assertThat(successCount.get() + exhaustCount.get()).isEqualTo(callerCount);
@@ -615,7 +676,8 @@ class ProductionSimulationTest implements WithAssertions {
             long expected = (long) handlerCount * eventCount;
             assertThat(received.sum()).isEqualTo(expected);
 
-            System.out.printf("[event-stress] handlers=%d events=%d received=%d%n",
+            System.out.printf(
+                    "[event-stress] handlers=%d events=%d received=%d%n",
                     handlerCount, eventCount, received.sum());
 
             em.stop();
@@ -642,25 +704,29 @@ class ProductionSimulationTest implements WithAssertions {
             int perThread = processCount / 10;
             for (int t = 0; t < 10; t++) {
                 final int threadId = t;
-                Thread.ofVirtual().start(() -> {
-                    try {
-                        startLatch.await();
-                        for (int i = 0; i < perThread; i++) {
-                            String name = "proc-" + threadId + "-" + i;
-                            var proc = new Proc<>(0, ProductionSimulationTest::handler);
-                            try {
-                                ProcRegistry.register(name, proc);
-                                registered.incrementAndGet();
-                            } catch (IllegalStateException e) {
-                                // duplicate - shouldn't happen
-                            }
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        doneLatch.countDown();
-                    }
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    try {
+                                        startLatch.await();
+                                        for (int i = 0; i < perThread; i++) {
+                                            String name = "proc-" + threadId + "-" + i;
+                                            var proc =
+                                                    new Proc<>(
+                                                            0, ProductionSimulationTest::handler);
+                                            try {
+                                                ProcessRegistry.register(name, proc);
+                                                registered.incrementAndGet();
+                                            } catch (IllegalStateException e) {
+                                                // duplicate - shouldn't happen
+                                            }
+                                        }
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    } finally {
+                                        doneLatch.countDown();
+                                    }
+                                });
             }
 
             startLatch.countDown();
@@ -673,11 +739,16 @@ class ProductionSimulationTest implements WithAssertions {
             for (int t = 0; t < 10; t++) {
                 for (int i = 0; i < perThread; i++) {
                     String name = "proc-" + t + "-" + i;
-                    Optional<Proc<Integer, Msg>> proc = ProcRegistry.whereis(name);
-                    proc.ifPresent(p -> {
-                        try { p.stop(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                    });
-                    ProcRegistry.unregister(name);
+                    Optional<Proc<Integer, Msg>> proc = ProcessRegistry.whereis(name);
+                    proc.ifPresent(
+                            p -> {
+                                try {
+                                    p.stop();
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            });
+                    ProcessRegistry.unregister(name);
                 }
             }
         }

@@ -11,21 +11,23 @@ import java.util.stream.Stream;
 /**
  * Persistent message store — append-only log for reliable message delivery.
  *
- * <p>Enterprise Integration Pattern: "Message Store captures messages for reliable
- * delivery, replay, and audit purposes."
+ * <p>Enterprise Integration Pattern: "Message Store captures messages for reliable delivery,
+ * replay, and audit purposes."
  *
- * <p>Joe Armstrong: "In Erlang, message queues are in-memory. But for enterprise
- * systems, you need persistence. The message store is the durable backing for the bus."
+ * <p>Joe Armstrong: "In Erlang, message queues are in-memory. But for enterprise systems, you need
+ * persistence. The message store is the durable backing for the bus."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Append-only log</b> — Messages are never modified, only appended</li>
- *   <li><b>Topic partitioning</b> — Messages organized by topic</li>
- *   <li><b>Retention policies</b> — Time or size-based message expiration</li>
- *   <li><b>Replay capability</b> — Retrieve messages for recovery or replay</li>
+ *   <li><b>Append-only log</b> — Messages are never modified, only appended
+ *   <li><b>Topic partitioning</b> — Messages organized by topic
+ *   <li><b>Retention policies</b> — Time or size-based message expiration
+ *   <li><b>Replay capability</b> — Retrieve messages for recovery or replay
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * MessageStore store = MessageStore.inMemory()
  *     .withRetention(Duration.ofHours(24))
@@ -100,31 +102,21 @@ public interface MessageStore {
      */
     Stream<StoredMessage> retrieveFrom(String topic, long fromSequence, int limit);
 
-    /**
-     * Get the current sequence number for a topic.
-     */
+    /** Get the current sequence number for a topic. */
     long currentSequence(String topic);
 
-    /**
-     * Remove old messages based on retention policy.
-     */
+    /** Remove old messages based on retention policy. */
     void compact();
 
-    /**
-     * Get store statistics.
-     */
+    /** Get store statistics. */
     Stats stats();
 
-    /**
-     * Clear all messages.
-     */
+    /** Clear all messages. */
     void clear();
 
     // ── Factory methods ──────────────────────────────────────────────────────────
 
-    /**
-     * Create an in-memory message store.
-     */
+    /** Create an in-memory message store. */
     static InMemoryBuilder inMemory() {
         return new InMemoryBuilder();
     }
@@ -153,8 +145,10 @@ public interface MessageStore {
 
     /** In-memory message store implementation. */
     final class InMemoryMessageStore implements MessageStore {
-        private final ConcurrentHashMap<String, ConcurrentLinkedQueue<StoredMessage>> topics = new ConcurrentHashMap<>();
-        private final ConcurrentHashMap<String, AtomicLong> topicSequences = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<String, ConcurrentLinkedQueue<StoredMessage>> topics =
+                new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<String, AtomicLong> topicSequences =
+                new ConcurrentHashMap<>();
         private final AtomicLong globalSequence = new AtomicLong(0);
         private final Duration retention;
         private final long maxSize;
@@ -172,7 +166,9 @@ public interface MessageStore {
             StoredMessage msg = StoredMessage.from(seq, envelope);
 
             topics.computeIfAbsent(envelope.topic(), k -> new ConcurrentLinkedQueue<>()).add(msg);
-            topicSequences.computeIfAbsent(envelope.topic(), k -> new AtomicLong(0)).incrementAndGet();
+            topicSequences
+                    .computeIfAbsent(envelope.topic(), k -> new AtomicLong(0))
+                    .incrementAndGet();
 
             newestMessage = Instant.now();
             if (oldestMessage == null) {
@@ -187,9 +183,7 @@ public interface MessageStore {
             Queue<StoredMessage> queue = topics.get(topic);
             if (queue == null) return Stream.empty();
 
-            return queue.stream()
-                    .skip(Math.max(0, queue.size() - limit))
-                    .limit(limit);
+            return queue.stream().skip(Math.max(0, queue.size() - limit)).limit(limit);
         }
 
         @Override
@@ -197,9 +191,7 @@ public interface MessageStore {
             Queue<StoredMessage> queue = topics.get(topic);
             if (queue == null) return Stream.empty();
 
-            return queue.stream()
-                    .filter(m -> m.sequence() > fromSequence)
-                    .limit(limit);
+            return queue.stream().filter(m -> m.sequence() > fromSequence).limit(limit);
         }
 
         @Override
@@ -212,16 +204,18 @@ public interface MessageStore {
         public void compact() {
             Instant cutoff = Instant.now().minus(retention);
 
-            topics.forEach((topic, queue) -> {
-                queue.removeIf(msg -> msg.timestamp().isBefore(cutoff));
-            });
+            topics.forEach(
+                    (topic, queue) -> {
+                        queue.removeIf(msg -> msg.timestamp().isBefore(cutoff));
+                    });
 
             // Update oldest message
-            oldestMessage = topics.values().stream()
-                    .flatMap(Queue::stream)
-                    .map(StoredMessage::timestamp)
-                    .min(Instant::compareTo)
-                    .orElse(Instant.now());
+            oldestMessage =
+                    topics.values().stream()
+                            .flatMap(Queue::stream)
+                            .map(StoredMessage::timestamp)
+                            .min(Instant::compareTo)
+                            .orElse(Instant.now());
         }
 
         @Override

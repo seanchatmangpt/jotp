@@ -4,11 +4,11 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
-import io.github.seanchatmangpt.jotp.Supervisor;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 
@@ -25,8 +25,7 @@ class AcquisitionSupervisorTest implements WithAssertions {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static AcquisitionSupervisor.ParamChannelPair pair(
-            String name, String group, long id) {
+    private static AcquisitionSupervisor.ParamChannelPair pair(String name, String group, long id) {
         var param = SqlRaceParameter.of(name, group, id, 0.0, 500.0, "kph");
         var channel =
                 SqlRaceChannel.periodic(id, name, 200.0, FrequencyUnit.Hz, DataType.Signed16Bit);
@@ -55,8 +54,7 @@ class AcquisitionSupervisorTest implements WithAssertions {
 
     @Test
     void sizeMismatchThrows() {
-        var params =
-                List.of(SqlRaceParameter.of("vCar", "Chassis", 1L, 0.0, 400.0, "kph"));
+        var params = List.of(SqlRaceParameter.of("vCar", "Chassis", 1L, 0.0, 400.0, "kph"));
         var channels =
                 List.of(
                         SqlRaceChannel.periodic(
@@ -115,18 +113,13 @@ class AcquisitionSupervisorTest implements WithAssertions {
                     new long[] {100L, 200L, 300L},
                     new double[] {100.0, 200.0, 300.0});
             sv.addSamples(
-                    "nEngine:Chassis",
-                    new long[] {100L, 200L},
-                    new double[] {5000.0, 6000.0});
+                    "nEngine:Chassis", new long[] {100L, 200L}, new double[] {5000.0, 6000.0});
 
             // Wait for samples to be buffered
             await().atMost(Duration.ofMillis(300))
                     .untilAsserted(
                             () ->
-                                    assertThat(
-                                                    sv.statistics()
-                                                            .get("vCar:Chassis")
-                                                            .messagesIn())
+                                    assertThat(sv.statistics().get("vCar:Chassis").messagesIn())
                                             .isEqualTo(3));
 
             var result =
@@ -147,8 +140,8 @@ class AcquisitionSupervisorTest implements WithAssertions {
      * same parameters as {@link AcquisitionSupervisor}: only the crashed child is restarted; its
      * siblings continue unaffected.
      *
-     * <p>This mirrors the production scenario where a hardware ECU fault on one sensor channel
-     * must never stop acquisition of all other channels.
+     * <p>This mirrors the production scenario where a hardware ECU fault on one sensor channel must
+     * never stop acquisition of all other channels.
      */
     @Test
     void oneForOneRestartDoesNotAffectSiblings() throws Exception {

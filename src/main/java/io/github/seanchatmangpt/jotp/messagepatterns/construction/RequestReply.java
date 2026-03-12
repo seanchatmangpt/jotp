@@ -50,8 +50,7 @@ public final class RequestReply<S, M> {
      * @param <M> message type
      * @return a new RequestReply server
      */
-    public static <S, M> RequestReply<S, M> server(
-            S initial, BiFunction<S, M, S> handler) {
+    public static <S, M> RequestReply<S, M> server(S initial, BiFunction<S, M, S> handler) {
         return new RequestReply<>(new Proc<>(initial, handler));
     }
 
@@ -84,7 +83,7 @@ public final class RequestReply<S, M> {
     }
 
     /** Stop the server process. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 

@@ -36,16 +36,19 @@ public final class IdempotentReceiver<T, K> {
     public IdempotentReceiver(Function<T, K> keyExtractor, Consumer<T> handler) {
         this.keyExtractor = keyExtractor;
         this.handler = handler;
-        this.proc = new Proc<>(new HashSet<>(), (processed, msg) -> {
-            K key = keyExtractor.apply(msg);
-            if (processed.contains(key)) {
-                return processed;
-            }
-            handler.accept(msg);
-            var updated = new HashSet<>(processed);
-            updated.add(key);
-            return updated;
-        });
+        this.proc =
+                new Proc<>(
+                        new HashSet<>(),
+                        (processed, msg) -> {
+                            K key = keyExtractor.apply(msg);
+                            if (processed.contains(key)) {
+                                return processed;
+                            }
+                            handler.accept(msg);
+                            var updated = new HashSet<>(processed);
+                            updated.add(key);
+                            return updated;
+                        });
     }
 
     /** Send a message (duplicates will be silently dropped). */
@@ -54,7 +57,7 @@ public final class IdempotentReceiver<T, K> {
     }
 
     /** Stop the receiver. */
-    public void stop() {
+    public void stop() throws InterruptedException {
         proc.stop();
     }
 }

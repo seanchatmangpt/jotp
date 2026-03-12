@@ -3,7 +3,6 @@ package io.github.seanchatmangpt.jotp.dogfood.messaging;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,10 +16,9 @@ import java.util.function.Function;
  *
  * <p>Generated from {@code templates/java/messaging/correlation-identifier.tera}.
  *
- * <p>Implements message correlation for request-reply patterns. Each request is assigned
- * a unique correlation ID, and replies are matched back to their original requests.
- * This is essential for asynchronous messaging where responses need to be correlated
- * with their requests.
+ * <p>Implements message correlation for request-reply patterns. Each request is assigned a unique
+ * correlation ID, and replies are matched back to their original requests. This is essential for
+ * asynchronous messaging where responses need to be correlated with their requests.
  *
  * <p><strong>Pattern contracts validated:</strong>
  *
@@ -39,9 +37,7 @@ public final class CorrelationPatterns<T, R> {
     private Duration defaultTimeout = Duration.ofSeconds(30);
     private Function<T, String> correlationIdExtractor = msg -> UUID.randomUUID().toString();
 
-    /**
-     * Represents a pending reply waiting for a response.
-     */
+    /** Represents a pending reply waiting for a response. */
     private static class PendingReply<R> {
         final CompletableFuture<R> future = new CompletableFuture<>();
         final Instant createdAt = Instant.now();
@@ -112,7 +108,10 @@ public final class CorrelationPatterns<T, R> {
             throws TimeoutException, InterruptedException {
         var correlationId = sendRequest(request);
         try {
-            return pendingReplies.get(correlationId).future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return pendingReplies
+                    .get(correlationId)
+                    .future
+                    .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             if (e.getCause() instanceof RuntimeException re) {
                 throw re;
@@ -172,9 +171,7 @@ public final class CorrelationPatterns<T, R> {
      * @return pending reply count
      */
     public int pendingReplyCount() {
-        return (int) pendingReplies.values().stream()
-                .filter(p -> !p.future.isDone())
-                .count();
+        return (int) pendingReplies.values().stream().filter(p -> !p.future.isDone()).count();
     }
 
     /**
@@ -187,8 +184,9 @@ public final class CorrelationPatterns<T, R> {
         for (var entry : pendingReplies.entrySet()) {
             if (entry.getValue().isExpired(defaultTimeout)) {
                 expired.add(entry.getKey());
-                entry.getValue().future.completeExceptionally(
-                        new TimeoutException("Reply timed out"));
+                entry.getValue()
+                        .future
+                        .completeExceptionally(new TimeoutException("Reply timed out"));
             }
         }
         expired.forEach(pendingReplies::remove);

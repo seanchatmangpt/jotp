@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,8 +55,7 @@ class ScatterGatherTest {
                             (state, msg) -> {
                                 // Echo server: just increment counter and return
                                 System.out.println(
-                                        "Server-" + serverId + ": echo '" + msg.payload()
-                                                + "'");
+                                        "Server-" + serverId + ": echo '" + msg.payload() + "'");
                                 return new ServerState(state.echoCount() + 1);
                             });
             processes.add(proc);
@@ -76,8 +74,7 @@ class ScatterGatherTest {
     @DisplayName("Basic scatter-gather: collect replies from all recipients")
     void testBasicScatterGather() {
         // Arrange
-        var scatterGather =
-                new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
+        var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
         var message = new EchoMessage("req-1", "Hello");
 
         // Act
@@ -89,18 +86,18 @@ class ScatterGatherTest {
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
-                                            CompletableFuture<
-                                                    ScatterGather.ReplyWithId<String>>>();
+                                            CompletableFuture<ScatterGather.ReplyWithId<String>>>();
                             for (var recipient : recipients) {
                                 var future =
-                                        recipient.ask(new EchoMessage(
-                                                        reqWithId.requestId(),
-                                                        reqWithId.payload().payload()),
-                                                Duration.ofSeconds(1))
+                                        recipient
+                                                .ask(
+                                                        new EchoMessage(
+                                                                reqWithId.requestId(),
+                                                                reqWithId.payload().payload()),
+                                                        Duration.ofSeconds(1))
                                                 .thenApply(
                                                         s -> {
-                                                            return new ScatterGather
-                                                                    .ReplyWithId<>(
+                                                            return new ScatterGather.ReplyWithId<>(
                                                                     reqWithId.requestId(),
                                                                     Result.ok("replied"));
                                                         });
@@ -110,14 +107,10 @@ class ScatterGatherTest {
                         });
 
         // Assert
-        assertThat(result)
-                .as("Scatter-gather should succeed")
-                .isInstanceOf(Result.Ok.class);
+        assertThat(result).as("Scatter-gather should succeed").isInstanceOf(Result.Ok.class);
 
         var okResult = (Result.Ok<List<String>, Exception>) result;
-        assertThat(okResult.value())
-                .as("Should collect replies from all 3 recipients")
-                .hasSize(3);
+        assertThat(okResult.value()).as("Should collect replies from all 3 recipients").hasSize(3);
     }
 
     @Test
@@ -137,8 +130,7 @@ class ScatterGatherTest {
                         });
         var slowRecipient = new ProcRef<>(slowProc);
 
-        var scatterGather =
-                new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
+        var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
         var message = new EchoMessage("req-timeout", "Will timeout");
 
         // Act
@@ -150,28 +142,25 @@ class ScatterGatherTest {
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
-                                            CompletableFuture<
-                                                    ScatterGather.ReplyWithId<String>>>();
+                                            CompletableFuture<ScatterGather.ReplyWithId<String>>>();
                             for (var r :
-                                    List.of(
-                                            recipients.get(0),
-                                            slowRecipient,
-                                            recipients.get(1))) {
+                                    List.of(recipients.get(0), slowRecipient, recipients.get(1))) {
                                 var future =
-                                        r.ask(new EchoMessage(
-                                                        reqWithId.requestId(),
-                                                        reqWithId.payload().payload()),
-                                                Duration.ofMillis(500))
+                                        r.ask(
+                                                        new EchoMessage(
+                                                                reqWithId.requestId(),
+                                                                reqWithId.payload().payload()),
+                                                        Duration.ofMillis(500))
                                                 .thenApply(
                                                         s -> {
-                                                            return new ScatterGather
-                                                                    .ReplyWithId<>(
+                                                            return new ScatterGather.ReplyWithId<>(
                                                                     reqWithId.requestId(),
                                                                     Result.ok("replied"));
                                                         });
                                 futures.add(future);
                             }
-                            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            return CompletableFuture.allOf(
+                                            futures.toArray(new CompletableFuture[0]))
                                     .thenApply(_ -> futures.get(0).join());
                         });
 
@@ -191,8 +180,8 @@ class ScatterGatherTest {
 
         // Act
         var result =
-                ScatterGather.<EchoMessage, String, ServerState, EchoMessage>
-                        scatterGatherCorrelated(
+                ScatterGather
+                        .<EchoMessage, String, ServerState, EchoMessage>scatterGatherCorrelated(
                                 correlationId,
                                 new EchoMessage("req", "test"),
                                 recipients,
@@ -204,23 +193,24 @@ class ScatterGatherTest {
                                                             ScatterGather.ReplyWithId<String>>>();
                                     for (var recipient : recipients) {
                                         var future =
-                                                recipient.ask(new EchoMessage(
-                                                                reqWithId.requestId(),
-                                                                reqWithId.payload().payload()),
-                                                        Duration.ofSeconds(1))
+                                                recipient
+                                                        .ask(
+                                                                new EchoMessage(
+                                                                        reqWithId.requestId(),
+                                                                        reqWithId
+                                                                                .payload()
+                                                                                .payload()),
+                                                                Duration.ofSeconds(1))
                                                         .thenApply(
                                                                 s -> {
                                                                     return new ScatterGather
                                                                             .ReplyWithId<>(
-                                                                            reqWithId
-                                                                                    .requestId(),
-                                                                            Result.ok(
-                                                                                    "replied"));
+                                                                            reqWithId.requestId(),
+                                                                            Result.ok("replied"));
                                                                 });
                                         futures.add(future);
                                     }
-                                    return CompletableFuture.completedFuture(
-                                            futures.get(0).join());
+                                    return CompletableFuture.completedFuture(futures.get(0).join());
                                 });
 
         // Assert
@@ -231,14 +221,13 @@ class ScatterGatherTest {
     @DisplayName("Scatter-gather with custom aggregator")
     void testScatterGatherWithAggregator() {
         // Arrange
-        var scatterGather =
-                new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
+        var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
         var message = new EchoMessage("agg-req", "aggregate");
 
         // Act
         var result =
-                ScatterGather.<EchoMessage, String, ServerState, EchoMessage, Integer>
-                        scatterGatherWith(
+                ScatterGather
+                        .<EchoMessage, String, ServerState, EchoMessage, Integer>scatterGatherWith(
                                 message,
                                 recipients,
                                 1000,
@@ -253,34 +242,31 @@ class ScatterGatherTest {
                                                             ScatterGather.ReplyWithId<String>>>();
                                     for (var recipient : recipients) {
                                         var future =
-                                                recipient.ask(new EchoMessage(
-                                                                reqWithId.requestId(),
-                                                                reqWithId.payload().payload()),
-                                                        Duration.ofSeconds(1))
+                                                recipient
+                                                        .ask(
+                                                                new EchoMessage(
+                                                                        reqWithId.requestId(),
+                                                                        reqWithId
+                                                                                .payload()
+                                                                                .payload()),
+                                                                Duration.ofSeconds(1))
                                                         .thenApply(
                                                                 s -> {
                                                                     return new ScatterGather
                                                                             .ReplyWithId<>(
-                                                                            reqWithId
-                                                                                    .requestId(),
-                                                                            Result.ok(
-                                                                                    "replied"));
+                                                                            reqWithId.requestId(),
+                                                                            Result.ok("replied"));
                                                                 });
                                         futures.add(future);
                                     }
-                                    return CompletableFuture.completedFuture(
-                                            futures.get(0).join());
+                                    return CompletableFuture.completedFuture(futures.get(0).join());
                                 });
 
         // Assert
-        assertThat(result)
-                .as("Aggregated result should be success")
-                .isInstanceOf(Result.Ok.class);
+        assertThat(result).as("Aggregated result should be success").isInstanceOf(Result.Ok.class);
 
         var okResult = (Result.Ok<Integer, Exception>) result;
-        assertThat(okResult.value())
-                .as("Should aggregate 3 replies into count")
-                .isEqualTo(3);
+        assertThat(okResult.value()).as("Should aggregate 3 replies into count").isEqualTo(3);
     }
 
     @Test
@@ -297,28 +283,35 @@ class ScatterGatherTest {
 
         // Act
         var result =
-                ScatterGather.<EchoMessage, String, ServerState, EchoMessage, String>
-                        scatterGatherWithFallback(
-                                new EchoMessage("fallback-req", "test"),
-                                List.of(failingRecipient),
-                                1000,
-                                (corrId, replies) -> "success: " + replies.size(),
-                                error -> "fallback: " + error.getMessage(),
-                                reqWithId -> {
-                                    var future =
-                                            failingRecipient.ask(new EchoMessage(
-                                                            reqWithId.requestId(),
-                                                            reqWithId.payload().payload()),
-                                                    Duration.ofSeconds(1))
-                                                    .thenApply(
-                                                            s -> {
-                                                                return new ScatterGather
-                                                                        .ReplyWithId<>(
-                                                                        reqWithId.requestId(),
-                                                                        Result.ok("replied"));
-                                                            });
-                                    return future;
-                                });
+                ScatterGather
+                        .<EchoMessage, String, ServerState, EchoMessage, String>
+                                scatterGatherWithFallback(
+                                        new EchoMessage("fallback-req", "test"),
+                                        List.of(failingRecipient),
+                                        1000,
+                                        (corrId, replies) -> "success: " + replies.size(),
+                                        error -> "fallback: " + error.getMessage(),
+                                        reqWithId -> {
+                                            var future =
+                                                    failingRecipient
+                                                            .ask(
+                                                                    new EchoMessage(
+                                                                            reqWithId.requestId(),
+                                                                            reqWithId
+                                                                                    .payload()
+                                                                                    .payload()),
+                                                                    Duration.ofSeconds(1))
+                                                            .thenApply(
+                                                                    s -> {
+                                                                        return new ScatterGather
+                                                                                .ReplyWithId<>(
+                                                                                reqWithId
+                                                                                        .requestId(),
+                                                                                Result.ok(
+                                                                                        "replied"));
+                                                                    });
+                                            return future;
+                                        });
 
         // Assert
         assertThat(result)
@@ -357,8 +350,7 @@ class ScatterGatherTest {
         }
 
         // Act
-        var scatterGather =
-                new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
+        var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
         var result =
                 scatterGather.scatterGather(
                         new EchoMessage("concurrent", "test"),
@@ -367,24 +359,24 @@ class ScatterGatherTest {
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
-                                            CompletableFuture<
-                                                    ScatterGather.ReplyWithId<String>>>();
+                                            CompletableFuture<ScatterGather.ReplyWithId<String>>>();
                             for (var r : concurrentRecipients) {
                                 var future =
-                                        r.ask(new EchoMessage(
-                                                        reqWithId.requestId(),
-                                                        reqWithId.payload().payload()),
-                                                Duration.ofSeconds(2))
+                                        r.ask(
+                                                        new EchoMessage(
+                                                                reqWithId.requestId(),
+                                                                reqWithId.payload().payload()),
+                                                        Duration.ofSeconds(2))
                                                 .thenApply(
                                                         s -> {
-                                                            return new ScatterGather
-                                                                    .ReplyWithId<>(
+                                                            return new ScatterGather.ReplyWithId<>(
                                                                     reqWithId.requestId(),
                                                                     Result.ok("replied"));
                                                         });
                                 futures.add(future);
                             }
-                            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            return CompletableFuture.allOf(
+                                            futures.toArray(new CompletableFuture[0]))
                                     .thenApply(_ -> futures.get(0).join());
                         });
 
@@ -415,8 +407,7 @@ class ScatterGatherTest {
     @DisplayName("Reply ordering: replies returned in recipient order")
     void testReplyOrdering() {
         // Arrange
-        var scatterGather =
-                new ScatterGather<EchoMessage, Integer, ServerState, EchoMessage>();
+        var scatterGather = new ScatterGather<EchoMessage, Integer, ServerState, EchoMessage>();
         var orderedRecipients = new ArrayList<ProcRef<ServerState, EchoMessage>>();
 
         for (int i = 0; i < 3; i++) {
@@ -446,14 +437,14 @@ class ScatterGatherTest {
                                 var future =
                                         orderedRecipients
                                                 .get(i)
-                                                .ask(new EchoMessage(
-                                                        reqWithId.requestId(),
-                                                        reqWithId.payload().payload()),
+                                                .ask(
+                                                        new EchoMessage(
+                                                                reqWithId.requestId(),
+                                                                reqWithId.payload().payload()),
                                                         Duration.ofSeconds(1))
                                                 .thenApply(
                                                         s -> {
-                                                            return new ScatterGather
-                                                                    .ReplyWithId<>(
+                                                            return new ScatterGather.ReplyWithId<>(
                                                                     reqWithId.requestId(),
                                                                     Result.ok(idx));
                                                         });

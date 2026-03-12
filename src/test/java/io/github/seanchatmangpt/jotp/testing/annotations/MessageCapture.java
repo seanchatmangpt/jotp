@@ -6,16 +6,18 @@ import java.lang.annotation.*;
  * Non-invasive message interception via ProcMonitor.
  *
  * <p>Records all mailbox messages with:
+ *
  * <ul>
- *   <li>Timestamps</li>
- *   <li>Sender/receiver PIDs</li>
- *   <li>Correlation IDs</li>
- *   <li>Message type and payload</li>
+ *   <li>Timestamps
+ *   <li>Sender/receiver PIDs
+ *   <li>Correlation IDs
+ *   <li>Message type and payload
  * </ul>
  *
  * <p>Does NOT interfere with message flow (unlike spies/mocks).
  *
  * <p>Usage:
+ *
  * <pre>{@code
  * @MessageCapture(captureAll = true)
  * class RouterTest {
@@ -39,45 +41,45 @@ import java.lang.annotation.*;
 @Documented
 public @interface MessageCapture {
 
-  /**
-   * Capture all messages during test.
-   *
-   * @return true to capture everything
-   */
-  boolean captureAll() default true;
+    /**
+     * Capture all messages during test.
+     *
+     * @return true to capture everything
+     */
+    boolean captureAll() default true;
 
-  /**
-   * Only capture specific message types (empty = all).
-   *
-   * @return array of class names to filter
-   */
-  String[] onlyTypes() default {};
+    /**
+     * Only capture specific message types (empty = all).
+     *
+     * @return array of class names to filter
+     */
+    String[] onlyTypes() default {};
 
-  /**
-   * Exclude specific message types (empty = none).
-   *
-   * @return array of class names to exclude
-   */
-  String[] excludeTypes() default {};
+    /**
+     * Exclude specific message types (empty = none).
+     *
+     * @return array of class names to exclude
+     */
+    String[] excludeTypes() default {};
 
-  /**
-   * Maximum captured messages before pruning.
-   *
-   * @return max message count (0 = unlimited)
-   */
-  int maxMessages() default 1000;
+    /**
+     * Maximum captured messages before pruning.
+     *
+     * @return max message count (0 = unlimited)
+     */
+    int maxMessages() default 1000;
 
-  /**
-   * Include payload in captured data (memory intensive).
-   *
-   * @return true to capture payloads
-   */
-  boolean includePayload() default true;
+    /**
+     * Include payload in captured data (memory intensive).
+     *
+     * @return true to capture payloads
+     */
+    boolean includePayload() default true;
 
-  /**
-   * Enable message tracing (includes call stacks).
-   *
-   * @return true to trace sender locations
-   */
-  boolean traceStackTrace() default false;
+    /**
+     * Enable message tracing (includes call stacks).
+     *
+     * @return true to trace sender locations
+     */
+    boolean traceStackTrace() default false;
 }

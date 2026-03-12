@@ -10,9 +10,9 @@ import io.github.seanchatmangpt.jotp.Proc;
  * the operation, the payload carries the arguments.
  *
  * <p>Ported from Vaughn Vernon's Reactive Messaging Patterns (Scala/Akka) to Java 26 JOTP. In the
- * original Akka implementation, command messages are case classes dispatched via pattern matching in
- * an actor's {@code receive} block. Here we use sealed interfaces and records with Java 26 pattern
- * matching.
+ * original Akka implementation, command messages are case classes dispatched via pattern matching
+ * in an actor's {@code receive} block. Here we use sealed interfaces and records with Java 26
+ * pattern matching.
  *
  * <p>Usage:
  *

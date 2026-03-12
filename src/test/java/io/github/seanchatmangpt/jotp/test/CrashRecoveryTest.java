@@ -1,10 +1,10 @@
 package io.github.seanchatmangpt.jotp.test;
 
+import io.github.seanchatmangpt.jotp.CrashRecovery;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.CrashRecovery;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 

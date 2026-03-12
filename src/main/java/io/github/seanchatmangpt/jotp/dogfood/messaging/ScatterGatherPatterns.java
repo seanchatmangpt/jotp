@@ -12,8 +12,8 @@ import java.util.function.Function;
  * <p>Generated from {@code templates/java/messaging/scatter-gather.tera}.
  *
  * <p>Implements the scatter-gather pattern where a request is broadcast to multiple handlers
- * (scatter), and responses are collected and aggregated (gather). This is useful for
- * parallel processing and aggregating results from multiple sources.
+ * (scatter), and responses are collected and aggregated (gather). This is useful for parallel
+ * processing and aggregating results from multiple sources.
  *
  * <p><strong>Pattern contracts validated:</strong>
  *
@@ -72,9 +72,10 @@ public final class ScatterGatherPatterns<T, R> {
         var futures = new ArrayList<CompletableFuture<R>>();
 
         for (var handler : handlers) {
-            var future = CompletableFuture.supplyAsync(
-                    () -> handler.apply(request),
-                    Executors.newVirtualThreadPerTaskExecutor());
+            var future =
+                    CompletableFuture.supplyAsync(
+                            () -> handler.apply(request),
+                            Executors.newVirtualThreadPerTaskExecutor());
             futures.add(future);
         }
 
@@ -130,9 +131,7 @@ public final class ScatterGatherPatterns<T, R> {
         return handlers.size();
     }
 
-    /**
-     * Clears all handlers.
-     */
+    /** Clears all handlers. */
     public void clear() {
         handlers.clear();
     }
@@ -145,23 +144,17 @@ public final class ScatterGatherPatterns<T, R> {
      * @param <R> response type
      */
     public record ScatterResult<R>(List<R> results, List<Throwable> errors) {
-        /**
-         * Returns true if all handlers succeeded.
-         */
+        /** Returns true if all handlers succeeded. */
         public boolean allSucceeded() {
             return errors.isEmpty();
         }
 
-        /**
-         * Returns true if any handler succeeded.
-         */
+        /** Returns true if any handler succeeded. */
         public boolean anySucceeded() {
             return !results.isEmpty();
         }
 
-        /**
-         * Returns the success rate as a percentage.
-         */
+        /** Returns the success rate as a percentage. */
         public double successRate() {
             var total = results.size() + errors.size();
             return total == 0 ? 0.0 : (double) results.size() / total * 100;

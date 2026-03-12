@@ -8,10 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Runnable example of the Point-to-Point Channel pattern.
  *
- * <p>Demonstrates a simple order processing system where:
- * 1. OrderGateway receives incoming orders and sends to OrderProcessor
- * 2. OrderProcessor validates and processes, sends to Warehouse
- * 3. Warehouse processes shipment
+ * <p>Demonstrates a simple order processing system where: 1. OrderGateway receives incoming orders
+ * and sends to OrderProcessor 2. OrderProcessor validates and processes, sends to Warehouse 3.
+ * Warehouse processes shipment
  *
  * <p>Each stage is a separate Proc (lightweight process), messages flow 1:1.
  *
@@ -46,29 +45,38 @@ public class PointToPointChannelExample {
         var warehouseState = new AppState();
 
         // Create Warehouse process (final recipient)
-        var warehouse = Proc.spawn(warehouseState, state -> msg -> {
-            if (msg instanceof Message.CommandMsg cmd) {
-                System.out.println("[Warehouse] Received order: " + cmd.payload());
-                state.addOrder(cmd.commandType(), "SHIPPED");
-                return state;
-            }
-            return state;
-        });
+        var warehouse =
+                new Proc<>(
+                        warehouseState,
+                        (AppState state, Message msg) -> {
+                            if (msg instanceof Message.CommandMsg cmd) {
+                                System.out.println("[Warehouse] Received order: " + cmd.payload());
+                                state.addOrder(cmd.commandType(), "SHIPPED");
+                                return state;
+                            }
+                            return state;
+                        });
 
         // Create OrderProcessor (receives from gateway, sends to warehouse)
-        var processor = Proc.spawn(processorState, state -> msg -> {
-            if (msg instanceof Message.EventMsg evt) {
-                System.out.println("[Processor] Processing event: " + evt.eventType());
-                state.addOrder(evt.eventType(), "PROCESSING");
+        var processor =
+                new Proc<>(
+                        processorState,
+                        (AppState state, Message msg) -> {
+                            if (msg instanceof Message.EventMsg evt) {
+                                System.out.println(
+                                        "[Processor] Processing event: " + evt.eventType());
+                                state.addOrder(evt.eventType(), "PROCESSING");
 
-                // Forward to warehouse
-                PointToPointChannel.send(warehouse,
-                    Message.command("ORDER_" + evt.eventType(), evt.payload(), null));
+                                // Forward to warehouse
+                                PointToPointChannel.send(
+                                        warehouse,
+                                        Message.command(
+                                                "ORDER_" + evt.eventType(), evt.payload(), null));
 
-                return state;
-            }
-            return state;
-        });
+                                return state;
+                            }
+                            return state;
+                        });
 
         // Simulate incoming orders (1:1 Point-to-Point)
         System.out.println("[Gateway] Sending orders to processor...\n");

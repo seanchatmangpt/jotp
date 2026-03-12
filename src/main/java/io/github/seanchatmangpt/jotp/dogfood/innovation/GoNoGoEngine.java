@@ -100,7 +100,10 @@ public final class GoNoGoEngine {
         record NoGoLiveRisk(RuleViolation violation, String monitor, String schedule)
                 implements Verdict {}
 
-        /** Renders the verdict as Armstrong-voice output matching the gonogo-refactor-prompt.md format. */
+        /**
+         * Renders the verdict as Armstrong-voice output matching the gonogo-refactor-prompt.md
+         * format.
+         */
         default String render() {
             return switch (this) {
                 case Go g ->
@@ -281,8 +284,7 @@ public final class GoNoGoEngine {
                         Severity.POST_LIVE,
                         List.of(
                                 Pattern.compile("\\breturn\\s+null\\s*;"),
-                                Pattern.compile(
-                                        "Optional\\.ofNullable\\s*\\([^)]*Optional")),
+                                Pattern.compile("Optional\\.ofNullable\\s*\\([^)]*Optional")),
                         "This %s is a lie — a method that returns null is hiding an error from"
                                 + " its callers.",
                         "jgen generate -t error-handling/result-railway -n %s",
@@ -308,8 +310,7 @@ public final class GoNoGoEngine {
                                                 + "\\s*;",
                                         Pattern.DOTALL),
                                 Pattern.compile(
-                                        "catch\\s*\\([^)]+\\)\\s*\\{\\s*\\}",
-                                        Pattern.DOTALL)),
+                                        "catch\\s*\\([^)]+\\)\\s*\\{\\s*\\}", Pattern.DOTALL)),
                         "This %s converts a failure into a lie;"
                                 + " the caller believes nothing went wrong.",
                         "Result.of(() -> { /* replace: %s */ })",
@@ -346,7 +347,8 @@ public final class GoNoGoEngine {
                         Severity.POST_LIVE,
                         List.of(
                                 Pattern.compile("Thread\\.sleep\\s*\\("),
-                                Pattern.compile("\\bmaxRetries\\b|\\bretryCount\\b|\\bretryLimit\\b"),
+                                Pattern.compile(
+                                        "\\bmaxRetries\\b|\\bretryCount\\b|\\bretryLimit\\b"),
                                 Pattern.compile("Math\\.pow\\s*\\([^,]+,\\s*attempt")),
                         "This %s is a supervisor written inside business logic;"
                                 + " it belongs in a Supervisor, not here.",
@@ -371,9 +373,9 @@ public final class GoNoGoEngine {
      * {@link Verdict.NoGoLiveRisk} is returned — no single instant refactor exists.
      *
      * @param javaSource full Java source code as a string
-     * @param className  the simple class name used in refactor command templates
+     * @param className the simple class name used in refactor command templates
      * @return one of {@link Verdict.Go}, {@link Verdict.NoGo}, {@link Verdict.NoGoComplex}, or
-     *         {@link Verdict.NoGoLiveRisk}
+     *     {@link Verdict.NoGoLiveRisk}
      */
     public static Verdict check(String javaSource, String className) {
         Objects.requireNonNull(javaSource, "javaSource must not be null");

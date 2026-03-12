@@ -1,11 +1,10 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
-import java.util.List;
-
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.CategoryScore;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.CodebaseScore;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.Finding;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.Recommendation;
+import java.util.List;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -454,10 +453,7 @@ class ModernizationScorerTest implements WithAssertions {
         void sortedByRoiDescending() {
             var result = scorer.analyze(LEGACY_SOURCE);
 
-            var rois =
-                    result.recommendations().stream()
-                            .map(Recommendation::roi)
-                            .toList();
+            var rois = result.recommendations().stream().map(Recommendation::roi).toList();
 
             for (int i = 0; i < rois.size() - 1; i++) {
                 assertThat(rois.get(i)).isGreaterThanOrEqualTo(rois.get(i + 1));
@@ -480,7 +476,9 @@ class ModernizationScorerTest implements WithAssertions {
 
             assertThat(result.recommendations())
                     .allSatisfy(
-                            rec -> assertThat(rec.description()).containsPattern("\\d+ occurrence"));
+                            rec ->
+                                    assertThat(rec.description())
+                                            .containsPattern("\\d+ occurrence"));
         }
     }
 
@@ -597,8 +595,7 @@ class ModernizationScorerTest implements WithAssertions {
             var threadLocalScore = scorer.analyze(threadLocalSource);
             var scopedValueScore = scorer.analyze(scopedValueSource);
 
-            assertThat(threadLocalScore.overallScore())
-                    .isLessThan(scopedValueScore.overallScore());
+            assertThat(threadLocalScore.overallScore()).isLessThan(scopedValueScore.overallScore());
         }
     }
 
@@ -637,7 +634,8 @@ class ModernizationScorerTest implements WithAssertions {
         @Test
         @DisplayName("source with only comments returns near-baseline score")
         void onlyCommentsReturnsBaseline() {
-            var source = """
+            var source =
+                    """
                     // Just a comment
                     /* Block comment */
                     """;

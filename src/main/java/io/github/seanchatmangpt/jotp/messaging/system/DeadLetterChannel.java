@@ -11,11 +11,11 @@ import java.util.function.BiFunction;
  * Dead Letter Channel pattern with supervisor-managed crash recovery.
  *
  * <p>Messaging pattern: Routes poison pill and failed messages to a separate channel for
- * inspection, alerting, or manual intervention. Integrates with JOTP's {@link Supervisor}
- * and {@link CrashRecovery} to automatically recover from processing failures.
+ * inspection, alerting, or manual intervention. Integrates with JOTP's {@link Supervisor} and
+ * {@link CrashRecovery} to automatically recover from processing failures.
  *
- * <p>Joe Armstrong principle: "If you can't process a message, don't crash silently — store
- * it in a dead letter channel where operators can inspect it and decide what to do."
+ * <p>Joe Armstrong principle: "If you can't process a message, don't crash silently — store it in a
+ * dead letter channel where operators can inspect it and decide what to do."
  *
  * <p><strong>Usage:</strong>
  *
@@ -100,8 +100,8 @@ public final class DeadLetterChannel<T> {
     /**
      * Drain all accumulated dead letters atomically.
      *
-     * <p>Returns a snapshot of all dead letters since the last drain. Subsequent calls will
-     * not include the previously drained letters.
+     * <p>Returns a snapshot of all dead letters since the last drain. Subsequent calls will not
+     * include the previously drained letters.
      *
      * @return list of all dead letters (may be empty if none have arrived)
      */
@@ -114,8 +114,8 @@ public final class DeadLetterChannel<T> {
     /**
      * Returns the current count of dead letters in the channel (volatile).
      *
-     * <p>This count may be stale by the time this method returns; use {@link #drain()} for
-     * accurate retrieval of all accumulated letters.
+     * <p>This count may be stale by the time this method returns; use {@link #drain()} for accurate
+     * retrieval of all accumulated letters.
      *
      * @return number of dead letters currently queued
      */
@@ -124,13 +124,14 @@ public final class DeadLetterChannel<T> {
     }
 
     /**
-     * Supervisor-compatible handler: wraps a throwing message processor with crash recovery
-     * and automatic routing to this dead letter channel on failure.
+     * Supervisor-compatible handler: wraps a throwing message processor with crash recovery and
+     * automatic routing to this dead letter channel on failure.
      *
-     * <p>This is a convenience factory to create a supervisor-ready handler that routes
-     * exceptions to the dead letter channel.
+     * <p>This is a convenience factory to create a supervisor-ready handler that routes exceptions
+     * to the dead letter channel.
      *
      * <p>Example:
+     *
      * <pre>{@code
      * var dlc = DeadLetterChannel.<Order>create();
      * var supervisor = new Supervisor("order-sup", Strategy.ONE_FOR_ONE, 5,
@@ -149,14 +150,12 @@ public final class DeadLetterChannel<T> {
      * @return a message handler that routes exceptions to this DLC
      */
     public BiFunction<DeadLetterChannel<T>, T, DeadLetterChannel<T>> withCrashHandler(
-        Processor<T> processor) {
+            Processor<T> processor) {
         return (dlc, message) -> {
             try {
                 processor.process(message);
             } catch (Exception e) {
-                dlc.onFailure(
-                    message,
-                    e.getClass().getSimpleName() + ": " + e.getMessage());
+                dlc.onFailure(message, e.getClass().getSimpleName() + ": " + e.getMessage());
             }
             return dlc;
         };
@@ -182,9 +181,7 @@ public final class DeadLetterChannel<T> {
      */
     public List<DeadLetter<T>> drainByReason(String reasonFilter) {
         var all = drain();
-        return all.stream()
-            .filter(dl -> dl.reason().contains(reasonFilter))
-            .toList();
+        return all.stream().filter(dl -> dl.reason().contains(reasonFilter)).toList();
     }
 
     /**
@@ -195,9 +192,7 @@ public final class DeadLetterChannel<T> {
      */
     public List<DeadLetter<T>> drainSince(Instant since) {
         var all = drain();
-        return all.stream()
-            .filter(dl -> !dl.arrivedAt().isBefore(since))
-            .toList();
+        return all.stream().filter(dl -> !dl.arrivedAt().isBefore(since)).toList();
     }
 
     /**

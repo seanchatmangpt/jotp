@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.StateMachine;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -9,21 +10,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
-import io.github.seanchatmangpt.jotp.StateMachine;
 
 /**
  * Armstrong AGI Engine — a higher-order reasoning layer that chains all six innovation engines into
  * a multi-pass pipeline modelled on Joe Armstrong's diagnostic philosophy:
  *
  * <blockquote>
+ *
  * "First understand what's wrong; then understand why; then understand what to do about it."
+ *
  * </blockquote>
  *
  * <p>The engine runs four analysis passes concurrently (Stage 1), then builds root-cause {@link
- * ExplanationChain}s linking each Armstrong rule violation to the OTP primitive that fixes it (Stage
- * 2), assembles a prioritised {@link ActionPlan} (Stage 3), and finally self-verifies its plan by
- * re-running {@link GoNoGoEngine} on a stub-patched version of the source to confirm the verdict
- * improves (Stage 4).
+ * ExplanationChain}s linking each Armstrong rule violation to the OTP primitive that fixes it
+ * (Stage 2), assembles a prioritised {@link ActionPlan} (Stage 3), and finally self-verifies its
+ * plan by re-running {@link GoNoGoEngine} on a stub-patched version of the source to confirm the
+ * verdict improves (Stage 4).
  *
  * <p>The {@link #assessAsync} entry point exposes a live {@link StateMachine} progressing through
  * {@code Idle → Assessing → Explaining → Planning → Done}, so callers can observe the pipeline in
@@ -120,10 +122,10 @@ public final class ArmstrongAgiEngine {
     /**
      * Aggregated output from the four engines run in Stage 1.
      *
-     * @param verdict     first-violation verdict from {@link GoNoGoEngine#check}
-     * @param violations  all violations from {@link GoNoGoEngine#audit}
-     * @param score       modernization score from {@link ModernizationScorer}
-     * @param migrations  ontology-driven migration analysis from {@link OntologyMigrationEngine}
+     * @param verdict first-violation verdict from {@link GoNoGoEngine#check}
+     * @param violations all violations from {@link GoNoGoEngine#audit}
+     * @param score modernization score from {@link ModernizationScorer}
+     * @param migrations ontology-driven migration analysis from {@link OntologyMigrationEngine}
      * @param docElements parsed documentation structure from {@link LivingDocGenerator}
      */
     public record AgiEvidence(
@@ -149,11 +151,11 @@ public final class ArmstrongAgiEngine {
     /**
      * Links a single Armstrong rule violation to its fault-tolerance rationale and OTP fix.
      *
-     * @param violation         the detected rule violation
+     * @param violation the detected rule violation
      * @param armstrongPrinciple human-readable rule name (e.g. "Let It Crash")
-     * @param rootCause          one sentence explaining why the pattern breaks fault tolerance
-     * @param otpFix             the OTP primitive that addresses it (e.g. "CrashRecovery")
-     * @param codeHint           minimal Java 26 snippet demonstrating the fix
+     * @param rootCause one sentence explaining why the pattern breaks fault tolerance
+     * @param otpFix the OTP primitive that addresses it (e.g. "CrashRecovery")
+     * @param codeHint minimal Java 26 snippet demonstrating the fix
      */
     public record ExplanationChain(
             GoNoGoEngine.RuleViolation violation,
@@ -176,11 +178,11 @@ public final class ArmstrongAgiEngine {
     /**
      * Ordered, confidence-weighted fix plan produced by Stage 3.
      *
-     * @param explanations   root-cause chains for each violation
-     * @param safeActions    non-breaking {@code jgen} commands, safe to apply automatically
+     * @param explanations root-cause chains for each violation
+     * @param safeActions non-breaking {@code jgen} commands, safe to apply automatically
      * @param breakingActions breaking commands requiring manual review
      * @param confidenceScore 0.0–1.0; approaches 1.0 when fewer LIVE_BLOCKERs remain after plan
-     * @param summary         human-readable one-paragraph verdict
+     * @param summary human-readable one-paragraph verdict
      */
     public record ActionPlan(
             List<ExplanationChain> explanations,
@@ -209,17 +211,14 @@ public final class ArmstrongAgiEngine {
     /**
      * The complete result returned by {@link #assess}.
      *
-     * @param className    simple class name that was analyzed
-     * @param evidence     aggregated engine evidence from Stage 1
-     * @param plan         ordered action plan from Stage 3
+     * @param className simple class name that was analyzed
+     * @param evidence aggregated engine evidence from Stage 1
+     * @param plan ordered action plan from Stage 3
      * @param selfVerified {@code true} if re-running GoNoGo on stub-patched source improved the
-     *                     verdict, confirming the plan's top action is effective
+     *     verdict, confirming the plan's top action is effective
      */
     public record AgiAssessment(
-            String className,
-            AgiEvidence evidence,
-            ActionPlan plan,
-            boolean selfVerified) {
+            String className, AgiEvidence evidence, ActionPlan plan, boolean selfVerified) {
 
         public AgiAssessment {
             Objects.requireNonNull(className, "className must not be null");
@@ -333,25 +332,25 @@ public final class ArmstrongAgiEngine {
      * assessment.
      *
      * @param javaSource the Java source text to analyze
-     * @param className  simple class name (used by {@link GoNoGoEngine} for refactor templates)
+     * @param className simple class name (used by {@link GoNoGoEngine} for refactor templates)
      * @return complete {@link AgiAssessment} with evidence, explanation chains, action plan, and
-     *         self-verification result
+     *     self-verification result
      */
     public static AgiAssessment assess(String javaSource, String className) {
         Objects.requireNonNull(javaSource, "javaSource must not be null");
         Objects.requireNonNull(className, "className must not be null");
 
-        var evidence = gatherEvidence(javaSource, className);                   // Stage 1
-        var chains = buildExplanationChains(evidence);                          // Stage 2
-        var plan = buildActionPlan(chains, evidence, className, javaSource);   // Stage 3
-        var selfVerified = selfVerify(javaSource, className, evidence, plan);  // Stage 4
+        var evidence = gatherEvidence(javaSource, className); // Stage 1
+        var chains = buildExplanationChains(evidence); // Stage 2
+        var plan = buildActionPlan(chains, evidence, className, javaSource); // Stage 3
+        var selfVerified = selfVerify(javaSource, className, evidence, plan); // Stage 4
 
         return new AgiAssessment(className, evidence, plan, selfVerified);
     }
 
     /**
-     * Async entry point — starts the pipeline on a virtual thread and returns the live
-     * {@link StateMachine} handle for state inspection.
+     * Async entry point — starts the pipeline on a virtual thread and returns the live {@link
+     * StateMachine} handle for state inspection.
      *
      * <p>Progress through {@code Idle → Assessing → Explaining → Planning → Done} can be observed
      * via {@code sm.state()} — the Erlang {@code sys:get_state/1} pattern applied to the engine
@@ -359,7 +358,7 @@ public final class ArmstrongAgiEngine {
      * reached.
      *
      * @param javaSource the Java source text to analyze
-     * @param className  simple class name
+     * @param className simple class name
      * @return a running {@link StateMachine} — poll {@code sm.state()} until {@code Done}
      */
     public static StateMachine<AgiState, AgiEvent, AgiData> assessAsync(
@@ -460,8 +459,7 @@ public final class ArmstrongAgiEngine {
                             () -> GoNoGoEngine.check(javaSource, className), exec);
             var violationsFuture =
                     CompletableFuture.supplyAsync(() -> GoNoGoEngine.audit(javaSource), exec);
-            var scoreFuture =
-                    CompletableFuture.supplyAsync(() -> scorer.analyze(javaSource), exec);
+            var scoreFuture = CompletableFuture.supplyAsync(() -> scorer.analyze(javaSource), exec);
             var migrationsFuture =
                     CompletableFuture.supplyAsync(
                             () -> OntologyMigrationEngine.analyze(className + ".java", javaSource),
@@ -470,7 +468,10 @@ public final class ArmstrongAgiEngine {
                     CompletableFuture.supplyAsync(() -> docGen.parseSource(javaSource), exec);
 
             CompletableFuture.allOf(
-                            verdictFuture, violationsFuture, scoreFuture, migrationsFuture,
+                            verdictFuture,
+                            violationsFuture,
+                            scoreFuture,
+                            migrationsFuture,
                             docFuture)
                     .join();
 
@@ -596,17 +597,14 @@ public final class ArmstrongAgiEngine {
     // ── Stage 4: Self-verification ────────────────────────────────────────────
 
     /**
-     * Applies a stub quick-fix to the source for the most severe violation, re-runs
-     * {@link GoNoGoEngine#check}, and returns {@code true} if the verdict improves.
+     * Applies a stub quick-fix to the source for the most severe violation, re-runs {@link
+     * GoNoGoEngine#check}, and returns {@code true} if the verdict improves.
      *
      * <p>Lower {@link #verdictScore} = better verdict. Improvement means the patched verdict has a
      * lower score than the original, confirming the plan's top action is effective.
      */
     private static boolean selfVerify(
-            String javaSource,
-            String className,
-            AgiEvidence evidence,
-            ActionPlan plan) {
+            String javaSource, String className, AgiEvidence evidence, ActionPlan plan) {
 
         if (evidence.violations().isEmpty()) return true; // already clean — trivially verified
 

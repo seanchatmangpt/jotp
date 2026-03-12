@@ -9,18 +9,20 @@ import java.util.function.Function;
 /**
  * Query dispatcher — CQRS query-side dispatcher.
  *
- * <p>CQRS Pattern: "The query side handles all read operations, optimized
- * for fast data retrieval without the complexity of the write model."
+ * <p>CQRS Pattern: "The query side handles all read operations, optimized for fast data retrieval
+ * without the complexity of the write model."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Query routing</b> — Route queries to handlers by type</li>
- *   <li><b>Caching</b> — Optional caching of query results</li>
- *   <li><b>Batch queries</b> — Execute multiple queries in parallel</li>
- *   <li><b>Projections</b> — Query against read model projections</li>
+ *   <li><b>Query routing</b> — Route queries to handlers by type
+ *   <li><b>Caching</b> — Optional caching of query results
+ *   <li><b>Batch queries</b> — Execute multiple queries in parallel
+ *   <li><b>Projections</b> — Query against read model projections
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * QueryDispatcher dispatcher = QueryDispatcher.create()
  *     .register(GetOrderById.class, this::handleGetOrderById)
@@ -36,7 +38,9 @@ public final class QueryDispatcher {
     /** Query marker interface. */
     public interface Query<T> {
         /** Cache key for this query. */
-        default String cacheKey() { return toString(); }
+        default String cacheKey() {
+            return toString();
+        }
     }
 
     /** Query handler function. */
@@ -47,7 +51,9 @@ public final class QueryDispatcher {
 
     /** Cache entry. */
     private record CacheEntry(Object value, Instant expiry) {
-        boolean isExpired() { return Instant.now().isAfter(expiry); }
+        boolean isExpired() {
+            return Instant.now().isAfter(expiry);
+        }
     }
 
     // ─-- Dispatcher state ────────────────────────────────────────────────────────
@@ -71,9 +77,7 @@ public final class QueryDispatcher {
 
     // ── Configuration ────────────────────────────────────────────────────────────
 
-    /**
-     * Enable caching with specified TTL.
-     */
+    /** Enable caching with specified TTL. */
     public QueryDispatcher cache(java.time.Duration ttl) {
         this.cacheTtl = ttl;
         this.cachingEnabled = !ttl.isZero() && !ttl.isNegative();
@@ -82,19 +86,17 @@ public final class QueryDispatcher {
 
     // ── Registration ─────────────────────────────────────────────────────────────
 
-    /**
-     * Register a handler for a query type.
-     */
-    public <Q extends Query<T>, T> QueryDispatcher register(Class<Q> queryType, Handler<Q, T> handler) {
+    /** Register a handler for a query type. */
+    public <Q extends Query<T>, T> QueryDispatcher register(
+            Class<Q> queryType, Handler<Q, T> handler) {
         handlers.put(queryType, handler);
         return this;
     }
 
-    /**
-     * Register a handler using a simple function.
-     */
+    /** Register a handler using a simple function. */
     @SuppressWarnings("unchecked")
-    public <Q extends Query<T>, T> QueryDispatcher registerFunc(Class<Q> queryType, Function<Q, T> handler) {
+    public <Q extends Query<T>, T> QueryDispatcher registerFunc(
+            Class<Q> queryType, Function<Q, T> handler) {
         Handler<Q, T> h = query -> handler.apply(query);
         handlers.put(queryType, h);
         return this;
@@ -102,9 +104,7 @@ public final class QueryDispatcher {
 
     // ── Query execution ──────────────────────────────────────────────────────────
 
-    /**
-     * Execute a query and return the result.
-     */
+    /** Execute a query and return the result. */
     @SuppressWarnings("unchecked")
     public <T> Optional<T> query(Query<T> query) {
         queriesExecuted.incrementAndGet();
@@ -141,16 +141,12 @@ public final class QueryDispatcher {
         }
     }
 
-    /**
-     * Execute a query asynchronously.
-     */
+    /** Execute a query asynchronously. */
     public <T> CompletableFuture<Optional<T>> queryAsync(Query<T> query) {
         return CompletableFuture.supplyAsync(() -> query(query));
     }
 
-    /**
-     * Execute multiple queries in parallel.
-     */
+    /** Execute multiple queries in parallel. */
     @SuppressWarnings("unchecked")
     public <T> Map<Query<T>, Optional<T>> queryAll(Collection<Query<T>> queries) {
         Map<Query<T>, CompletableFuture<Optional<T>>> futures = new LinkedHashMap<>();
@@ -160,29 +156,26 @@ public final class QueryDispatcher {
         }
 
         Map<Query<T>, Optional<T>> results = new LinkedHashMap<>();
-        futures.forEach((query, future) -> {
-            try {
-                results.put(query, future.get());
-            } catch (Exception e) {
-                results.put(query, Optional.empty());
-            }
-        });
+        futures.forEach(
+                (query, future) -> {
+                    try {
+                        results.put(query, future.get());
+                    } catch (Exception e) {
+                        results.put(query, Optional.empty());
+                    }
+                });
 
         return results;
     }
 
     // ── Cache management ──────────────────────────────────────────────────────────
 
-    /**
-     * Clear the query cache.
-     */
+    /** Clear the query cache. */
     public void clearCache() {
         cache.clear();
     }
 
-    /**
-     * Evict expired cache entries.
-     */
+    /** Evict expired cache entries. */
     public void evictExpired() {
         cache.values().removeIf(CacheEntry::isExpired);
     }

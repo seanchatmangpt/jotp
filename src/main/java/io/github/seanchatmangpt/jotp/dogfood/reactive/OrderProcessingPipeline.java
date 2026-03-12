@@ -1,16 +1,15 @@
 package io.github.seanchatmangpt.jotp.dogfood.reactive;
 
-import java.util.List;
 import io.github.seanchatmangpt.jotp.reactive.DeadLetterChannel;
 import io.github.seanchatmangpt.jotp.reactive.MessageAggregator;
 import io.github.seanchatmangpt.jotp.reactive.MessageDispatcher;
 import io.github.seanchatmangpt.jotp.reactive.MessageFilter;
-import io.github.seanchatmangpt.jotp.reactive.MessagePipeline;
 import io.github.seanchatmangpt.jotp.reactive.MessageRouter;
 import io.github.seanchatmangpt.jotp.reactive.MessageSplitter;
 import io.github.seanchatmangpt.jotp.reactive.MessageTransformer;
 import io.github.seanchatmangpt.jotp.reactive.PointToPointChannel;
 import io.github.seanchatmangpt.jotp.reactive.PublishSubscribeChannel;
+import java.util.List;
 
 /**
  * Dogfood: reactive messaging patterns assembled into a real-world e-commerce order processing
@@ -92,11 +91,16 @@ public final class OrderProcessingPipeline {
                         .workers(
                                 3,
                                 order -> {
-                                    var id = switch (order) {
-                                        case ValidatedOrder.ExpressOrder e -> e.orderId();
-                                        case ValidatedOrder.StandardOrder s -> s.orderId();
-                                    };
-                                    auditBus.send(new AuditEvent(id, "express-dispatched", System.currentTimeMillis()));
+                                    var id =
+                                            switch (order) {
+                                                case ValidatedOrder.ExpressOrder e -> e.orderId();
+                                                case ValidatedOrder.StandardOrder s -> s.orderId();
+                                            };
+                                    auditBus.send(
+                                            new AuditEvent(
+                                                    id,
+                                                    "express-dispatched",
+                                                    System.currentTimeMillis()));
                                 })
                         .build();
 
@@ -111,7 +115,8 @@ public final class OrderProcessingPipeline {
                                                 System.currentTimeMillis())));
 
         var splitter =
-                MessageSplitter.<FullBatch, BatchLine>of(FullBatch::lines, new PointToPointChannel<>(line -> {}));
+                MessageSplitter.<FullBatch, BatchLine>of(
+                        FullBatch::lines, new PointToPointChannel<>(line -> {}));
 
         var standardAggregator =
                 MessageAggregator.<ValidatedOrder, FullBatch>builder()
@@ -119,25 +124,42 @@ public final class OrderProcessingPipeline {
                                 order ->
                                         switch (order) {
                                             case ValidatedOrder.ExpressOrder e -> e.orderId();
-                                            case ValidatedOrder.StandardOrder s -> "batch-" + (s.orderId().hashCode() % 10);
+                                            case ValidatedOrder.StandardOrder s ->
+                                                    "batch-" + (s.orderId().hashCode() % 10);
                                         })
                         .completeWhen(lines -> lines.size() >= batchSize)
                         .aggregateWith(
                                 lines -> {
                                     var first = lines.getFirst();
-                                    var batchId = switch (first) {
-                                        case ValidatedOrder.ExpressOrder e -> e.orderId();
-                                        case ValidatedOrder.StandardOrder s -> "batch-" + (s.orderId().hashCode() % 10);
-                                    };
+                                    var batchId =
+                                            switch (first) {
+                                                case ValidatedOrder.ExpressOrder e -> e.orderId();
+                                                case ValidatedOrder.StandardOrder s ->
+                                                        "batch-" + (s.orderId().hashCode() % 10);
+                                            };
                                     var batchLines =
                                             lines.stream()
                                                     .map(
                                                             o ->
                                                                     switch (o) {
-                                                                        case ValidatedOrder.ExpressOrder e ->
-                                                                                new BatchLine(batchId, e.customerId(), e.itemId(), e.qty());
-                                                                        case ValidatedOrder.StandardOrder s ->
-                                                                                new BatchLine(batchId, s.customerId(), s.itemId(), s.qty());
+                                                                        case ValidatedOrder
+                                                                                                .ExpressOrder
+                                                                                        e ->
+                                                                                new BatchLine(
+                                                                                        batchId,
+                                                                                        e
+                                                                                                .customerId(),
+                                                                                        e.itemId(),
+                                                                                        e.qty());
+                                                                        case ValidatedOrder
+                                                                                                .StandardOrder
+                                                                                        s ->
+                                                                                new BatchLine(
+                                                                                        batchId,
+                                                                                        s
+                                                                                                .customerId(),
+                                                                                        s.itemId(),
+                                                                                        s.qty());
                                                                     })
                                                     .toList();
                                     return new FullBatch(batchId, batchLines);
@@ -160,13 +182,21 @@ public final class OrderProcessingPipeline {
         var transformerChannel =
                 MessageTransformer.<RawRequest, ValidatedOrder>of(
                         raw -> {
-                            if (raw.quantity() <= 0 || raw.customerId() == null || raw.customerId().isBlank()) {
+                            if (raw.quantity() <= 0
+                                    || raw.customerId() == null
+                                    || raw.customerId().isBlank()) {
                                 throw new IllegalArgumentException("Invalid request: " + raw);
                             }
-                            String orderId = raw.customerId() + "-" + raw.itemId() + "-" + System.nanoTime();
+                            String orderId =
+                                    raw.customerId() + "-" + raw.itemId() + "-" + System.nanoTime();
                             return raw.express()
-                                    ? new ValidatedOrder.ExpressOrder(orderId, raw.customerId(), raw.itemId(), raw.quantity())
-                                    : new ValidatedOrder.StandardOrder(orderId, raw.customerId(), raw.itemId(), raw.quantity());
+                                    ? new ValidatedOrder.ExpressOrder(
+                                            orderId, raw.customerId(), raw.itemId(), raw.quantity())
+                                    : new ValidatedOrder.StandardOrder(
+                                            orderId,
+                                            raw.customerId(),
+                                            raw.itemId(),
+                                            raw.quantity());
                         },
                         router,
                         deadRaw);
@@ -191,15 +221,17 @@ public final class OrderProcessingPipeline {
         var dead = new DeadLetterChannel<ValidatedOrder>();
 
         // Subscribe an audit logger
-        auditBus.subscribe(event -> System.out.printf("[AUDIT] %s → %s%n", event.orderId(), event.outcome()));
+        auditBus.subscribe(
+                event -> System.out.printf("[AUDIT] %s → %s%n", event.orderId(), event.outcome()));
 
         var pipeline = assemble(auditBus, dead, 2);
 
         // Send a mix of valid express, standard, and invalid orders
         pipeline.send(new RawRequest("cust-A", "item-1", 2, true));
         pipeline.send(new RawRequest("cust-B", "item-2", 1, false));
-        pipeline.send(new RawRequest("cust-C", "item-3", 0, false));  // invalid → dead
-        pipeline.send(new RawRequest("cust-D", "item-4", 3, false));  // standard batch completes at 2
+        pipeline.send(new RawRequest("cust-C", "item-3", 0, false)); // invalid → dead
+        pipeline.send(
+                new RawRequest("cust-D", "item-4", 3, false)); // standard batch completes at 2
 
         Thread.sleep(500);
 

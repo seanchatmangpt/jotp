@@ -1,14 +1,12 @@
 package io.github.seanchatmangpt.jotp.test;
 
-import java.time.Duration;
+import io.github.seanchatmangpt.jotp.EventManager;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.EventManager;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -16,9 +14,9 @@ import org.junit.jupiter.api.Timeout;
 /**
  * Armstrong's EventManager scale and fault-isolation stress tests.
  *
- * <p>Joe Armstrong: <em>"gen_event's power is in its fault isolation. A crashing handler must
- * never take down the manager. If it does, you've lost your error logger exactly when you need
- * it most."</em>
+ * <p>Joe Armstrong: <em>"gen_event's power is in its fault isolation. A crashing handler must never
+ * take down the manager. If it does, you've lost your error logger exactly when you need it
+ * most."</em>
  *
  * <h2>Breaking points under investigation</h2>
  *
@@ -26,9 +24,9 @@ import org.junit.jupiter.api.Timeout;
  *   <li><b>Broadcast latency with N handlers</b> — {@code syncNotify} is O(N) in handler count.
  *       With 1000 handlers each doing real work, this may block the manager for seconds. We
  *       characterise the latency curve.
- *   <li><b>Crash storm — 500 crashing handlers simultaneously</b> — a broadcast that causes all
- *       500 handlers to throw. The manager must survive and continue serving the remaining 0
- *       handlers. The broadcast must complete, not hang.
+ *   <li><b>Crash storm — 500 crashing handlers simultaneously</b> — a broadcast that causes all 500
+ *       handlers to throw. The manager must survive and continue serving the remaining 0 handlers.
+ *       The broadcast must complete, not hang.
  *   <li><b>Dynamic churn — add/remove handlers while notifying</b> — handler list modified
  *       concurrently with broadcasts. The manager is a single-threaded {@link org.acme.Proc}, so
  *       all operations are serialised — but we verify this empirically under high churn.
@@ -73,12 +71,9 @@ class EventManagerScaleTest implements WithAssertions {
         mgr.syncNotify(new Evt.Tick());
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
-        System.out.printf(
-                "[event-scale] handlers=%d syncNotify=%d ms%n", handlerCount, elapsedMs);
+        System.out.printf("[event-scale] handlers=%d syncNotify=%d ms%n", handlerCount, elapsedMs);
 
-        assertThat(elapsedMs)
-                .as("syncNotify with %d handlers (ms)", handlerCount)
-                .isLessThan(2000);
+        assertThat(elapsedMs).as("syncNotify with %d handlers (ms)", handlerCount).isLessThan(2000);
 
         mgr.stop();
     }
@@ -125,9 +120,7 @@ class EventManagerScaleTest implements WithAssertions {
         mgr.syncNotify(new Evt.Tick()); // must not hang
 
         // All handlers must have been removed with non-null reason
-        assertThat(removedCount.get())
-                .as("handlers removed due to crash")
-                .isEqualTo(handlerCount);
+        assertThat(removedCount.get()).as("handlers removed due to crash").isEqualTo(handlerCount);
 
         // Manager must still accept new handlers and events
         var afterCrashCount = new AtomicInteger(0);
@@ -194,9 +187,9 @@ class EventManagerScaleTest implements WithAssertions {
      * addHandler(), deleteHandler(), and notify() calls are enqueued and executed in order. The
      * handler list must never be observed in a partially-updated state.
      *
-     * <p>We run 1000 add/remove cycles interleaved with 100 broadcasts and verify:
-     * - No exceptions (ConcurrentModification, NullPointer, etc.)
-     * - Events only delivered to handlers registered at the time of broadcast
+     * <p>We run 1000 add/remove cycles interleaved with 100 broadcasts and verify: - No exceptions
+     * (ConcurrentModification, NullPointer, etc.) - Events only delivered to handlers registered at
+     * the time of broadcast
      */
     @Test
     void handlerChurnDuringNotify_noCorruption() throws Exception {
@@ -278,9 +271,9 @@ class EventManagerScaleTest implements WithAssertions {
     /**
      * <b>Breaking point: manager mailbox under N concurrent producers.</b>
      *
-     * <p>50 threads each calling {@code notify()} 100 times = 5000 events. Each event is handled
-     * by one counting handler. The total count must be exactly 5000 — the manager's process
-     * serialises all events and the single handler counts each one.
+     * <p>50 threads each calling {@code notify()} 100 times = 5000 events. Each event is handled by
+     * one counting handler. The total count must be exactly 5000 — the manager's process serialises
+     * all events and the single handler counts each one.
      */
     @Test
     void concurrentProducers_50threads_exactEventCount() throws Exception {

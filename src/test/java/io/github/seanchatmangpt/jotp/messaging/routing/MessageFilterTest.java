@@ -33,16 +33,17 @@ class MessageFilterTest implements WithAssertions {
             AtomicInteger forwarded = new AtomicInteger(0);
             CountDownLatch latch = new CountDownLatch(2);
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> msg.value() > 5,
-                    msg -> {
-                        forwarded.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> msg.value() > 5,
+                            msg -> {
+                                forwarded.incrementAndGet();
+                                latch.countDown();
+                            });
 
-            filter.filter(new Message("m1", 10, "A"));  // Should forward
-            filter.filter(new Message("m2", 3, "B"));   // Should drop
-            filter.filter(new Message("m3", 8, "C"));   // Should forward
+            filter.filter(new Message("m1", 10, "A")); // Should forward
+            filter.filter(new Message("m2", 3, "B")); // Should drop
+            filter.filter(new Message("m3", 8, "C")); // Should forward
 
             // Wait for 2 forwards (drop should happen silently)
             latch.await();
@@ -55,12 +56,13 @@ class MessageFilterTest implements WithAssertions {
         void dropsNonMatchingMessages() throws InterruptedException {
             AtomicInteger forwarded = new AtomicInteger(0);
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> msg.category().equals("IMPORTANT"),
-                    msg -> forwarded.incrementAndGet());
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> msg.category().equals("IMPORTANT"),
+                            msg -> forwarded.incrementAndGet());
 
-            filter.filter(new Message("m1", 5, "IMPORTANT"));  // Forward
-            filter.filter(new Message("m2", 5, "SPAM"));       // Drop
+            filter.filter(new Message("m1", 5, "IMPORTANT")); // Forward
+            filter.filter(new Message("m2", 5, "SPAM")); // Drop
 
             // Give time to process
             await().atMost(Duration.ofMillis(500)).until(() -> true);
@@ -73,9 +75,10 @@ class MessageFilterTest implements WithAssertions {
         void handlesNoMatches() throws InterruptedException {
             AtomicInteger forwarded = new AtomicInteger(0);
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> msg.value() > 100, // Very strict predicate
-                    msg -> forwarded.incrementAndGet());
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> msg.value() > 100, // Very strict predicate
+                            msg -> forwarded.incrementAndGet());
 
             filter.filter(new Message("m1", 5, "A"));
             filter.filter(new Message("m2", 10, "B"));
@@ -99,21 +102,21 @@ class MessageFilterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(1);
 
             // Create chain: value > 5 -> category == IMPORTANT -> final
-            MessageFilter<Message> categoryFilter = MessageFilter.create(
-                    msg -> msg.category().equals("IMPORTANT"),
-                    msg -> {
-                        final_count.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> categoryFilter =
+                    MessageFilter.create(
+                            msg -> msg.category().equals("IMPORTANT"),
+                            msg -> {
+                                final_count.incrementAndGet();
+                                latch.countDown();
+                            });
 
-            MessageFilter<Message> valueFilter = MessageFilter.create(
-                    msg -> msg.value() > 5,
-                    categoryFilter::filter);
+            MessageFilter<Message> valueFilter =
+                    MessageFilter.create(msg -> msg.value() > 5, categoryFilter::filter);
 
             // Send test messages
             valueFilter.filter(new Message("m1", 10, "IMPORTANT")); // Pass both
-            valueFilter.filter(new Message("m2", 3, "IMPORTANT"));  // Drop at value filter
-            valueFilter.filter(new Message("m3", 8, "SPAM"));       // Pass value, drop at category
+            valueFilter.filter(new Message("m2", 3, "IMPORTANT")); // Drop at value filter
+            valueFilter.filter(new Message("m3", 8, "SPAM")); // Pass value, drop at category
 
             latch.await();
 
@@ -128,26 +131,25 @@ class MessageFilterTest implements WithAssertions {
             CountDownLatch latch = new CountDownLatch(1);
 
             // Create a 3-level chain
-            MessageFilter<Message> filter3 = MessageFilter.create(
-                    msg -> msg.category().equals("IMPORTANT"),
-                    msg -> {
-                        final_count.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> filter3 =
+                    MessageFilter.create(
+                            msg -> msg.category().equals("IMPORTANT"),
+                            msg -> {
+                                final_count.incrementAndGet();
+                                latch.countDown();
+                            });
 
-            MessageFilter<Message> filter2 = MessageFilter.create(
-                    msg -> msg.value() > 5,
-                    filter3::filter);
+            MessageFilter<Message> filter2 =
+                    MessageFilter.create(msg -> msg.value() > 5, filter3::filter);
 
-            MessageFilter<Message> filter1 = MessageFilter.create(
-                    msg -> msg.id().startsWith("msg"),
-                    filter2::filter);
+            MessageFilter<Message> filter1 =
+                    MessageFilter.create(msg -> msg.id().startsWith("msg"), filter2::filter);
 
             // Only message passing all three filters should reach final
             filter1.filter(new Message("msg_1", 10, "IMPORTANT")); // Pass all
             filter1.filter(new Message("bad_1", 10, "IMPORTANT")); // Fail filter1
-            filter1.filter(new Message("msg_2", 3, "IMPORTANT"));  // Fail filter2
-            filter1.filter(new Message("msg_3", 10, "SPAM"));      // Fail filter3
+            filter1.filter(new Message("msg_2", 3, "IMPORTANT")); // Fail filter2
+            filter1.filter(new Message("msg_3", 10, "SPAM")); // Fail filter3
 
             latch.await();
 
@@ -167,10 +169,11 @@ class MessageFilterTest implements WithAssertions {
             AtomicInteger count = new AtomicInteger(0);
             CountDownLatch latch = new CountDownLatch(1);
 
-            MessageFilter.Destination<Message> dest = msg -> {
-                count.incrementAndGet();
-                latch.countDown();
-            };
+            MessageFilter.Destination<Message> dest =
+                    msg -> {
+                        count.incrementAndGet();
+                        latch.countDown();
+                    };
 
             MessageFilter<Message> filter = MessageFilter.create(msg -> msg.value() > 5, dest);
 
@@ -221,7 +224,10 @@ class MessageFilterTest implements WithAssertions {
 
         @Test
         void nullDestinationThrows() {
-            assertThatThrownBy(() -> MessageFilter.create(msg -> true, (MessageFilter.Destination<Message>) null))
+            assertThatThrownBy(
+                            () ->
+                                    MessageFilter.create(
+                                            msg -> true, (MessageFilter.Destination<Message>) null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("next");
         }
@@ -241,12 +247,13 @@ class MessageFilterTest implements WithAssertions {
             int count = 10;
             CountDownLatch latch = new CountDownLatch(count);
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> true, // Always forward
-                    msg -> {
-                        forwarded.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> true, // Always forward
+                            msg -> {
+                                forwarded.incrementAndGet();
+                                latch.countDown();
+                            });
 
             for (int i = 0; i < count; i++) {
                 filter.filter(new Message("m" + i, i, "ANY"));
@@ -262,9 +269,10 @@ class MessageFilterTest implements WithAssertions {
         void alwaysFalsePredicateDropsAll() throws InterruptedException {
             AtomicInteger forwarded = new AtomicInteger(0);
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> false, // Never forward
-                    msg -> forwarded.incrementAndGet());
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> false, // Never forward
+                            msg -> forwarded.incrementAndGet());
 
             filter.filter(new Message("m1", 5, "A"));
             filter.filter(new Message("m2", 10, "B"));
@@ -287,19 +295,22 @@ class MessageFilterTest implements WithAssertions {
             int messageCount = 100;
             CountDownLatch latch = new CountDownLatch(messageCount / 2); // Expect 50 forwards
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> msg.value() > 5,
-                    msg -> {
-                        forwarded.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> msg.value() > 5,
+                            msg -> {
+                                forwarded.incrementAndGet();
+                                latch.countDown();
+                            });
 
             // Send messages from multiple virtual threads
             for (int i = 0; i < messageCount; i++) {
                 final int value = i % 10;
-                Thread.ofVirtual().start(() -> {
-                    filter.filter(new Message("m" + value, value, "A"));
-                });
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    filter.filter(new Message("m" + value, value, "A"));
+                                });
             }
 
             latch.await();
@@ -320,12 +331,13 @@ class MessageFilterTest implements WithAssertions {
             int messageCount = 1000;
             CountDownLatch latch = new CountDownLatch(messageCount / 2); // Expect half
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> msg.value() % 2 == 0, // Pass even values
-                    msg -> {
-                        forwarded.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg -> msg.value() % 2 == 0, // Pass even values
+                            msg -> {
+                                forwarded.incrementAndGet();
+                                latch.countDown();
+                            });
 
             long start = System.currentTimeMillis();
 
@@ -347,14 +359,19 @@ class MessageFilterTest implements WithAssertions {
         void complexPredicatePerformance() throws InterruptedException {
             AtomicInteger forwarded = new AtomicInteger(0);
             int messageCount = 500;
-            CountDownLatch latch = new CountDownLatch(messageCount / 4); // Complex predicate ~25% match
+            CountDownLatch latch =
+                    new CountDownLatch(messageCount / 4); // Complex predicate ~25% match
 
-            MessageFilter<Message> filter = MessageFilter.create(
-                    msg -> msg.value() > 5 && msg.category().length() > 3 && msg.id().startsWith("m"),
-                    msg -> {
-                        forwarded.incrementAndGet();
-                        latch.countDown();
-                    });
+            MessageFilter<Message> filter =
+                    MessageFilter.create(
+                            msg ->
+                                    msg.value() > 5
+                                            && msg.category().length() > 3
+                                            && msg.id().startsWith("m"),
+                            msg -> {
+                                forwarded.incrementAndGet();
+                                latch.countDown();
+                            });
 
             for (int i = 0; i < messageCount; i++) {
                 filter.filter(new Message("msg_" + i, i % 20, "IMPORTANT"));

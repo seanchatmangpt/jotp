@@ -7,8 +7,8 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  * sample rate, and source type of a single data stream. Every {@link SqlRaceParameter} references
  * exactly one channel by {@link #channelId()}.
  *
- * <p>Channels are created during the {@link SqlRaceSession} configuration phase
- * ({@code Initializing → Live}) and committed atomically:
+ * <p>Channels are created during the {@link SqlRaceSession} configuration phase ({@code
+ * Initializing → Live}) and committed atomically:
  *
  * <pre>{@code
  * // Real SQL Race pattern (C# original):
@@ -18,14 +18,14 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  * config.Commit();
  * }</pre>
  *
- * <p>In this Java 26 / OTP port, channels are immutable records committed via a
- * {@link SqlRaceSessionEvent.Configure} message to the session {@code StateMachine}.
+ * <p>In this Java 26 / OTP port, channels are immutable records committed via a {@link
+ * SqlRaceSessionEvent.Configure} message to the session {@code StateMachine}.
  *
- * @param channelId      unique channel identifier within the session (auto-incremented)
- * @param name           short engineering name (e.g. {@code "vCar"}, {@code "nEngine"})
- * @param intervalNs     sample interval in nanoseconds; derived from frequency via
- *                       {@link FrequencyUnit#toIntervalNs(double)}
- * @param dataType       binary representation of each sample
+ * @param channelId unique channel identifier within the session (auto-incremented)
+ * @param name short engineering name (e.g. {@code "vCar"}, {@code "nEngine"})
+ * @param intervalNs sample interval in nanoseconds; derived from frequency via {@link
+ *     FrequencyUnit#toIntervalNs(double)}
+ * @param dataType binary representation of each sample
  * @param dataSourceType how samples arrive (periodic, triggered, raw)
  */
 public record SqlRaceChannel(
@@ -57,19 +57,19 @@ public record SqlRaceChannel(
      * }</pre>
      *
      * @param channelId unique ID within session
-     * @param name      short name
+     * @param name short name
      * @param frequency sampling rate (in {@code unit})
-     * @param unit      Hz or KHz
-     * @param dataType  sample bit width
+     * @param unit Hz or KHz
+     * @param dataType sample bit width
      * @return configured periodic channel
      */
     public static SqlRaceChannel periodic(
-            long channelId,
-            String name,
-            double frequency,
-            FrequencyUnit unit,
-            DataType dataType) {
-        return new SqlRaceChannel(channelId, name, unit.toIntervalNs(frequency), dataType,
+            long channelId, String name, double frequency, FrequencyUnit unit, DataType dataType) {
+        return new SqlRaceChannel(
+                channelId,
+                name,
+                unit.toIntervalNs(frequency),
+                dataType,
                 ChannelDataSourceType.Periodic);
     }
 

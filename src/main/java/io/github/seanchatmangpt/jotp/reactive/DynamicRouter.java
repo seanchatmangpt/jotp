@@ -5,18 +5,18 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
 /**
- * Dynamic Router — EIP pattern that routes messages based on a routing table that can
- * be updated at runtime without stopping the system.
+ * Dynamic Router — EIP pattern that routes messages based on a routing table that can be updated at
+ * runtime without stopping the system.
  *
- * <p>Unlike {@link MessageRouter} (static routes at build time), the DynamicRouter allows
- * adding and removing routes while messages are flowing. This enables live reconfiguration,
- * A/B routing, and feature flags in message-driven systems.
+ * <p>Unlike {@link MessageRouter} (static routes at build time), the DynamicRouter allows adding
+ * and removing routes while messages are flowing. This enables live reconfiguration, A/B routing,
+ * and feature flags in message-driven systems.
  *
- * <p>Erlang/OTP analogy: a {@code gen_server} whose state includes a live routing table
- * updated via normal messages (hot code reload equivalent for routing logic).
+ * <p>Erlang/OTP analogy: a {@code gen_server} whose state includes a live routing table updated via
+ * normal messages (hot code reload equivalent for routing logic).
  *
- * <p>Route evaluation uses first-match semantics. Routes are stored in a
- * {@link CopyOnWriteArrayList} for lock-free reads under concurrent message flow.
+ * <p>Route evaluation uses first-match semantics. Routes are stored in a {@link
+ * CopyOnWriteArrayList} for lock-free reads under concurrent message flow.
  *
  * @param <T> message type
  */
@@ -28,8 +28,11 @@ public final class DynamicRouter<T> implements MessageChannel<T> {
     private volatile MessageChannel<T> defaultChannel;
 
     private static final class NoOpChannel<T> implements MessageChannel<T> {
-        @Override public void send(T message) {}
-        @Override public void stop() {}
+        @Override
+        public void send(T message) {}
+
+        @Override
+        public void stop() {}
     }
 
     /** Creates a DynamicRouter with no routes (all unmatched messages are silently dropped). */
@@ -43,33 +46,33 @@ public final class DynamicRouter<T> implements MessageChannel<T> {
     }
 
     /**
-     * Adds a route: messages matching {@code predicate} are forwarded to {@code channel}.
-     * Route is appended to the end of the routing table (lowest priority).
-     * Thread-safe — can be called while messages are flowing.
+     * Adds a route: messages matching {@code predicate} are forwarded to {@code channel}. Route is
+     * appended to the end of the routing table (lowest priority). Thread-safe — can be called while
+     * messages are flowing.
      */
     public void addRoute(Predicate<T> predicate, MessageChannel<T> channel) {
         routes.add(new Route<>(predicate, channel));
     }
 
     /**
-     * Prepends a route, giving it highest priority (first-match semantics).
-     * Thread-safe — can be called while messages are flowing.
+     * Prepends a route, giving it highest priority (first-match semantics). Thread-safe — can be
+     * called while messages are flowing.
      */
     public void prependRoute(Predicate<T> predicate, MessageChannel<T> channel) {
         routes.add(0, new Route<>(predicate, channel));
     }
 
     /**
-     * Removes all routes targeting the given channel.
-     * Thread-safe — can be called while messages are flowing.
+     * Removes all routes targeting the given channel. Thread-safe — can be called while messages
+     * are flowing.
      */
     public void removeRoutesTo(MessageChannel<T> channel) {
         routes.removeIf(r -> r.channel() == channel);
     }
 
     /**
-     * Atomically replaces the default (fallback) channel.
-     * Thread-safe — next message dispatch picks up the new default.
+     * Atomically replaces the default (fallback) channel. Thread-safe — next message dispatch picks
+     * up the new default.
      */
     public void setDefault(MessageChannel<T> defaultChannel) {
         this.defaultChannel = defaultChannel;
@@ -81,8 +84,8 @@ public final class DynamicRouter<T> implements MessageChannel<T> {
     }
 
     /**
-     * Dispatches {@code message} to the first matching route, or the default channel
-     * if no route matches.
+     * Dispatches {@code message} to the first matching route, or the default channel if no route
+     * matches.
      *
      * <p>Reads the route snapshot atomically (CopyOnWriteArrayList iteration is consistent).
      */
@@ -98,7 +101,9 @@ public final class DynamicRouter<T> implements MessageChannel<T> {
         defaultChannel.send(message);
     }
 
-    /** No managed threads — no-op stop. Callers are responsible for stopping downstream channels. */
+    /**
+     * No managed threads — no-op stop. Callers are responsible for stopping downstream channels.
+     */
     @Override
     public void stop() throws InterruptedException {
         // DynamicRouter is stateless; downstream channels manage their own lifecycle

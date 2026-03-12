@@ -2,11 +2,11 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcLink;
+import io.github.seanchatmangpt.jotp.ProcessLink;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -79,10 +79,15 @@ class ExitTrapTest implements WithAssertions {
 
     @Test
     void trapExit_false_propagatesInterrupt() throws Exception {
-        var a = new Proc<>(0, (Integer s, String m) -> { throw new RuntimeException(m); });
+        var a =
+                new Proc<>(
+                        0,
+                        (Integer s, String m) -> {
+                            throw new RuntimeException(m);
+                        });
         var b = new Proc<>(0, (Integer s, String m) -> s); // passive
 
-        ProcLink.link(a, b);
+        ProcessLink.link(a, b);
         // b does NOT trap exits (default)
 
         a.tell("crash");
@@ -90,10 +95,10 @@ class ExitTrapTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(2)).until(() -> !b.thread().isAlive());
     }
 
-    // ── Test 3: trapping process receives ExitSignal via ProcLink ───────
+    // ── Test 3: trapping process receives ExitSignal via ProcessLink ───────
 
     @Test
-    void trapExit_viaProcLink_convertsToMessage() throws Exception {
+    void trapExit_viaProcessLink_convertsToMessage() throws Exception {
         var exitSignalRef = new AtomicReference<ExitSignal>();
 
         var trapping =
@@ -116,7 +121,7 @@ class ExitTrapTest implements WithAssertions {
                             throw new RuntimeException("linked crash");
                         });
 
-        // Use ProcLink.link — it calls deliverExitSignal which checks trapExits
+        // Use ProcessLink.link — it calls deliverExitSignal which checks trapExits
         @SuppressWarnings("unchecked")
         Proc<Integer, Object> trappingTyped = (Proc<Integer, Object>) (Proc<?, ?>) trapping;
         @SuppressWarnings("unchecked")

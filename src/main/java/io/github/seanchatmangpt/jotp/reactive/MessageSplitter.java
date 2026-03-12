@@ -7,10 +7,10 @@ import java.util.function.Function;
  * Message splitter: decomposes one composite message into a sequence of part messages, forwarding
  * each part to a downstream channel.
  *
- * <p>Enterprise Integration Pattern: <em>Splitter</em> (EIP §9.1). Erlang analog: the canonical
- * OTP scatter pattern — a coordinator process receives a batch and fans out individual work units
- * to a pool of worker processes via {@code [Pid ! Part || Part <- Parts]}. Complementary to
- * {@link MessageAggregator} which re-collects the scattered parts.
+ * <p>Enterprise Integration Pattern: <em>Splitter</em> (EIP §9.1). Erlang analog: the canonical OTP
+ * scatter pattern — a coordinator process receives a batch and fans out individual work units to a
+ * pool of worker processes via {@code [Pid ! Part || Part <- Parts]}. Complementary to {@link
+ * MessageAggregator} which re-collects the scattered parts.
  *
  * <p>Usage — scatter-gather with splitter and aggregator:
  *

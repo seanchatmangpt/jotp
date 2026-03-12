@@ -2,10 +2,8 @@ package io.github.seanchatmangpt.jotp.messaging.system;
 
 import static java.time.Instant.*;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.stream.Collectors;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
@@ -115,8 +113,7 @@ class MessageExpirationTest implements WithAssertions {
         var expiration = MessageExpiration.create(5000);
         var msg = new NotificationMsg.Alert("ALERT-001", "HIGH");
         var created = Instant.now();
-        var expiring =
-                new MessageExpiration.ExpiringMessage<>(msg, 1000, created);
+        var expiring = new MessageExpiration.ExpiringMessage<>(msg, 1000, created);
 
         var beforeExpiry = created.plusMillis(500);
         var atExpiry = created.plusMillis(1000);
@@ -309,8 +306,7 @@ class MessageExpirationTest implements WithAssertions {
     void wrapMessage_wrapsJOTPMessage() {
         var expiration = MessageExpiration.create(5000);
         var jotpMsg =
-                io.github.seanchatmangpt.jotp.messaging.Message.event(
-                        "OrderCreated", new Object());
+                io.github.seanchatmangpt.jotp.messaging.Message.event("OrderCreated", new Object());
 
         var wrapped = expiration.wrapMessage(jotpMsg, 3000);
 
@@ -365,10 +361,7 @@ class MessageExpirationTest implements WithAssertions {
         var extracted = expiration.extractExpired(empty);
         assertThat(extracted).isEmpty();
 
-        var cleaned =
-                expiration
-                        .cleanupExpired(empty.stream())
-                        .collect(Collectors.toList());
+        var cleaned = expiration.cleanupExpired(empty.stream()).collect(Collectors.toList());
         assertThat(cleaned).isEmpty();
     }
 

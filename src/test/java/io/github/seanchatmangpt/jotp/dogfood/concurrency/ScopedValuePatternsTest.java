@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.StructuredTaskScope;
 import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
@@ -16,7 +15,8 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     void handleAsUser_bindsUserForScope() {
         AtomicReference<String> captured = new AtomicReference<>();
-        ScopedValuePatterns.handleAsUser("alice", () -> captured.set(ScopedValuePatterns.currentUser()));
+        ScopedValuePatterns.handleAsUser(
+                "alice", () -> captured.set(ScopedValuePatterns.currentUser()));
         assertThat(captured.get()).isEqualTo("alice");
     }
 
@@ -37,10 +37,12 @@ class ScopedValuePatternsTest implements WithAssertions {
 
     @Test
     void withTrace_unbindsAfterScope() throws Exception {
-        ScopedValuePatterns.withTrace("trace-456", () -> {
-            assertThat(ScopedValuePatterns.TRACE_ID.get()).isEqualTo("trace-456");
-            return null;
-        });
+        ScopedValuePatterns.withTrace(
+                "trace-456",
+                () -> {
+                    assertThat(ScopedValuePatterns.TRACE_ID.get()).isEqualTo("trace-456");
+                    return null;
+                });
         assertThat(ScopedValuePatterns.TRACE_ID.isBound()).isFalse();
     }
 
@@ -53,11 +55,13 @@ class ScopedValuePatternsTest implements WithAssertions {
         AtomicReference<String> capturedTrace = new AtomicReference<>();
         AtomicReference<String> capturedTenant = new AtomicReference<>();
 
-        ScopedValuePatterns.withRequestContext(ctx, () -> {
-            capturedUser.set(ScopedValuePatterns.CURRENT_USER.get());
-            capturedTrace.set(ScopedValuePatterns.TRACE_ID.get());
-            capturedTenant.set(ScopedValuePatterns.TENANT_ID.get());
-        });
+        ScopedValuePatterns.withRequestContext(
+                ctx,
+                () -> {
+                    capturedUser.set(ScopedValuePatterns.CURRENT_USER.get());
+                    capturedTrace.set(ScopedValuePatterns.TRACE_ID.get());
+                    capturedTenant.set(ScopedValuePatterns.TENANT_ID.get());
+                });
 
         assertThat(capturedUser.get()).isEqualTo("user-1");
         assertThat(capturedTrace.get()).isEqualTo("trace-1");
@@ -67,11 +71,16 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     void withRequestContext_withReturn_bindsAllValues() throws Exception {
         var ctx = new ScopedValuePatterns.RequestContext("user-2", "trace-2", "tenant-2");
-        var result = ScopedValuePatterns.withRequestContext(ctx, () -> {
-            return ScopedValuePatterns.CURRENT_USER.get() + "|"
-                    + ScopedValuePatterns.TRACE_ID.get() + "|"
-                    + ScopedValuePatterns.TENANT_ID.get();
-        });
+        var result =
+                ScopedValuePatterns.withRequestContext(
+                        ctx,
+                        () -> {
+                            return ScopedValuePatterns.CURRENT_USER.get()
+                                    + "|"
+                                    + ScopedValuePatterns.TRACE_ID.get()
+                                    + "|"
+                                    + ScopedValuePatterns.TENANT_ID.get();
+                        });
         assertThat(result).isEqualTo("user-2|trace-2|tenant-2");
     }
 
@@ -82,10 +91,13 @@ class ScopedValuePatternsTest implements WithAssertions {
         AtomicReference<String> outerUser = new AtomicReference<>();
         AtomicReference<String> innerUser = new AtomicReference<>();
 
-        ScopedValuePatterns.handleAsUser("alice", () -> {
-            outerUser.set(ScopedValuePatterns.currentUser());
-            ScopedValuePatterns.runAsSystem(() -> innerUser.set(ScopedValuePatterns.currentUser()));
-        });
+        ScopedValuePatterns.handleAsUser(
+                "alice",
+                () -> {
+                    outerUser.set(ScopedValuePatterns.currentUser());
+                    ScopedValuePatterns.runAsSystem(
+                            () -> innerUser.set(ScopedValuePatterns.currentUser()));
+                });
 
         assertThat(outerUser.get()).isEqualTo("alice");
         assertThat(innerUser.get()).isEqualTo("SYSTEM");
@@ -100,7 +112,8 @@ class ScopedValuePatternsTest implements WithAssertions {
                 () -> log.add("outer: " + ScopedValuePatterns.currentUser()),
                 () -> log.add("inner: " + ScopedValuePatterns.currentUser()));
 
-        assertThat(log).containsExactly("outer: outer-user", "inner: inner-user", "outer: outer-user");
+        assertThat(log)
+                .containsExactly("outer: outer-user", "inner: inner-user", "outer: outer-user");
     }
 
     // ── Pattern 5: ScopedValue with StructuredTaskScope ───────────────────────
@@ -119,9 +132,12 @@ class ScopedValuePatternsTest implements WithAssertions {
 
     @Test
     void currentUserOrDefault_returnsBoundValue() {
-        ScopedValuePatterns.handleAsUser("bob", () -> {
-            assertThat(ScopedValuePatterns.currentUserOrDefault("default")).isEqualTo("bob");
-        });
+        ScopedValuePatterns.handleAsUser(
+                "bob",
+                () -> {
+                    assertThat(ScopedValuePatterns.currentUserOrDefault("default"))
+                            .isEqualTo("bob");
+                });
     }
 
     @Test
@@ -136,9 +152,11 @@ class ScopedValuePatternsTest implements WithAssertions {
 
     @Test
     void currentUserOptional_returnsValueWhenBound() {
-        ScopedValuePatterns.handleAsUser("charlie", () -> {
-            assertThat(ScopedValuePatterns.currentUserOptional()).contains("charlie");
-        });
+        ScopedValuePatterns.handleAsUser(
+                "charlie",
+                () -> {
+                    assertThat(ScopedValuePatterns.currentUserOptional()).contains("charlie");
+                });
     }
 
     // ── Pattern 7: Real-world server pattern ──────────────────────────────────
@@ -146,11 +164,15 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     void serveRequest_bindsFullContext() {
         var captured = new java.util.ArrayList<String>();
-        ScopedValuePatterns.serveRequest("user-req", "tenant-req", "trace-req", () -> {
-            captured.add(ScopedValuePatterns.CURRENT_USER.get());
-            captured.add(ScopedValuePatterns.TENANT_ID.get());
-            captured.add(ScopedValuePatterns.TRACE_ID.get());
-        });
+        ScopedValuePatterns.serveRequest(
+                "user-req",
+                "tenant-req",
+                "trace-req",
+                () -> {
+                    captured.add(ScopedValuePatterns.CURRENT_USER.get());
+                    captured.add(ScopedValuePatterns.TENANT_ID.get());
+                    captured.add(ScopedValuePatterns.TRACE_ID.get());
+                });
         assertThat(captured).containsExactly("user-req", "tenant-req", "trace-req");
     }
 }

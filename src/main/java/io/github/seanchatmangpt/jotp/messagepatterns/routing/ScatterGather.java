@@ -1,6 +1,5 @@
 package io.github.seanchatmangpt.jotp.messagepatterns.routing;
 
-import io.github.seanchatmangpt.jotp.Proc;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,9 +10,9 @@ import java.util.function.Function;
 /**
  * Scatter-Gather pattern: broadcasts a request to multiple recipients and aggregates the responses.
  *
- * <p>Enterprise Integration Pattern: <em>Scatter-Gather</em> (EIP §8.10). Combines a Recipient
- * List (scatter) with an Aggregator (gather) — the request is fanned out to N suppliers and
- * responses are collected until all arrive or a timeout elapses.
+ * <p>Enterprise Integration Pattern: <em>Scatter-Gather</em> (EIP §8.10). Combines a Recipient List
+ * (scatter) with an Aggregator (gather) — the request is fanned out to N suppliers and responses
+ * are collected until all arrive or a timeout elapses.
  *
  * <p>Erlang analog: fan-out via {@code [spawn(fun() -> Pid ! {self(), Request} end) || Pid <-
  * Suppliers]} followed by a receive loop collecting replies with {@code after Timeout -> done}.
@@ -48,9 +47,10 @@ public final class ScatterGather<T, R> {
      * @return the list of gathered responses (may be fewer than handlers if timeout)
      */
     public List<R> scatterAndGather(T request) {
-        List<CompletableFuture<R>> futures = handlers.stream()
-                .map(handler -> CompletableFuture.supplyAsync(() -> handler.apply(request)))
-                .toList();
+        List<CompletableFuture<R>> futures =
+                handlers.stream()
+                        .map(handler -> CompletableFuture.supplyAsync(() -> handler.apply(request)))
+                        .toList();
 
         var results = new ArrayList<R>();
         for (CompletableFuture<R> future : futures) {

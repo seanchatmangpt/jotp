@@ -2,6 +2,10 @@ package io.github.seanchatmangpt.jotp.benchmark;
 
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.StructuredTaskScopePatterns;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -12,11 +16,6 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
-
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
 
 /**
  * JMH benchmarks for the Parallel fan-out pattern.
@@ -63,14 +62,12 @@ public class ParallelBenchmark {
                         .<Supplier<Long>>mapToObj(_ -> () -> computeWork(WORK_UNITS))
                         .toList();
         return Parallel.all(tasks)
-                .fold(
-                        results -> results.stream().mapToLong(Long::longValue).sum(),
-                        _ -> -1L);
+                .fold(results -> results.stream().mapToLong(Long::longValue).sum(), _ -> -1L);
     }
 
     /**
-     * Sequential baseline: same N tasks run one-by-one. The speedup ratio
-     * (sequential_baseline / parallel_fanout) is the empirical speedup factor.
+     * Sequential baseline: same N tasks run one-by-one. The speedup ratio (sequential_baseline /
+     * parallel_fanout) is the empirical speedup factor.
      */
     @Benchmark
     public long sequential_baseline() {
@@ -88,7 +85,8 @@ public class ParallelBenchmark {
     @Benchmark
     public long structured_scope_fanout() throws Exception {
         List<Integer> items = IntStream.range(0, taskCount).boxed().toList();
-        List<Long> results = StructuredTaskScopePatterns.fanOut(items, _ -> computeWork(WORK_UNITS));
+        List<Long> results =
+                StructuredTaskScopePatterns.fanOut(items, _ -> computeWork(WORK_UNITS));
         return results.stream().mapToLong(Long::longValue).sum();
     }
 }

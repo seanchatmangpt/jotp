@@ -3,9 +3,9 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 /**
  * Rational (polynomial) conversion — mirrors {@code MESL.SqlRace.Domain.RationalConversion}.
  *
- * <p>In ATLAS every parameter carries a conversion function that maps raw ADC counts to
- * engineering units (kph, bar, °C, g). The SQL Race {@code RationalConversion} models the
- * standard Bosch / McLaren polynomial:
+ * <p>In ATLAS every parameter carries a conversion function that maps raw ADC counts to engineering
+ * units (kph, bar, °C, g). The SQL Race {@code RationalConversion} models the standard Bosch /
+ * McLaren polynomial:
  *
  * <pre>
  *   y = (c1 + c2·x + c3·x²) / (c4 + c5·x + c6·x²)
@@ -24,15 +24,15 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  *     0.0, 1.0, 0.0, 0.0, 0.0, 1.0));   // identity: raw = engineering value
  * }</pre>
  *
- * @param name         conversion identifier (e.g. {@code "CONV_vCar:Chassis"})
- * @param unit         engineering unit string (e.g. {@code "kph"}, {@code "bar"}, {@code "°C"})
+ * @param name conversion identifier (e.g. {@code "CONV_vCar:Chassis"})
+ * @param unit engineering unit string (e.g. {@code "kph"}, {@code "bar"}, {@code "°C"})
  * @param formatString C-style printf format for display (e.g. {@code "%5.2f"})
- * @param c1           polynomial numerator constant term
- * @param c2           polynomial numerator linear coefficient
- * @param c3           polynomial numerator quadratic coefficient
- * @param c4           polynomial denominator constant term (must be non-zero)
- * @param c5           polynomial denominator linear coefficient
- * @param c6           polynomial denominator quadratic coefficient
+ * @param c1 polynomial numerator constant term
+ * @param c2 polynomial numerator linear coefficient
+ * @param c3 polynomial numerator quadratic coefficient
+ * @param c4 polynomial denominator constant term (must be non-zero)
+ * @param c5 polynomial denominator linear coefficient
+ * @param c6 polynomial denominator quadratic coefficient
  */
 public record RationalConversion(
         String name,
@@ -54,14 +54,13 @@ public record RationalConversion(
      *                                      400.0 / 32767.0, 0.0);
      * }</pre>
      *
-     * @param name   conversion identifier
-     * @param unit   engineering unit
-     * @param scale  linear multiplier (c2)
+     * @param name conversion identifier
+     * @param unit engineering unit
+     * @param scale linear multiplier (c2)
      * @param offset additive offset (c1)
      * @return configured linear conversion
      */
-    public static RationalConversion linear(
-            String name, String unit, double scale, double offset) {
+    public static RationalConversion linear(String name, String unit, double scale, double offset) {
         return new RationalConversion(name, unit, "%5.2f", offset, scale, 0.0, 1.0, 0.0, 0.0);
     }
 

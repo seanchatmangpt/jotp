@@ -1,11 +1,11 @@
 package io.github.seanchatmangpt.jotp.doctest;
 
+import io.github.seanchatmangpt.jotp.MessageBus;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
-import io.github.seanchatmangpt.jotp.MessageBus;
 import org.assertj.core.api.WithAssertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
@@ -52,9 +52,7 @@ class MessageBusDocIT implements WithAssertions {
         bus.subscribe("orders.created", env -> received.add(env.payload()));
         bus.publish("orders.created", new Order("O-1", 99.99));
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> received.size() == 1);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> received.size() == 1);
         assertThat(received.get(0)).isInstanceOf(Order.class);
     }
 
@@ -72,9 +70,7 @@ class MessageBusDocIT implements WithAssertions {
         bus.publish("telemetry", "sample-1");
         bus.publish("telemetry", "sample-2");
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> a.size() == 2 && b.size() == 2);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> a.size() == 2 && b.size() == 2);
         assertThat(a).containsExactly("sample-1", "sample-2");
         assertThat(b).containsExactly("sample-1", "sample-2");
     }
@@ -105,9 +101,7 @@ class MessageBusDocIT implements WithAssertions {
         bus.publish("telemetry.rpm", 8500);
         bus.publish("orders.created", "O-1"); // should NOT match
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> topics.size() == 2);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> topics.size() == 2);
         assertThat(topics).containsExactlyInAnyOrder("telemetry.speed", "telemetry.rpm");
     }
 
@@ -125,9 +119,7 @@ class MessageBusDocIT implements WithAssertions {
         bus.subscribe("critical", env -> received.add(env.payload()));
 
         boolean delivered =
-                bus.publishSync(
-                        MessageBus.Envelope.of("critical", "ALERT"),
-                        Duration.ofSeconds(2));
+                bus.publishSync(MessageBus.Envelope.of("critical", "ALERT"), Duration.ofSeconds(2));
 
         assertThat(delivered).isTrue();
         assertThat(received).hasSize(1);
@@ -155,9 +147,7 @@ class MessageBusDocIT implements WithAssertions {
         assertThat(sub.isActive()).isTrue();
 
         bus.publish("events", "before-cancel");
-        Awaitility.await()
-                .atMost(1, TimeUnit.SECONDS)
-                .until(() -> received.size() == 1);
+        Awaitility.await().atMost(1, TimeUnit.SECONDS).until(() -> received.size() == 1);
 
         sub.cancel();
         assertThat(sub.isActive()).isFalse();
@@ -181,9 +171,7 @@ class MessageBusDocIT implements WithAssertions {
         bus.publish("stats.topic", "msg-1");
         bus.publish("stats.topic", "msg-2");
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .until(() -> bus.stats().delivered() >= 2);
+        Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> bus.stats().delivered() >= 2);
 
         MessageBus.Stats stats = bus.stats();
         assertThat(stats.published()).isGreaterThanOrEqualTo(2);
@@ -206,12 +194,15 @@ class MessageBusDocIT implements WithAssertions {
         List<Object> dlq = new CopyOnWriteArrayList<>();
         MessageBus bus =
                 MessageBus.builder()
-                        .deadLetterHandler(
-                                (env, err) -> dlq.add(env.payload()))
+                        .deadLetterHandler((env, err) -> dlq.add(env.payload()))
                         .build();
 
         List<Object> good = new CopyOnWriteArrayList<>();
-        bus.subscribe("topic", env -> { throw new RuntimeException("simulated failure"); });
+        bus.subscribe(
+                "topic",
+                env -> {
+                    throw new RuntimeException("simulated failure");
+                });
         bus.subscribe("topic", env -> good.add(env.payload()));
         bus.publish("topic", "payload");
 

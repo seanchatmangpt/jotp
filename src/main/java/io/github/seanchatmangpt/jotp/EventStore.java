@@ -2,32 +2,33 @@ package io.github.seanchatmangpt.jotp;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Stream;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * Event Store — append-only log for event sourcing with projections.
  *
- * <p>Event Sourcing Pattern: "Persist the state of a business entity as a sequence
- * of state-changing events. Reconstruct current state by replaying events."
+ * <p>Event Sourcing Pattern: "Persist the state of a business entity as a sequence of
+ * state-changing events. Reconstruct current state by replaying events."
  *
- * <p>Joe Armstrong: "In Erlang, you don't persist state — you persist the messages
- * that led to the state. Recovery is replay. This is the essence of event sourcing."
+ * <p>Joe Armstrong: "In Erlang, you don't persist state — you persist the messages that led to the
+ * state. Recovery is replay. This is the essence of event sourcing."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Append-only</b> — Events are never modified, only appended</li>
- *   <li><b>Stream per aggregate</b> — Each entity has its own event stream</li>
- *   <li><b>Projections</b> — Build read models from event streams</li>
- *   <li><b>Snapshots</b> — Optimize replay by storing periodic state</li>
- *   <li><b>Subscriptions</b> — Real-time notification of new events</li>
+ *   <li><b>Append-only</b> — Events are never modified, only appended
+ *   <li><b>Stream per aggregate</b> — Each entity has its own event stream
+ *   <li><b>Projections</b> — Build read models from event streams
+ *   <li><b>Snapshots</b> — Optimize replay by storing periodic state
+ *   <li><b>Subscriptions</b> — Real-time notification of new events
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * EventStore store = EventStore.create();
  *
@@ -60,56 +61,63 @@ public final class EventStore implements Application.Infrastructure {
             Map<String, String> metadata) {
 
         public static StoredEvent of(String streamId, long version, Object event) {
-            return new StoredEvent(streamId, version, event, Instant.now(), UUID.randomUUID(), Map.of());
+            return new StoredEvent(
+                    streamId, version, event, Instant.now(), UUID.randomUUID(), Map.of());
         }
 
-        public static StoredEvent of(String streamId, long version, Object event, Map<String, String> metadata) {
-            return new StoredEvent(streamId, version, event, Instant.now(), UUID.randomUUID(), metadata);
+        public static StoredEvent of(
+                String streamId, long version, Object event, Map<String, String> metadata) {
+            return new StoredEvent(
+                    streamId, version, event, Instant.now(), UUID.randomUUID(), metadata);
         }
     }
 
     /** Subscription handle. */
     public interface Subscription {
         String id();
+
         void cancel();
+
         boolean isActive();
     }
 
     /** Projection interface for building read models. */
     public interface Projection {
         String name();
+
         void apply(StoredEvent event);
+
         void reset();
     }
 
     /** Event store statistics. */
-    public record Stats(
-            long totalEvents,
-            int streams,
-            int projections,
-            int subscriptions) {}
+    public record Stats(long totalEvents, int streams, int projections, int subscriptions) {}
 
     // ── Internal state ──────────────────────────────────────────────────────────
 
     private final String name;
-    private final ConcurrentHashMap<String, ConcurrentLinkedQueue<StoredEvent>> streams = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConcurrentLinkedQueue<StoredEvent>> streams =
+            new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicLong> versions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Projection> projections = new ConcurrentHashMap<>();
-    private final List<StreamSubscription> allSubscriptions = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<StreamSubscription> allSubscriptions =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AtomicLong totalEvents = new AtomicLong(0);
 
     private static final class StreamSubscription {
-            final String id;
-            final String streamId;
-            final Consumer<StoredEvent> handler;
-            volatile boolean active;
-            StreamSubscription(String id, String streamId, Consumer<StoredEvent> handler, boolean active) {
-                this.id = id;
-                this.streamId = streamId;
-                this.handler = handler;
-                this.active = active;
-            }
+        final String id;
+        final String streamId;
+        final Consumer<StoredEvent> handler;
+        volatile boolean active;
+
+        StreamSubscription(
+                String id, String streamId, Consumer<StoredEvent> handler, boolean active) {
+            this.id = id;
+            this.streamId = streamId;
+            this.handler = handler;
+            this.active = active;
         }
+    }
 
     // ─-- Constructor ─────────────────────────────────────────────────────────────
 
@@ -138,7 +146,8 @@ public final class EventStore implements Application.Infrastructure {
      */
     public long append(String streamId, List<?> events) {
         AtomicLong version = versions.computeIfAbsent(streamId, k -> new AtomicLong(0));
-        ConcurrentLinkedQueue<StoredEvent> stream = streams.computeIfAbsent(streamId, k -> new ConcurrentLinkedQueue<>());
+        ConcurrentLinkedQueue<StoredEvent> stream =
+                streams.computeIfAbsent(streamId, k -> new ConcurrentLinkedQueue<>());
 
         long newVersion = 0;
         for (Object event : events) {
@@ -173,73 +182,69 @@ public final class EventStore implements Application.Infrastructure {
         return append(streamId, events);
     }
 
-    /**
-     * Append a single event.
-     */
+    /** Append a single event. */
     public long append(String streamId, Object event) {
         return append(streamId, List.of(event));
     }
 
     // ── Load operations ──────────────────────────────────────────────────────────
 
-    /**
-     * Load all events for a stream.
-     */
+    /** Load all events for a stream. */
     public Stream<StoredEvent> load(String streamId) {
         Queue<StoredEvent> stream = streams.get(streamId);
         if (stream == null) return Stream.empty();
         return stream.stream();
     }
 
-    /**
-     * Load events from a specific version.
-     */
+    /** Load events from a specific version. */
     public Stream<StoredEvent> loadFrom(String streamId, long fromVersion) {
         return load(streamId).filter(e -> e.version() > fromVersion);
     }
 
-    /**
-     * Load events up to a specific version.
-     */
+    /** Load events up to a specific version. */
     public Stream<StoredEvent> loadUpTo(String streamId, long toVersion) {
         return load(streamId).filter(e -> e.version() <= toVersion);
     }
 
-    /**
-     * Get the current version of a stream.
-     */
+    /** Get the current version of a stream. */
     public long currentVersion(String streamId) {
         AtomicLong version = versions.get(streamId);
         return version != null ? version.get() : 0;
     }
 
-    /**
-     * Check if a stream exists.
-     */
+    /** Check if a stream exists. */
     public boolean exists(String streamId) {
         return streams.containsKey(streamId);
     }
 
     // ── Subscriptions ────────────────────────────────────────────────────────────
 
-    /**
-     * Subscribe to all events on a stream.
-     */
+    /** Subscribe to all events on a stream. */
     public Subscription subscribe(String streamId, Consumer<StoredEvent> handler) {
         String id = UUID.randomUUID().toString();
         StreamSubscription sub = new StreamSubscription(id, streamId, handler, true);
         allSubscriptions.add(sub);
 
         return new Subscription() {
-            @Override public String id() { return id; }
-            @Override public void cancel() { sub.active = false; allSubscriptions.remove(sub); }
-            @Override public boolean isActive() { return sub.active; }
+            @Override
+            public String id() {
+                return id;
+            }
+
+            @Override
+            public void cancel() {
+                sub.active = false;
+                allSubscriptions.remove(sub);
+            }
+
+            @Override
+            public boolean isActive() {
+                return sub.active;
+            }
         };
     }
 
-    /**
-     * Subscribe to all events in the store.
-     */
+    /** Subscribe to all events in the store. */
     public Subscription subscribeAll(Consumer<StoredEvent> handler) {
         return subscribe("*", handler);
     }
@@ -259,16 +264,12 @@ public final class EventStore implements Application.Infrastructure {
 
     // ── Projections ──────────────────────────────────────────────────────────────
 
-    /**
-     * Add a projection.
-     */
+    /** Add a projection. */
     public void addProjection(Projection projection) {
         projections.put(projection.name(), projection);
     }
 
-    /**
-     * Rebuild a projection from all events.
-     */
+    /** Rebuild a projection from all events. */
     public void rebuildProjection(String name) {
         Projection projection = projections.get(name);
         if (projection == null) return;
@@ -280,9 +281,7 @@ public final class EventStore implements Application.Infrastructure {
                 .forEach(projection::apply);
     }
 
-    /**
-     * Get a projection by name.
-     */
+    /** Get a projection by name. */
     @SuppressWarnings("unchecked")
     public <T extends Projection> Optional<T> getProjection(String name) {
         return Optional.ofNullable((T) projections.get(name));
@@ -293,7 +292,11 @@ public final class EventStore implements Application.Infrastructure {
             try {
                 projection.apply(event);
             } catch (Exception e) {
-                System.err.println("[EventStore] Projection error in " + projection.name() + ": " + e.getMessage());
+                System.err.println(
+                        "[EventStore] Projection error in "
+                                + projection.name()
+                                + ": "
+                                + e.getMessage());
             }
         }
     }
@@ -302,16 +305,15 @@ public final class EventStore implements Application.Infrastructure {
 
     public Stats stats() {
         return new Stats(
-                totalEvents.get(),
-                streams.size(),
-                projections.size(),
-                allSubscriptions.size());
+                totalEvents.get(), streams.size(), projections.size(), allSubscriptions.size());
     }
 
     // ── Infrastructure lifecycle ─────────────────────────────────────────────────
 
     @Override
-    public String name() { return name; }
+    public String name() {
+        return name;
+    }
 
     @Override
     public void onStop(Application app) {

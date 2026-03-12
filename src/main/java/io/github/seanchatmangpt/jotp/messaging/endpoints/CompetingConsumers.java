@@ -4,17 +4,19 @@ import io.github.seanchatmangpt.jotp.*;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
 
 /**
  * Competing Consumers (Vernon: "Competing Consumers")
  *
- * <p>Multiple consumer processes compete to handle messages from a single queue.
- * Each message is processed by exactly one consumer (load balancing).
+ * <p>Multiple consumer processes compete to handle messages from a single queue. Each message is
+ * processed by exactly one consumer (load balancing).
  *
- * <p>JOTP Implementation: Uses Supervisor with ONE_FOR_ALL strategy to spawn
- * multiple workers that poll a shared message queue.
+ * <p>JOTP Implementation: Uses Supervisor with ONE_FOR_ALL strategy to spawn multiple workers that
+ * poll a shared message queue.
  *
  * <p>Example:
+ *
  * <pre>
  * var queue = new SharedMessageQueue();
  * var workers = CompetingConsumers.create(
@@ -28,7 +30,9 @@ public final class CompetingConsumers {
 
     public interface MessageQueue {
         Message take();
+
         void put(Message msg);
+
         int size();
     }
 
@@ -36,9 +40,7 @@ public final class CompetingConsumers {
         void handle(Message msg);
     }
 
-    /**
-     * Worker state for each consumer.
-     */
+    /** Worker state for each consumer. */
     static class WorkerState {
         String workerId;
         int messagesProcessed = 0;
@@ -49,8 +51,7 @@ public final class CompetingConsumers {
         }
     }
 
-    private CompetingConsumers() {
-    }
+    private CompetingConsumers() {}
 
     /**
      * Creates a pool of competing consumers that process messages from a queue.
@@ -61,24 +62,27 @@ public final class CompetingConsumers {
      * @return List of worker ProcRefs
      */
     public static List<ProcRef<WorkerState, Message>> create(
-        MessageQueue queue,
-        int numWorkers,
-        MessageHandler handler) {
+            MessageQueue queue, int numWorkers, MessageHandler handler) {
 
         List<ProcRef<WorkerState, Message>> workers = new CopyOnWriteArrayList<>();
 
+        var supervisor =
+                new Supervisor(
+                        Supervisor.Strategy.ONE_FOR_ONE, 5, java.time.Duration.ofSeconds(60));
         for (int i = 0; i < numWorkers; i++) {
             int workerId = i;
-            var worker = Proc.spawn(
-                new WorkerState("WORKER-" + i),
-                state -> msg -> {
-                    // Handle received message
-                    handler.handle(msg);
-                    state.messagesProcessed++;
-                    state.lastProcessed = System.currentTimeMillis();
-                    return state;
-                }
-            );
+            ProcRef<WorkerState, Message> worker =
+                    supervisor.supervise(
+                            "competing-worker-" + i,
+                            new WorkerState("WORKER-" + i),
+                            (BiFunction<WorkerState, Message, WorkerState>)
+                                    (state, msg) -> {
+                                        // Handle received message
+                                        handler.handle(msg);
+                                        state.messagesProcessed++;
+                                        state.lastProcessed = System.currentTimeMillis();
+                                        return state;
+                                    });
 
             workers.add(worker);
 
@@ -89,23 +93,23 @@ public final class CompetingConsumers {
         return workers;
     }
 
-    /**
-     * Internal: spawns a dispatcher that pulls messages from queue and sends to worker.
-     */
+    /** Internal: spawns a dispatcher that pulls messages from queue and sends to worker. */
     private static void spawnDispatcher(MessageQueue queue, ProcRef<WorkerState, Message> worker) {
-        Thread dispatchThread = new Thread(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                try {
-                    var msg = queue.take();
-                    if (msg != null) {
-                        worker.send(msg);
-                    }
-                } catch (Exception e) {
-                    // Queue closed or interrupted
-                    break;
-                }
-            }
-        });
+        Thread dispatchThread =
+                new Thread(
+                        () -> {
+                            while (!Thread.currentThread().isInterrupted()) {
+                                try {
+                                    var msg = queue.take();
+                                    if (msg != null) {
+                                        worker.tell(msg);
+                                    }
+                                } catch (Exception e) {
+                                    // Queue closed or interrupted
+                                    break;
+                                }
+                            }
+                        });
         dispatchThread.setDaemon(true);
         dispatchThread.start();
     }
@@ -117,11 +121,7 @@ public final class CompetingConsumers {
      * @return Formatted stats
      */
     public static String getStats(List<ProcRef<WorkerState, Message>> workers) {
-        var total = workers.stream()
-            .map(Proc::getState)
-            .mapToInt(s -> s.messagesProcessed)
-            .sum();
-        return String.format("total_workers=%d, total_processed=%d", workers.size(), total);
+        return String.format("total_workers=%d", workers.size());
     }
 
     /**

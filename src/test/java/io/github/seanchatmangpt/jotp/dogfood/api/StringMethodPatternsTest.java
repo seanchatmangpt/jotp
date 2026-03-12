@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
@@ -166,8 +165,7 @@ class StringMethodPatternsTest implements WithAssertions {
 
     @Test
     void joinWithBrackets_wrapsInBrackets() {
-        assertThat(StringMethodPatterns.joinWithBrackets(List.of("x", "y")))
-                .isEqualTo("[x, y]");
+        assertThat(StringMethodPatterns.joinWithBrackets(List.of("x", "y"))).isEqualTo("[x, y]");
         assertThat(StringMethodPatterns.joinWithBrackets(List.of())).isEqualTo("[]");
     }
 
@@ -182,7 +180,8 @@ class StringMethodPatternsTest implements WithAssertions {
 
     @Test
     void parseConfig_parsesKeyValuePairs() {
-        var config = """
+        var config =
+                """
                 # comment
                 host = localhost
                 port = 8080

@@ -3,14 +3,11 @@ package io.github.seanchatmangpt.jotp.dogfood.concurrency;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/**
- * Dogfood: tests for VirtualThreadPatterns generated from concurrency/virtual-thread.tera.
- */
+/** Dogfood: tests for VirtualThreadPatterns generated from concurrency/virtual-thread.tera. */
 @DisplayName("VirtualThreadPatterns")
 class VirtualThreadPatternsTest implements WithAssertions {
 

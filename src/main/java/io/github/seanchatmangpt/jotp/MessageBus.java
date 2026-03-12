@@ -13,22 +13,24 @@ import java.util.function.Consumer;
 /**
  * Topic-based message bus — extends EventManager with topic subscriptions and persistent messaging.
  *
- * <p>Enterprise Integration Pattern: "Message Bus provides a common communication system
- * that multiple applications use, built on top of messaging."
+ * <p>Enterprise Integration Pattern: "Message Bus provides a common communication system that
+ * multiple applications use, built on top of messaging."
  *
- * <p>Joe Armstrong: "In Erlang, all communication is via message passing. The message bus
- * is the universal integration layer — every process talks to every other process through it."
+ * <p>Joe Armstrong: "In Erlang, all communication is via message passing. The message bus is the
+ * universal integration layer — every process talks to every other process through it."
  *
  * <p>Features:
+ *
  * <ul>
- *   <li><b>Topic-based routing</b> — Subscribe to specific topics or patterns</li>
- *   <li><b>Wildcards</b> — Subscribe to hierarchical topics (e.g., "telemetry.*")</li>
- *   <li><b>Durable subscriptions</b> — Messages persisted for offline subscribers</li>
- *   <li><b>Dead letter handling</b> — Failed messages routed to DLQ</li>
- *   <li><b>Backpressure</b> — Flow control for slow consumers</li>
+ *   <li><b>Topic-based routing</b> — Subscribe to specific topics or patterns
+ *   <li><b>Wildcards</b> — Subscribe to hierarchical topics (e.g., "telemetry.*")
+ *   <li><b>Durable subscriptions</b> — Messages persisted for offline subscribers
+ *   <li><b>Dead letter handling</b> — Failed messages routed to DLQ
+ *   <li><b>Backpressure</b> — Flow control for slow consumers
  * </ul>
  *
  * <p><b>Usage:</b>
+ *
  * <pre>{@code
  * MessageBus bus = MessageBus.create();
  *
@@ -57,8 +59,11 @@ public final class MessageBus implements Application.Infrastructure {
     /** Subscription handle for cancellation. */
     public interface Subscription {
         String id();
+
         String topic();
+
         void cancel();
+
         boolean isActive();
     }
 
@@ -87,62 +92,68 @@ public final class MessageBus implements Application.Infrastructure {
 
     /** Statistics for the bus. */
     public record Stats(
-            long published,
-            long delivered,
-            long failed,
-            int activeSubscriptions,
-            int topics) {}
+            long published, long delivered, long failed, int activeSubscriptions, int topics) {}
 
     // ── Internal state ──────────────────────────────────────────────────────────
 
     private final String name;
     private final EventManager<InternalMsg> eventManager;
-    private final ConcurrentHashMap<String, List<SubscriberInfo>> topicSubscribers = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, PatternSubscription> patternSubscribers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<SubscriberInfo>> topicSubscribers =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, PatternSubscription> patternSubscribers =
+            new ConcurrentHashMap<>();
     private final MessageStore messageStore;
     private final DeadLetterHandler deadLetterHandler;
     private final LongAdder published = new LongAdder();
     private final LongAdder delivered = new LongAdder();
     private final LongAdder failed = new LongAdder();
 
-    private sealed interface InternalMsg permits InternalMsg.Publish, InternalMsg.Subscribe, InternalMsg.Unsubscribe {
-        record Publish(Envelope envelope, CompletableFuture<Boolean> reply) implements InternalMsg {}
-        record Subscribe(String topic, SubscriberInfo info, CompletableFuture<Subscription> reply) implements InternalMsg {}
+    private sealed interface InternalMsg
+            permits InternalMsg.Publish, InternalMsg.Subscribe, InternalMsg.Unsubscribe {
+        record Publish(Envelope envelope, CompletableFuture<Boolean> reply)
+                implements InternalMsg {}
+
+        record Subscribe(String topic, SubscriberInfo info, CompletableFuture<Subscription> reply)
+                implements InternalMsg {}
+
         record Unsubscribe(String subscriptionId) implements InternalMsg {}
     }
 
     private static final class SubscriberInfo {
-            final String id;
-            final String topic;
-            final Consumer<Envelope> handler;
-            volatile boolean active;
-            SubscriberInfo(String id, String topic, Consumer<Envelope> handler, boolean active) {
-                this.id = id;
-                this.topic = topic;
-                this.handler = handler;
-                this.active = active;
-            }
+        final String id;
+        final String topic;
+        final Consumer<Envelope> handler;
+        volatile boolean active;
+
+        SubscriberInfo(String id, String topic, Consumer<Envelope> handler, boolean active) {
+            this.id = id;
+            this.topic = topic;
+            this.handler = handler;
+            this.active = active;
         }
+    }
 
     private static final class PatternSubscription {
-            final String id;
-            final String pattern;
-            final Consumer<Envelope> handler;
-            volatile boolean active;
-            PatternSubscription(String id, String pattern, Consumer<Envelope> handler, boolean active) {
-                this.id = id;
-                this.pattern = pattern;
-                this.handler = handler;
-                this.active = active;
-            }
+        final String id;
+        final String pattern;
+        final Consumer<Envelope> handler;
+        volatile boolean active;
+
+        PatternSubscription(String id, String pattern, Consumer<Envelope> handler, boolean active) {
+            this.id = id;
+            this.pattern = pattern;
+            this.handler = handler;
+            this.active = active;
         }
+    }
 
     // ── Constructor ─────────────────────────────────────────────────────────────
 
     private MessageBus(String name, MessageStore store, DeadLetterHandler deadLetterHandler) {
         this.name = name;
         this.messageStore = store != null ? store : MessageStore.inMemory().build();
-        this.deadLetterHandler = deadLetterHandler != null ? deadLetterHandler : DeadLetterHandler.log();
+        this.deadLetterHandler =
+                deadLetterHandler != null ? deadLetterHandler : DeadLetterHandler.log();
         this.eventManager = EventManager.start();
 
         // Start the internal event handler
@@ -205,18 +216,14 @@ public final class MessageBus implements Application.Infrastructure {
         publish(Envelope.of(topic, payload));
     }
 
-    /**
-     * Publish an envelope to a topic.
-     */
+    /** Publish an envelope to a topic. */
     public void publish(Envelope envelope) {
         published.increment();
         var reply = new CompletableFuture<Boolean>();
         eventManager.notify(new InternalMsg.Publish(envelope, reply));
     }
 
-    /**
-     * Publish and wait for delivery confirmation.
-     */
+    /** Publish and wait for delivery confirmation. */
     public boolean publishSync(Envelope envelope, Duration timeout) throws InterruptedException {
         published.increment();
         var reply = new CompletableFuture<Boolean>();
@@ -257,13 +264,24 @@ public final class MessageBus implements Application.Infrastructure {
         patternSubscribers.put(id, new PatternSubscription(id, pattern, handler, true));
 
         return new Subscription() {
-            @Override public String id() { return id; }
-            @Override public String topic() { return pattern; }
-            @Override public void cancel() {
+            @Override
+            public String id() {
+                return id;
+            }
+
+            @Override
+            public String topic() {
+                return pattern;
+            }
+
+            @Override
+            public void cancel() {
                 patternSubscribers.get(id).active = false;
                 patternSubscribers.remove(id);
             }
-            @Override public boolean isActive() {
+
+            @Override
+            public boolean isActive() {
                 var sub = patternSubscribers.get(id);
                 return sub != null && sub.active;
             }
@@ -277,14 +295,17 @@ public final class MessageBus implements Application.Infrastructure {
                 published.sum(),
                 delivered.sum(),
                 failed.sum(),
-                topicSubscribers.values().stream().mapToInt(List::size).sum() + patternSubscribers.size(),
+                topicSubscribers.values().stream().mapToInt(List::size).sum()
+                        + patternSubscribers.size(),
                 topicSubscribers.size());
     }
 
     // ── Infrastructure lifecycle ─────────────────────────────────────────────────
 
     @Override
-    public String name() { return name; }
+    public String name() {
+        return name;
+    }
 
     @Override
     public void onStop(Application app) {
@@ -301,12 +322,15 @@ public final class MessageBus implements Application.Infrastructure {
                     handlePublish(envelope, reply);
                 }
                 case InternalMsg.Subscribe(var topic, var info, var reply) -> {
-                    topicSubscribers.computeIfAbsent(topic, k -> new CopyOnWriteArrayList<>()).add(info);
+                    topicSubscribers
+                            .computeIfAbsent(topic, k -> new CopyOnWriteArrayList<>())
+                            .add(info);
                     reply.complete(new SubscriptionImpl(info));
                 }
                 case InternalMsg.Unsubscribe(var id) -> {
-                    topicSubscribers.values().forEach(list ->
-                            list.removeIf(info -> info.id.equals(id)));
+                    topicSubscribers
+                            .values()
+                            .forEach(list -> list.removeIf(info -> info.id.equals(id)));
                 }
             }
         }
@@ -370,13 +394,26 @@ public final class MessageBus implements Application.Infrastructure {
             this.info = info;
         }
 
-        @Override public String id() { return info.id; }
-        @Override public String topic() { return info.topic; }
-        @Override public void cancel() {
+        @Override
+        public String id() {
+            return info.id;
+        }
+
+        @Override
+        public String topic() {
+            return info.topic;
+        }
+
+        @Override
+        public void cancel() {
             info.active = false;
             eventManager.notify(new InternalMsg.Unsubscribe(info.id));
         }
-        @Override public boolean isActive() { return info.active; }
+
+        @Override
+        public boolean isActive() {
+            return info.active;
+        }
     }
 
     // ── Dead letter handler ──────────────────────────────────────────────────────
@@ -387,14 +424,16 @@ public final class MessageBus implements Application.Infrastructure {
         void handle(Envelope envelope, Exception error);
 
         static DeadLetterHandler log() {
-            return (env, err) -> System.err.println(
-                    "[DLQ] Failed to deliver to " + env.topic() + ": " + err.getMessage());
+            return (env, err) ->
+                    System.err.println(
+                            "[DLQ] Failed to deliver to " + env.topic() + ": " + err.getMessage());
         }
 
         static DeadLetterHandler store(MessageStore store) {
             return (env, err) -> {
-                Envelope dlq = env.withHeader("dlq.error", err.getMessage())
-                        .withHeader("dlq.timestamp", Instant.now().toString());
+                Envelope dlq =
+                        env.withHeader("dlq.error", err.getMessage())
+                                .withHeader("dlq.timestamp", Instant.now().toString());
                 store.store(dlq);
             };
         }

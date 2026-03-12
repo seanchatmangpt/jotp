@@ -41,9 +41,7 @@ class DocumentMessageTest implements WithAssertions {
 
             DocumentMessage<Customer> msg = DocumentMessage.create("Customer", customer);
 
-            assertThat(msg)
-                    .isNotNull()
-                    .isInstanceOf(DocumentMessage.class);
+            assertThat(msg).isNotNull().isInstanceOf(DocumentMessage.class);
             assertThat(msg.documentType()).isEqualTo("Customer");
             assertThat(msg.documentBytes()).isNotEmpty();
         }
@@ -112,11 +110,12 @@ class DocumentMessageTest implements WithAssertions {
         @Test
         @DisplayName("rejects non-serializable objects")
         void rejectsNonSerializable() {
-            Object nonSerializable =
-                    new Object(); // Object is not Serializable
+            Object nonSerializable = new Object(); // Object is not Serializable
 
             assertThatThrownBy(
-                    () -> DocumentMessage.create("Object", nonSerializable))
+                            () ->
+                                    DocumentMessage.create(
+                                            "Object", (java.io.Serializable) nonSerializable))
                     .isInstanceOf(ClassCastException.class);
         }
     }
@@ -177,8 +176,7 @@ class DocumentMessageTest implements WithAssertions {
         @Test
         @DisplayName("deserialize rejects null bytes")
         void deserializeRejectsNullBytes() {
-            assertThatThrownBy(
-                    () -> DocumentMessage.deserialize(null, Customer.class))
+            assertThatThrownBy(() -> DocumentMessage.deserialize(null, Customer.class))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -412,9 +410,9 @@ class DocumentMessageTest implements WithAssertions {
 
             // Reconstruct on receiving end
             DocumentMessage<Customer> receivedMsg =
-                    DocumentMessage.create(documentType, DocumentMessage.deserialize(wireBytes, Customer.class));
-            Customer receivedCustomer =
-                    receivedMsg.document(documentType, Customer.class);
+                    DocumentMessage.create(
+                            documentType, DocumentMessage.deserialize(wireBytes, Customer.class));
+            Customer receivedCustomer = receivedMsg.document(documentType, Customer.class);
 
             assertThat(receivedCustomer).isEqualTo(customer);
         }
@@ -445,16 +443,16 @@ class DocumentMessageTest implements WithAssertions {
         void preservesComplexStructures() throws IOException, ClassNotFoundException {
             // Complex nested record
             record Address(String street, String city, String zip) implements Serializable {}
-            record FullCustomer(String id, String name, Address address)
-                    implements Serializable {}
+            record FullCustomer(String id, String name, Address address) implements Serializable {}
 
             Address addr = new Address("123 Main St", "Springfield", "12345");
             FullCustomer fullCustomer = new FullCustomer("CUST-025", "Zoe", addr);
 
             DocumentMessage<?> msg = DocumentMessage.create("FullCustomer", fullCustomer);
 
-            // Note: deserialize as Object first, then cast if needed
-            Object restored = DocumentMessage.deserialize(msg.documentBytes(), Object.class);
+            // Note: deserialize as Serializable first, then check instance type
+            java.io.Serializable restored =
+                    DocumentMessage.deserialize(msg.documentBytes(), java.io.Serializable.class);
             assertThat(restored).isInstanceOf(FullCustomer.class);
         }
     }

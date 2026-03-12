@@ -6,31 +6,25 @@ import java.util.Map;
 /**
  * Normalizer (Vernon: "Normalizer")
  *
- * <p>Converts messages to a canonical format, enabling integration
- * of systems with different message schemas.
+ * <p>Converts messages to a canonical format, enabling integration of systems with different
+ * message schemas.
  *
- * <p>JOTP Implementation: Uses sealed Message types as the canonical format.
- * Normalizers detect incoming format and convert to standard Message types.
+ * <p>JOTP Implementation: Uses sealed Message types as the canonical format. Normalizers detect
+ * incoming format and convert to standard Message types.
  *
  * <p>Example:
+ *
  * <pre>
  * var canonical = Normalizer.toCanonical(xmlMessageString);
  * // Returns normalized Message.EventMsg with parsed payload
  * </pre>
  */
-public sealed class Normalizer {
+public final class Normalizer {
 
-    /**
-     * Canonical message format wrapper.
-     */
-    public record CanonicalMessage(
-        String type,
-        String sourceFormat,
-        Object payload
-    ) {}
+    /** Canonical message format wrapper. */
+    public record CanonicalMessage(String type, String sourceFormat, Object payload) {}
 
-    private Normalizer() {
-    }
+    private Normalizer() {}
 
     /**
      * Detects input format and converts to canonical Message format.
@@ -81,9 +75,11 @@ public sealed class Normalizer {
         return Message.document("BINARY_INPUT", bytes);
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     private static Message normalizeFromMap(Map<?, ?> map) {
-        var type = map.getOrDefault("type", "OBJECT");
-        var payload = map.getOrDefault("payload", map);
+        Map rawMap = (Map) map;
+        Object type = rawMap.getOrDefault("type", "OBJECT");
+        Object payload = rawMap.getOrDefault("payload", map);
         return Message.event(String.valueOf(type), payload);
     }
 
@@ -92,9 +88,9 @@ public sealed class Normalizer {
     private static String toJson(Message msg) {
         return switch (msg) {
             case Message.EventMsg evt ->
-                String.format("{\"type\":\"EVENT\",\"eventType\":\"%s\"}", evt.eventType());
+                    String.format("{\"type\":\"EVENT\",\"eventType\":\"%s\"}", evt.eventType());
             case Message.CommandMsg cmd ->
-                String.format("{\"type\":\"COMMAND\",\"command\":\"%s\"}", cmd.commandType());
+                    String.format("{\"type\":\"COMMAND\",\"command\":\"%s\"}", cmd.commandType());
             default -> "{}";
         };
     }
@@ -102,9 +98,9 @@ public sealed class Normalizer {
     private static String toXml(Message msg) {
         return switch (msg) {
             case Message.EventMsg evt ->
-                String.format("<message type=\"EVENT\" eventType=\"%s\"/>", evt.eventType());
+                    String.format("<message type=\"EVENT\" eventType=\"%s\"/>", evt.eventType());
             case Message.CommandMsg cmd ->
-                String.format("<message type=\"COMMAND\" command=\"%s\"/>", cmd.commandType());
+                    String.format("<message type=\"COMMAND\" command=\"%s\"/>", cmd.commandType());
             default -> "<message/>";
         };
     }
@@ -117,9 +113,7 @@ public sealed class Normalizer {
         };
     }
 
-    /**
-     * Validates message conforms to canonical format.
-     */
+    /** Validates message conforms to canonical format. */
     public static boolean isCanonical(Message msg) {
         return msg instanceof Message.EventMsg
                 || msg instanceof Message.CommandMsg

@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.dogfood.concurrency;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.StructuredTaskScope;
-import java.util.function.Supplier;
 
 /**
  * {@link ScopedValue} patterns for immutable, inheritable context (Java 26).
@@ -70,8 +69,8 @@ public final class ScopedValuePatterns {
     public record RequestContext(String userId, String traceId, String tenantId) {}
 
     /**
-     * Binds a full request context (user, trace, tenant) and runs the handler. All three values
-     * are bound atomically and inherited by child threads.
+     * Binds a full request context (user, trace, tenant) and runs the handler. All three values are
+     * bound atomically and inherited by child threads.
      */
     public static void withRequestContext(RequestContext ctx, Runnable handler) {
         ScopedValue.where(CURRENT_USER, ctx.userId())

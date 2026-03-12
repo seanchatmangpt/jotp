@@ -1,12 +1,12 @@
 package io.github.seanchatmangpt.jotp.test;
 
+import io.github.seanchatmangpt.jotp.Parallel;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
-import io.github.seanchatmangpt.jotp.Parallel;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.Test;
 

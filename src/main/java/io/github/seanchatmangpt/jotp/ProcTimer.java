@@ -10,8 +10,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>In OTP, processes model timeouts by receiving timed messages rather than using blocking sleep
  * or callback-based APIs. {@code timer:send_after(Ms, Pid, Msg)} sends {@code Msg} to {@code Pid}
- * after {@code Ms} milliseconds; the process handles it like any other message in its main
- * receive loop.
+ * after {@code Ms} milliseconds; the process handles it like any other message in its main receive
+ * loop.
  *
  * <p>Java 26 mapping:
  *

@@ -36,16 +36,15 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
  *     "Chassis");
  * }</pre>
  *
- * @param identifier              SQL Race identifier in {@code "name:AppGroup"} format
- * @param name                    short engineering name (without the application group suffix)
- * @param description             human-readable description shown in parameter browser
- * @param maxValue                engineering-unit upper bound (for {@link DataStatusType#OutOfRange}
- *                                detection)
- * @param minValue                engineering-unit lower bound
- * @param conversionFunctionName  name of the associated {@link RationalConversion}
+ * @param identifier SQL Race identifier in {@code "name:AppGroup"} format
+ * @param name short engineering name (without the application group suffix)
+ * @param description human-readable description shown in parameter browser
+ * @param maxValue engineering-unit upper bound (for {@link DataStatusType#OutOfRange} detection)
+ * @param minValue engineering-unit lower bound
+ * @param conversionFunctionName name of the associated {@link RationalConversion}
  * @param parameterGroupIdentifier the {@link ParameterGroup} this parameter belongs to
- * @param channelId               ID of the backing {@link SqlRaceChannel}
- * @param applicationGroupName    ECU / subsystem name (the part after the colon in identifier)
+ * @param channelId ID of the backing {@link SqlRaceChannel}
+ * @param applicationGroupName ECU / subsystem name (the part after the colon in identifier)
  */
 public record SqlRaceParameter(
         String identifier,
@@ -84,21 +83,16 @@ public record SqlRaceParameter(
      * // → conversionFunctionName = "CONV_vCar:Chassis"
      * }</pre>
      *
-     * @param name     short engineering name
+     * @param name short engineering name
      * @param appGroup application group (ECU name)
      * @param channelId backing channel ID
-     * @param min      engineering minimum
-     * @param max      engineering maximum
-     * @param unit     engineering unit label (informational; drives conversion name)
+     * @param min engineering minimum
+     * @param max engineering maximum
+     * @param unit engineering unit label (informational; drives conversion name)
      * @return fully constructed parameter
      */
     public static SqlRaceParameter of(
-            String name,
-            String appGroup,
-            long channelId,
-            double min,
-            double max,
-            String unit) {
+            String name, String appGroup, long channelId, double min, double max, String unit) {
         String id = name + ":" + appGroup;
         return new SqlRaceParameter(
                 id,

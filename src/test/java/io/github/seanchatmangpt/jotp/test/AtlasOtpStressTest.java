@@ -2,21 +2,9 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Gatherers;
-import java.util.stream.IntStream;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcRegistry;
+import io.github.seanchatmangpt.jotp.ProcessRegistry;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.AcquisitionSupervisor;
@@ -33,6 +21,18 @@ import io.github.seanchatmangpt.jotp.dogfood.mclaren.SqlRaceSession;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.SqlRaceSessionData;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.SqlRaceSessionEvent;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.SqlRaceSessionState;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Gatherers;
+import java.util.stream.IntStream;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,10 +55,10 @@ import org.junit.jupiter.api.Timeout;
  * <ol>
  *   <li>{@link AcquisitionSupervisor} — 1 K ONE_FOR_ONE supervised {@code ParameterDataAccess}
  *       processes; 1 M live ECU samples pushed via {@link AcquisitionSupervisor#addSamples}
- *   <li>{@link ProcRegistry} — 1 K registered {@link PdaMsg}-typed procs; 1 M concurrent
- *       {@code whereis()} lookups followed by {@link PdaMsg.AddSamples} fire-and-forget
- *   <li>{@link SqlRaceSession} — 1 K session state machines configured and moved to {@code Live};
- *       1 M concurrent {@link SqlRaceSessionEvent.AddLap} events; exact lap count verified
+ *   <li>{@link ProcessRegistry} — 1 K registered {@link PdaMsg}-typed procs; 1 M concurrent {@code
+ *       whereis()} lookups followed by {@link PdaMsg.AddSamples} fire-and-forget
+ *   <li>{@link SqlRaceSession} — 1 K session state machines configured and moved to {@code Live}; 1
+ *       M concurrent {@link SqlRaceSessionEvent.AddLap} events; exact lap count verified
  *   <li>{@link SessionEventBus} — 10 registered handlers; 1 M async {@link
  *       SqlRaceSessionEvent.AddLap} broadcasts; every handler must receive every event
  *   <li>{@link Supervisor} crash storm — 1 K supervised procs; 1 M mixed-load {@link
@@ -90,15 +90,15 @@ class AtlasOtpStressTest implements WithAssertions {
     // ── Shared channel / parameter fixture ──────────────────────────────────
 
     /**
-     * 200 Hz signed-16 channel for car speed — used to configure sessions in Test 3.
-     * Real ATLAS: {@code new Channel(1L, "vCar", 5_000_000L, DataType.Signed16Bit, Periodic)}.
+     * 200 Hz signed-16 channel for car speed — used to configure sessions in Test 3. Real ATLAS:
+     * {@code new Channel(1L, "vCar", 5_000_000L, DataType.Signed16Bit, Periodic)}.
      */
     private static final SqlRaceChannel SHARED_CHANNEL =
             SqlRaceChannel.periodic(1L, "vCar", 200.0, FrequencyUnit.Hz, DataType.Signed16Bit);
 
     /**
-     * Car-speed parameter bound to the shared channel.
-     * Identifier follows the McLaren convention: {@code "vCar:Chassis"}.
+     * Car-speed parameter bound to the shared channel. Identifier follows the McLaren convention:
+     * {@code "vCar:Chassis"}.
      */
     private static final SqlRaceParameter SHARED_PARAM =
             SqlRaceParameter.of("vCar", "Chassis", 1L, 0.0, 400.0, "kph");
@@ -115,10 +115,10 @@ class AtlasOtpStressTest implements WithAssertions {
      * Blocks until all threads finish or {@code timeout} expires.
      *
      * @param semaphorePermits max concurrent VTs doing real work (rest park cheaply)
-     * @param task             receives the zero-based thread index
-     * @param successes        incremented on each successful task invocation
-     * @param errors           incremented on each exception thrown by task
-     * @param timeout          maximum wall-clock budget for the entire run
+     * @param task receives the zero-based thread index
+     * @param successes incremented on each successful task invocation
+     * @param errors incremented on each exception thrown by task
+     * @param timeout maximum wall-clock budget for the entire run
      */
     private static void runMillion(
             int semaphorePermits,
@@ -160,7 +160,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
     @AfterEach
     void resetRegistry() {
-        ProcRegistry.reset();
+        ProcessRegistry.reset();
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -177,8 +177,9 @@ class AtlasOtpStressTest implements WithAssertions {
         var channels = new ArrayList<SqlRaceChannel>(PARAM_COUNT);
         var paramIds = new String[PARAM_COUNT];
         for (int i = 0; i < PARAM_COUNT; i++) {
-            var ch = SqlRaceChannel.periodic(
-                    i + 1L, "ch" + i, 200.0, FrequencyUnit.Hz, DataType.Signed16Bit);
+            var ch =
+                    SqlRaceChannel.periodic(
+                            i + 1L, "ch" + i, 200.0, FrequencyUnit.Hz, DataType.Signed16Bit);
             var p = SqlRaceParameter.of("p" + i, "Chassis", i + 1L, 0.0, 400.0, "kph");
             channels.add(ch);
             params.add(p);
@@ -235,28 +236,29 @@ class AtlasOtpStressTest implements WithAssertions {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // Test 2 — ProcRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
+    // Test 2 — ProcessRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
     @Order(2)
     @DisplayName(
-            "1 M ProcRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
+            "1 M ProcessRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
     @SuppressWarnings("unchecked")
     void processRegistry_millionLookups_allPdaMsgDelivered() throws Exception {
         // 1 K Proc<AtomicLong, PdaMsg>: counts AddSamples; silently ignores other PdaMsg variants.
         // AtomicLong state avoids exposing the package-private ParameterDataAccess.State.
         Proc<AtomicLong, PdaMsg>[] procs = new Proc[PARAM_COUNT];
         for (int i = 0; i < PARAM_COUNT; i++) {
-            procs[i] = new Proc<>(
-                    new AtomicLong(0),
-                    (count, msg) -> {
-                        if (msg instanceof PdaMsg.AddSamples) {
-                            count.incrementAndGet();
-                        }
-                        return count;
-                    });
-            ProcRegistry.register("pda-" + i, procs[i]);
+            procs[i] =
+                    new Proc<>(
+                            new AtomicLong(0),
+                            (count, msg) -> {
+                                if (msg instanceof PdaMsg.AddSamples) {
+                                    count.incrementAndGet();
+                                }
+                                return count;
+                            });
+            ProcessRegistry.register("pda-" + i, procs[i]);
         }
 
         var successes = new AtomicLong(0);
@@ -268,16 +270,13 @@ class AtlasOtpStressTest implements WithAssertions {
                 CONCURRENCY,
                 idx -> {
                     var ref =
-                            ProcRegistry.<AtomicLong, PdaMsg>whereis(
+                            ProcessRegistry.<AtomicLong, PdaMsg>whereis(
                                     "pda-" + (idx % PARAM_COUNT));
                     if (ref.isEmpty()) {
                         empties.incrementAndGet();
                         return;
                     }
-                    ref.get()
-                            .tell(
-                                    new PdaMsg.AddSamples(
-                                            new long[] {idx}, new double[] {1.0}));
+                    ref.get().tell(new PdaMsg.AddSamples(new long[] {idx}, new double[] {1.0}));
                 },
                 successes,
                 errors,
@@ -285,7 +284,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
         assertThat(errors.get()).as("no lookup should throw").isZero();
         assertThat(empties.get())
-                .as("every PDA proc must be found — ProcRegistry must return no stale entries")
+                .as("every PDA proc must be found — ProcessRegistry must return no stale entries")
                 .isZero();
 
         // Drain: ask(Clear) enqueued AFTER all AddSamples — FIFO guarantees exact count.
@@ -304,7 +303,7 @@ class AtlasOtpStressTest implements WithAssertions {
                         .orElse(0L);
 
         assertThat(totalDelivered)
-                .as("ProcRegistry must route all 1 M PdaMsg.AddSamples to live procs")
+                .as("ProcessRegistry must route all 1 M PdaMsg.AddSamples to live procs")
                 .isEqualTo(N);
 
         for (var p : procs) p.stop();
@@ -344,7 +343,8 @@ class AtlasOtpStressTest implements WithAssertions {
                                         .allMatch(
                                                 s ->
                                                         s.state()
-                                                                instanceof SqlRaceSessionState.Live));
+                                                                instanceof
+                                                                SqlRaceSessionState.Live));
 
         var successes = new AtomicLong(0);
         var errors = new AtomicLong(0);
@@ -388,8 +388,7 @@ class AtlasOtpStressTest implements WithAssertions {
                             .map(CompletableFuture::join)
                             .gather(
                                     Gatherers.fold(
-                                            () -> 0L,
-                                            (acc, data) -> acc + data.laps().size()))
+                                            () -> 0L, (acc, data) -> acc + data.laps().size()))
                             .findFirst()
                             .orElse(0L);
 
@@ -483,9 +482,7 @@ class AtlasOtpStressTest implements WithAssertions {
         for (int i = 0; i < PARAM_COUNT; i++) {
             refs[i] =
                     supervisor.supervise(
-                            "storm-pda-" + i,
-                            new AtomicLong(0),
-                            AtlasOtpStressTest::stormHandler);
+                            "storm-pda-" + i, new AtomicLong(0), AtlasOtpStressTest::stormHandler);
         }
 
         var successes = new AtomicLong(0);
@@ -542,7 +539,8 @@ class AtlasOtpStressTest implements WithAssertions {
                                                                                         new long[] {
                                                                                             0L
                                                                                         },
-                                                                                        new double[] {
+                                                                                        new double
+                                                                                                [] {
                                                                                             1.0
                                                                                         })))));
 
@@ -563,9 +561,9 @@ class AtlasOtpStressTest implements WithAssertions {
     private static AtomicLong stormHandler(AtomicLong count, PdaMsg msg) {
         return switch (msg) {
             case PdaMsg.AddSamples s when s.values().length > 0 && s.values()[0] < 0 ->
-                // Crash — ONE_FOR_ONE supervisor restarts this proc immediately
-                throw new RuntimeException(
-                        "deliberate crash: negative ECU reading simulates sensor fault");
+                    // Crash — ONE_FOR_ONE supervisor restarts this proc immediately
+                    throw new RuntimeException(
+                            "deliberate crash: negative ECU reading simulates sensor fault");
             case PdaMsg.AddSamples s -> {
                 count.incrementAndGet();
                 yield count;

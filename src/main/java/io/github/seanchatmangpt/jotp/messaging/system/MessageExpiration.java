@@ -10,13 +10,11 @@ import java.util.stream.Stream;
 /**
  * Message Expiration pattern with automatic cleanup and TTL enforcement.
  *
- * <p>Messaging pattern: Discards expired messages before processing to prevent
- * stale data from being actioned. Uses JOTP's {@link ProcTimer} for timeout management
- * and periodic cleanup.
+ * <p>Messaging pattern: Discards expired messages before processing to prevent stale data from
+ * being actioned. Uses JOTP's {@link ProcTimer} for timeout management and periodic cleanup.
  *
- * <p>Joe Armstrong principle: "Messages that are too old should be discarded before
- * processing. In a distributed system with network delays and retries, message age
- * becomes a critical dimension."
+ * <p>Joe Armstrong principle: "Messages that are too old should be discarded before processing. In
+ * a distributed system with network delays and retries, message age becomes a critical dimension."
  *
  * <p><strong>Usage:</strong>
  *
@@ -95,9 +93,8 @@ public final class MessageExpiration {
     /**
      * Wrap a message with TTL metadata for expiration tracking.
      *
-     * <p>The resulting {@link ExpiringMessage} carries the original message, its TTL,
-     * and the creation time. Use {@link #isExpired(ExpiringMessage)} to check before
-     * processing.
+     * <p>The resulting {@link ExpiringMessage} carries the original message, its TTL, and the
+     * creation time. Use {@link #isExpired(ExpiringMessage)} to check before processing.
      *
      * @param message the message to wrap
      * @param ttlMs time-to-live in milliseconds
