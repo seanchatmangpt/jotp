@@ -147,7 +147,7 @@
                         <exclude>**/dogfood/mclaren/**</exclude>
                         <exclude>**/dogfood/messaging/**</exclude>
                         <exclude>**/GenServer.java</exclude>
-                        <exclude>**/MessageBus.java</exclude>
+                        <exclude>io/github/seanchatmangpt/jotp/MessageBus.java</exclude>
                         <exclude>**/MetricsCollector.java</exclude>
                         <exclude>**/SagaOrchestrator.java</exclude>
                         <exclude>**/HealthChecker.java</exclude>
