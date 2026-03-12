@@ -25,13 +25,15 @@ Pid ! Msg.  % Send message
 
 **Java 26:**
 ```java
-var proc = Proc.start(state -> msg -> state, init);
-proc.send(msg);  // Send message
+var proc = new Proc<>(initState, (state, msg) -> switch (msg) {
+    case SomeMsg _ -> newState;
+});
+proc.tell(msg);  // Fire-and-forget (equivalent to Pid ! Msg)
 ```
 
 **Equivalence:** Both spawn a lightweight process, maintain isolated state, and accept async messages.
 
-### 2. Message Passing: `!` ↔ `send()`
+### 2. Message Passing: `!` ↔ `tell()`
 
 **Erlang:**
 ```erlang
@@ -46,10 +48,10 @@ end.
 sealed interface Msg permits GreetMsg {}
 record GreetMsg(String text) implements Msg {}
 
-receiver.send(new GreetMsg("Hello"));
+receiver.tell(new GreetMsg("Hello"));
 
 // In receiver's handler:
-case GreetMsg(String text) ->
+case GreetMsg(var text) ->
     System.out.println("Got: " + text);
 ```
 
@@ -65,7 +67,7 @@ link(ChildPid).
 
 **Java 26:**
 ```java
-ProcessLink.link(childProc, parentProc);
+ProcLink.link(childProc, parentProc);
 // If childProc crashes, parentProc receives ExitSignal
 ```
 
@@ -83,10 +85,9 @@ ProcessLink.link(childProc, parentProc);
 
 **Java 26:**
 ```java
-var sup = Supervisor.oneForOne()
-    .add("child1", ChildSpec1::create)
-    .add("child2", ChildSpec2::create)
-    .build();
+var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+ProcRef<?, ?> child1 = sup.supervise("child1", ChildSpec1.INIT_STATE, ChildSpec1.HANDLER);
+ProcRef<?, ?> child2 = sup.supervise("child2", ChildSpec2.INIT_STATE, ChildSpec2.HANDLER);
 ```
 
 **Equivalence:** Both provide hierarchical restart strategies with sliding restart windows.
@@ -101,10 +102,11 @@ handle_event(internal, Msg, State, Data) ->
 
 **Java 26:**
 ```java
-record Transition<S, D>(S state, D data) {}
-var sm = StateMachine.create(
-    (state, event, data) ->
-        new Transition(nextState, newData)
+var sm = new StateMachine<>(initialState, initialData,
+    (state, event, data) -> switch (state) {
+        case SomeState _ -> Transition.nextState(nextState, newData);
+        default          -> Transition.keepState(data);
+    }
 );
 ```
 
@@ -159,41 +161,45 @@ static int increment(int x) { return x + 1; }
 // Caught at compile time if X is not an int
 ```
 
-**Trade-off:** Java eliminates entire classes of errors at the cost of more verbose type annotations. For production systems, static typing is superior.
+**Trade-off:** Java's static types eliminate entire classes of runtime errors at the cost of more verbose declarations. Armstrong's position was more nuanced: Erlang's dynamic typing enables live code upgrades and flexible message shapes that Java's static types make expensive. The Fortune 500 tradeoff favors static typing: audit trails, safe refactoring, and IDE tooling outweigh the flexibility of runtime dispatch in most enterprise contexts. Hot code reloading (one place where Erlang wins) is solved by blue-green deployment in JOTP.
 
 ## Performance Equivalence
 
-**Message Latency** (average):
-- BEAM: 1-5 microseconds
-- JOTP: 1-5 microseconds
+Benchmarks from ARCHITECTURE.md Appendix A (JMH, OpenJDK 26, 32-core / 128 GB RAM):
 
-**Throughput**:
-- BEAM: 1M messages/sec/core
-- JOTP: 1M messages/sec/core
+| Metric | Erlang BEAM | JOTP (JVM) | Notes |
+|--------|-------------|------------|-------|
+| **Intra-node message latency p50** | 400–800 ns | 80–150 ns | JOTP faster intra-JVM (no BEAM I/O dispatch) |
+| **Intra-node message latency p99** | 2–5 µs | 500 ns | JOTP benefits from JIT; BEAM tail latency better under CPU pressure |
+| **Throughput (msg/sec)** | 45M | 120M+ | JIT compilation advantage |
+| **Max concurrent processes** | 250M+ | 10M+ | BEAM wins at extreme scale; JOTP sufficient for enterprise workloads |
+| **Process memory** | 326 bytes | ~1 KB | BEAM more compact; difference matters only at 10M+ processes |
+| **Restart latency p50** | 200–500 µs | 100–200 µs | Similar |
 
-**Process Count**:
-- BEAM: 250M+ per machine
-- JOTP: 1M+ per machine (limited by heap, not design)
+**Interpreting these numbers:**
+- JOTP is *faster* at intra-JVM messaging because `LinkedTransferQueue` is JIT-optimized and avoids BEAM's I/O dispatch overhead.
+- BEAM wins at extreme scale (250M vs 10M processes) — a difference only relevant for IoT or telecom use cases, not typical enterprise applications.
+- For the 99% case (10K–1M concurrent processes, I/O-bound handlers), performance equivalence holds.
 
-See the **[PhD Thesis](../phd-thesis/otp-28-java26.md)** for detailed benchmarks.
+See the **[PhD Thesis](../phd-thesis-otp-java26.md)** for full benchmark methodology, hardware specifications, and statistical analysis.
 
 ## Formal Mapping: All 15 Primitives
 
 | # | Erlang/OTP | JOTP Java | Semantics |
 |---|-----------|-----------|-----------|
-| 1 | `spawn/3` | `Proc.start()` | Lightweight process |
+| 1 | `spawn/3` | `new Proc<>(state, handler)` | Lightweight process |
 | 2 | Pid | `ProcRef<S,M>` | Process reference |
-| 3 | `!` operator | `send()` | Async messaging |
+| 3 | `!` operator | `proc.tell(msg)` | Async messaging |
 | 4 | `receive` | Handler function | Message reception |
-| 5 | `link/1` | `ProcessLink.link()` | Bilateral crash link |
+| 5 | `link/1` | `ProcLink.link()` | Bilateral crash link |
 | 6 | `supervisor` | `Supervisor` | Hierarchical restart |
-| 7 | ONE_FOR_ONE | `oneForOne()` | Restart strategy |
-| 8 | ONE_FOR_ALL | `oneForAll()` | Restart strategy |
-| 9 | REST_FOR_ONE | `restForOne()` | Restart strategy |
+| 7 | ONE_FOR_ONE | `Strategy.ONE_FOR_ONE` | Restart strategy |
+| 8 | ONE_FOR_ALL | `Strategy.ONE_FOR_ALL` | Restart strategy |
+| 9 | REST_FOR_ONE | `Strategy.REST_FOR_ONE` | Restart strategy |
 | 10 | `gen_statem` | `StateMachine<S,E,D>` | Complex state machines |
 | 11 | `gen_event` | `EventManager<E>` | Event broadcast |
-| 12 | `monitor/2` | `ProcessMonitor` | Unilateral monitoring |
-| 13 | `register/2` | `ProcessRegistry` | Global name table |
+| 12 | `monitor/2` | `ProcMonitor` | Unilateral monitoring |
+| 13 | `register/2` | `ProcRegistry` | Global name table |
 | 14 | `timer:send_after/3` | `ProcTimer` | Timed delivery |
 | 15 | `{:ok, V} \| {:error, R}` | `Result<T,E>` | Railway errors |
 
@@ -229,7 +235,7 @@ This opens a **blue ocean strategy** for Oracle's ecosystem:
 - **[Architecture Overview](architecture-overview.md)** — System design at 30,000 feet
 - **[Concurrency Model](concurrency-model.md)** — How virtual threads power JOTP
 - **[Design Decisions](design-decisions.md)** — Specific architectural choices
-- **[PhD Thesis: OTP 28 in Java 26](../phd-thesis/otp-28-java26.md)** — Full academic treatment
+- **[PhD Thesis: OTP 28 in Java 26](../phd-thesis-otp-java26.md)** — Full academic treatment
 
 ---
 
