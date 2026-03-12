@@ -32,24 +32,22 @@ public final class EventDrivenExample {
     /**
      * Sealed event hierarchy for an order management system.
      *
-     * <p>Each event is a complete, immutable record capturing a domain event. Handlers subscribe
-     * to this event type and process independently.
+     * <p>Each event is a complete, immutable record capturing a domain event. Handlers subscribe to
+     * this event type and process independently.
      */
     sealed interface OrderEvent permits OrderCreated, OrderShipped, OrderCancelled {
         String orderId();
     }
 
     /** Event: order has been created with an amount. */
-    record OrderCreated(String orderId, double amount, Instant timestamp)
-            implements OrderEvent {}
+    record OrderCreated(String orderId, double amount, Instant timestamp) implements OrderEvent {}
 
     /** Event: order has been shipped to customer. */
     record OrderShipped(String orderId, String trackingId, Instant timestamp)
             implements OrderEvent {}
 
     /** Event: order has been cancelled by customer. */
-    record OrderCancelled(String orderId, String reason, Instant timestamp)
-            implements OrderEvent {}
+    record OrderCancelled(String orderId, String reason, Instant timestamp) implements OrderEvent {}
 
     /**
      * Log handler: prints all events to stdout.
@@ -174,7 +172,11 @@ public final class EventDrivenExample {
             String notification =
                     switch (event) {
                         case OrderCreated oc ->
-                                "Email: Order " + oc.orderId() + " created (amount: $" + oc.amount() + ")";
+                                "Email: Order "
+                                        + oc.orderId()
+                                        + " created (amount: $"
+                                        + oc.amount()
+                                        + ")";
                         case OrderShipped os ->
                                 "Email: Order "
                                         + os.orderId()
@@ -197,7 +199,8 @@ public final class EventDrivenExample {
             if (reason == null) {
                 System.out.println("[NOTIFICATION] NotificationHandler terminated normally");
             } else {
-                System.out.println("[NOTIFICATION] NotificationHandler crashed: " + reason.getMessage());
+                System.out.println(
+                        "[NOTIFICATION] NotificationHandler crashed: " + reason.getMessage());
             }
         }
 

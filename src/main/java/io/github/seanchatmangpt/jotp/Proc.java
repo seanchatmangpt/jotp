@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TransferQueue;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
@@ -39,9 +39,9 @@ import java.util.function.Consumer;
  * per-process message statistics — mirroring OTP's {@code sys} module.
  *
  * <p><strong>Message Processing and Stream.Gatherers:</strong> The message loop polls the queue
- * with a 50ms timeout (lines 127–128) rather than blocking indefinitely. While Java 26's
- * {@link java.util.stream.Stream.Gatherers} might seem applicable for batching messages, the
- * current design is optimal because:
+ * with a 50ms timeout (lines 127–128) rather than blocking indefinitely. While Java 26's {@link
+ * java.util.stream.Stream.Gatherers} might seem applicable for batching messages, the current
+ * design is optimal because:
  *
  * <ul>
  *   <li><strong>Semantic compatibility with OTP:</strong> Erlang processes handle one message per
@@ -112,16 +112,17 @@ public final class Proc<S, M> {
      * <p><strong>Java 26 Implementation Notes:</strong>
      *
      * <ul>
-     *   <li><strong>Virtual Threads:</strong> Each process runs on its own virtual thread (Thread.ofVirtual) spawned
-     *       immediately. This allows millions of lightweight processes with minimal heap overhead (~1 KB per process).
-     *   <li><strong>Mailbox:</strong> Uses LinkedTransferQueue for lock-free MPMC message passing (50–150 ns
-     *       per message round-trip).
-     *   <li><strong>State Isolation:</strong> State {@code S} is never returned by reference — only by handler
-     *       invocation, guaranteeing isolation.
-     *   <li><strong>Message Records:</strong> Use sealed interface hierarchies of records for type-safe
-     *       pattern matching in the handler.
-     *   <li><strong>Immutability:</strong> State should be immutable (record, sealed class, or value type)
-     *       to enable safe concurrent sharing via monitors and asks.
+     *   <li><strong>Virtual Threads:</strong> Each process runs on its own virtual thread
+     *       (Thread.ofVirtual) spawned immediately. This allows millions of lightweight processes
+     *       with minimal heap overhead (~1 KB per process).
+     *   <li><strong>Mailbox:</strong> Uses LinkedTransferQueue for lock-free MPMC message passing
+     *       (50–150 ns per message round-trip).
+     *   <li><strong>State Isolation:</strong> State {@code S} is never returned by reference — only
+     *       by handler invocation, guaranteeing isolation.
+     *   <li><strong>Message Records:</strong> Use sealed interface hierarchies of records for
+     *       type-safe pattern matching in the handler.
+     *   <li><strong>Immutability:</strong> State should be immutable (record, sealed class, or
+     *       value type) to enable safe concurrent sharing via monitors and asks.
      * </ul>
      *
      * @param initial initial state
@@ -196,7 +197,10 @@ public final class Proc<S, M> {
                                         }
                                     }
                                     // Fire termination callbacks (monitor semantics — always)
-                                    Throwable exitReason = (crashedAbnormally || lastError != null) ? lastError : null;
+                                    Throwable exitReason =
+                                            (crashedAbnormally || lastError != null)
+                                                    ? lastError
+                                                    : null;
                                     for (Consumer<Throwable> cb : terminationCallbacks) {
                                         cb.accept(exitReason);
                                     }
@@ -227,8 +231,9 @@ public final class Proc<S, M> {
     /**
      * Timed request-reply — mirrors OTP's {@code gen_server:call(Pid, Msg, Timeout)}.
      *
-     * <p>The returned future completes exceptionally with {@link java.util.concurrent.TimeoutException}
-     * if the process does not respond within {@code timeout}.
+     * <p>The returned future completes exceptionally with {@link
+     * java.util.concurrent.TimeoutException} if the process does not respond within {@code
+     * timeout}.
      *
      * <p>Armstrong: "An unbounded call is a latent deadlock. Every call must have a timeout."
      */
@@ -240,8 +245,8 @@ public final class Proc<S, M> {
      * Enable or disable exit signal trapping — mirrors OTP's {@code process_flag(trap_exit, Flag)}.
      *
      * <p>When {@code true}, EXIT signals from linked processes are delivered as {@link ExitSignal}
-     * messages to this process's mailbox instead of interrupting it. The process stays alive and can
-     * choose how to handle each exit reason.
+     * messages to this process's mailbox instead of interrupting it. The process stays alive and
+     * can choose how to handle each exit reason.
      *
      * <p>When {@code false} (default), EXIT signals kill this process immediately.
      */
@@ -320,16 +325,16 @@ public final class Proc<S, M> {
     }
 
     /**
-     * Package-private: suspend this process — used by {@link ProcSys#suspend}.
-     * The process loop will block after finishing the current message.
+     * Package-private: suspend this process — used by {@link ProcSys#suspend}. The process loop
+     * will block after finishing the current message.
      */
     void suspendProc() {
         suspended = true;
     }
 
     /**
-     * Package-private: resume this process — used by {@link ProcSys#resume}.
-     * The process loop continues immediately.
+     * Package-private: resume this process — used by {@link ProcSys#resume}. The process loop
+     * continues immediately.
      */
     void resumeProc() {
         suspended = false;

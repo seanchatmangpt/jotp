@@ -35,8 +35,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <ul>
  *   <li><strong>Sealed Interfaces:</strong> Internal {@code Msg<E>} is sealed to 6 message types
- *       (Notify, SyncNotify, Add, Delete, Call, Stop), enabling exhaustive pattern matching in
- *       the event loop.
+ *       (Notify, SyncNotify, Add, Delete, Call, Stop), enabling exhaustive pattern matching in the
+ *       event loop.
  *   <li><strong>Records:</strong> Each message is a record carrying handler reference, event,
  *       completion future, etc.
  *   <li><strong>Virtual Threads:</strong> The event manager runs on its own virtual thread,

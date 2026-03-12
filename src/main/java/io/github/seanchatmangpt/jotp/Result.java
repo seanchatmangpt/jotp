@@ -61,8 +61,8 @@ import java.util.function.Supplier;
  *   <li><strong>Records:</strong> Each variant is a record (immutable, transparent, with
  *       destructuring support for pattern matching).
  *   <li><strong>Pattern Matching:</strong> Use {@code switch} expressions with sealed patterns:
- *       {@code switch (result) { case Ok(var v) -> ...; case Err(var e) -> ...; }}
- *       The compiler enforces exhaustiveness.
+ *       {@code switch (result) { case Ok(var v) -> ...; case Err(var e) -> ...; }} The compiler
+ *       enforces exhaustiveness.
  *   <li><strong>Type-Safe Railway:</strong> All transformations ({@code map}, {@code flatMap},
  *       {@code fold}) leverage generics to maintain type safety across both tracks.
  * </ul>
@@ -217,7 +217,8 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
      * Get the success value, or throw if this is a failure.
      *
      * <p>If the failure value is a {@link Throwable}, it is rethrown directly (without wrapping).
-     * Otherwise, the failure value is converted to a string and wrapped in a {@link RuntimeException}.
+     * Otherwise, the failure value is converted to a string and wrapped in a {@link
+     * RuntimeException}.
      *
      * @return the success value
      * @throws RuntimeException if this is a failure
