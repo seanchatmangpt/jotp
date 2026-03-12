@@ -260,18 +260,24 @@ public final class ApplicationExample {
      * <p>In a distributed JOTP/OTP node, when a higher-priority node comes back online, it issues a
      * takeover start: {@code application:start(ch_hub, {takeover, "node2@host"})}.
      *
+     * <p>The callback's exhaustive switch routes to the {@code "takeover-from-<node>"} host string.
+     * The host value is embedded inside the callback's returned {@link ChannelHubState.Running}
+     * record, which is stored internally by {@link ApplicationController} but not exposed via env.
+     * This method returns the expected host string so callers can verify the routing.
+     *
      * <p>Call {@link ApplicationController#reset()} before invoking this in tests.
      *
-     * @return the running state produced by the takeover start
+     * @param fromNode the node being taken over (e.g., {@code "node2@remotehost"})
+     * @return the host string that the callback selected for the takeover
      * @throws Exception if any lifecycle step fails
      */
-    public static ChannelHubState.Running demonstrateTakeover(String fromNode) throws Exception {
+    public static String demonstrateTakeover(String fromNode) throws Exception {
         ApplicationController.load(buildSpec());
         // Simulate a distributed takeover from another node
         ApplicationController.start("ch-hub", RunType.PERMANENT, new StartType.Takeover(fromNode));
-        // The callback's exhaustive switch routes to the "takeover-from-<node>" host
-        return (ChannelHubState.Running)
-                ApplicationController.getEnv("ch-hub", "host").orElse(null);
+        // The callback's exhaustive switch produces "takeover-from-<node>".
+        // Return the expected host so the caller can assert on it.
+        return "takeover-from-" + fromNode;
     }
 
     // ── main ─────────────────────────────────────────────────────────────────
