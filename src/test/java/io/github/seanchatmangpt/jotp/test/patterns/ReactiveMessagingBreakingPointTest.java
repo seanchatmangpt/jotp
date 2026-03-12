@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
-import io.github.seanchatmangpt.jotp.ProcessLink;
-import io.github.seanchatmangpt.jotp.ProcessMonitor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -51,12 +49,12 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     // ── Utility Methods ───────────────────────────────────────────────────────────
@@ -231,12 +229,12 @@ class ReactiveMessagingBreakingPointTest implements WithAssertions {
 
             // Link all processes
             for (int i = 1; i < depth; i++) {
-                ProcessLink.link(procs.get(i - 1), procs.get(i));
+                ProcLink.link(procs.get(i - 1), procs.get(i));
             }
 
             // Monitor the last process to detect cascade completion
             var lastProc = procs.get(depth - 1);
-            ProcessMonitor.monitor(lastProc, (down) -> deadCount.incrementAndGet());
+            ProcMonitor.monitor(lastProc, (down) -> deadCount.incrementAndGet());
 
             long start = System.nanoTime();
             procs.get(0).tell("boom");

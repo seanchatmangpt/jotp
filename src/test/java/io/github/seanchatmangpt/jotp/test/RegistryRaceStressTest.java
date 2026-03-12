@@ -3,7 +3,6 @@ package io.github.seanchatmangpt.jotp.test;
 import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -62,7 +61,7 @@ class RegistryRaceStressTest implements WithAssertions {
 
     @BeforeEach
     void resetRegistry() {
-        ProcessRegistry.reset();
+        ProcRegistry.reset();
     }
 
     // ── 1. Registration stampede — only one winner ────────────────────────
@@ -94,7 +93,7 @@ class RegistryRaceStressTest implements WithAssertions {
                                     () -> {
                                         try {
                                             latch.await();
-                                            ProcessRegistry.register("stampede-race", proc);
+                                            ProcRegistry.register("stampede-race", proc);
                                             successCount.incrementAndGet();
                                         } catch (InterruptedException e) {
                                             Thread.currentThread().interrupt();
@@ -110,7 +109,7 @@ class RegistryRaceStressTest implements WithAssertions {
         assertThat(successCount.get()).as("exactly one registration must succeed").isEqualTo(1);
 
         // Cleanup
-        ProcessRegistry.unregister("stampede-race");
+        ProcRegistry.unregister("stampede-race");
         procs.forEach(
                 p -> {
                     try {
@@ -129,7 +128,7 @@ class RegistryRaceStressTest implements WithAssertions {
      * <p>Each process registers a unique name, then crashes. The termination callback must reliably
      * deregister the name using the two-arg {@code remove(name, proc)} to prevent phantom entries.
      *
-     * <p>After all crashes, {@code ProcessRegistry.registered()} must be empty.
+     * <p>After all crashes, {@code ProcRegistry.registered()} must be empty.
      */
     @Test
     void crashStorm_500registeredProcesses_registryEmptyAfter() throws Exception {
@@ -139,14 +138,11 @@ class RegistryRaceStressTest implements WithAssertions {
         // Register all processes with unique names
         for (int i = 0; i < count; i++) {
             Proc<Integer, Msg> proc = new Proc<>(0, RegistryRaceStressTest::handle);
-            ProcessRegistry.register("stress-" + i, proc);
+            ProcRegistry.register("stress-" + i, proc);
             procs.add(proc);
         }
 
-        assertThat(
-                        ProcessRegistry.registered().stream()
-                                .filter(n -> n.startsWith("stress-"))
-                                .count())
+        assertThat(ProcRegistry.registered().stream().filter(n -> n.startsWith("stress-")).count())
                 .as("stress entries registered")
                 .isEqualTo(count);
 
@@ -176,12 +172,12 @@ class RegistryRaceStressTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(5))
                 .until(
                         () -> {
-                            var registered = ProcessRegistry.registered();
+                            var registered = ProcRegistry.registered();
                             return registered.stream().noneMatch(n -> n.startsWith("stress-"));
                         });
 
         var remaining =
-                ProcessRegistry.registered().stream().filter(n -> n.startsWith("stress-")).toList();
+                ProcRegistry.registered().stream().filter(n -> n.startsWith("stress-")).toList();
         assertThat(remaining).as("phantom registry entries after crash storm").isEmpty();
     }
 
@@ -202,17 +198,17 @@ class RegistryRaceStressTest implements WithAssertions {
         for (int i = 0; i < count; i++) {
             String name = "prop-" + System.nanoTime() + "-" + i;
             Proc<Integer, Msg> proc = new Proc<>(0, RegistryRaceStressTest::handle);
-            ProcessRegistry.register(name, proc);
+            ProcRegistry.register(name, proc);
             names.add(name);
             proc.stop(); // graceful stop → terminationCallback fires → auto-deregister
         }
 
         // Allow deregister callbacks to propagate
         await().atMost(Duration.ofSeconds(3))
-                .until(() -> names.stream().allMatch(n -> ProcessRegistry.whereis(n).isEmpty()));
+                .until(() -> names.stream().allMatch(n -> ProcRegistry.whereis(n).isEmpty()));
 
         for (String name : names) {
-            assertThat(ProcessRegistry.whereis(name))
+            assertThat(ProcRegistry.whereis(name))
                     .as("dead process '%s' must not be in registry", name)
                     .isEmpty();
         }
@@ -243,14 +239,14 @@ class RegistryRaceStressTest implements WithAssertions {
                         .start(
                                 () -> {
                                     while (stop.getCount() > 0) {
-                                        ProcessRegistry.whereis(name)
+                                        ProcRegistry.whereis(name)
                                                 .ifPresent(
                                                         proc -> {
                                                             // A true zombie: dead proc still in
                                                             // registry (not just a stale reference
                                                             // obtained before process died).
                                                             if (!proc.thread().isAlive()
-                                                                    && ProcessRegistry.whereis(name)
+                                                                    && ProcRegistry.whereis(name)
                                                                             .map(r -> r == proc)
                                                                             .orElse(false)) {
                                                                 badReads.incrementAndGet();
@@ -264,16 +260,16 @@ class RegistryRaceStressTest implements WithAssertions {
         for (int i = 0; i < cycles; i++) {
             Proc<Integer, Msg> proc = new Proc<>(0, RegistryRaceStressTest::handle);
             try {
-                ProcessRegistry.register(name, proc);
+                ProcRegistry.register(name, proc);
             } catch (IllegalStateException e) {
                 // Previous auto-deregister not yet complete; wait briefly
                 await().atMost(Duration.ofMillis(100))
-                        .until(() -> ProcessRegistry.whereis(name).isEmpty());
-                ProcessRegistry.register(name, proc);
+                        .until(() -> ProcRegistry.whereis(name).isEmpty());
+                ProcRegistry.register(name, proc);
             }
             proc.stop(); // triggers auto-deregister
             await().atMost(Duration.ofMillis(500))
-                    .until(() -> ProcessRegistry.whereis(name).isEmpty());
+                    .until(() -> ProcRegistry.whereis(name).isEmpty());
         }
 
         stop.countDown();
@@ -313,7 +309,7 @@ class RegistryRaceStressTest implements WithAssertions {
                                     try {
                                         Proc<Integer, Msg> proc =
                                                 new Proc<>(0, RegistryRaceStressTest::handle);
-                                        ProcessRegistry.register(name, proc);
+                                        ProcRegistry.register(name, proc);
                                         proc.stop();
                                     } catch (Exception e) {
                                         errors.incrementAndGet();
@@ -330,9 +326,9 @@ class RegistryRaceStressTest implements WithAssertions {
                             () -> {
                                 while (done.getCount() > 0) {
                                     try {
-                                        var all = ProcessRegistry.registered();
+                                        var all = ProcRegistry.registered();
                                         for (String name : all) {
-                                            ProcessRegistry.whereis(name); // just must not throw
+                                            ProcRegistry.whereis(name); // just must not throw
                                         }
                                     } catch (Exception e) {
                                         errors.incrementAndGet();

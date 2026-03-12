@@ -110,7 +110,7 @@ public final class GenServer<S, M> {
         record Cast<M>(M request) implements GenServerMessage<M> {}
 
         /** Out-of-band message (timeout, external event, etc.) */
-        record Info(Object info) implements GenServerMessage<Object> {}
+        record Info<M>(Object info) implements GenServerMessage<M> {}
     }
 
     /**
