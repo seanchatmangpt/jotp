@@ -8,6 +8,7 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.patterns;
     exports io.github.seanchatmangpt.jotp.dogfood.api;
     exports io.github.seanchatmangpt.jotp.dogfood.errorhandling;
+    exports io.github.seanchatmangpt.jotp.dogfood.otp;
     exports io.github.seanchatmangpt.jotp.dogfood.security;
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
     exports io.github.seanchatmangpt.jotp.dogfood.mclaren;
