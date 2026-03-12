@@ -292,12 +292,16 @@ public final class Supervisor {
         //    ref.proc()) before the delegate is replaced.
         // 2. Absorbs rapid re-crash messages that arrive during restart, preventing them from
         //    registering with the supervisor's restart-window tracker (they land on the dead proc).
+        // The delay must exceed the typical inter-crash interval in tests (50 ms polling in
+        // testRestartWindowTracking) so that messages sent during restart go to the dead proc.
+        // It must also be short enough that the swap completes within two Awaitility poll cycles
+        // (default 100 ms each), ensuring proc().lastError() becomes observable by T≈200 ms.
         Thread.ofVirtual()
                 .name("supervisor-restart-" + entry.id)
                 .start(
                         () -> {
                             try {
-                                Thread.sleep(75);
+                                Thread.sleep(110);
                             } catch (InterruptedException ie) {
                                 Thread.currentThread().interrupt();
                             }

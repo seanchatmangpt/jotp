@@ -62,7 +62,7 @@ public final class SqlRaceSession {
         var key = SqlRaceSessionKey.newKey(identifier);
         var initial = SqlRaceSessionData.empty(key, identifier);
         var machine =
-                new StateMachine<>(
+                new StateMachine<SqlRaceSessionState, SqlRaceSessionEvent, SqlRaceSessionData>(
                         new SqlRaceSessionState.Initializing(),
                         initial,
                         SqlRaceSession::transition);
@@ -147,7 +147,13 @@ public final class SqlRaceSession {
     // ---------------------------------------------------------------------------
 
     private static Transition<SqlRaceSessionState, SqlRaceSessionData> transition(
-            SqlRaceSessionState state, SqlRaceSessionEvent event, SqlRaceSessionData data) {
+            SqlRaceSessionState state,
+            StateMachine.SMEvent<SqlRaceSessionEvent> smEvent,
+            SqlRaceSessionData data) {
+        // Only handle user events — ignore timeouts/enter callbacks
+        if (!(smEvent instanceof StateMachine.SMEvent.User<SqlRaceSessionEvent>(var event))) {
+            return Transition.keepState(data);
+        }
         return switch (state) {
             case SqlRaceSessionState.Initializing ignored -> handleInitializing(event, data);
             case SqlRaceSessionState.Live ignored -> handleLive(event, data);

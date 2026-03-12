@@ -26,9 +26,10 @@ class StateMachineExampleTest {
     void testInitialState() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         assertThat(sm.state()).isInstanceOf(TurnstileState.Locked.class);
         assertThat(sm.data()).isEqualTo(new TurnstileData(0, 0));
@@ -42,9 +43,10 @@ class StateMachineExampleTest {
     void testCoinAccumulation() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send two coins asynchronously
         sm.send(new TurnstileEvent.Coin(25));
@@ -64,9 +66,10 @@ class StateMachineExampleTest {
     void testPassWithInsufficientBalance() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(25, 25),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(25, 25),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send pass event (insufficient balance)
         var data = sm.call(new TurnstileEvent.Pass()).join();
@@ -82,9 +85,10 @@ class StateMachineExampleTest {
     void testPassWithSufficientBalance() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(50, 100),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(50, 100),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send pass event (sufficient balance)
         var data = sm.call(new TurnstileEvent.Pass()).join();
@@ -101,9 +105,10 @@ class StateMachineExampleTest {
     void testPassInUnlockedState() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Unlocked(),
-                        new TurnstileData(0, 50),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Unlocked(),
+                                new TurnstileData(0, 50),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send pass event from unlocked state
         var data = sm.call(new TurnstileEvent.Pass()).join();
@@ -120,9 +125,10 @@ class StateMachineExampleTest {
     void testCoinInUnlockedStateIgnored() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Unlocked(),
-                        new TurnstileData(0, 50),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Unlocked(),
+                                new TurnstileData(0, 50),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send coin event while unlocked
         sm.send(new TurnstileEvent.Coin(25));
@@ -141,9 +147,10 @@ class StateMachineExampleTest {
     void testSendIsAsync() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // send() returns immediately without waiting for processing
         var data = sm.data();
@@ -163,9 +170,10 @@ class StateMachineExampleTest {
     void testCallIsSync() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(40, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(40, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // call() returns a future that completes after event is processed
         var future = sm.call(new TurnstileEvent.Coin(25));
@@ -183,9 +191,10 @@ class StateMachineExampleTest {
     void testFifoOrderingOfSends() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send multiple coins in sequence
         for (int i = 1; i <= 5; i++) {
@@ -206,9 +215,10 @@ class StateMachineExampleTest {
     void testCompleteCycle() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Deposit coins
         sm.send(new TurnstileEvent.Coin(30));
@@ -239,9 +249,10 @@ class StateMachineExampleTest {
     void testCallAfterShutdown() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         sm.stop();
 
@@ -256,7 +267,10 @@ class StateMachineExampleTest {
         var initialData = new TurnstileData(0, 0);
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(), initialData, StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                initialData,
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // Send coin event
         sm.send(new TurnstileEvent.Coin(25));
@@ -275,9 +289,10 @@ class StateMachineExampleTest {
     void testMultiplePassesAtThreshold() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(50, 150),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(50, 150),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         // First pass: should unlock and reset balance
         var data1 = sm.call(new TurnstileEvent.Pass()).join();

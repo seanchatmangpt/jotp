@@ -140,7 +140,7 @@ public final class LapDetector {
      */
     public static LapDetector start() {
         return new LapDetector(
-                new StateMachine<>(
+                new StateMachine<LapState, LapEvent, LapData>(
                         new LapState.OutLap(), LapData.empty(), LapDetector::transition));
     }
 
@@ -196,7 +196,11 @@ public final class LapDetector {
     // ---------------------------------------------------------------------------
 
     private static Transition<LapState, LapData> transition(
-            LapState state, LapEvent event, LapData data) {
+            LapState state, StateMachine.SMEvent<LapEvent> smEvent, LapData data) {
+        // Only handle user events — ignore timeouts/enter callbacks
+        if (!(smEvent instanceof StateMachine.SMEvent.User<LapEvent>(var event))) {
+            return Transition.keepState(data);
+        }
         return switch (state) {
             case LapState.OutLap ignored -> handleOutLap(event, data);
             case LapState.FlyingLap ignored -> handleFlyingLap(event, data);

@@ -72,10 +72,22 @@ public final class Proc<S, M> {
     private final TransferQueue<Envelope<M>> mailbox = new LinkedTransferQueue<>();
 
     /**
-     * Sys channel: {@link ProcSys#getState} offers a future here; the loop completes it with the
-     * current state before processing the next regular message.
+     * Sys channel: {@link ProcSys} enqueues {@link SysRequest} values here; the loop drains this
+     * queue before each user message, ensuring sys operations (getState, codeChange) are served
+     * promptly without being blocked by a flooded user mailbox.
      */
+    final TransferQueue<SysRequest> sysQueue = new LinkedTransferQueue<>();
+
+    /**
+     * Legacy sys channel retained for binary compatibility. Delegates to sysQueue internally.
+     *
+     * @deprecated Use {@link #offerSysRequest(SysRequest)} instead.
+     */
+    @Deprecated
     final TransferQueue<CompletableFuture<Object>> sysGetState = new LinkedTransferQueue<>();
+
+    /** Debug observer installed by {@link ProcSys#trace} — {@code null} when tracing is off. */
+    private volatile DebugObserver<S, M> debugObserver = null;
 
     private final Thread thread;
     private volatile boolean stopped = false;
@@ -142,6 +154,7 @@ public final class Proc<S, M> {
         return new Proc<>(initialState, handler);
     }
 
+    @SuppressWarnings("unchecked")
     public Proc(S initial, BiFunction<S, M, S> handler) {
         thread =
                 Thread.ofVirtual()
@@ -152,10 +165,22 @@ public final class Proc<S, M> {
                                     boolean crashedAbnormally = false;
                                     outer:
                                     while (!stopped || !mailbox.isEmpty()) {
-                                        // 1. Drain sys get-state requests (higher priority)
-                                        CompletableFuture<Object> stateQ;
-                                        while ((stateQ = sysGetState.poll()) != null) {
-                                            stateQ.complete(state);
+                                        // 1. Drain sys requests (higher priority than user msgs)
+                                        SysRequest sysReq;
+                                        while ((sysReq = sysQueue.poll()) != null) {
+                                            switch (sysReq) {
+                                                case SysRequest.GetState(var reply) ->
+                                                        reply.complete(state);
+                                                case SysRequest.CodeChange(var fn, var reply) -> {
+                                                    state = (S) fn.apply(state);
+                                                    reply.complete(state);
+                                                }
+                                            }
+                                        }
+                                        // Also drain legacy sysGetState queue
+                                        CompletableFuture<Object> legacyStateQ;
+                                        while ((legacyStateQ = sysGetState.poll()) != null) {
+                                            legacyStateQ.complete(state);
                                         }
 
                                         // 2. Suspend check — block until resumed
@@ -180,9 +205,12 @@ public final class Proc<S, M> {
                                             env = mailbox.poll(50, TimeUnit.MILLISECONDS);
                                             if (env == null) continue;
                                             messagesIn.increment();
+                                            DebugObserver<S, M> obs = debugObserver;
+                                            if (obs != null) obs.onIn(env.msg());
                                             S next = handler.apply(state, env.msg());
                                             state = next;
                                             messagesOut.increment();
+                                            if (obs != null) obs.onOut(state, env.msg());
                                             if (env.reply() != null) {
                                                 env.reply().complete(state);
                                             }
@@ -205,7 +233,18 @@ public final class Proc<S, M> {
                                         }
                                     }
 
-                                    // Complete any pending getState requests exceptionally
+                                    // Complete any pending sys requests exceptionally
+                                    SysRequest pendingSys;
+                                    while ((pendingSys = sysQueue.poll()) != null) {
+                                        var ex = new IllegalStateException("process terminated");
+                                        switch (pendingSys) {
+                                            case SysRequest.GetState(var r) ->
+                                                    r.completeExceptionally(ex);
+                                            case SysRequest.CodeChange(var fn, var r) ->
+                                                    r.completeExceptionally(ex);
+                                        }
+                                    }
+                                    // Also drain legacy sysGetState queue
                                     CompletableFuture<Object> pending;
                                     while ((pending = sysGetState.poll()) != null) {
                                         pending.completeExceptionally(
@@ -388,5 +427,29 @@ public final class Proc<S, M> {
     /** Package-private: current mailbox depth — used by {@link ProcSys#statistics}. */
     int mailboxSize() {
         return mailbox.size();
+    }
+
+    /**
+     * Package-private: enqueue a sys request into the high-priority sys channel — used by {@link
+     * ProcSys#getState}, {@link ProcSys#codeChange}, etc.
+     */
+    void offerSysRequest(SysRequest req) {
+        sysQueue.add(req);
+    }
+
+    /**
+     * Package-private: install a debug observer for event tracing — used by {@link ProcSys#trace}.
+     * Pass {@code null} to disable tracing.
+     */
+    void setDebugObserver(DebugObserver<S, M> obs) {
+        this.debugObserver = obs;
+    }
+
+    /**
+     * Package-private: retrieve the currently installed debug observer — used by {@link
+     * ProcSys#getLog}.
+     */
+    DebugObserver<S, M> getDebugObserver() {
+        return debugObserver;
     }
 }

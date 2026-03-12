@@ -111,20 +111,20 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
 
-    // Enterprise Patterns
-    exports io.github.seanchatmangpt.jotp.enterprise.health;
-    exports io.github.seanchatmangpt.jotp.enterprise.backpressure;
-    exports io.github.seanchatmangpt.jotp.enterprise.recovery;
-    exports io.github.seanchatmangpt.jotp.enterprise.bulkhead;
-    exports io.github.seanchatmangpt.jotp.enterprise.multitenancy;
-    exports io.github.seanchatmangpt.jotp.enterprise.eventbus;
-    exports io.github.seanchatmangpt.jotp.enterprise.saga;
+// Enterprise Patterns (excluded from compilation — pom.xml excludes **/enterprise/**)
+// exports io.github.seanchatmangpt.jotp.enterprise.health;
+// exports io.github.seanchatmangpt.jotp.enterprise.backpressure;
+// exports io.github.seanchatmangpt.jotp.enterprise.recovery;
+// exports io.github.seanchatmangpt.jotp.enterprise.bulkhead;
+// exports io.github.seanchatmangpt.jotp.enterprise.multitenancy;
+// exports io.github.seanchatmangpt.jotp.enterprise.eventbus;
+// exports io.github.seanchatmangpt.jotp.enterprise.saga;
 
-    // Reactive Messaging Patterns (Vaughn Vernon port)
-    exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.routing;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.transformation;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
-    exports io.github.seanchatmangpt.jotp.messagepatterns.management;
+// Reactive Messaging Patterns (excluded from compilation — pom.xml excludes **/messagepatterns/**)
+// exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
+// exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
+// exports io.github.seanchatmangpt.jotp.messagepatterns.routing;
+// exports io.github.seanchatmangpt.jotp.messagepatterns.transformation;
+// exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
+// exports io.github.seanchatmangpt.jotp.messagepatterns.management;
 }
