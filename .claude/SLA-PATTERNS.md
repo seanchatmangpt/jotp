@@ -150,6 +150,13 @@ After 10 timeouts/60s: Circuit breaker opens (all requests fail fast)
    curl http://localhost:8080/metrics | grep gateway_timeout_rate
    ```
 
+   ```java
+   // Check supervisor restart count via ProcSys introspection
+   ProcSys sys = ProcSys.of(paymentGatewayRef);
+   var stats = sys.getStatistics();
+   logger.info("Restart count: {}, last error: {}", stats.restartCount(), stats.lastError());
+   ```
+
 2. **Short-term (5-30 min):**
    ```java
    // Get live process statistics via ProcSys
