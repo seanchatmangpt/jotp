@@ -38,7 +38,7 @@ public abstract class PatternTestBase<P> {
   @BeforeEach
   public void setUp() throws Exception {
     var patternClass = getPatternClass();
-    fixture = PatternTestFixture.for(patternClass).build();
+    fixture = PatternTestFixture.forClass(patternClass).build();
     messageBuilder = MessageBuilder.custom(patternClass.getSimpleName());
     correlationTracker = new CorrelationIdTracker();
   }

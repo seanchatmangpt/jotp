@@ -31,7 +31,7 @@ public @interface PatternTest {
    *
    * @return pattern name (e.g., "ContentBasedRouter", "Aggregator", "DeadLetterChannel")
    */
-  String pattern();
+  String pattern() default "";
 
   /**
    * Pattern category for organization and filtering.

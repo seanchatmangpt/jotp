@@ -30,7 +30,7 @@ class AnnotationsValidationTest implements WithAssertions {
 
   // ── Helper ───────────────────────────────────────────────────────────────
 
-  private static void assertRuntimeRetention(Class<?> annotationType) {
+  private void assertRuntimeRetention(Class<?> annotationType) {
     var retention = annotationType.getAnnotation(Retention.class);
     assertThat(retention)
         .as("@Retention present on %s", annotationType.getSimpleName())
@@ -40,7 +40,7 @@ class AnnotationsValidationTest implements WithAssertions {
         .isEqualTo(RetentionPolicy.RUNTIME);
   }
 
-  private static void assertTargetContains(Class<?> annotationType, ElementType... expected) {
+  private void assertTargetContains(Class<?> annotationType, ElementType... expected) {
     var target = annotationType.getAnnotation(Target.class);
     assertThat(target)
         .as("@Target present on %s", annotationType.getSimpleName())
@@ -133,12 +133,12 @@ class AnnotationsValidationTest implements WithAssertions {
     }
 
     @Test
-    @DisplayName("pattern attribute has no default (required)")
-    void patternHasNoDefault() throws Exception {
+    @DisplayName("pattern attribute has empty string default")
+    void patternHasEmptyStringDefault() throws Exception {
       var method = PatternTest.class.getDeclaredMethod("pattern");
       assertThat(method.getDefaultValue())
-          .as("PatternTest.pattern() should have no default")
-          .isNull();
+          .as("PatternTest.pattern() default")
+          .isEqualTo("");
     }
   }
 

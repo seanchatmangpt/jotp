@@ -38,7 +38,7 @@ public class PatternTestFixture<P> {
     this.patternClass = patternClass;
   }
 
-  public static <P> PatternTestFixture<P> for(Class<P> patternClass) {
+  public static <P> PatternTestFixture<P> forClass(Class<P> patternClass) {
     return new PatternTestFixture<>(patternClass);
   }
 
@@ -154,7 +154,7 @@ public class PatternTestFixture<P> {
    */
   public Class<?>[] getPatternVariants() {
     if (isPatternSealed()) {
-      return patternClass.permittedSubclasses();
+      return patternClass.getPermittedSubclasses();
     }
     return new Class<?>[0];
   }

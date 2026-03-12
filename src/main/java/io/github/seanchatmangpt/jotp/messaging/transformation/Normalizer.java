@@ -121,7 +121,9 @@ public sealed class Normalizer {
      * Validates message conforms to canonical format.
      */
     public static boolean isCanonical(Message msg) {
-        return msg instanceof (Message.EventMsg | Message.CommandMsg |
-                              Message.QueryMsg | Message.DocumentMsg);
+        return msg instanceof Message.EventMsg
+                || msg instanceof Message.CommandMsg
+                || msg instanceof Message.QueryMsg
+                || msg instanceof Message.DocumentMsg;
     }
 }

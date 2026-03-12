@@ -313,8 +313,8 @@ class DeadLetterChannelTest implements WithAssertions {
 
     @Test
     void genericTypes_handledCorrectly() {
-        var dlcString = DeadLetterChannel.<String>.create();
-        var dlcInteger = DeadLetterChannel.<Integer>.create();
+        var dlcString = DeadLetterChannel.<String>create();
+        var dlcInteger = DeadLetterChannel.<Integer>create();
 
         dlcString.onFailure("message1", "Error for string");
         dlcInteger.onFailure(42, "Error for integer");

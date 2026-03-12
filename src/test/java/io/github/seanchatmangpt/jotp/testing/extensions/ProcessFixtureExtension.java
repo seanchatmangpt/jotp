@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Uses reflection to:
  * <ul>
- *   <li>Discover sealed Message type hierarchies via {@code Class.permittedSubclasses()}</li>
+ *   <li>Discover sealed Message type hierarchies via {@code Class.getPermittedSubclasses()}</li>
  *   <li>Extract record components: {@code Class.getRecordComponents()}</li>
  *   <li>Resolve generic types: {@code Type.getActualTypeArguments()}</li>
  *   <li>Create process instances via constructor introspection</li>
@@ -133,7 +133,7 @@ public class ProcessFixtureExtension implements TestInstancePostProcessor, Exten
    */
   public static Class<?>[] getPermittedSubclasses(Class<?> sealed) {
     if (sealed.isSealed()) {
-      return sealed.permittedSubclasses();
+      return sealed.getPermittedSubclasses();
     }
     return new Class<?>[0];
   }
