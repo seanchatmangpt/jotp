@@ -1,6 +1,5 @@
 package io.github.seanchatmangpt.jotp;
 
-import java.lang.ScopedValue;
 import java.time.Duration;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
@@ -55,10 +54,10 @@ public final class ProcLib {
     private static final Duration DEFAULT_INIT_TIMEOUT = Duration.ofSeconds(5);
 
     /**
-     * Scoped value binding the init-ack latch from the child's init handler back to the
-     * {@link #startLink} caller. Established before the init handler runs, automatically cleaned up
-     * when the handler completes. Uses Java 26 structured concurrency semantics to improve
-     * integration with StructuredTaskScope and avoid thread-local pollution.
+     * Scoped value binding the init-ack latch from the child's init handler back to the {@link
+     * #startLink} caller. Established before the init handler runs, automatically cleaned up when
+     * the handler completes. Uses Java 26 structured concurrency semantics to improve integration
+     * with StructuredTaskScope and avoid thread-local pollution.
      */
     private static final ScopedValue<CountDownLatch> INIT_LATCH = ScopedValue.newInstance();
 
@@ -134,20 +133,26 @@ public final class ProcLib {
                                 // The scope is automatically cleaned up when the call completes,
                                 // improving integration with StructuredTaskScope and avoiding
                                 // thread-local pollution (Java 26 best practice).
-                                return ScopedValue.where(INIT_LATCH, ready).call(() -> {
-                                    try {
-                                        S next = initHandler.apply(state);
-                                        // Do NOT call ready.countDown() here — the init handler MUST
-                                        // call initAck() explicitly to unblock the parent, mirroring
-                                        // OTP proc_lib:init_ack({ok, self()}). If initAck() is never
-                                        // called, the parent times out and returns Err.
-                                        return next;
-                                    } catch (RuntimeException e) {
-                                        initError.set(e);
-                                        ready.countDown();
-                                        throw e; // crash the process
-                                    }
-                                });
+                                return ScopedValue.where(INIT_LATCH, ready)
+                                        .call(
+                                                () -> {
+                                                    try {
+                                                        S next = initHandler.apply(state);
+                                                        // Do NOT call ready.countDown() here — the
+                                                        // init handler MUST
+                                                        // call initAck() explicitly to unblock the
+                                                        // parent, mirroring
+                                                        // OTP proc_lib:init_ack({ok, self()}). If
+                                                        // initAck() is never
+                                                        // called, the parent times out and returns
+                                                        // Err.
+                                                        return next;
+                                                    } catch (RuntimeException e) {
+                                                        initError.set(e);
+                                                        ready.countDown();
+                                                        throw e; // crash the process
+                                                    }
+                                                });
                             } catch (RuntimeException e) {
                                 // Already handled by the scoped call; re-throw to crash the process
                                 throw e;

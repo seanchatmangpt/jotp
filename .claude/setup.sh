@@ -63,6 +63,23 @@ if [ ! -L /usr/local/bin/mvnd ] || [ "$(readlink /usr/local/bin/mvnd)" != "${MVN
   echo "/usr/local/bin/mvnd -> ${MVND_BIN}"
 fi
 
+# ── /opt/mvnd2/bin symlink (YAWL toolchain expects mvnd here) ────────────
+if [ ! -L /opt/mvnd2/bin/mvnd ] || [ "$(readlink /opt/mvnd2/bin/mvnd)" != "${MVND_BIN}" ]; then
+  mkdir -p /opt/mvnd2/bin
+  ln -sf "${MVND_BIN}" /opt/mvnd2/bin/mvnd
+  echo "/opt/mvnd2/bin/mvnd -> ${MVND_BIN}"
+fi
+
+# ── Pre-build dx-guard (PostToolUse hook needs it; cargo not in hook PATH at edit time) ──
+GUARD_BIN="${REPO_ROOT}/guard-system/target/release/dx-guard"
+if [ ! -x "${GUARD_BIN}" ]; then
+  echo "Building guard system (dx-guard)..."
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+  (cd "${REPO_ROOT}/guard-system" && cargo build --release -q) && \
+    echo "dx-guard built: ${GUARD_BIN}" || \
+    echo "[WARN] guard-system build failed — guards will grep-fallback"
+fi
+
 # ── /opt/jdk symlink (mvnd native binary has /opt/jdk hardcoded as fallback)
 if [ ! -L /opt/jdk ] || [ "$(readlink /opt/jdk)" != "${JDK26_HOME}" ]; then
   mkdir -p /opt

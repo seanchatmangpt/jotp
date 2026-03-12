@@ -18,8 +18,8 @@ import org.junit.jupiter.api.extension.*;
  *   <li>Message type and payload
  * </ul>
  *
- * <p>Uses ProcMonitor (not instrumentation) to avoid interfering with message flow.
- * Automatically injected into test via store.
+ * <p>Uses ProcMonitor (not instrumentation) to avoid interfering with message flow. Automatically
+ * injected into test via store.
  */
 public class MessageCapturingExtension implements TestInstancePostProcessor, ParameterResolver {
 

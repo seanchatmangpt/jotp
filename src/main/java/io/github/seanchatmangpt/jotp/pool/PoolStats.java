@@ -18,11 +18,7 @@ package io.github.seanchatmangpt.jotp.pool;
  * @param totalWorkers total configured worker count
  */
 public record PoolStats(
-        int activeWorkers,
-        long completedTasks,
-        long avgResponseTimeMs,
-        int totalWorkers
-) {
+        int activeWorkers, long completedTasks, long avgResponseTimeMs, int totalWorkers) {
 
     /**
      * Get the number of active worker processes.
@@ -78,11 +74,6 @@ public record PoolStats(
     public String toString() {
         return String.format(
                 "PoolStats{active=%d/%d (%.0f%%), completed=%d, avgResponseTime=%dms}",
-                activeWorkers,
-                totalWorkers,
-                activePercentage(),
-                completedTasks,
-                avgResponseTimeMs
-        );
+                activeWorkers, totalWorkers, activePercentage(), completedTasks, avgResponseTimeMs);
     }
 }

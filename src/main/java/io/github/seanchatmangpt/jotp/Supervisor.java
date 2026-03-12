@@ -63,8 +63,8 @@ import java.util.function.*;
  * <ul>
  *   <li><strong>Virtual Threads:</strong> The supervisor itself runs on a virtual thread,
  *       monitoring all children efficiently.
- *   <li><strong>Sealed Interfaces:</strong> Internal {@code SvEvent} is sealed to
- *       {@code SvEvent_ChildCrashed}, {@code SvEvent_Shutdown} for exhaustive event handling.
+ *   <li><strong>Sealed Interfaces:</strong> Internal {@code SvEvent} is sealed to {@code
+ *       SvEvent_ChildCrashed}, {@code SvEvent_Shutdown} for exhaustive event handling.
  *   <li><strong>Records:</strong> Events are records carrying child ID, crash reason, etc.
  *   <li><strong>Pattern Matching:</strong> Supervisor's event loop uses switch/case on sealed
  *       events to route crashes to the appropriate restart strategy handler.
@@ -139,8 +139,7 @@ public final class Supervisor {
     /**
      * Create a named supervisor with the given strategy and restart limits.
      *
-     * <p><strong>Deprecated:</strong> Use {@link #create(String, Strategy, int, Duration)}
-     * instead.
+     * <p><strong>Deprecated:</strong> Use {@link #create(String, Strategy, int, Duration)} instead.
      *
      * @param name supervisor name (used for thread naming)
      * @param strategy restart strategy
@@ -345,8 +344,8 @@ public final class Supervisor {
     /**
      * Create a named supervision tree node with the given restart strategy and limits.
      *
-     * <p>Same as {@link #create(Strategy, int, Duration)} but with an explicit name used for
-     * thread naming and debugging.
+     * <p>Same as {@link #create(Strategy, int, Duration)} but with an explicit name used for thread
+     * naming and debugging.
      *
      * <p><b>Usage:</b>
      *

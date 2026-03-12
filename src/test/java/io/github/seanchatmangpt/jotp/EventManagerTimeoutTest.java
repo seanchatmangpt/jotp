@@ -14,9 +14,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("EventManager configurable timeouts")
 class EventManagerTimeoutTest implements WithAssertions {
 
-    /**
-     * Simple test event.
-     */
+    /** Simple test event. */
     record TestEvent(String message) {}
 
     @Nested
@@ -88,7 +86,7 @@ class EventManagerTimeoutTest implements WithAssertions {
         @Test
         @DisplayName("rejects null timeout")
         void rejectsNullTimeout() {
-            assertThatThrownBy(() -> EventManager.start(null))
+            assertThatThrownBy(() -> EventManager.start((java.time.Duration) null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout cannot be null");
         }
@@ -163,8 +161,7 @@ class EventManagerTimeoutTest implements WithAssertions {
         void rejectsNullTimeoutOverride() {
             EventManager<TestEvent> manager = EventManager.start();
 
-            assertThatThrownBy(
-                    () -> manager.syncNotify(new TestEvent("test"), null))
+            assertThatThrownBy(() -> manager.syncNotify(new TestEvent("test"), null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout cannot be null");
 
@@ -176,8 +173,7 @@ class EventManagerTimeoutTest implements WithAssertions {
         void rejectsZeroTimeoutOverride() {
             EventManager<TestEvent> manager = EventManager.start();
 
-            assertThatThrownBy(
-                    () -> manager.syncNotify(new TestEvent("test"), Duration.ZERO))
+            assertThatThrownBy(() -> manager.syncNotify(new TestEvent("test"), Duration.ZERO))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout must be positive");
 
@@ -190,7 +186,7 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager<TestEvent> manager = EventManager.start();
 
             assertThatThrownBy(
-                    () -> manager.syncNotify(new TestEvent("test"), Duration.ofSeconds(-1)))
+                            () -> manager.syncNotify(new TestEvent("test"), Duration.ofSeconds(-1)))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout must be positive");
 
@@ -276,8 +272,7 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager<TestEvent> manager = EventManager.start();
             EventManager.Handler<TestEvent> handler = event -> {};
 
-            assertThatThrownBy(
-                    () -> manager.deleteHandler(handler, Duration.ZERO))
+            assertThatThrownBy(() -> manager.deleteHandler(handler, Duration.ZERO))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout must be positive");
 
@@ -290,8 +285,7 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager<TestEvent> manager = EventManager.start();
             EventManager.Handler<TestEvent> handler = event -> {};
 
-            assertThatThrownBy(
-                    () -> manager.deleteHandler(handler, Duration.ofSeconds(-1)))
+            assertThatThrownBy(() -> manager.deleteHandler(handler, Duration.ofSeconds(-1)))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout must be positive");
 
@@ -317,8 +311,7 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager<TestEvent> manager = EventManager.start();
             EventManager.Handler<TestEvent> handler = event -> {};
 
-            boolean removed =
-                    manager.deleteHandler(handler, Duration.ofSeconds(5));
+            boolean removed = manager.deleteHandler(handler, Duration.ofSeconds(5));
 
             assertThat(removed).isFalse();
             manager.stop();
@@ -363,8 +356,7 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager<TestEvent> manager = EventManager.start();
             EventManager.Handler<TestEvent> handler = event -> {};
 
-            assertThatThrownBy(
-                    () -> manager.call(handler, new TestEvent("test"), null))
+            assertThatThrownBy(() -> manager.call(handler, new TestEvent("test"), null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout cannot be null");
 
@@ -377,8 +369,7 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager<TestEvent> manager = EventManager.start();
             EventManager.Handler<TestEvent> handler = event -> {};
 
-            assertThatThrownBy(
-                    () -> manager.call(handler, new TestEvent("test"), Duration.ZERO))
+            assertThatThrownBy(() -> manager.call(handler, new TestEvent("test"), Duration.ZERO))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout must be positive");
 
@@ -392,8 +383,9 @@ class EventManagerTimeoutTest implements WithAssertions {
             EventManager.Handler<TestEvent> handler = event -> {};
 
             assertThatThrownBy(
-                    () -> manager.call(
-                            handler, new TestEvent("test"), Duration.ofSeconds(-1)))
+                            () ->
+                                    manager.call(
+                                            handler, new TestEvent("test"), Duration.ofSeconds(-1)))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("timeout must be positive");
 

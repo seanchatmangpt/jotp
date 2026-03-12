@@ -2,22 +2,20 @@ package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import static java.time.Instant.now;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.seanchatmangpt.jotp.EventManager;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 /**
  * Test for EventDrivenExample: demonstrates EventManager handler isolation.
  *
  * <p>Verifies that:
+ *
  * <ul>
  *   <li>All handlers receive events via notify/syncNotify
  *   <li>A crashing handler is removed silently
@@ -140,19 +138,20 @@ class EventDrivenExampleTest implements WithAssertions {
         // Create a slow handler that tracks when it completes
         var completionTimes = new ArrayList<Long>();
 
-        var slowHandler = new EventManager.Handler<EventDrivenExample.OrderEvent>() {
-            @Override
-            public void handleEvent(EventDrivenExample.OrderEvent event) {
-                try {
-                    Thread.sleep(100); // Simulate slow processing
-                } catch (InterruptedException ignored) {
-                }
-                completionTimes.add(System.currentTimeMillis());
-            }
+        var slowHandler =
+                new EventManager.Handler<EventDrivenExample.OrderEvent>() {
+                    @Override
+                    public void handleEvent(EventDrivenExample.OrderEvent event) {
+                        try {
+                            Thread.sleep(100); // Simulate slow processing
+                        } catch (InterruptedException ignored) {
+                        }
+                        completionTimes.add(System.currentTimeMillis());
+                    }
 
-            @Override
-            public void terminate(Throwable reason) {}
-        };
+                    @Override
+                    public void terminate(Throwable reason) {}
+                };
 
         manager.addHandler(slowHandler);
 
@@ -168,21 +167,22 @@ class EventDrivenExampleTest implements WithAssertions {
     @Test
     @DisplayName("notify returns immediately (async)")
     void notifyReturnsImmediately() throws InterruptedException {
-        var handler = new EventManager.Handler<EventDrivenExample.OrderEvent>() {
-            private volatile boolean processed = false;
+        var handler =
+                new EventManager.Handler<EventDrivenExample.OrderEvent>() {
+                    private volatile boolean processed = false;
 
-            @Override
-            public void handleEvent(EventDrivenExample.OrderEvent event) {
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException ignored) {
-                }
-                processed = true;
-            }
+                    @Override
+                    public void handleEvent(EventDrivenExample.OrderEvent event) {
+                        try {
+                            Thread.sleep(200);
+                        } catch (InterruptedException ignored) {
+                        }
+                        processed = true;
+                    }
 
-            @Override
-            public void terminate(Throwable reason) {}
-        };
+                    @Override
+                    public void terminate(Throwable reason) {}
+                };
 
         manager.addHandler(handler);
 
@@ -202,15 +202,16 @@ class EventDrivenExampleTest implements WithAssertions {
     void handlerReceivesTerminateOnNormalRemoval() throws InterruptedException {
         var terminations = new ArrayList<Throwable>();
 
-        var handler = new EventManager.Handler<EventDrivenExample.OrderEvent>() {
-            @Override
-            public void handleEvent(EventDrivenExample.OrderEvent event) {}
+        var handler =
+                new EventManager.Handler<EventDrivenExample.OrderEvent>() {
+                    @Override
+                    public void handleEvent(EventDrivenExample.OrderEvent event) {}
 
-            @Override
-            public void terminate(Throwable reason) {
-                terminations.add(reason);
-            }
-        };
+                    @Override
+                    public void terminate(Throwable reason) {
+                        terminations.add(reason);
+                    }
+                };
 
         manager.addHandler(handler);
         manager.deleteHandler(handler);
