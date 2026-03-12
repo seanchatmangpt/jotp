@@ -16,8 +16,8 @@ import java.util.function.Function;
  *
  * <p><strong>Overview:</strong>
  *
- * <p>The CircuitBreaker guards a request/response function, tracking failures per time window
- * using the Supervisor's restart-limiting semantics. Three states represent the circuit:
+ * <p>The CircuitBreaker guards a request/response function, tracking failures per time window using
+ * the Supervisor's restart-limiting semantics. Three states represent the circuit:
  *
  * <ul>
  *   <li><strong>CLOSED:</strong> Normal operation — requests pass through, failures are counted
@@ -29,9 +29,8 @@ import java.util.function.Function;
  * <p><strong>Java 26 Features Used:</strong>
  *
  * <ul>
- *   <li><strong>Sealed Interface:</strong> {@code CircuitBreakerResult<V, E>} is sealed to
- *       {@code Success}, {@code Failure}, {@code CircuitOpen}, enabling exhaustive pattern
- *       matching
+ *   <li><strong>Sealed Interface:</strong> {@code CircuitBreakerResult<V, E>} is sealed to {@code
+ *       Success}, {@code Failure}, {@code CircuitOpen}, enabling exhaustive pattern matching
  *   <li><strong>Records:</strong> Result variants are records for immutability and pattern
  *       destructuring
  *   <li><strong>Pattern Matching:</strong> Result handling via switch expressions
@@ -79,300 +78,299 @@ import java.util.function.Function;
  */
 public final class CircuitBreaker<R, V, E extends Exception> {
 
-  /**
-   * Sealed interface for circuit breaker outcomes: success, failure, or circuit-open.
-   *
-   * <p>Callers pattern-match on the result to handle all three cases:
-   *
-   * <pre>{@code
-   * var result = circuitBreaker.execute(request, handler);
-   * switch (result) {
-   *     case CircuitBreakerResult.Success<V, E>(var value) -> ...
-   *     case CircuitBreakerResult.Failure<V, E>(var error) -> ...
-   *     case CircuitBreakerResult.CircuitOpen<V, E>() -> ...
-   * }
-   * }</pre>
-   *
-   * @param <V> success value type
-   * @param <E> error type
-   */
-  public sealed interface CircuitBreakerResult<V, E extends Exception>
-      permits CircuitBreakerResult.Success, CircuitBreakerResult.Failure,
-          CircuitBreakerResult.CircuitOpen {
+    /**
+     * Sealed interface for circuit breaker outcomes: success, failure, or circuit-open.
+     *
+     * <p>Callers pattern-match on the result to handle all three cases:
+     *
+     * <pre>{@code
+     * var result = circuitBreaker.execute(request, handler);
+     * switch (result) {
+     *     case CircuitBreakerResult.Success<V, E>(var value) -> ...
+     *     case CircuitBreakerResult.Failure<V, E>(var error) -> ...
+     *     case CircuitBreakerResult.CircuitOpen<V, E>() -> ...
+     * }
+     * }</pre>
+     *
+     * @param <V> success value type
+     * @param <E> error type
+     */
+    public sealed interface CircuitBreakerResult<V, E extends Exception>
+            permits CircuitBreakerResult.Success,
+                    CircuitBreakerResult.Failure,
+                    CircuitBreakerResult.CircuitOpen {
 
-    /** Request succeeded with a response value. */
-    record Success<V, E extends Exception>(V value) implements CircuitBreakerResult<V, E> {}
+        /** Request succeeded with a response value. */
+        record Success<V, E extends Exception>(V value) implements CircuitBreakerResult<V, E> {}
 
-    /** Request failed with an error (circuit was closed). */
-    record Failure<V, E extends Exception>(E error) implements CircuitBreakerResult<V, E> {}
+        /** Request failed with an error (circuit was closed). */
+        record Failure<V, E extends Exception>(E error) implements CircuitBreakerResult<V, E> {}
 
-    /** Circuit is open; request rejected without executing the handler. */
-    record CircuitOpen<V, E extends Exception>() implements CircuitBreakerResult<V, E> {}
+        /** Circuit is open; request rejected without executing the handler. */
+        record CircuitOpen<V, E extends Exception>() implements CircuitBreakerResult<V, E> {}
 
-    /** Check if this result represents success. */
-    default boolean isSuccess() {
-      return this instanceof Success<V, E>;
-    }
-
-    /** Check if this result represents a failure (circuit was closed). */
-    default boolean isFailure() {
-      return this instanceof Failure<V, E>;
-    }
-
-    /** Check if the circuit is open. */
-    default boolean isCircuitOpen() {
-      return this instanceof CircuitOpen<V, E>;
-    }
-
-    /** Extract the value if successful, or null. */
-    default V successValue() {
-      return switch (this) {
-        case Success<V, E>(var value) -> value;
-        case Failure<V, E> ignored -> null;
-        case CircuitOpen<V, E> ignored -> null;
-      };
-    }
-
-    /** Extract the error if failed, or null. */
-    default E failureError() {
-      return switch (this) {
-        case Success<V, E> ignored -> null;
-        case Failure<V, E>(var error) -> error;
-        case CircuitOpen<V, E> ignored -> null;
-      };
-    }
-  }
-
-  /** Circuit breaker state machine. */
-  public enum State {
-    CLOSED,
-    OPEN,
-    HALF_OPEN
-  }
-
-  private final String name;
-  private final int maxFailures;
-  private final Duration window;
-  private final Duration halfOpenTimeout;
-  private volatile State state = State.CLOSED;
-  private final LinkedList<Instant> failureTimes = new LinkedList<>();
-  private volatile Instant lastFailureTime = null;
-  private volatile Instant openedTime = null;
-  private volatile Instant halfOpenProbeTime = null;
-
-  /**
-   * Create a circuit breaker.
-   *
-   * @param name circuit breaker identifier (for logging/diagnostics)
-   * @param maxFailures maximum failures allowed before opening the circuit
-   * @param window time window for counting failures
-   * @param halfOpenTimeout duration to wait in HALF_OPEN state before retrying
-   */
-  private CircuitBreaker(
-      String name, int maxFailures, Duration window, Duration halfOpenTimeout) {
-    this.name = name;
-    this.maxFailures = maxFailures;
-    this.window = window;
-    this.halfOpenTimeout = halfOpenTimeout;
-  }
-
-  /**
-   * Create a circuit breaker with the given configuration.
-   *
-   * <p><b>Usage:</b>
-   *
-   * <pre>{@code
-   * var cb = CircuitBreaker.create(
-   *     "external-api",
-   *     5,                              // max failures
-   *     Duration.ofSeconds(60),         // window
-   *     Duration.ofSeconds(30)          // half-open timeout
-   * );
-   * }</pre>
-   *
-   * @param name circuit breaker name
-   * @param maxFailures failure threshold for opening
-   * @param window time window for counting failures
-   * @param halfOpenTimeout how long to wait before attempting recovery
-   * @return a new CircuitBreaker instance
-   * @throws NullPointerException if name, window, or halfOpenTimeout is null
-   * @throws IllegalArgumentException if maxFailures <= 0
-   */
-  public static <R, V, E extends Exception> CircuitBreaker<R, V, E> create(
-      String name, int maxFailures, Duration window, Duration halfOpenTimeout) {
-    if (maxFailures <= 0) throw new IllegalArgumentException("maxFailures must be > 0");
-    Objects.requireNonNull(window, "window cannot be null");
-    Objects.requireNonNull(halfOpenTimeout, "halfOpenTimeout cannot be null");
-    return new CircuitBreaker<>(name, maxFailures, window, halfOpenTimeout);
-  }
-
-  /**
-   * Execute a request through the circuit breaker.
-   *
-   * <p>The handler is only invoked if the circuit is CLOSED or HALF_OPEN. If the circuit is OPEN,
-   * returns {@code CircuitOpen} immediately (fail-fast).
-   *
-   * <p>On success, the circuit remains CLOSED. On failure, the failure count is incremented. If
-   * the count exceeds {@code maxFailures} within {@code window}, the circuit opens.
-   *
-   * <p><strong>Pattern Matching:</strong>
-   *
-   * <pre>{@code
-   * var result = circuitBreaker.execute(myRequest, request -> {
-   *     // Invoke external service
-   *     return apiClient.call(request);
-   * });
-   *
-   * switch (result) {
-   *     case CircuitBreakerResult.Success<String, Exception>(var value) ->
-   *         System.out.println("Success: " + value);
-   *     case CircuitBreakerResult.Failure<String, Exception>(var error) ->
-   *         System.out.println("Request failed: " + error.getMessage());
-   *     case CircuitBreakerResult.CircuitOpen<String, Exception>() ->
-   *         System.out.println("Circuit open, retry later");
-   * }
-   * }</pre>
-   *
-   * @param request the input request
-   * @param handler function that processes the request and returns a value
-   * @return {@code CircuitBreakerResult.Success}, {@code Failure}, or {@code CircuitOpen}
-   */
-  @SuppressWarnings("unchecked")
-  public CircuitBreakerResult<V, E> execute(R request, Function<R, V> handler) {
-    // State machine: check circuit state and transition
-    synchronized (this) {
-      State currentState = state;
-
-      switch (currentState) {
-        case OPEN -> {
-          // Check if half-open timeout has elapsed
-          if (openedTime != null
-              && Instant.now().isAfter(openedTime.plus(halfOpenTimeout))) {
-            state = State.HALF_OPEN;
-            halfOpenProbeTime = Instant.now();
-          } else {
-            return new CircuitBreakerResult.CircuitOpen<>();
-          }
+        /** Check if this result represents success. */
+        default boolean isSuccess() {
+            return this instanceof Success<V, E>;
         }
 
-        case HALF_OPEN -> {
-          // In HALF_OPEN, allow one probe attempt; if it fails, reopen immediately
-          // If it succeeds, close the circuit
+        /** Check if this result represents a failure (circuit was closed). */
+        default boolean isFailure() {
+            return this instanceof Failure<V, E>;
         }
 
-        case CLOSED -> {
-          // Prune old failures outside the window
-          Instant cutoff = Instant.now().minus(window);
-          failureTimes.removeIf(t -> t.isBefore(cutoff));
-        }
-      }
-    }
-
-    // Execute the handler
-    try {
-      V value = handler.apply(request);
-      // Success: reset failure count and close circuit if in HALF_OPEN
-      synchronized (this) {
-        failureTimes.clear();
-        lastFailureTime = null;
-        if (state == State.HALF_OPEN) {
-          state = State.CLOSED;
-        }
-      }
-      return new CircuitBreakerResult.Success<>(value);
-    } catch (Exception e) {
-      // Failure: record it and check if we should open the circuit
-      synchronized (this) {
-        Instant now = Instant.now();
-        lastFailureTime = now;
-        failureTimes.add(now);
-
-        // Prune old failures
-        Instant cutoff = now.minus(window);
-        failureTimes.removeIf(t -> t.isBefore(cutoff));
-
-        // If too many failures, open the circuit (unless already open/half-open)
-        if (failureTimes.size() > maxFailures && state == State.CLOSED) {
-          state = State.OPEN;
-          openedTime = now;
+        /** Check if the circuit is open. */
+        default boolean isCircuitOpen() {
+            return this instanceof CircuitOpen<V, E>;
         }
 
-        // If probing in HALF_OPEN and it failed, reopen
-        if (state == State.HALF_OPEN) {
-          state = State.OPEN;
-          openedTime = now;
+        /** Extract the value if successful, or null. */
+        default V successValue() {
+            return switch (this) {
+                case Success<V, E>(var value) -> value;
+                case Failure<V, E> ignored -> null;
+                case CircuitOpen<V, E> ignored -> null;
+            };
         }
-      }
 
-      return new CircuitBreakerResult.Failure<>((E) e);
+        /** Extract the error if failed, or null. */
+        default E failureError() {
+            return switch (this) {
+                case Success<V, E> ignored -> null;
+                case Failure<V, E>(var error) -> error;
+                case CircuitOpen<V, E> ignored -> null;
+            };
+        }
     }
-  }
 
-  /**
-   * Get the current state of the circuit.
-   *
-   * @return CLOSED, OPEN, or HALF_OPEN
-   */
-  public State getState() {
-    return state;
-  }
-
-  /**
-   * Get the number of recorded failures in the current window.
-   *
-   * @return count of failures within the time window
-   */
-  public int getFailureCount() {
-    synchronized (this) {
-      Instant cutoff = Instant.now().minus(window);
-      failureTimes.removeIf(t -> t.isBefore(cutoff));
-      return failureTimes.size();
+    /** Circuit breaker state machine. */
+    public enum State {
+        CLOSED,
+        OPEN,
+        HALF_OPEN
     }
-  }
 
-  /**
-   * Get the circuit breaker name.
-   *
-   * @return the name provided at creation
-   */
-  public String getName() {
-    return name;
-  }
+    private final String name;
+    private final int maxFailures;
+    private final Duration window;
+    private final Duration halfOpenTimeout;
+    private volatile State state = State.CLOSED;
+    private final LinkedList<Instant> failureTimes = new LinkedList<>();
+    private volatile Instant lastFailureTime = null;
+    private volatile Instant openedTime = null;
+    private volatile Instant halfOpenProbeTime = null;
 
-  /**
-   * Reset the circuit to CLOSED state and clear all recorded failures.
-   *
-   * <p>Useful for testing or manual recovery.
-   */
-  public void reset() {
-    synchronized (this) {
-      state = State.CLOSED;
-      failureTimes.clear();
-      lastFailureTime = null;
-      openedTime = null;
-      halfOpenProbeTime = null;
+    /**
+     * Create a circuit breaker.
+     *
+     * @param name circuit breaker identifier (for logging/diagnostics)
+     * @param maxFailures maximum failures allowed before opening the circuit
+     * @param window time window for counting failures
+     * @param halfOpenTimeout duration to wait in HALF_OPEN state before retrying
+     */
+    private CircuitBreaker(
+            String name, int maxFailures, Duration window, Duration halfOpenTimeout) {
+        this.name = name;
+        this.maxFailures = maxFailures;
+        this.window = window;
+        this.halfOpenTimeout = halfOpenTimeout;
     }
-  }
 
-  /**
-   * Forcibly open the circuit (for testing or emergency override).
-   */
-  public void open() {
-    synchronized (this) {
-      state = State.OPEN;
-      openedTime = Instant.now();
+    /**
+     * Create a circuit breaker with the given configuration.
+     *
+     * <p><b>Usage:</b>
+     *
+     * <pre>{@code
+     * var cb = CircuitBreaker.create(
+     *     "external-api",
+     *     5,                              // max failures
+     *     Duration.ofSeconds(60),         // window
+     *     Duration.ofSeconds(30)          // half-open timeout
+     * );
+     * }</pre>
+     *
+     * @param name circuit breaker name
+     * @param maxFailures failure threshold for opening
+     * @param window time window for counting failures
+     * @param halfOpenTimeout how long to wait before attempting recovery
+     * @return a new CircuitBreaker instance
+     * @throws NullPointerException if name, window, or halfOpenTimeout is null
+     * @throws IllegalArgumentException if maxFailures <= 0
+     */
+    public static <R, V, E extends Exception> CircuitBreaker<R, V, E> create(
+            String name, int maxFailures, Duration window, Duration halfOpenTimeout) {
+        if (maxFailures <= 0) throw new IllegalArgumentException("maxFailures must be > 0");
+        Objects.requireNonNull(window, "window cannot be null");
+        Objects.requireNonNull(halfOpenTimeout, "halfOpenTimeout cannot be null");
+        return new CircuitBreaker<>(name, maxFailures, window, halfOpenTimeout);
     }
-  }
 
-  /**
-   * Return a string representation of the circuit breaker state.
-   *
-   * @return "[CircuitBreaker: name, state, failure count / max failures]"
-   */
-  @Override
-  public String toString() {
-    return String.format(
-        "[CircuitBreaker: %s, state=%s, failures=%d/%d]",
-        name, state, getFailureCount(), maxFailures);
-  }
+    /**
+     * Execute a request through the circuit breaker.
+     *
+     * <p>The handler is only invoked if the circuit is CLOSED or HALF_OPEN. If the circuit is OPEN,
+     * returns {@code CircuitOpen} immediately (fail-fast).
+     *
+     * <p>On success, the circuit remains CLOSED. On failure, the failure count is incremented. If
+     * the count exceeds {@code maxFailures} within {@code window}, the circuit opens.
+     *
+     * <p><strong>Pattern Matching:</strong>
+     *
+     * <pre>{@code
+     * var result = circuitBreaker.execute(myRequest, request -> {
+     *     // Invoke external service
+     *     return apiClient.call(request);
+     * });
+     *
+     * switch (result) {
+     *     case CircuitBreakerResult.Success<String, Exception>(var value) ->
+     *         System.out.println("Success: " + value);
+     *     case CircuitBreakerResult.Failure<String, Exception>(var error) ->
+     *         System.out.println("Request failed: " + error.getMessage());
+     *     case CircuitBreakerResult.CircuitOpen<String, Exception>() ->
+     *         System.out.println("Circuit open, retry later");
+     * }
+     * }</pre>
+     *
+     * @param request the input request
+     * @param handler function that processes the request and returns a value
+     * @return {@code CircuitBreakerResult.Success}, {@code Failure}, or {@code CircuitOpen}
+     */
+    @SuppressWarnings("unchecked")
+    public CircuitBreakerResult<V, E> execute(R request, Function<R, V> handler) {
+        // State machine: check circuit state and transition
+        synchronized (this) {
+            State currentState = state;
+
+            switch (currentState) {
+                case OPEN -> {
+                    // Check if half-open timeout has elapsed
+                    if (openedTime != null
+                            && Instant.now().isAfter(openedTime.plus(halfOpenTimeout))) {
+                        state = State.HALF_OPEN;
+                        halfOpenProbeTime = Instant.now();
+                    } else {
+                        return new CircuitBreakerResult.CircuitOpen<>();
+                    }
+                }
+
+                case HALF_OPEN -> {
+                    // In HALF_OPEN, allow one probe attempt; if it fails, reopen immediately
+                    // If it succeeds, close the circuit
+                }
+
+                case CLOSED -> {
+                    // Prune old failures outside the window
+                    Instant cutoff = Instant.now().minus(window);
+                    failureTimes.removeIf(t -> t.isBefore(cutoff));
+                }
+            }
+        }
+
+        // Execute the handler
+        try {
+            V value = handler.apply(request);
+            // Success: reset failure count and close circuit if in HALF_OPEN
+            synchronized (this) {
+                failureTimes.clear();
+                lastFailureTime = null;
+                if (state == State.HALF_OPEN) {
+                    state = State.CLOSED;
+                }
+            }
+            return new CircuitBreakerResult.Success<>(value);
+        } catch (Exception e) {
+            // Failure: record it and check if we should open the circuit
+            synchronized (this) {
+                Instant now = Instant.now();
+                lastFailureTime = now;
+                failureTimes.add(now);
+
+                // Prune old failures
+                Instant cutoff = now.minus(window);
+                failureTimes.removeIf(t -> t.isBefore(cutoff));
+
+                // If too many failures, open the circuit (unless already open/half-open)
+                if (failureTimes.size() > maxFailures && state == State.CLOSED) {
+                    state = State.OPEN;
+                    openedTime = now;
+                }
+
+                // If probing in HALF_OPEN and it failed, reopen
+                if (state == State.HALF_OPEN) {
+                    state = State.OPEN;
+                    openedTime = now;
+                }
+            }
+
+            return new CircuitBreakerResult.Failure<>((E) e);
+        }
+    }
+
+    /**
+     * Get the current state of the circuit.
+     *
+     * @return CLOSED, OPEN, or HALF_OPEN
+     */
+    public State getState() {
+        return state;
+    }
+
+    /**
+     * Get the number of recorded failures in the current window.
+     *
+     * @return count of failures within the time window
+     */
+    public int getFailureCount() {
+        synchronized (this) {
+            Instant cutoff = Instant.now().minus(window);
+            failureTimes.removeIf(t -> t.isBefore(cutoff));
+            return failureTimes.size();
+        }
+    }
+
+    /**
+     * Get the circuit breaker name.
+     *
+     * @return the name provided at creation
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Reset the circuit to CLOSED state and clear all recorded failures.
+     *
+     * <p>Useful for testing or manual recovery.
+     */
+    public void reset() {
+        synchronized (this) {
+            state = State.CLOSED;
+            failureTimes.clear();
+            lastFailureTime = null;
+            openedTime = null;
+            halfOpenProbeTime = null;
+        }
+    }
+
+    /** Forcibly open the circuit (for testing or emergency override). */
+    public void open() {
+        synchronized (this) {
+            state = State.OPEN;
+            openedTime = Instant.now();
+        }
+    }
+
+    /**
+     * Return a string representation of the circuit breaker state.
+     *
+     * @return "[CircuitBreaker: name, state, failure count / max failures]"
+     */
+    @Override
+    public String toString() {
+        return String.format(
+                "[CircuitBreaker: %s, state=%s, failures=%d/%d]",
+                name, state, getFailureCount(), maxFailures);
+    }
 }
