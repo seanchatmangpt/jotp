@@ -63,11 +63,16 @@ public final class ProcessMonitoringExample {
     /** Dashboard behavior: monitors multiple workers and collects their statistics. */
     static DashboardState dashboardBehavior(DashboardState state, DashboardMessage msg) {
         return switch (msg) {
-            case DashboardMessage.MonitorWorker(var worker, var name) -> {
-                // Install a monitor on the worker (unilateral DOWN notification)
-                ProcMonitor.monitor(worker, _ -> {});
+            case DashboardMessage.MonitorWorker(var worker, var name, var dashProc) -> {
+                // Install a monitor on the worker — fires DOWN notification into this process
+                ProcMonitor.monitor(
+                        worker.proc(),
+                        reason -> {
+                            String reasonStr = reason == null ? "normal" : reason.getMessage();
+                            dashProc.tell(new DashboardMessage.WorkerDown(worker.proc(), reasonStr));
+                        });
                 var newWorkers = new HashMap<>(state.workers());
-                newWorkers.put(worker, name);
+                newWorkers.put(worker.proc(), name);
                 yield new DashboardState(
                         newWorkers, state.downNotifications(), state.statsCollected());
             }
@@ -83,7 +88,7 @@ public final class ProcessMonitoringExample {
                 var statsList = new ArrayList<>(state.statsCollected());
                 for (var worker : state.workers().keySet()) {
                     try {
-                        var stats = ProcSys.statistics(worker);
+                        var stats = ProcSys.statistics(worker.proc());
                         statsList.add("Worker " + state.workers().get(worker) + ": " + stats);
                     } catch (Exception e) {
                         // Worker may have terminated
@@ -100,7 +105,14 @@ public final class ProcessMonitoringExample {
             List<String> statsCollected) {}
 
     sealed interface DashboardMessage {
-        record MonitorWorker(Proc<WorkerState, WorkerMessage> worker, String name)
+        /**
+         * Request to start monitoring a worker; carries a back-reference to the dashboard process
+         * so the monitor callback can enqueue WorkerDown messages.
+         */
+        record MonitorWorker(
+                ProcRef<WorkerState, WorkerMessage> worker,
+                String name,
+                Proc<DashboardState, DashboardMessage> dashProc)
                 implements DashboardMessage {}
 
         record WorkerDown(Proc<WorkerState, WorkerMessage> worker, String reason)
@@ -114,12 +126,14 @@ public final class ProcessMonitoringExample {
 
         // 1. Spawn two worker processes
         System.out.println("1. Creating 2 worker processes...");
-        var worker1 =
+        var worker1Proc =
                 Proc.spawn(
                         new WorkerState(0, "Worker-1"), ProcessMonitoringExample::workerBehavior);
-        var worker2 =
+        var worker2Proc =
                 Proc.spawn(
                         new WorkerState(0, "Worker-2"), ProcessMonitoringExample::workerBehavior);
+        var worker1 = new ProcRef<>(worker1Proc);
+        var worker2 = new ProcRef<>(worker2Proc);
         System.out.println("   - Worker-1 spawned");
         System.out.println("   - Worker-2 spawned\n");
 
@@ -133,8 +147,8 @@ public final class ProcessMonitoringExample {
 
         // 3. Install monitors
         System.out.println("3. Installing monitors on workers...");
-        dashboard.tell(new DashboardMessage.MonitorWorker(worker1, "Worker-1"));
-        dashboard.tell(new DashboardMessage.MonitorWorker(worker2, "Worker-2"));
+        dashboard.tell(new DashboardMessage.MonitorWorker(worker1, "Worker-1", dashboard));
+        dashboard.tell(new DashboardMessage.MonitorWorker(worker2, "Worker-2", dashboard));
         Thread.sleep(100); // Give monitors time to install
         System.out.println("   - Monitors installed\n");
 
@@ -152,8 +166,8 @@ public final class ProcessMonitoringExample {
         dashboard.tell(new DashboardMessage.CollectStats());
         Thread.sleep(100);
 
-        // Get dashboard state to see collected stats
-        var dashboardState =
+        // Get dashboard state via ask
+        var dashboardStateFuture =
                 dashboard.ask(new DashboardMessage.CollectStats(), Duration.ofSeconds(1));
         System.out.println("   - Dashboard state retrieved\n");
 

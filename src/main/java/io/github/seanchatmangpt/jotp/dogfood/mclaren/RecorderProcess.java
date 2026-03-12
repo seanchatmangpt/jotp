@@ -176,13 +176,14 @@ public final class RecorderProcess {
     }
 
     /**
-     * Install a {@link ProcessMonitor} on this recorder process.
+     * Install a {@link io.github.seanchatmangpt.jotp.ProcMonitor} on this recorder process.
      *
      * <p>The {@code downHandler} is called when the recorder terminates (normally or abnormally).
      * This demonstrates OTP {@code erlang:monitor(process, Pid)}.
      *
      * @param downHandler called with {@code null} on normal exit, or the crash reason otherwise
-     * @return a {@link MonitorRef} that can be passed to {@link ProcessMonitor#demonitor}
+     * @return a {@link MonitorRef} that can be passed to {@link
+     *     io.github.seanchatmangpt.jotp.ProcMonitor#demonitor}
      */
     public MonitorRef<RecorderState, Object> monitor(Consumer<Throwable> downHandler) {
         return ProcMonitor.monitor(proc, downHandler);

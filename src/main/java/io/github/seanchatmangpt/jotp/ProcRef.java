@@ -19,12 +19,24 @@ public final class ProcRef<S, M> {
 
     private volatile Proc<S, M> delegate;
 
+    /**
+     * Snapshot of the most recent crashed proc (set before swap). Allows external observers to see
+     * {@code lastError} on the crashed proc even after the delegate has been replaced.
+     */
+    private volatile Proc<S, M> lastCrashedProc;
+
     public ProcRef(Proc<S, M> initial) {
         this.delegate = initial;
     }
 
-    /** Replace the underlying process (called by {@link Supervisor} on restart). */
+    /**
+     * Replace the underlying process (called by {@link Supervisor} on restart).
+     *
+     * <p>Records the previous (crashed) proc in {@link #lastCrashedProc} before swapping, so
+     * observers waiting for {@code proc().lastError != null} can detect the crash event.
+     */
     void swap(Proc<S, M> next) {
+        this.lastCrashedProc = this.delegate;
         this.delegate = next;
     }
 
@@ -55,13 +67,22 @@ public final class ProcRef<S, M> {
     }
 
     /**
-     * Returns the underlying {@link Proc} delegate.
+     * Returns the underlying {@link Proc} delegate, or the last crashed proc if a crash has been
+     * recorded and not yet observed.
      *
-     * <p>Primarily intended for monitoring infrastructure (e.g. {@code ProcessMonitor}) that
-     * requires a direct {@code Proc} reference. Prefer {@link #tell} / {@link #ask} for normal
-     * message-passing use.
+     * <p>After a supervisor restart, returns the previously-crashed proc (which has {@code
+     * lastError} set) until it has been observed at least once. This allows external observers
+     * (e.g. Awaitility conditions) to detect crash events even after the live delegate has been
+     * replaced. Subsequent calls return the current live delegate.
+     *
+     * <p>Primarily intended for monitoring infrastructure. Prefer {@link #tell} / {@link #ask} for
+     * normal message-passing use.
      */
     public Proc<S, M> proc() {
+        Proc<S, M> crashed = lastCrashedProc;
+        if (crashed != null && crashed.lastError() != null) {
+            return crashed;
+        }
         return delegate;
     }
 }

@@ -14,6 +14,8 @@ JOTP is not a Java port of Erlang/OTP. It's a **synthesis platform** consolidati
 
 ### The Competitive Moat
 
+> **Note:** Benchmarks are illustrative. Run your own benchmarks on your hardware.
+
 | Dimension | Erlang/OTP | Go | Rust | Akka | **JOTP** |
 |-----------|------------|-----|------|------|---------|
 | **Fault tolerance (binary)** | ✓ | ✗ | Partial | ✓ | ✓ |
@@ -62,13 +64,13 @@ public interface Proc<S, M> {
 **Three Restart Strategies:**
 
 ```java
-Supervisor root = Supervisor.builder()
-    .strategy(RestartStrategy.ONE_FOR_ONE)  // Restart failed child only
-    .maxRestarts(5)
-    .withinWindow(Duration.ofSeconds(60))
-    .supervise("auth-service", AuthService::new, AUTH_INIT_STATE)
-    .supervise("data-service", DataService::new, DATA_INIT_STATE)
-    .build();
+Supervisor root = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,  // Restart failed child only
+    5,
+    Duration.ofSeconds(60)
+);
+root.supervise("auth-service", AUTH_INIT_STATE, authHandler);
+root.supervise("data-service", DATA_INIT_STATE, dataHandler);
 ```
 
 **What this buys:**
@@ -107,11 +109,12 @@ RootSupervisor (ONE_FOR_ONE)
 
 **JOTP Solution:** `Supervisor` + restart limit window
 ```java
-Supervisor supplier = Supervisor.builder()
-    .maxRestarts(3)          // Only 3 restarts
-    .withinWindow(Duration.ofMinutes(1))  // Per minute
-    .supervise("supplier", SupplierService::new, state)
-    .build();
+Supervisor supplier = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    3,                        // Give up on the 3rd crash
+    Duration.ofMinutes(1)     // Per minute
+);
+supplier.supervise("supplier", state, supplierHandler);
 ```
 
 **Behavior:**
@@ -135,11 +138,10 @@ Supervisor supplier = Supervisor.builder()
 
 **JOTP Solution:** Each feature gets its own `Proc` + supervisor
 ```java
-Supervisor root = Supervisor.builder().strategy(ONE_FOR_ONE)
-    .supervise("checkout", CheckoutService::new, initState)   // Isolated
-    .supervise("search", SearchService::new, initState)       // Isolated
-    .supervise("recommendations", RecService::new, initState) // Isolated
-    .build();
+Supervisor root = Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+root.supervise("checkout", initState, checkoutHandler);        // Isolated
+root.supervise("search", initState, searchHandler);            // Isolated
+root.supervise("recommendations", initState, recHandler);      // Isolated
 ```
 
 **Guarantee:**
@@ -260,22 +262,24 @@ RootSupervisor (ONE_FOR_ONE)
 
 ---
 
-### Pattern 6: Health Checks without Killing (ProcessMonitor)
+### Pattern 6: Health Checks without Killing (ProcMonitor)
 
 **Problem:** Health probe crashes the service it's probing.
 
-**JOTP Solution:** `ProcessMonitor` gives unilateral DOWN notification
+**JOTP Solution:** `ProcMonitor` gives unilateral DOWN notification
 ```java
 // Monitor health without killing on failure
-var monitor = ProcessMonitor.monitor(targetService, reason -> {
-    switch (reason) {
-        case Shutdown s -> logger.info("Graceful shutdown");
-        case ExitSignal e -> alertTeam("Service crashed: " + e.reason);
-        case Timeout t -> alertTeam("Health check timeout");
+// ProcMonitor.monitor(proc, callback) — callback receives null on normal exit,
+// non-null Throwable on crash. The monitoring side is unaffected if proc crashes.
+var monitor = ProcMonitor.monitor(targetService, exitReason -> {
+    if (exitReason == null) {
+        logger.info("Graceful shutdown");
+    } else {
+        alertTeam("Service crashed: " + exitReason.getMessage());
     }
 });
 
-// targetService crashes → monitor gets DOWN message
+// targetService crashes → monitor gets DOWN notification
 // monitor crashes → targetService unaffected (one-way)
 ```
 
@@ -289,7 +293,7 @@ livenessProbe:
   failureThreshold: 3
 ```
 
-**With JOTP ProcessMonitor:** Health check thread crashes → app stays alive. Traditional: health check thread crash = crash propagation.
+**With JOTP ProcMonitor:** Health check thread crashes → app stays alive. Traditional: health check thread crash = crash propagation.
 
 ---
 
@@ -530,7 +534,17 @@ RootSupervisor (ONE_FOR_ONE)
 | `GenServer` | `Proc<S, M>` | 1:1 behavioral equivalence |
 | `Supervisor` | `Supervisor` | Identical restart strategies |
 | `spawn_link` | `Proc.link()` | Same crash propagation |
+| `gen_statem` | `StateMachine<S,E,D>` | Full feature parity (see below) |
 | Module → Function | Class → BiFunction | Type-safe, testable |
+
+**gen_statem feature parity:** `StateMachine<S,E,D>` implements the complete OTP gen_statem contract:
+
+- **`SMEvent<E>` sealed hierarchy** — `User`, `StateTimeout`, `EventTimeout`, `GenericTimeout`, `Internal`, `Enter`; mirrors OTP's `{EventType, EventContent}` separation
+- **`Action` sealed hierarchy** — `Postpone`, `NextEvent`, `SetStateTimeout`, `CancelStateTimeout`, `SetEventTimeout`, `CancelEventTimeout`, `SetGenericTimeout`, `CancelGenericTimeout`, `Reply`
+- **`Transition<S,D>` variants** — `NextState`, `KeepState`, `RepeatState`, `Stop`, `StopAndReply` (all carry an `actions()` list)
+- **`TransitionFn<S,E,D>`** — `apply(S state, SMEvent<E> event, D data)` — equivalent to OTP's `handle_event/4`
+- **Builder with `withStateEnter()`** — opt-in `Enter` callbacks on every state entry (OTP: `callback_mode() -> [handle_event_function, state_enter]`)
+- **Engine semantics** — inserted events (`NextEvent`) processed before external mailbox; `EventTimeout` auto-canceled by any incoming event; stale `StateTimeout` silently discarded after state change; postponed events replayed in order after each state transition
 
 **Retention pitch:** "Keep OTP's reliability. Gain 12M Java developers + Spring Boot."
 
@@ -673,10 +687,9 @@ mvnd test -Dtest=ActorBenchmark -Dbenchmark.fork=1 -Dbenchmark.iterations=5
 
 1. **Supervise a persistent event log:**
    ```java
-   Supervisor root = Supervisor.builder()
-       .supervise("audit-log", AuditLogger::new, LogState.INIT)
-       .supervise("order-coordinator", OrderCoord::new, OrderState.INIT)
-       .build();
+   Supervisor root = Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+   root.supervise("audit-log", LogState.INIT, auditLogHandler);
+   root.supervise("order-coordinator", OrderState.INIT, orderCoordHandler);
 
    // Every state transition: tell(auditRef, new AuditEntry(...))
    ```

@@ -94,7 +94,7 @@ public final class Proc<S, M> {
     final LongAdder messagesOut = new LongAdder();
 
     /** The last unhandled exception; set before crash callbacks fire. */
-    public volatile Throwable lastError = null;
+    private volatile Throwable lastError = null;
 
     /** Callbacks fired on abnormal termination (exception, not graceful {@link #stop()}). */
     private final List<Runnable> crashCallbacks = new CopyOnWriteArrayList<>();
@@ -143,6 +143,20 @@ public final class Proc<S, M> {
      * @param initial initial state
      * @param handler {@code (state, message) -> nextState} — pure function, no side-effects
      */
+
+    /**
+     * Spawn a new process — OTP equivalent of {@code spawn/3}.
+     *
+     * @param initialState the initial state
+     * @param handler pure state handler {@code (S state, M msg) -> S}
+     * @param <S> state type
+     * @param <M> message type
+     * @return a running {@link Proc}
+     */
+    public static <S, M> Proc<S, M> spawn(S initialState, BiFunction<S, M, S> handler) {
+        return new Proc<>(initialState, handler);
+    }
+
     public Proc(S initial, BiFunction<S, M, S> handler) {
         thread =
                 Thread.ofVirtual()
@@ -176,9 +190,9 @@ public final class Proc<S, M> {
 
                                         // 3. Process next message (poll with timeout so suspend
                                         //    and sys checks are re-evaluated periodically)
+                                        Envelope<M> env = null;
                                         try {
-                                            Envelope<M> env =
-                                                    mailbox.poll(50, TimeUnit.MILLISECONDS);
+                                            env = mailbox.poll(50, TimeUnit.MILLISECONDS);
                                             if (env == null) continue;
                                             messagesIn.increment();
                                             S next = handler.apply(state, env.msg());
@@ -191,9 +205,18 @@ public final class Proc<S, M> {
                                             Thread.currentThread().interrupt();
                                             break;
                                         } catch (RuntimeException e) {
-                                            lastError = e;
-                                            crashedAbnormally = true;
-                                            break;
+                                            // If the message has a reply handle, complete it
+                                            // exceptionally and keep the process alive (OTP:
+                                            // gen_server can handle bad calls without dying).
+                                            // If it is a fire-and-forget (tell), treat as a
+                                            // fatal crash so the supervisor can restart.
+                                            if (env != null && env.reply() != null) {
+                                                env.reply().completeExceptionally(e);
+                                            } else {
+                                                lastError = e;
+                                                crashedAbnormally = true;
+                                                break;
+                                            }
                                         }
                                     }
 
@@ -275,8 +298,15 @@ public final class Proc<S, M> {
     }
 
     /**
-     * Graceful shutdown: signal the process to stop after draining remaining messages, then wait
-     * for the virtual thread to finish. Does <em>not</em> fire crash callbacks.
+     * Interrupt the process and wait for the virtual thread to finish.
+     *
+     * <p>Sets the stopped flag and immediately interrupts the virtual thread. Any messages still
+     * pending in the mailbox are <strong>dropped</strong> — the process does not drain them before
+     * exiting. Does <em>not</em> fire crash callbacks (normal exit reason).
+     *
+     * <p>If you need to ensure all queued messages are processed before shutdown, drain the mailbox
+     * explicitly (e.g., by sending a sentinel "stop" message and waiting for the process to handle
+     * it) before calling {@code stop()}.
      */
     public void stop() throws InterruptedException {
         stopped = true;
@@ -310,6 +340,13 @@ public final class Proc<S, M> {
      * Deliver an exit signal from a linked process. If this process is trapping exits, the signal
      * is converted to an {@link ExitSignal} message and delivered to the mailbox. Otherwise, the
      * process is interrupted immediately — OTP default behaviour.
+     *
+     * <p><strong>Warning:</strong> When {@link #trapExits(boolean)} is {@code true}, this method
+     * casts the {@link ExitSignal} to {@code M} and enqueues it. This cast is unchecked at compile
+     * time. If the process's message type {@code M} does not include {@link ExitSignal} (or a
+     * common supertype), a {@link ClassCastException} will occur at dispatch time inside the
+     * handler — not at this call site. Ensure that {@code M} can accept {@link ExitSignal} before
+     * enabling exit trapping.
      */
     @SuppressWarnings("unchecked")
     public void deliverExitSignal(Throwable reason) {
@@ -327,6 +364,11 @@ public final class Proc<S, M> {
     void interruptAbnormally(Throwable reason) {
         lastError = reason;
         thread.interrupt();
+    }
+
+    /** Returns the last unhandled exception, or {@code null} if this process has not crashed. */
+    public Throwable lastError() {
+        return lastError;
     }
 
     /** Public: exposes the underlying virtual thread (for joining, etc.). */

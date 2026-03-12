@@ -21,8 +21,9 @@ import java.util.concurrent.TimeUnit;
  *
  * <ul>
  *   <li><b>Crash</b>: lost ECU connection (null message), corrupt framing (exception in decode).
- *       The {@link org.acme.Supervisor} in {@link AcquisitionSupervisor} restarts the process
- *       within 50 ms — the ring buffer is fresh, but acquisition resumes immediately.
+ *       The {@link io.github.seanchatmangpt.jotp.Supervisor} in {@link AcquisitionSupervisor}
+ *       restarts the process within 50 ms — the ring buffer is fresh, but acquisition resumes
+ *       immediately.
  *   <li><b>Domain error</b>: out-of-range value, non-finite double. Handled via {@link
  *       DataStatusType} tagging and {@link Result} — the process stays alive and continues
  *       recording. The erroneous sample is stored with the appropriate flag so analysts can

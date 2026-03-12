@@ -281,10 +281,8 @@ public class MultiTenantSaaSPlatform {
             // Execute data service
             var dataResult = dataService.query((String) request.payload());
             if (dataResult.isFailure()) {
-                return Result.failure(
-                        "Data service error: "
-                                + dataResult.fold(
-                                        v -> "", e -> e != null ? e.getMessage() : "unknown"));
+                String reason = dataResult.fold(_ -> "unknown", e -> e.getMessage());
+                return Result.failure("Data service error: " + reason);
             }
 
             String result = dataResult.orElseThrow();
@@ -403,22 +401,29 @@ public class MultiTenantSaaSPlatform {
     }
 
     private static void printResult(Result<TenantResponse, String> result, String context) {
-        if (result.isSuccess()) {
-            var response = result.orElseThrow();
-            System.out.println(
-                    "  ✅ ["
-                            + context
-                            + "] "
-                            + response.status()
-                            + " (response time: "
-                            + response.processingTimeMs()
-                            + "ms)");
-        } else {
-            System.out.println(
-                    "  ❌ ["
-                            + context
-                            + "] Error: "
-                            + result.fold(v -> "", e -> e != null ? e : "unknown"));
+        switch (result) {
+            case Result.Ok<TenantResponse, String>(var response) ->
+                    System.out.println(
+                            "  ["
+                                    + context
+                                    + "] "
+                                    + response.status()
+                                    + " (response time: "
+                                    + response.processingTimeMs()
+                                    + "ms)");
+            case Result.Success<TenantResponse, String>(var response) ->
+                    System.out.println(
+                            "  ["
+                                    + context
+                                    + "] "
+                                    + response.status()
+                                    + " (response time: "
+                                    + response.processingTimeMs()
+                                    + "ms)");
+            case Result.Err<TenantResponse, String>(var error) ->
+                    System.out.println("  [" + context + "] Error: " + error);
+            case Result.Failure<TenantResponse, String>(var error) ->
+                    System.out.println("  [" + context + "] Error: " + error);
         }
     }
 }

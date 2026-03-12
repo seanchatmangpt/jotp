@@ -66,15 +66,15 @@ public class EcommerceOrderService {
 
     /** Order events (sealed hierarchy for exhaustive pattern matching). */
     public sealed interface OrderEvent
-            permits EcommerceOrderService.Created,
-                    EcommerceOrderService.PaymentAuthorized,
-                    EcommerceOrderService.PaymentFailed,
-                    EcommerceOrderService.InventoryReserved,
-                    EcommerceOrderService.InventoryFailed,
-                    EcommerceOrderService.ShippingScheduled,
-                    EcommerceOrderService.ShippingFailed,
-                    EcommerceOrderService.OrderCompleted,
-                    EcommerceOrderService.OrderCancelled {}
+            permits Created,
+                    PaymentAuthorized,
+                    PaymentFailed,
+                    InventoryReserved,
+                    InventoryFailed,
+                    ShippingScheduled,
+                    ShippingFailed,
+                    OrderCompleted,
+                    OrderCancelled {}
 
     // Event records
     public record Created(String orderId, double amount, List<LineItem> items)
@@ -123,33 +123,44 @@ public class EcommerceOrderService {
         }
 
         public Result<String, Exception> charge(Double amount) {
-            var cbResult =
-                    breaker.execute(
-                            amount,
-                            a -> {
-                                if (simulateFailure) {
-                                    throw new RuntimeException("Simulated payment failure");
-                                }
-                                if (Math.random() > 0.95) {
-                                    throw new RuntimeException("Payment gateway timeout");
-                                }
-                                return "TXN-" + System.nanoTime();
-                            });
-            return switch (cbResult) {
-                case CircuitBreaker.CircuitBreakerResult.Success<String, Exception>(var v) ->
-                        Result.success(v);
-                case CircuitBreaker.CircuitBreakerResult.Failure<String, Exception>(var e) ->
-                        Result.failure(e);
-                case CircuitBreaker.CircuitBreakerResult.CircuitOpen<String, Exception>() ->
-                        Result.failure(new RuntimeException("Circuit breaker is open"));
-            };
+            return Result.of(
+                    () -> {
+                        var cbResult =
+                                breaker.execute(
+                                        amount,
+                                        a -> {
+                                            if (simulateFailure) {
+                                                throw new RuntimeException(
+                                                        "Simulated payment failure");
+                                            }
+                                            // Simulate 95% success rate
+                                            if (Math.random() > 0.95) {
+                                                throw new RuntimeException(
+                                                        "Payment gateway timeout");
+                                            }
+                                            return "TXN-" + System.nanoTime();
+                                        });
+                        return switch (cbResult) {
+                            case CircuitBreaker.CircuitBreakerResult.Success<String, Exception>(
+                                            var v) ->
+                                    v;
+                            case CircuitBreaker.CircuitBreakerResult.Failure<String, Exception>(
+                                            var e) ->
+                                    throw (e instanceof RuntimeException re)
+                                            ? re
+                                            : new RuntimeException(e);
+                            case CircuitBreaker.CircuitBreakerResult.CircuitOpen<String, Exception>
+                                            ignored ->
+                                    throw new RuntimeException("Circuit open");
+                        };
+                    });
         }
 
         public CircuitBreaker.State getCircuitState() {
             return breaker.getState();
         }
 
-        public void setSimulateFailure(boolean fail) {
+        void setSimulateFailure(boolean fail) {
             simulateFailure = fail;
         }
     }
@@ -175,10 +186,10 @@ public class EcommerceOrderService {
             var sendResult = bulkhead.send(new ReserveRequest(productId, quantity));
 
             return switch (sendResult) {
-                case BulkheadIsolation.Send.Success() -> Result.success("RES-" + System.nanoTime());
-                case BulkheadIsolation.Send.Rejected rejected ->
-                        Result.failure(
-                                new Exception("Inventory service degraded: " + rejected.reason()));
+                case BulkheadIsolation.Send.Success ignored ->
+                        Result.success("RES-" + System.nanoTime());
+                case BulkheadIsolation.Send.Rejected(var reason) ->
+                        Result.failure(new Exception("Inventory service degraded: " + reason));
             };
         }
 
@@ -235,14 +246,14 @@ public class EcommerceOrderService {
         private final PaymentService paymentService;
         private final InventoryService inventoryService;
         private final ShippingService shippingService;
-        private final Proc<Void, OrderEvent> auditLog;
+        private final List<Object> auditLog;
         private final Duration timeout;
 
         public OrderSagaCoordinator(
                 PaymentService paymentService,
                 InventoryService inventoryService,
                 ShippingService shippingService,
-                Proc<Void, OrderEvent> auditLog,
+                List<Object> auditLog,
                 Duration timeout) {
             this.paymentService = paymentService;
             this.inventoryService = inventoryService;
@@ -262,30 +273,20 @@ public class EcommerceOrderService {
             var paymentResult = paymentService.charge(orderData.amount());
             if (paymentResult.isFailure()) {
                 // Payment failed, no compensation needed
-                auditLog.tell(new PaymentFailed("Payment gateway error"));
-                String reason =
-                        switch (paymentResult) {
-                            case Result.Err<String, Exception>(var e) -> e.getMessage();
-                            case Result.Failure<String, Exception>(var e) -> e.getMessage();
-                            default -> "unknown error";
-                        };
+                auditLog.add(new PaymentFailed("Payment gateway error"));
+                String reason = paymentResult.fold(_ -> "unknown", e -> e.getMessage());
                 return Result.failure(new SagaError("Payment failed: " + reason, List.of()));
             }
 
             String transactionId = paymentResult.orElseThrow();
-            auditLog.tell(new PaymentAuthorized(transactionId));
+            auditLog.add(new PaymentAuthorized(transactionId));
 
             // Step 2: Reserve inventory
             var inventoryResult = inventoryService.reserve(orderData.items().get(0).productId(), 1);
             if (inventoryResult.isFailure()) {
                 // Inventory failed, compensate: refund payment
-                String invReason =
-                        switch (inventoryResult) {
-                            case Result.Err<String, Exception>(var e) -> e.getMessage();
-                            case Result.Failure<String, Exception>(var e) -> e.getMessage();
-                            default -> "unknown error";
-                        };
-                auditLog.tell(new InventoryFailed("Inventory unavailable: " + invReason));
+                String invReason = inventoryResult.fold(_ -> "unknown", e -> e.getMessage());
+                auditLog.add(new InventoryFailed("Inventory unavailable: " + invReason));
 
                 // Compensation: refund
                 compensatePayment(transactionId);
@@ -295,19 +296,14 @@ public class EcommerceOrderService {
             }
 
             String reservationId = inventoryResult.orElseThrow();
-            auditLog.tell(new InventoryReserved(List.of(reservationId)));
+            auditLog.add(new InventoryReserved(List.of(reservationId)));
 
             // Step 3: Schedule shipping
             var shippingResult = shippingService.schedule(orderData.shippingAddress());
             if (shippingResult.isFailure()) {
                 // Shipping failed, compensate: release inventory + refund payment
-                String shipReason =
-                        switch (shippingResult) {
-                            case Result.Err<String, Exception>(var e) -> e.getMessage();
-                            case Result.Failure<String, Exception>(var e) -> e.getMessage();
-                            default -> "unknown error";
-                        };
-                auditLog.tell(new ShippingFailed("Shipping service unavailable: " + shipReason));
+                String shipReason = shippingResult.fold(_ -> "unknown", e -> e.getMessage());
+                auditLog.add(new ShippingFailed("Shipping service unavailable: " + shipReason));
 
                 // Compensation in LIFO order
                 compensateInventory(reservationId);
@@ -321,8 +317,8 @@ public class EcommerceOrderService {
             }
 
             String trackingNumber = shippingResult.orElseThrow();
-            auditLog.tell(new ShippingScheduled(trackingNumber));
-            auditLog.tell(new OrderCompleted(Instant.now()));
+            auditLog.add(new ShippingScheduled(trackingNumber));
+            auditLog.add(new OrderCompleted(Instant.now()));
 
             return Result.success(
                     new SagaOutcome(
@@ -369,22 +365,7 @@ public class EcommerceOrderService {
         var paymentService = new PaymentService("payment-gateway", 5, Duration.ofSeconds(60));
         var inventoryService = new InventoryService("inventory-service", 5, 100);
         var shippingService = new ShippingService();
-        var eventSourcingLog =
-                EventSourcingAuditLog.<OrderState, OrderEvent, OrderData>builder()
-                        .entityId("orders")
-                        .backend(new InMemoryAuditBackend())
-                        .build();
-        Proc<Void, OrderEvent> auditLog =
-                Proc.spawn(
-                        null,
-                        (state, event) -> {
-                            @SuppressWarnings("unchecked")
-                            Class<? extends OrderEvent> eventClass =
-                                    (Class<? extends OrderEvent>) event.getClass();
-                            eventSourcingLog.logTransition(
-                                    "orders", OrderState.class, eventClass, OrderState.class, null);
-                            return state;
-                        });
+        List<Object> auditLog = new ArrayList<>();
 
         var coordinator =
                 new OrderSagaCoordinator(
@@ -413,21 +394,6 @@ public class EcommerceOrderService {
 
         System.out.println("\n--- Saga Execution Result ---");
         switch (result) {
-            case Result.Ok<SagaOutcome, SagaError>(var outcome) -> {
-                System.out.println("Order creation SUCCEEDED");
-                System.out.println("   Message: " + outcome.message());
-                System.out.println("   Steps:");
-                for (var step : outcome.steps()) {
-                    System.out.println(
-                            "     - "
-                                    + step.service()
-                                    + ": "
-                                    + step.id()
-                                    + " ["
-                                    + step.status()
-                                    + "]");
-                }
-            }
             case Result.Success<SagaOutcome, SagaError>(var outcome) -> {
                 System.out.println("Order creation SUCCEEDED");
                 System.out.println("   Message: " + outcome.message());
@@ -443,13 +409,9 @@ public class EcommerceOrderService {
                                     + "]");
                 }
             }
-            case Result.Err<SagaOutcome, SagaError>(var error) -> {
-                System.out.println("Order creation FAILED");
-                System.out.println("   Reason: " + error.message());
-                System.out.println("   Compensations applied:");
-                for (var comp : error.compensations()) {
-                    System.out.println("     - " + comp);
-                }
+            case Result.Ok<SagaOutcome, SagaError>(var outcome) -> {
+                System.out.println("Order creation SUCCEEDED");
+                System.out.println("   Message: " + outcome.message());
             }
             case Result.Failure<SagaOutcome, SagaError>(var error) -> {
                 System.out.println("Order creation FAILED");
@@ -459,32 +421,13 @@ public class EcommerceOrderService {
                     System.out.println("     - " + comp);
                 }
             }
+            case Result.Err<SagaOutcome, SagaError>(var error) -> {
+                System.out.println("Order creation FAILED: " + error.message());
+            }
         }
 
         System.out.println("\n--- Pattern Status ---");
         System.out.println("Circuit Breaker (Payment): " + paymentService.getCircuitState());
         System.out.println("Bulkhead Isolation (Inventory): " + inventoryService.getStatus());
-    }
-
-    /** Audit log backend implementation for this example. */
-    public static class InMemoryAuditBackend implements EventSourcingAuditLog.AuditBackend {
-        private final java.util.concurrent.CopyOnWriteArrayList<EventSourcingAuditLog.AuditEntry>
-                entries = new java.util.concurrent.CopyOnWriteArrayList<>();
-
-        @Override
-        public void append(EventSourcingAuditLog.AuditEntry entry) {
-            entries.add(entry);
-        }
-
-        @Override
-        public java.util.stream.Stream<EventSourcingAuditLog.AuditEntry> entriesFor(
-                String entityId) {
-            return entries.stream().filter(e -> e.entityId().equals(entityId));
-        }
-
-        @Override
-        public void close() {
-            entries.clear();
-        }
     }
 }

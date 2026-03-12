@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.await;
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcLink;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -167,7 +168,7 @@ class LinkCascadeStressTest implements WithAssertions {
         var crashers = new ArrayList<Proc<Integer, Msg>>(crasherCount);
         for (int i = 0; i < crasherCount; i++) {
             Proc<Integer, Msg> crasher = new Proc<>(0, LinkCascadeStressTest::handle);
-            crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError));
+            crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError()));
             crashers.add(crasher);
         }
 

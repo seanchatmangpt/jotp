@@ -6,7 +6,7 @@ import io.github.seanchatmangpt.jotp.ProcMonitor.MonitorRef;
 import java.util.function.Consumer;
 
 /**
- * Session and parameter process monitor — OTP {@code ProcessMonitor} (unilateral DOWN notification)
+ * Session and parameter process monitor — OTP {@code ProcMonitor} (unilateral DOWN notification)
  * mapped to ATLAS session lifecycle observation.
  *
  * <p>In ATLAS, an analyst workstation or remote factory must detect when:
@@ -17,10 +17,10 @@ import java.util.function.Consumer;
  * </ul>
  *
  * <p>OTP's {@code erlang:monitor(process, Pid)} — implemented here as {@link
- * ProcessMonitor#monitor(Proc, Consumer)} — installs a unilateral DOWN callback. Unlike {@link
- * org.acme.ProcessLink}, a monitor does <em>not</em> crash the monitoring side if the target
- * crashes. This is correct for display plugins and analytics dashboards: the dashboard should
- * survive a parameter process restart.
+ * ProcMonitor#monitor(Proc, Consumer)} — installs a unilateral DOWN callback. Unlike {@link
+ * io.github.seanchatmangpt.jotp.ProcLink}, a monitor does <em>not</em> crash the monitoring side if
+ * the target crashes. This is correct for display plugins and analytics dashboards: the dashboard
+ * should survive a parameter process restart.
  *
  * <p>Real Erlang equivalent:
  *

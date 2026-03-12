@@ -216,7 +216,8 @@ public final class GenServer<S, M> {
      * @return a CompletableFuture that completes when the message is enqueued
      */
     public CompletableFuture<Void> cast(M msg) {
-        return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Cast<>(msg)));
+        proc.tell(new GenServerMessage.Cast<>(msg));
+        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -252,7 +253,8 @@ public final class GenServer<S, M> {
      * @return a CompletableFuture that completes when the message is enqueued
      */
     public CompletableFuture<Void> info(Object info) {
-        return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Info<>(info)));
+        proc.tell(new GenServerMessage.Info(info));
+        return CompletableFuture.completedFuture(null);
     }
 
     /**

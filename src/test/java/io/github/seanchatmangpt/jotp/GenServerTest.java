@@ -80,7 +80,8 @@ class GenServerTest {
 
     @Test
     @DisplayName("cast() delivers messages asynchronously")
-    void testCastFireAndForget() throws Exception {
+    void testCastFireAndForget()
+            throws InterruptedException, java.util.concurrent.ExecutionException {
         var handler =
                 new GenServer.Handler<Integer, CounterMsg>() {
                     @Override
@@ -163,7 +164,7 @@ class GenServerTest {
         server.cast(new StateMsg.Append("third"));
 
         // Verify ordering
-        List<String> result =
+        var result =
                 server.<List<String>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         assertThat(result).containsExactly("first", "second", "third");
 
@@ -463,7 +464,7 @@ class GenServerTest {
             server.cast(new StateMsg.Append("unused"));
         }
 
-        List<Integer> result =
+        var result =
                 server.<List<Integer>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         // List should have exactly 5 elements (1, 2, 3, 4, 5)
         assertThat(result).hasSize(5).containsExactly(1, 2, 3, 4, 5);

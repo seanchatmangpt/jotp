@@ -186,11 +186,16 @@ class ConstructionPatternsTest implements WithAssertions {
                             (state, msg) ->
                                     switch (msg) {
                                         case Echo e -> "RE: " + e.text();
+                                        default -> "";
                                     });
 
             String reply = server.request(new Echo("Hello"), Duration.ofSeconds(2));
             assertThat(reply).isEqualTo("RE: Hello");
-            server.stop();
+            try {
+                server.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

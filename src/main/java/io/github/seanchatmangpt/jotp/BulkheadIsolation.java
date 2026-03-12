@@ -147,13 +147,8 @@ public final class BulkheadIsolation<F, M> {
     private final BiFunction<Object, M, Object> handler;
 
     /** Per-worker state: a queue of messages. */
-    private static final class WorkerState {
-        final LinkedTransferQueue<Object> queue;
-
-        WorkerState(LinkedTransferQueue<Object> queue) {
-            this.queue = queue;
-        }
-    }
+    @SuppressWarnings("rawtypes")
+    private record WorkerState(LinkedTransferQueue queue) {}
 
     private final Queue<ProcRef<WorkerState, M>> workers = new ConcurrentLinkedQueue<>();
     private final AtomicLong rejectionCounter = new AtomicLong(0);
@@ -305,22 +300,25 @@ public final class BulkheadIsolation<F, M> {
         var ref =
                 supervisor.supervise(
                         "worker-" + workerCount.get(),
-                        new WorkerState(new LinkedTransferQueue<Object>()),
-                        (BiFunction<WorkerState, Object, WorkerState>)
-                                (state, msg) -> {
-                                    var ws = (WorkerState) state;
-                                    ws.queue.offer(msg);
-                                    // Process the message using the handler
-                                    try {
-                                        @SuppressWarnings("unchecked")
-                                        M typedMsg = (M) msg;
-                                        Object nextState = handler.apply(ws, typedMsg);
-                                        return nextState instanceof WorkerState ws2 ? ws2 : ws;
-                                    } catch (Exception e) {
-                                        // Re-throw to trigger crash recovery
-                                        throw new RuntimeException("Worker processing failed", e);
-                                    }
-                                });
+                        new WorkerState(new LinkedTransferQueue<>()),
+                        (state, msg) -> {
+                            @SuppressWarnings("unchecked")
+                            var ws = (WorkerState) state;
+                            @SuppressWarnings("unchecked")
+                            M typedMsg = (M) msg;
+                            ws.queue.offer(typedMsg);
+                            // Process the message using the handler
+                            try {
+                                var nextState = handler.apply(ws, typedMsg);
+                                @SuppressWarnings("unchecked")
+                                WorkerState nextWs =
+                                        (WorkerState) (nextState != null ? nextState : state);
+                                return nextWs;
+                            } catch (Exception e) {
+                                // Re-throw to trigger crash recovery
+                                throw new RuntimeException("Worker processing failed", e);
+                            }
+                        });
 
         workers.offer((ProcRef<WorkerState, M>) ref);
     }

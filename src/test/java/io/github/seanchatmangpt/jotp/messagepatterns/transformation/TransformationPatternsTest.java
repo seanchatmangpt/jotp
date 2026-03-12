@@ -40,10 +40,14 @@ class TransformationPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("apply returns translation synchronously")
-        void syncApply() {
+        void syncApply() throws Exception {
             var translator = new MessageTranslator<Integer, String>(i -> "num:" + i, s -> {});
             assertThat(translator.apply(7)).isEqualTo("num:7");
-            translator.stop();
+            try {
+                translator.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

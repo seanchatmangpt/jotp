@@ -23,7 +23,7 @@ class StateMachineExampleTest {
 
     @Test
     @DisplayName("Initial state should be Locked with zero balance")
-    void testInitialState() {
+    void testInitialState() throws InterruptedException {
         var sm =
                 io.github.seanchatmangpt.jotp.StateMachine.create(
                         new TurnstileState.Locked(),

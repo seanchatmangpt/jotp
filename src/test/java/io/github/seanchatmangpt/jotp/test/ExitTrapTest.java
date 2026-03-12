@@ -63,7 +63,7 @@ class ExitTrapTest implements WithAssertions {
                         });
 
         // Link them — crasher crash should deliver ExitSignal to trapping
-        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError));
+        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError()));
 
         crasher.tell("boom");
 
@@ -127,7 +127,7 @@ class ExitTrapTest implements WithAssertions {
         @SuppressWarnings("unchecked")
         Proc<Integer, Object> crasherTyped = (Proc<Integer, Object>) (Proc<?, ?>) crasher;
 
-        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError));
+        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError()));
 
         crasher.tell("crash");
 

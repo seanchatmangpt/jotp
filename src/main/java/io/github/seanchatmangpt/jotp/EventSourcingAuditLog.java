@@ -292,9 +292,8 @@ public final class EventSourcingAuditLog<S, E, D> {
      *
      * <p>Used by {@link Proc#tell} to deliver audit entries asynchronously.
      */
-    sealed interface AuditMessage
-            permits AuditMessage.LogTransition, AuditMessage.LogError, AuditMessage.ReplayRequest {
-        record LogTransition(StateChange<?, ?, ?> entry) implements AuditMessage {}
+    sealed interface AuditMessage {
+        record LogTransition<S, E, D>(StateChange<S, E, D> entry) implements AuditMessage {}
 
         record LogError(ErrorEntry<?, ?> entry) implements AuditMessage {}
 

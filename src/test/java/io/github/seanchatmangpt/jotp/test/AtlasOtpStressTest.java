@@ -4,7 +4,6 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
 import io.github.seanchatmangpt.jotp.dogfood.mclaren.AcquisitionSupervisor;

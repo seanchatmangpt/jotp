@@ -143,16 +143,16 @@ public final class StateMachineExample {
      * @return transition action (nextState, keepState, or stop)
      */
     static Transition<TurnstileState, TurnstileData> handleEvent(
-            TurnstileState state, TurnstileEvent event, TurnstileData data) {
+            TurnstileState state, StateMachine.SMEvent<TurnstileEvent> event, TurnstileData data) {
         return switch (state) {
             case TurnstileState.Locked _ ->
                     switch (event) {
-                        case TurnstileEvent.Coin(var amount) -> {
+                        case StateMachine.SMEvent.User(TurnstileEvent.Coin(var amount)) -> {
                             // Accumulate coin, stay locked
                             var newData = data.addCoin(amount);
                             yield Transition.keepState(newData);
                         }
-                        case TurnstileEvent.Pass _ -> {
+                        case StateMachine.SMEvent.User(TurnstileEvent.Pass _) -> {
                             // Check if balance exceeds threshold (50¢)
                             if (data.balance() >= 50) {
                                 // Unlock and reset balance for next cycle
@@ -163,17 +163,19 @@ public final class StateMachineExample {
                                 yield Transition.keepState(data);
                             }
                         }
+                        default -> Transition.keepState(data);
                     };
             case TurnstileState.Unlocked _ ->
                     switch (event) {
-                        case TurnstileEvent.Pass _ -> {
+                        case StateMachine.SMEvent.User(TurnstileEvent.Pass _) -> {
                             // Person passed; return to locked
                             yield Transition.nextState(new TurnstileState.Locked(), data);
                         }
-                        case TurnstileEvent.Coin(var amount) -> {
+                        case StateMachine.SMEvent.User(TurnstileEvent.Coin(var amount)) -> {
                             // Barrier is open; ignore coins until locked again
                             yield Transition.keepState(data);
                         }
+                        default -> Transition.keepState(data);
                     };
         };
     }
@@ -197,9 +199,10 @@ public final class StateMachineExample {
         // Create state machine: initial state Locked, initial data (0¢ balance, 0¢ total collected)
         var turnstile =
                 StateMachine.create(
-                        new TurnstileState.Locked(),
-                        new TurnstileData(0, 0),
-                        StateMachineExample::handleEvent);
+                                new TurnstileState.Locked(),
+                                new TurnstileData(0, 0),
+                                StateMachineExample::handleEvent)
+                        .start();
 
         System.out.println("Initial state: " + turnstile.state());
         System.out.println("Initial data:  " + turnstile.data());

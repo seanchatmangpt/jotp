@@ -30,7 +30,7 @@ class SupervisorStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("ONE_FOR_ONE restart: single child crash (10 children)")
-    void testOneForOneRestart() {
+    void testOneForOneRestart() throws Exception {
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 10, Duration.ofSeconds(60));
         List<AtomicInteger> restartCounts = new ArrayList<>();
 
@@ -93,7 +93,7 @@ class SupervisorStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("ONE_FOR_ALL restart: single crash restarts all 50 children")
-    void testOneForAllRestart() {
+    void testOneForAllRestart() throws Exception {
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ALL, 10, Duration.ofSeconds(60));
         AtomicInteger totalRestarts = new AtomicInteger();
         List<AtomicInteger> childRestarts = new ArrayList<>();
@@ -144,7 +144,7 @@ class SupervisorStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("REST_FOR_ONE restart: crash at position 3 (10 children total)")
-    void testRestForOneRestart() {
+    void testRestForOneRestart() throws Exception {
         Supervisor supervisor = new Supervisor(Strategy.REST_FOR_ONE, 10, Duration.ofSeconds(60));
         List<AtomicInteger> activityCounts = new ArrayList<>();
 
@@ -192,7 +192,7 @@ class SupervisorStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("Child spawn storm (rapidly register 1000 children)")
-    void testChildSpawnStorm() {
+    void testChildSpawnStorm() throws Exception {
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 100, Duration.ofSeconds(60));
 
         try {
@@ -230,7 +230,7 @@ class SupervisorStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("Restart window throttling (5 restarts in 1 sec window)")
-    void testRestartWindowThrottling() {
+    void testRestartWindowThrottling() throws Exception {
         // Create supervisor with strict restart window: 5 restarts in 1 second
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(1));
         CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -280,7 +280,7 @@ class SupervisorStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("Supervisor latency (100 children, constant load)")
-    void testSupervisorLatency() {
+    void testSupervisorLatency() throws Exception {
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 20, Duration.ofSeconds(60));
 
         try {
@@ -303,13 +303,14 @@ class SupervisorStressTest extends StressTestBase {
 
             // Load: 1000 messages/sec across all children
             LoadProfile profile = new LoadProfile.ConstantLoad(1000L, Duration.ofSeconds(5));
+            AtomicInteger opCounter = new AtomicInteger();
             MetricsCollector metrics =
                     runStressTest(
                             "Supervisor Latency (100 children)",
                             profile,
                             () -> {
                                 // Distribute messages across children
-                                int childIndex = (int) (metrics.getOperationCount() % childCount);
+                                int childIndex = opCounter.getAndIncrement() % childCount;
                                 counters.get(childIndex).incrementAndGet();
                             });
 

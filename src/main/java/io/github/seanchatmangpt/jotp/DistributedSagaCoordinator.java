@@ -308,7 +308,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
                                     .join();
             return Result.ok(result);
         } catch (java.util.concurrent.CompletionException e) {
-            if (e.getCause() instanceof java.util.concurrent.CancellationException) {
+            if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
                 return Result.err("Service call timeout: " + serviceName);
             }
             return Result.err("Service call failed: " + e.getMessage());
@@ -349,6 +349,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 response -> {
                     compensationLog.add(compensation);
                     // Return a NextStep transition (caller applies it)
+<<<<<<< HEAD
                     S innerState =
                             switch (currentState) {
                                 case SagaState.Executing<S>(var s, var idx, var steps) -> s;
@@ -357,6 +358,16 @@ public final class DistributedSagaCoordinator<S, E, D> {
                                 case SagaState.Failed<S>(var reason, var steps) -> null;
                             };
                     return Result.ok(SagaTransition.nextStep(innerState, currentData));
+=======
+                    S businessState =
+                            switch (currentState) {
+                                case SagaState.Executing<S>(var s, _, _) -> s;
+                                case SagaState.Compensating<S>(var s, _, _) -> s;
+                                case SagaState.Completed<S>(var s, _) -> s;
+                                case SagaState.Failed<S> ignored -> null;
+                            };
+                    return Result.ok(SagaTransition.nextStep(businessState, currentData));
+>>>>>>> origin/main
                 },
                 // Failure: trigger compensation
                 error -> Result.err(error));
@@ -474,32 +485,45 @@ public final class DistributedSagaCoordinator<S, E, D> {
      * @return true if transition succeeded, false if saga must fail
      */
     public boolean applyTransition(SagaTransition<S, D> transition) {
-        switch (transition) {
+        return switch (transition) {
             case SagaTransition.NextStep<S, D>(var newState, var newData) -> {
+<<<<<<< HEAD
                 int nextStep =
                         currentState instanceof SagaState.Executing<S>(var s, var idx, var steps)
                                 ? idx + 1
                                 : 0;
                 this.currentState = new SagaState.Executing<>(newState, nextStep, List.of());
+=======
+                int nextIndex =
+                        switch (currentState) {
+                            case SagaState.Executing<S>(_, var idx, var steps) -> idx + 1;
+                            default -> 0;
+                        };
+                this.currentState = new SagaState.Executing<>(newState, nextIndex, List.of());
+>>>>>>> origin/main
                 this.currentData = newData;
-                return true;
+                yield true;
             }
             case SagaTransition.Compensate<S, D>(var reason, var newData) -> {
                 this.currentData = newData;
-                return true;
+                yield true;
             }
             case SagaTransition.Complete<S, D>(var newState, var newData) -> {
                 this.currentState = new SagaState.Completed<>(newState, List.of());
                 this.currentData = newData;
                 this.running = false;
-                return true;
+                yield true;
             }
             case SagaTransition.Fail<S, D>(var reason) -> {
                 this.running = false;
                 this.stopReason = reason;
-                return false;
+                yield false;
             }
+<<<<<<< HEAD
         }
+=======
+        };
+>>>>>>> origin/main
     }
 
     /**
@@ -528,8 +552,14 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 new DistributedSagaCoordinator<>(
                         name, initialState, initialData, stateMachine, stepTimeout);
 
+<<<<<<< HEAD
         Proc<SagaState<S>, SagaCoordinatorMsg<S, D>> proc =
                 new Proc<>(
+=======
+        @SuppressWarnings("unchecked")
+        var proc =
+                new Proc<SagaState<S>, SagaCoordinatorMsg<S, D>>(
+>>>>>>> origin/main
                         coordinator.currentState,
                         (state, msg) ->
                                 switch (msg) {

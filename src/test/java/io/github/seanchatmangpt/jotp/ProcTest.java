@@ -255,7 +255,7 @@ class ProcTest {
         // Wait for crash callback to fire
         var result = crashFired.await(AWAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         assertThat(result).isTrue();
-        assertThat(proc.lastError).isNotNull();
+        assertThat(proc.lastError()).isNotNull();
 
         proc.thread().join();
     }
@@ -346,7 +346,7 @@ class ProcTest {
         var reason = new RuntimeException("linked process crashed");
         proc.deliverExitSignal(reason);
 
-        await().atMost(AWAIT_TIMEOUT).until(() -> proc.lastError != null);
+        await().atMost(AWAIT_TIMEOUT).until(() -> proc.lastError() != null);
 
         proc.thread().join();
     }
@@ -437,8 +437,8 @@ class ProcTest {
         proc.addCrashCallback(
                 () -> {
                     // At this point, lastError should be set
-                    assertThat(proc.lastError).isNotNull();
-                    assertThat(proc.lastError.getMessage()).contains("test error");
+                    assertThat(proc.lastError()).isNotNull();
+                    assertThat(proc.lastError().getMessage()).contains("test error");
                     crashCalled.countDown();
                 });
 
@@ -570,7 +570,11 @@ class ProcTest {
         record TestState(int value, String label) {}
 
         BiFunction<TestState, TestMsg, TestState> handler =
+<<<<<<< HEAD
                 (state, msg) -> {
+=======
+                (TestState state, TestMsg msg) -> {
+>>>>>>> origin/main
                     if (msg instanceof TestMsg.Increment) {
                         return new TestState(state.value + 1, "incremented");
                     }
