@@ -138,6 +138,12 @@ public final class ApplicationController {
      * <p>Dependency resolution: for each name in {@link ApplicationSpec#applications()}, if the
      * dependency is loaded but not running it will be auto-started with {@link RunType#TEMPORARY}.
      *
+     * <p><strong>StartType limitation:</strong> This implementation always invokes the application
+     * callback with {@link StartType.Normal}. The {@link StartType.Takeover} and {@link
+     * StartType.Failover} variants (used in OTP distributed failover scenarios) are not yet
+     * supported. If your callback switches on {@link StartType}, it will always receive {@code
+     * Normal()}.
+     *
      * @param name the application name (must be loaded via {@link #load})
      * @param runType the run type governing cascade behavior on termination
      * @throws IllegalStateException if the application is not loaded
