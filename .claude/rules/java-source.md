@@ -64,6 +64,16 @@ ScopedValue.where(CURRENT_USER, user).run(() -> handleRequest());
 
 **CrashRecovery** — wraps supplier in isolated virtual thread; returns `Result<T, Exception>`.
 
+**ApplicationController** — static registry; `load(spec)` → `start(name)` → `stop(name)` → `unload(name)`. Equivalent to Erlang's `application` module. Thread-safe via `ConcurrentHashMap`. Call `reset()` in `@BeforeEach` for test isolation.
+
+**ApplicationSpec** — immutable record built via `ApplicationSpec.builder(name)`. Equivalent to a `.app` file. Fields: `description`, `vsn`, `modules`, `registered`, `applications` (dependencies), `env`, `mod` (callback), `startArgs`.
+
+**ApplicationCallback<S>** — `@FunctionalInterface`; `start(StartType, Object) -> S` and default no-op `stop(S)`. Use lambda for simple apps; full class for apps needing cleanup.
+
+**StartType** — sealed: `Normal()`, `Takeover(String node)`, `Failover(String node)`. Use exhaustive switch in callbacks.
+
+**RunType** — `PERMANENT` (cascade-stop all), `TRANSIENT` (treated as PERMANENT in this impl), `TEMPORARY` (default, no cascade).
+
 ## Forbidden Patterns (guards scan on every edit)
 
 ```java
@@ -93,5 +103,12 @@ io.github.seanchatmangpt.jotp
 ├── StateMachine.java, EventManager.java
 ├── Parallel.java, ExitSignal.java
 ├── Result.java
+├── Application.java           ← lifecycle orchestrator (Infrastructure nested interface)
+├── ApplicationController.java ← application_controller: load/start/stop/query
+├── ApplicationSpec.java       ← .app resource file as a Java record + Builder
+├── ApplicationCallback.java   ← -behaviour(application): start/2, stop/1
+├── StartType.java             ← sealed: Normal | Takeover(node) | Failover(node)
+├── RunType.java               ← enum: PERMANENT | TRANSIENT | TEMPORARY
+├── ApplicationInfo.java       ← {Name, Description, Vsn} tuple record
 └── dogfood/          ← template-generated examples, not production primitives
 ```
