@@ -145,8 +145,6 @@
                         <exclude>**/pool/**</exclude>
                         <exclude>**/dogfood/mclaren/**</exclude>
                         <exclude>**/GenServer.java</exclude>
-                        <exclude>**/MessageBus.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/MessageBus.java</exclude>
                         <exclude>**/MetricsCollector.java</exclude>
                         <exclude>**/SagaOrchestrator.java</exclude>
                         <exclude>**/HealthChecker.java</exclude>
@@ -168,8 +166,6 @@
                         <testExclude>org/acme/**</testExclude>
                         <!-- Pattern examples - not yet integrated into core test suite -->
                         <testExclude>**/test/patterns/**</testExclude>
-                        <!-- Result type tests moved to core compilation - see Result.java for examples -->
-                        <testExclude>**/ResultTest.java</testExclude>
                         <!-- Enterprise composition patterns - under evaluation for v2.0 -->
                         <testExclude>**/test/EnterpriseCompositionIT.java</testExclude>
                         <!-- Tests for excluded source files — compile errors until source is fixed -->
@@ -185,7 +181,6 @@
                         <testExclude>**/EventSourcingAuditLogTest.java</testExclude>
                         <testExclude>**/GenServerTest.java</testExclude>
                         <testExclude>**/test/**</testExclude>
-                        <testExclude>**/ProcTest.java</testExclude>
                         <testExclude>**/stress/**</testExclude>
                         <testExclude>**/testing/**</testExclude>
                         <testExclude>**/enterprise/**</testExclude>
@@ -311,12 +306,9 @@
                 <version>3.2.0</version>
                 <configuration>
                     <java>
-<<<<<<< HEAD
-=======
-                        <!-- Exclude files with syntax that google-java-format cannot parse -->
->>>>>>> origin/main
                         <excludes>
-                            <exclude>**/FactoryMethodPatterns.java</exclude>
+                            <!-- sealed local classes not supported by google-java-format -->
+                            <exclude>src/main/java/io/github/seanchatmangpt/jotp/FactoryMethodPatterns.java</exclude>
                         </excludes>
                         <googleJavaFormat>
                             <style>AOSP</style>

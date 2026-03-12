@@ -306,7 +306,8 @@ public final class MessageBus {
         return name;
     }
 
-    public void onStop() {
+    @Override
+    public void onStop(Application<?> app) {
         eventManager.stop();
     }
 

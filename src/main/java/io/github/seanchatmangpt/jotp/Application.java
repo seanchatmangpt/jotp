@@ -76,6 +76,25 @@ import java.util.function.Supplier;
  */
 public final class Application<S> {
 
+    /**
+     * Marker interface for infrastructure components managed by an {@code Application}.
+     *
+     * <p>Infrastructure components (e.g., {@code MessageBus}, {@code MetricsCollector}) implement
+     * this interface to participate in the application lifecycle via {@link #name()} and {@link
+     * #onStop(Application)}.
+     */
+    public interface Infrastructure {
+        /** The component name, used for registration and logging. */
+        String name();
+
+        /**
+         * Called when the owning application is stopping. Implementations should release resources.
+         *
+         * @param app the application that is stopping
+         */
+        void onStop(Application<?> app);
+    }
+
     /** Sealed hierarchy of application lifecycle phases. */
     public sealed interface ApplicationPhase {
         /** Initializing: running init hooks and preparing state. */
@@ -96,20 +115,6 @@ public final class Application<S> {
          * @param error non-null if shutdown failed unexpectedly
          */
         record STOPPED(Throwable error) implements ApplicationPhase {}
-    }
-
-    /**
-     * Lifecycle contract for infrastructure components managed by an Application.
-     *
-     * <p>Implementations provide a human-readable name and a hook called when the Application
-     * stops.
-     */
-    public interface Infrastructure {
-        /** Human-readable component name for logging and diagnostics. */
-        String name();
-
-        /** Invoked by the Application during graceful shutdown. Default: no-op. */
-        default void onStop(Application<?> app) {}
     }
 
     private final String name;
@@ -172,9 +177,11 @@ public final class Application<S> {
                         // START phase
                         phase = new ApplicationPhase.START();
 
-                        // Start supervisors (they manage their own children)
-                        for (var supervisor : supervisors) {
-                            // Supervisor is already running (started in builder), just track it
+                        // Supervisors auto-start their virtual thread on construction
+                        // (Supervisor.supervisorThread is started in Supervisor's constructor).
+                        // No explicit start call is needed here; this loop is intentionally empty
+                        // and exists only to document that supervisors are accounted for.
+                        for (var ignored : supervisors) { // NOSONAR: intentional no-op
                         }
 
                         // Transition to RUNNING

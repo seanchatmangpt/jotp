@@ -64,6 +64,49 @@ ScopedValue.where(CURRENT_USER, user).run(() -> handleRequest());
 
 **CrashRecovery** — wraps supplier in isolated virtual thread; returns `Result<T, Exception>`.
 
+**ApplicationController** — static registry; equivalent to Erlang's `application:` module.
+
+| Method | Erlang equivalent | Notes |
+|---|---|---|
+| `load(spec)` | `application:load/1` | Stores spec; no start |
+| `unload(name)` | `application:unload/1` | Throws if running |
+| `start(name)` | `application:start/1` | TEMPORARY run type |
+| `start(name, RunType)` | `application:start/2` | PERMANENT/TRANSIENT/TEMPORARY |
+| `start(name, RunType, StartType)` | `application:start/2` | Passes Normal/Takeover/Failover to callback |
+| `stop(name)` | `application:stop/1` | Normal termination; TRANSIENT does NOT cascade |
+| `stop(name, true)` | crash/abnormal exit | TRANSIENT cascades like PERMANENT |
+| `restart(name)` | `application:restart/1` | Stop + start, preserves RunType and env overrides |
+| `loadedApplications()` | `application:loaded_applications/0` | Includes running |
+| `whichApplications()` | `application:which_applications/0` | Running only |
+| `getEnv(app, key)` | `application:get_env/2` | Returns Optional |
+| `getEnv(app, key, default)` | `application:get_env/3` | Returns value or default |
+| `setEnv(app, key, value)` | `application:set_env/3` | Runtime override; survives restart |
+| `unsetEnv(app, key)` | `application:unset_env/2` | Removes override; spec env visible again |
+| `getKey(app, key)` | `application:get_key/2` | Keys: description/vsn/modules/registered/applications/env/mod/start_args |
+| `reset()` | — | Test isolation; call in @BeforeEach |
+
+Thread safety: all operations use ConcurrentHashMap. Call reset() in @BeforeEach.
+
+**ApplicationSpec** — immutable record built via `ApplicationSpec.builder(name)`. Equivalent to a `.app` file. Fields: `description`, `vsn`, `modules`, `registered`, `applications` (dependencies), `env`, `mod` (callback), `startArgs`.
+
+**ApplicationCallback<S>** — `-behaviour(application)` interface.
+
+```java
+ApplicationSpec.builder("my-app")
+    .mod((startType, args) -> switch (startType) {
+        case StartType.Normal()           -> startNormal(args);
+        case StartType.Takeover(var node) -> takeoverFrom(node);
+        case StartType.Failover(var node) -> failoverFrom(node);
+    })
+    .build();
+```
+
+The switch is exhaustive — compiler-enforced because StartType is sealed.
+
+**StartType** — sealed: `Normal()`, `Takeover(String node)`, `Failover(String node)`. Use exhaustive switch in callbacks.
+
+**RunType** — `PERMANENT` (cascade-stop all), `TRANSIENT` (treated as PERMANENT in this impl), `TEMPORARY` (default, no cascade).
+
 ## Forbidden Patterns (guards scan on every edit)
 
 ```java
@@ -93,5 +136,12 @@ io.github.seanchatmangpt.jotp
 ├── StateMachine.java, EventManager.java
 ├── Parallel.java, ExitSignal.java
 ├── Result.java
+├── Application.java           ← lifecycle orchestrator (Infrastructure nested interface)
+├── ApplicationController.java ← application_controller: load/start/stop/query
+├── ApplicationSpec.java       ← .app resource file as a Java record + Builder
+├── ApplicationCallback.java   ← -behaviour(application): start/2, stop/1
+├── StartType.java             ← sealed: Normal | Takeover(node) | Failover(node)
+├── RunType.java               ← enum: PERMANENT | TRANSIENT | TEMPORARY
+├── ApplicationInfo.java       ← {Name, Description, Vsn} tuple record
 └── dogfood/          ← template-generated examples, not production primitives
 ```
