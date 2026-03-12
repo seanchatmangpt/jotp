@@ -135,7 +135,7 @@ public class PatternTestFixture<P> {
     /** Get permitted subclasses of sealed pattern. */
     public Class<?>[] getPatternVariants() {
         if (isPatternSealed()) {
-            return patternClass.permittedSubclasses();
+            return patternClass.getPermittedSubclasses();
         }
         return new Class<?>[0];
     }

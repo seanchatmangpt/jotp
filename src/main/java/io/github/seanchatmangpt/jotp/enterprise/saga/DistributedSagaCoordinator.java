@@ -129,7 +129,7 @@ public class DistributedSagaCoordinator {
             for (int i = 0; i < config.steps().size(); i++) {
                 SagaStep step = config.steps().get(i);
 
-                if (step instanceof SagaStep.Action<?> action) {
+                if (step instanceof SagaStep.Action<?, ?> action) {
                     try {
                         Object output = action.task().apply(null); // TODO: thread step inputs
                         instance.outputs.put(action.name(), output);

@@ -530,7 +530,17 @@ RootSupervisor (ONE_FOR_ONE)
 | `GenServer` | `Proc<S, M>` | 1:1 behavioral equivalence |
 | `Supervisor` | `Supervisor` | Identical restart strategies |
 | `spawn_link` | `Proc.link()` | Same crash propagation |
+| `gen_statem` | `StateMachine<S,E,D>` | Full feature parity (see below) |
 | Module → Function | Class → BiFunction | Type-safe, testable |
+
+**gen_statem feature parity:** `StateMachine<S,E,D>` implements the complete OTP gen_statem contract:
+
+- **`SMEvent<E>` sealed hierarchy** — `User`, `StateTimeout`, `EventTimeout`, `GenericTimeout`, `Internal`, `Enter`; mirrors OTP's `{EventType, EventContent}` separation
+- **`Action` sealed hierarchy** — `Postpone`, `NextEvent`, `SetStateTimeout`, `CancelStateTimeout`, `SetEventTimeout`, `CancelEventTimeout`, `SetGenericTimeout`, `CancelGenericTimeout`, `Reply`
+- **`Transition<S,D>` variants** — `NextState`, `KeepState`, `RepeatState`, `Stop`, `StopAndReply` (all carry an `actions()` list)
+- **`TransitionFn<S,E,D>`** — `apply(S state, SMEvent<E> event, D data)` — equivalent to OTP's `handle_event/4`
+- **Builder with `withStateEnter()`** — opt-in `Enter` callbacks on every state entry (OTP: `callback_mode() -> [handle_event_function, state_enter]`)
+- **Engine semantics** — inserted events (`NextEvent`) processed before external mailbox; `EventTimeout` auto-canceled by any incoming event; stale `StateTimeout` silently discarded after state change; postponed events replayed in order after each state transition
 
 **Retention pitch:** "Keep OTP's reliability. Gain 12M Java developers + Spring Boot."
 

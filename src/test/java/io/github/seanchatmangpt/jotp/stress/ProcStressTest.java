@@ -27,7 +27,7 @@ class ProcStressTest extends StressTestBase {
      */
     @Test
     @DisplayName("Constant load (10K msg/sec for 10 seconds)")
-    void testConstantLoad() {
+    void testConstantLoad() throws Exception {
         // Create a simple process that counts received messages
         AtomicInteger messageCount = new AtomicInteger();
         CountDownLatch readyLatch = new CountDownLatch(1);
