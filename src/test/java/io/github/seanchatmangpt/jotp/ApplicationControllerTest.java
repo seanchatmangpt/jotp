@@ -498,6 +498,205 @@ class ApplicationControllerTest {
         ApplicationController.stop("ch-app");
     }
 
+    // ── restart() ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("restart() invokes stop then start; app remains running afterwards")
+    void testRestartCyclesTheApp() throws Exception {
+        var stopCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        var startCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        var spec =
+                specWithCallback(
+                        "my-app",
+                        new ApplicationCallback<String>() {
+                            @Override
+                            public String start(StartType type, Object args) {
+                                startCount.incrementAndGet();
+                                return "state";
+                            }
+
+                            @Override
+                            public void stop(String state) {
+                                stopCount.incrementAndGet();
+                            }
+                        });
+
+        ApplicationController.start(spec);
+        ApplicationController.restart("my-app");
+
+        assertThat(startCount.get()).isEqualTo(2);
+        assertThat(stopCount.get()).isEqualTo(1);
+        assertThat(ApplicationController.whichApplications())
+                .extracting(ApplicationInfo::name)
+                .containsExactly("my-app");
+    }
+
+    @Test
+    @DisplayName("restart() preserves the RunType from the original start")
+    void testRestartPreservesRunType() throws Exception {
+        var spec = minimalSpec("critical");
+        ApplicationController.start(spec, RunType.PERMANENT);
+
+        ApplicationController.restart("critical");
+
+        // After restart, a normal stop of the PERMANENT app should still cascade
+        ApplicationController.start(minimalSpec("app-b"));
+        ApplicationController.stop("critical"); // should cascade because RunType is still PERMANENT
+
+        assertThat(ApplicationController.whichApplications()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("restart() does not trigger cascade semantics during the stop phase")
+    void testRestartDoesNotCascade() throws Exception {
+        ApplicationController.start(minimalSpec("app-a"));
+        ApplicationController.start(minimalSpec("critical"), RunType.PERMANENT);
+
+        // restart should NOT cascade-stop app-a even though critical is PERMANENT
+        ApplicationController.restart("critical");
+
+        assertThat(ApplicationController.whichApplications())
+                .extracting(ApplicationInfo::name)
+                .contains("app-a", "critical");
+    }
+
+    // ── getEnv with default ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("getEnv(app, key, default) returns value when key exists")
+    void testGetEnvWithDefaultKeyPresent() throws Exception {
+        var spec = ApplicationSpec.builder("ch-app").env("file", "/usr/local/log").build();
+        ApplicationController.start(spec);
+
+        Object val = ApplicationController.getEnv("ch-app", "file", "/fallback");
+
+        assertThat(val).isEqualTo("/usr/local/log");
+    }
+
+    @Test
+    @DisplayName("getEnv(app, key, default) returns defaultValue when key is absent")
+    void testGetEnvWithDefaultKeyAbsent() throws Exception {
+        ApplicationController.start(minimalSpec("my-app"));
+
+        Object val = ApplicationController.getEnv("my-app", "nonexistent", "fallback");
+
+        assertThat(val).isEqualTo("fallback");
+    }
+
+    @Test
+    @DisplayName("getEnv(app, key, default) runtime override takes precedence over default")
+    void testGetEnvWithDefaultOverrideTakesPrecedence() throws Exception {
+        ApplicationController.start(minimalSpec("my-app"));
+        ApplicationController.setEnv("my-app", "key", "overridden");
+
+        Object val = ApplicationController.getEnv("my-app", "key", "fallback");
+
+        assertThat(val).isEqualTo("overridden");
+    }
+
+    // ── unsetEnv() ────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("unsetEnv() removes a runtime override so spec value is visible again")
+    void testUnsetEnvRestoresSpecValue() throws Exception {
+        var spec = ApplicationSpec.builder("ch-app").env("file", "/spec-value").build();
+        ApplicationController.start(spec);
+        ApplicationController.setEnv("ch-app", "file", "runtime-value");
+
+        ApplicationController.unsetEnv("ch-app", "file");
+
+        assertThat(ApplicationController.getEnv("ch-app", "file")).contains("/spec-value");
+    }
+
+    @Test
+    @DisplayName("unsetEnv() removes a key that has no spec fallback → Optional.empty()")
+    void testUnsetEnvNoSpecFallback() throws Exception {
+        ApplicationController.start(minimalSpec("my-app"));
+        ApplicationController.setEnv("my-app", "temp-key", "some-value");
+
+        ApplicationController.unsetEnv("my-app", "temp-key");
+
+        assertThat(ApplicationController.getEnv("my-app", "temp-key")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("unsetEnv() on a key that was never set is a no-op")
+    void testUnsetEnvNeverSetIsNoOp() throws Exception {
+        ApplicationController.start(minimalSpec("my-app"));
+
+        assertThatCode(() -> ApplicationController.unsetEnv("my-app", "nonexistent"))
+                .doesNotThrowAnyException();
+    }
+
+    // ── getKey() ──────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("getKey() returns description from spec")
+    void testGetKeyDescription() throws Exception {
+        var spec =
+                ApplicationSpec.builder("ch-app").description("Channel allocator").vsn("2").build();
+        ApplicationController.start(spec);
+
+        assertThat(ApplicationController.getKey("ch-app", "description"))
+                .contains("Channel allocator");
+    }
+
+    @Test
+    @DisplayName("getKey() returns vsn from spec")
+    void testGetKeyVsn() throws Exception {
+        var spec = ApplicationSpec.builder("ch-app").vsn("3.1.4").build();
+        ApplicationController.start(spec);
+
+        assertThat(ApplicationController.getKey("ch-app", "vsn")).contains("3.1.4");
+    }
+
+    @Test
+    @DisplayName("getKey() returns modules list from spec")
+    void testGetKeyModules() throws Exception {
+        var spec = ApplicationSpec.builder("ch-app").modules("ch_app", "ch_sup", "ch3").build();
+        ApplicationController.start(spec);
+
+        Optional<Object> result = ApplicationController.getKey("ch-app", "modules");
+        assertThat(result).isPresent();
+        assertThat(result.get()).isInstanceOf(List.class);
+        assertThat((List<String>) result.get()).containsExactly("ch_app", "ch_sup", "ch3");
+    }
+
+    @Test
+    @DisplayName("getKey() returns applications (dependency) list from spec")
+    void testGetKeyApplications() throws Exception {
+        var spec = ApplicationSpec.builder("ch-app").applications("kernel", "stdlib").build();
+        ApplicationController.load(spec);
+
+        Optional<Object> result = ApplicationController.getKey("ch-app", "applications");
+        assertThat(result).isPresent();
+        assertThat(result.get()).isInstanceOf(List.class);
+        assertThat((List<String>) result.get()).containsExactly("kernel", "stdlib");
+    }
+
+    @Test
+    @DisplayName("getKey() returns Optional.empty() for an unknown key")
+    void testGetKeyUnknown() throws Exception {
+        ApplicationController.start(minimalSpec("my-app"));
+
+        assertThat(ApplicationController.getKey("my-app", "no_such_key")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getKey() returns Optional.empty() when the application is not loaded")
+    void testGetKeyAppNotLoaded() {
+        assertThat(ApplicationController.getKey("nonexistent", "description")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getKey() works for a loaded-but-not-started application")
+    void testGetKeyLoadedOnly() {
+        var spec = ApplicationSpec.builder("my-app").description("Loaded only").build();
+        ApplicationController.load(spec);
+
+        assertThat(ApplicationController.getKey("my-app", "description")).contains("Loaded only");
+    }
+
     // ── reset() ────────────────────────────────────────────────────────────────
 
     @Test

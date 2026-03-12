@@ -19,10 +19,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * application:start(ch_app).                     ApplicationController.start("ch-app");
  * application:start(ch_app, permanent).          ApplicationController.start("ch-app", RunType.PERMANENT);
  * application:stop(ch_app).                      ApplicationController.stop("ch-app");
+ * application:restart(ch_app).                   ApplicationController.restart("ch-app");
  * application:loaded_applications().             ApplicationController.loadedApplications();
  * application:which_applications().             ApplicationController.whichApplications();
  * application:get_env(ch_app, file).             ApplicationController.getEnv("ch-app", "file");
+ * application:get_env(ch_app, file, "/default"). ApplicationController.getEnv("ch-app", "file", "/default");
  * application:set_env(ch_app, file, "testlog").  ApplicationController.setEnv("ch-app", "file", "testlog");
+ * application:unset_env(ch_app, file).           ApplicationController.unsetEnv("ch-app", "file");
+ * application:get_key(ch_app, description).      ApplicationController.getKey("ch-app", "description");
  * }</pre>
  *
  * <p><strong>Lifecycle model:</strong>
@@ -251,6 +255,39 @@ public final class ApplicationController {
         start(spec.name(), runType, startType);
     }
 
+    // ── Restart ────────────────────────────────────────────────────────────────
+
+    /**
+     * Restart a running application: stop it then start it again, preserving its {@link RunType}.
+     *
+     * <p>Equivalent to Erlang's {@code application:restart/1}. Unlike a plain {@link #stop} +
+     * {@link #start}, {@code restart} does <em>not</em> trigger cascade semantics — only the named
+     * application is cycled. The spec must already be loaded.
+     *
+     * <p>If the application is not currently running (e.g. it was never started or was already
+     * stopped), it is started fresh with {@link RunType#TEMPORARY}.
+     *
+     * @param name the application name (must be loaded)
+     * @throws IllegalStateException if the application is not loaded
+     * @throws Exception if the stop or start callback throws
+     */
+    @SuppressWarnings("unchecked")
+    public static void restart(String name) throws Exception {
+        // Capture the RunType before stopping; default to TEMPORARY if not currently running
+        RunningEntry current = running.get(name);
+        RunType runType = current != null ? current.runType() : RunType.TEMPORARY;
+
+        // Stop the application directly (bypassing cascade semantics)
+        RunningEntry entry = running.remove(name);
+        if (entry != null) {
+            ApplicationCallback<Object> callback = (ApplicationCallback<Object>) entry.spec().mod();
+            callback.stop(entry.state());
+        }
+
+        // Re-start with the preserved RunType
+        start(name, runType);
+    }
+
     // ── Stop ───────────────────────────────────────────────────────────────────
 
     /**
@@ -379,6 +416,21 @@ public final class ApplicationController {
     }
 
     /**
+     * Get an application environment parameter, returning a default value if absent.
+     *
+     * <p>Equivalent to Erlang's {@code application:get_env(App, Par, Default)}. The priority order
+     * is the same as {@link #getEnv(String, String)}: runtime overrides beat the spec's env map.
+     *
+     * @param app the application name
+     * @param key the parameter key
+     * @param defaultValue the value to return when the key is not present
+     * @return the value if found, {@code defaultValue} otherwise
+     */
+    public static Object getEnv(String app, String key, Object defaultValue) {
+        return getEnv(app, key).orElse(defaultValue);
+    }
+
+    /**
      * Set (or override) an application environment parameter at runtime.
      *
      * <p>Equivalent to Erlang's {@code application:set_env/3}. The override persists until {@link
@@ -390,6 +442,83 @@ public final class ApplicationController {
      */
     public static void setEnv(String app, String key, Object value) {
         envOverrides.computeIfAbsent(app, _ -> new ConcurrentHashMap<>()).put(key, value);
+    }
+
+    /**
+     * Remove a runtime environment override for an application parameter.
+     *
+     * <p>Equivalent to Erlang's {@code application:unset_env/2}. After calling this method,
+     * subsequent calls to {@link #getEnv(String, String)} will fall through to the spec's original
+     * {@link ApplicationSpec#env() env} map (or return empty if the key was also absent there).
+     *
+     * <p>Calling this method for a key that was never set is a no-op.
+     *
+     * @param app the application name
+     * @param key the parameter key to remove
+     */
+    public static void unsetEnv(String app, String key) {
+        var overrides = envOverrides.get(app);
+        if (overrides != null) {
+            overrides.remove(key);
+        }
+    }
+
+    // ── Spec key lookup ────────────────────────────────────────────────────────
+
+    /**
+     * Retrieve a field from an application's {@link ApplicationSpec} by name.
+     *
+     * <p>Equivalent to Erlang's {@code application:get_key(App, Key)}. Supported key names mirror
+     * the fields of an Erlang {@code .app} file:
+     *
+     * <ul>
+     *   <li>{@code "description"} — {@link ApplicationSpec#description()}
+     *   <li>{@code "vsn"} — {@link ApplicationSpec#vsn()}
+     *   <li>{@code "modules"} — {@link ApplicationSpec#modules()} (returns {@code List<String>})
+     *   <li>{@code "registered"} — {@link ApplicationSpec#registered()} (returns {@code
+     *       List<String>})
+     *   <li>{@code "applications"} — {@link ApplicationSpec#applications()} (returns {@code
+     *       List<String>})
+     *   <li>{@code "env"} — {@link ApplicationSpec#env()} (returns {@code Map<String,Object>})
+     *   <li>{@code "mod"} — {@link ApplicationSpec#mod()} (returns the callback; may be {@code
+     *       null} for library applications)
+     *   <li>{@code "start_args"} — {@link ApplicationSpec#startArgs()}
+     * </ul>
+     *
+     * @param app the application name (must be loaded)
+     * @param key the spec field name
+     * @return {@code Optional.of(value)} if the application is loaded and the key is recognised,
+     *     {@code Optional.empty()} if the application is not loaded or the key is unknown
+     */
+    public static Optional<Object> getKey(String app, String key) {
+        ApplicationSpec spec = resolveSpec(app);
+        if (spec == null) {
+            return Optional.empty();
+        }
+        return switch (key) {
+            case "description" -> Optional.of(spec.description());
+            case "vsn" -> Optional.of(spec.vsn());
+            case "modules" -> Optional.of(spec.modules());
+            case "registered" -> Optional.of(spec.registered());
+            case "applications" -> Optional.of(spec.applications());
+            case "env" -> Optional.of(spec.env());
+            case "mod" -> Optional.ofNullable(spec.mod());
+            case "start_args" -> Optional.ofNullable(spec.startArgs());
+            default -> Optional.empty();
+        };
+    }
+
+    /**
+     * Resolve the {@link ApplicationSpec} for an application by checking the running registry first
+     * (to get the live spec) and falling back to the loaded registry.
+     */
+    private static ApplicationSpec resolveSpec(String app) {
+        RunningEntry runEntry = running.get(app);
+        if (runEntry != null) {
+            return runEntry.spec();
+        }
+        LoadedEntry loadEntry = loaded.get(app);
+        return loadEntry != null ? loadEntry.spec() : null;
     }
 
     // ── Test support ───────────────────────────────────────────────────────────
