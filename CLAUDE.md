@@ -323,7 +323,7 @@ Details on each primitive:
 
 - `Proc<S,M>` — lightweight process: virtual-thread mailbox + pure state handler (OTP: `spawn/3`)
 - `ProcRef<S,M>` — stable Pid: opaque handle that survives supervisor restarts
-- `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window
+- `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE / SIMPLE_ONE_FOR_ONE (dynamic homogeneous pools) with sliding restart window; per-child `ChildSpec<S,M>` declares `RestartType` (PERMANENT/TRANSIENT/TEMPORARY), `Shutdown` (BrutalKill/Timeout/Infinity), and `ChildType` (WORKER/SUPERVISOR); `AutoShutdown` (NEVER/ANY_SIGNIFICANT/ALL_SIGNIFICANT) controls supervisor lifecycle on significant-child exit; dynamic management via `startChild(ChildSpec)`, `startChild()`, `terminateChild(id)`, `terminateChild(ref)`, `deleteChild(id)`, `whichChildren()`; factory methods `Supervisor.create()` and `Supervisor.createSimple()`
 - `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads
 - `StateMachine<S,E,D>` — gen_statem full parity: `SMEvent<E>` sealed hierarchy (User, StateTimeout, EventTimeout, GenericTimeout, Internal, Enter); `Action` sealed hierarchy (Postpone, NextEvent, Set/CancelStateTimeout, Set/CancelEventTimeout, Set/CancelGenericTimeout, Reply); `Transition` variants (NextState, KeepState, RepeatState, Stop, StopAndReply all with `actions()`); `TransitionFn<S,E,D>` with `apply(S, SMEvent<E>, D)`; builder with `withStateEnter()`; engine: insertedEvents priority queue, EventTimeout auto-cancel on any event, StateTimeout stale-discard on state change, postpone/replay across state transitions
 - `ProcLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)

@@ -179,7 +179,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("request returns reply synchronously")
-        void syncRequest() {
+        void syncRequest() throws InterruptedException {
             var server =
                     RequestReply.server(
                             "",

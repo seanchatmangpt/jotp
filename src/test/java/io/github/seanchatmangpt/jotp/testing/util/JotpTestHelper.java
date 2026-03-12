@@ -118,7 +118,9 @@ public class JotpTestHelper {
 
         for (int i = 0; i < components.length; i++) {
             try {
-                values[i] = components[i].getAccessor().invoke(record);
+                var accessor = components[i].getAccessor();
+                accessor.setAccessible(true);
+                values[i] = accessor.invoke(record);
             } catch (Exception e) {
                 values[i] = null;
             }
