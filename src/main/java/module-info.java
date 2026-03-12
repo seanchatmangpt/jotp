@@ -1,4 +1,5 @@
 module io.github.seanchatmangpt.jotp {
+    requires java.management;
     // Local exports
     exports io.github.seanchatmangpt.jotp;
     exports io.github.seanchatmangpt.jotp.reactive;

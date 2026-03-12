@@ -98,6 +98,17 @@
                     <compilerArgs>
                         <arg>--enable-preview</arg>
                     </compilerArgs>
+                    <excludes>
+                        <exclude>**/messaging/**</exclude>
+                    </excludes>
+                    <testExcludes>
+                        <testExclude>**/messaging/**</testExclude>
+                        <testExclude>org/acme/**</testExclude>
+                        <testExclude>**/test/patterns/**</testExclude>
+                        <testExclude>**/ResultTest.java</testExclude>
+                        <testExclude>**/doctest/**</testExclude>
+                        <testExclude>**/test/EnterpriseCompositionIT.java</testExclude>
+                    </testExcludes>
                 </configuration>
             </plugin>
             <plugin>

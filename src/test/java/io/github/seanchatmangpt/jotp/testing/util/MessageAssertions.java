@@ -141,7 +141,9 @@ public class MessageAssertions {
       for (var component : components) {
         if (component.getName().equals(fieldName)) {
           try {
-            return component.getAccessor().invoke(obj);
+            var accessor = component.getAccessor();
+            accessor.setAccessible(true);
+            return accessor.invoke(obj);
           } catch (Exception e) {
             return null;
           }
