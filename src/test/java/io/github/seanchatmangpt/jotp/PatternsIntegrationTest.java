@@ -31,7 +31,7 @@ class PatternsIntegrationTest {
     private EcommerceOrderService.PaymentService paymentService;
     private EcommerceOrderService.InventoryService inventoryService;
     private EcommerceOrderService.ShippingService shippingService;
-    private EventSourcingAuditLog<EcommerceOrderService.OrderState> auditLog;
+    private Proc<Void, EcommerceOrderService.OrderEvent> auditLog;
 
     @BeforeEach
     void setUp() {
@@ -39,7 +39,7 @@ class PatternsIntegrationTest {
                 new EcommerceOrderService.PaymentService("payment", 5, Duration.ofSeconds(60));
         inventoryService = new EcommerceOrderService.InventoryService("inventory", 5, 100);
         shippingService = new EcommerceOrderService.ShippingService();
-        auditLog = new EventSourcingAuditLog<>("test-audit", new TestAuditBackend());
+        auditLog = Proc.spawn(null, (state, event) -> state);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -141,11 +141,22 @@ class PatternsIntegrationTest {
             assertThat(result.isSuccess() || result.isFailure()).isTrue();
 
             if (result.isSuccess()) {
-                var outcome = result.successValue().orElseThrow();
+                var outcome = result.orElseThrow();
                 assertThat(outcome.orderId()).isEqualTo("ORD-" + i);
                 System.out.println("✅ Order " + outcome.orderId() + " succeeded");
             } else {
-                var error = result.failureReason().orElseThrow();
+                var error =
+                        switch (result) {
+                            case Result.Err<
+                                            EcommerceOrderService.SagaOutcome,
+                                            EcommerceOrderService.SagaError>(var e) ->
+                                    e;
+                            case Result.Failure<
+                                            EcommerceOrderService.SagaOutcome,
+                                            EcommerceOrderService.SagaError>(var e) ->
+                                    e;
+                            default -> throw new IllegalStateException("unexpected result");
+                        };
                 assertThat(error.message()).isNotEmpty();
                 System.out.println("❌ Order failed: " + error.message());
             }
@@ -181,7 +192,18 @@ class PatternsIntegrationTest {
 
         // Should fail gracefully due to payment service circuit breaker
         assertThat(result.isFailure()).isTrue();
-        var error = result.failureReason().orElseThrow();
+        var error =
+                switch (result) {
+                    case Result.Err<
+                                    EcommerceOrderService.SagaOutcome,
+                                    EcommerceOrderService.SagaError>(var e) ->
+                            e;
+                    case Result.Failure<
+                                    EcommerceOrderService.SagaOutcome,
+                                    EcommerceOrderService.SagaError>(var e) ->
+                            e;
+                    default -> throw new IllegalStateException("unexpected result");
+                };
         assertThat(error.message()).contains("Payment");
 
         System.out.println("✅ Graceful degradation test passed: " + error.message());
@@ -214,7 +236,18 @@ class PatternsIntegrationTest {
         for (int i = 0; i < 10; i++) {
             var result = coordinator.executeOrderCreation(orderData);
             if (result.isFailure()) {
-                var error = result.failureReason().orElseThrow();
+                var error =
+                        switch (result) {
+                            case Result.Err<
+                                            EcommerceOrderService.SagaOutcome,
+                                            EcommerceOrderService.SagaError>(var e) ->
+                                    e;
+                            case Result.Failure<
+                                            EcommerceOrderService.SagaOutcome,
+                                            EcommerceOrderService.SagaError>(var e) ->
+                                    e;
+                            default -> throw new IllegalStateException("unexpected result");
+                        };
                 // Verify compensations were applied in reverse order
                 if (!error.compensations().isEmpty()) {
                     // Last compensation should be payment refund (first in LIFO)
@@ -264,18 +297,23 @@ class PatternsIntegrationTest {
     // Test Utilities
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
 
-    private static class TestAuditBackend
-            implements EventSourcingAuditLog.AuditBackend<EcommerceOrderService.OrderState> {
-        private final List<Object> entries = new java.util.ArrayList<>();
+    private static class TestAuditBackend implements EventSourcingAuditLog.AuditBackend {
+        private final List<EventSourcingAuditLog.AuditEntry> entries = new java.util.ArrayList<>();
 
         @Override
-        public void append(Object auditEntry) {
-            entries.add(auditEntry);
+        public void append(EventSourcingAuditLog.AuditEntry entry) {
+            entries.add(entry);
         }
 
         @Override
-        public List<Object> getAll() {
-            return new java.util.ArrayList<>(entries);
+        public java.util.stream.Stream<EventSourcingAuditLog.AuditEntry> entriesFor(
+                String entityId) {
+            return entries.stream().filter(e -> e.entityId().equals(entityId));
+        }
+
+        @Override
+        public void close() {
+            entries.clear();
         }
 
         @Override

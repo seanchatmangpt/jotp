@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;
-import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import java.time.Duration;
 import java.util.*;
@@ -24,11 +23,11 @@ public final class ProcessMonitoringExample {
 
     // Sealed monitoring events
     sealed interface MonitoringEvent {
-        record ProcessDown(ProcRef<WorkerState, WorkerMessage> worker, String reason)
+        record ProcessDown(Proc<WorkerState, WorkerMessage> worker, String reason)
                 implements MonitoringEvent {}
 
         record WorkerStats(
-                ProcRef<WorkerState, WorkerMessage> worker,
+                Proc<WorkerState, WorkerMessage> worker,
                 long messagesReceived,
                 long queueDepth,
                 WorkerState currentState)
@@ -70,10 +69,10 @@ public final class ProcessMonitoringExample {
                         worker.proc(),
                         reason -> {
                             String reasonStr = reason == null ? "normal" : reason.getMessage();
-                            dashProc.tell(new DashboardMessage.WorkerDown(worker, reasonStr));
+                            dashProc.tell(new DashboardMessage.WorkerDown(worker.proc(), reasonStr));
                         });
                 var newWorkers = new HashMap<>(state.workers());
-                newWorkers.put(worker, name);
+                newWorkers.put(worker.proc(), name);
                 yield new DashboardState(
                         newWorkers, state.downNotifications(), state.statsCollected());
             }
@@ -101,7 +100,7 @@ public final class ProcessMonitoringExample {
     }
 
     record DashboardState(
-            Map<ProcRef<WorkerState, WorkerMessage>, String> workers,
+            Map<Proc<WorkerState, WorkerMessage>, String> workers,
             List<String> downNotifications,
             List<String> statsCollected) {}
 
@@ -116,7 +115,7 @@ public final class ProcessMonitoringExample {
                 Proc<DashboardState, DashboardMessage> dashProc)
                 implements DashboardMessage {}
 
-        record WorkerDown(ProcRef<WorkerState, WorkerMessage> worker, String reason)
+        record WorkerDown(Proc<WorkerState, WorkerMessage> worker, String reason)
                 implements DashboardMessage {}
 
         record CollectStats() implements DashboardMessage {}

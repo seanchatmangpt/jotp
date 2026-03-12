@@ -86,7 +86,7 @@ class ProcTest {
     @DisplayName("tell(): Fire-and-forget message delivery")
     void testTellFireAndForget() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) return state + 1;
                     return state;
                 };
@@ -109,7 +109,7 @@ class ProcTest {
     @DisplayName("ask(): Request-reply with future completion")
     void testAskRequestReply() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) return state + 1;
                     return state;
                 };
@@ -129,7 +129,7 @@ class ProcTest {
     @DisplayName("ask(msg, timeout): Timed request-reply")
     void testAskWithTimeout() throws Exception {
         BiFunction<Integer, TestMsg, Integer> slowHandler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Timeout t) {
                         try {
                             Thread.sleep(t.delayMs());
@@ -163,7 +163,7 @@ class ProcTest {
     void testMailboxOrdering() throws Exception {
         var received = new CopyOnWriteArrayList<Integer>();
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Echo e) {
                         try {
                             received.add(Integer.parseInt(e.value()));
@@ -196,7 +196,7 @@ class ProcTest {
     void testConcurrentSenders() throws Exception {
         var messageCount = new AtomicInteger(0);
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) {
                         messageCount.incrementAndGet();
                         return state + 1;
@@ -241,7 +241,7 @@ class ProcTest {
     void testCrashCallbackFiredOnException() throws Exception {
         var crashFired = new CountDownLatch(1);
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Crash)
                         throw new RuntimeException("intentional crash");
                     return state;
@@ -264,7 +264,7 @@ class ProcTest {
     @DisplayName("Crash callback: Not fired on normal exit")
     void testCrashCallbackNotFiredOnNormalExit() throws Exception {
         var crashFired = new AtomicBoolean(false);
-        BiFunction<Integer, TestMsg, Integer> handler = (Integer state, TestMsg msg) -> state;
+        BiFunction<Integer, TestMsg, Integer> handler = (state, msg) -> state;
 
         var proc = new Proc<>(0, handler);
         proc.addCrashCallback(() -> crashFired.set(true));
@@ -280,7 +280,7 @@ class ProcTest {
     void testMultipleCrashCallbacks() throws Exception {
         var count = new AtomicInteger(0);
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Crash) throw new RuntimeException("crash");
                     return state;
                 };
@@ -306,7 +306,7 @@ class ProcTest {
     void testExitSignalTrapAsMessage() throws Exception {
         var received = new AtomicBoolean(false);
         BiFunction<Integer, Object, Integer> handler =
-                (Integer state, Object msg) -> {
+                (state, msg) -> {
                     if (msg instanceof ExitSignal sig) {
                         received.set(true);
                         return state;
@@ -329,7 +329,7 @@ class ProcTest {
     @DisplayName("trapExits(false): EXIT signals interrupt immediately")
     void testExitSignalKillsImmediately() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     try {
                         Thread.sleep(1000); // Long operation
                     } catch (InterruptedException e) {
@@ -376,7 +376,7 @@ class ProcTest {
     void testTerminationCallbackNormalExit() throws Exception {
         var callbackFired = new CountDownLatch(1);
         var reason = new AtomicReference<Throwable>();
-        BiFunction<Integer, TestMsg, Integer> handler = (Integer state, TestMsg msg) -> state;
+        BiFunction<Integer, TestMsg, Integer> handler = (state, msg) -> state;
 
         var proc = new Proc<>(0, handler);
         proc.addTerminationCallback(
@@ -398,7 +398,7 @@ class ProcTest {
         var callbackFired = new CountDownLatch(1);
         var reason = new AtomicReference<Throwable>();
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Crash) throw new RuntimeException("crash");
                     return state;
                 };
@@ -427,7 +427,7 @@ class ProcTest {
     @DisplayName("lastError: Set before crash callbacks fire")
     void testLastErrorSet() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Crash) throw new RuntimeException("test error");
                     return state;
                 };
@@ -470,7 +470,7 @@ class ProcTest {
     @DisplayName("Message statistics: messagesIn increments correctly")
     void testMessageStatistics() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) return state + 1;
                     return state;
                 };
@@ -496,7 +496,7 @@ class ProcTest {
     @DisplayName("Empty mailbox: Process waits for messages")
     void testEmptyMailboxWait() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) return state + 1;
                     return state;
                 };
@@ -519,7 +519,7 @@ class ProcTest {
     @DisplayName("Handler exception: Process terminates abnormally")
     void testHandlerException() throws Exception {
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Crash) throw new RuntimeException("handler error");
                     return state;
                 };
@@ -541,7 +541,7 @@ class ProcTest {
     void testRapidMessageFire() throws Exception {
         var counter = new AtomicInteger(0);
         BiFunction<Integer, TestMsg, Integer> handler =
-                (Integer state, TestMsg msg) -> {
+                (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) {
                         counter.incrementAndGet();
                         return state + 1;
@@ -570,7 +570,11 @@ class ProcTest {
         record TestState(int value, String label) {}
 
         BiFunction<TestState, TestMsg, TestState> handler =
+<<<<<<< HEAD
+                (state, msg) -> {
+=======
                 (TestState state, TestMsg msg) -> {
+>>>>>>> origin/main
                     if (msg instanceof TestMsg.Increment) {
                         return new TestState(state.value + 1, "incremented");
                     }

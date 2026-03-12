@@ -3,6 +3,8 @@ package io.github.seanchatmangpt.jotp.test;
 import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -18,7 +20,7 @@ import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 
 /**
- * Armstrong's registry race condition stress tests — breaking points of {@link ProcessRegistry}.
+ * Armstrong's registry race condition stress tests — breaking points of {@link ProcRegistry}.
  *
  * <p>Joe Armstrong: <em>"A global name registry is a shared mutable resource. Every concurrent
  * access is a potential race. The question is not whether races occur but whether they corrupt
@@ -43,7 +45,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * </ol>
  */
 @Timeout(30)
-@Execution(ExecutionMode.SAME_THREAD) // Isolate from parallel tests due to global ProcessRegistry
+@Execution(ExecutionMode.SAME_THREAD) // Isolate from parallel tests due to global ProcRegistry
 class RegistryRaceStressTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Noop, Msg.Crash {

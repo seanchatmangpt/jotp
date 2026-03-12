@@ -309,7 +309,7 @@
                     <java>
                         <excludes>
                             <!-- sealed local classes not supported by google-java-format -->
-                            <exclude>src/main/java/io/github/seanchatmangpt/jotp/FactoryMethodPatterns.java</exclude>
+                            <exclude>**/FactoryMethodPatterns.java</exclude>
                             <!-- Exclude test files with syntax errors that google-java-format cannot parse -->
                             <exclude>src/test/java/io/github/seanchatmangpt/jotp/test/ProcLinkTest.java</exclude>
                             <exclude>src/test/java/io/github/seanchatmangpt/jotp/test/ProcRegistryTest.java</exclude>

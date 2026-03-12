@@ -73,8 +73,8 @@ public final class SelectiveConsumer {
     }
 
     /**
-     * Creates a selective consumer registered by name in ProcessRegistry. Other processes can look
-     * it up with whereis(name).
+     * Creates a selective consumer registered by name in ProcRegistry. Other processes can look it
+     * up with whereis(name).
      *
      * @param consumerName Registry name
      * @param selector Predicate for message selection
@@ -92,7 +92,7 @@ public final class SelectiveConsumer {
             proc = PROC_MAP.get(consumer);
         }
         if (proc != null) {
-            ProcessRegistry.register(consumerName, proc);
+            ProcRegistry.register(consumerName, proc);
         }
         return consumer;
     }

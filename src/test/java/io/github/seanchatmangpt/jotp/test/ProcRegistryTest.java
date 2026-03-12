@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Timeout;
  * </ol>
  */
 @Timeout(10)
-class ProcessRegistryTest implements WithAssertions {
+class ProcRegistryTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Ping, Msg.Crash {
         record Ping() implements Msg {}

@@ -2,7 +2,7 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
 import java.util.List;
@@ -51,7 +51,7 @@ public class RoutingPatternsDemo {
                             System.out.println("  -> Order Service received: " + msg);
                             return state;
                         });
-        ProcessRegistry.register("order-service", orderProc);
+        ProcRegistry.register("order-service", orderProc);
 
         Proc<List<String>, String> paymentProc =
                 new Proc<>(
@@ -61,7 +61,7 @@ public class RoutingPatternsDemo {
                             System.out.println("  -> Payment Service received: " + msg);
                             return state;
                         });
-        ProcessRegistry.register("payment-service", paymentProc);
+        ProcRegistry.register("payment-service", paymentProc);
 
         Proc<List<String>, String> shippingProc =
                 new Proc<>(
@@ -71,7 +71,7 @@ public class RoutingPatternsDemo {
                             System.out.println("  -> Shipping Service received: " + msg);
                             return state;
                         });
-        ProcessRegistry.register("shipping-service", shippingProc);
+        ProcRegistry.register("shipping-service", shippingProc);
 
         // Create dynamic router with type-based resolver
         DynamicRouter<String> router =
@@ -112,9 +112,9 @@ public class RoutingPatternsDemo {
         System.out.println("  Shipping Service: " + shippingService.size() + " messages");
 
         // Cleanup
-        ProcessRegistry.unregister("order-service");
-        ProcessRegistry.unregister("payment-service");
-        ProcessRegistry.unregister("shipping-service");
+        ProcRegistry.unregister("order-service");
+        ProcRegistry.unregister("payment-service");
+        ProcRegistry.unregister("shipping-service");
     }
 
     /** Demonstrates RecipientListRouter: fan-out to multiple recipients. */
@@ -194,8 +194,8 @@ public class RoutingPatternsDemo {
         System.out.println("  All processed: " + allProcessed);
 
         // Cleanup
-        ProcessRegistry.unregister("audit-service");
-        ProcessRegistry.unregister("notification-service");
-        ProcessRegistry.unregister("analytics-service");
+        ProcRegistry.unregister("audit-service");
+        ProcRegistry.unregister("notification-service");
+        ProcRegistry.unregister("analytics-service");
     }
 }

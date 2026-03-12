@@ -54,7 +54,7 @@ import org.junit.jupiter.api.Timeout;
  * <ol>
  *   <li>{@link AcquisitionSupervisor} — 1 K ONE_FOR_ONE supervised {@code ParameterDataAccess}
  *       processes; 1 M live ECU samples pushed via {@link AcquisitionSupervisor#addSamples}
- *   <li>{@link ProcessRegistry} — 1 K registered {@link PdaMsg}-typed procs; 1 M concurrent {@code
+ *   <li>{@link ProcRegistry} — 1 K registered {@link PdaMsg}-typed procs; 1 M concurrent {@code
  *       whereis()} lookups followed by {@link PdaMsg.AddSamples} fire-and-forget
  *   <li>{@link SqlRaceSession} — 1 K session state machines configured and moved to {@code Live}; 1
  *       M concurrent {@link SqlRaceSessionEvent.AddLap} events; exact lap count verified
@@ -235,7 +235,7 @@ class AtlasOtpStressTest implements WithAssertions {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // Test 2 — ProcessRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
+    // Test 2 — ProcRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
@@ -281,7 +281,7 @@ class AtlasOtpStressTest implements WithAssertions {
 
         assertThat(errors.get()).as("no lookup should throw").isZero();
         assertThat(empties.get())
-                .as("every PDA proc must be found — ProcessRegistry must return no stale entries")
+                .as("every PDA proc must be found — ProcRegistry must return no stale entries")
                 .isZero();
 
         // Drain: ask(Clear) enqueued AFTER all AddSamples — FIFO guarantees exact count.
@@ -300,7 +300,7 @@ class AtlasOtpStressTest implements WithAssertions {
                         .orElse(0L);
 
         assertThat(totalDelivered)
-                .as("ProcessRegistry must route all 1 M PdaMsg.AddSamples to live procs")
+                .as("ProcRegistry must route all 1 M PdaMsg.AddSamples to live procs")
                 .isEqualTo(N);
 
         for (var p : procs) p.stop();

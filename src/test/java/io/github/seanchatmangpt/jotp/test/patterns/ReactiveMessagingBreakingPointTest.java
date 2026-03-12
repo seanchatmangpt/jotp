@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcLink;
+import io.github.seanchatmangpt.jotp.ProcMonitor;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import java.util.ArrayList;
 import java.util.HashMap;

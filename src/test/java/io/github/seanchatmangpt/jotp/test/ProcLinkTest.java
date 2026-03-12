@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Timeout;
  * </ol>
  */
 @Timeout(10)
-class ProcessLinkTest implements WithAssertions {
+class ProcLinkTest implements WithAssertions {
 
     sealed interface Msg permits Msg.Inc, Msg.Boom, Msg.Ping {
         record Inc() implements Msg {}
@@ -45,8 +45,8 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void link_crashA_interruptsB() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
         ProcLink.link(a, b);
         a.tell(new Msg.Boom());
         await().atMost(Duration.ofSeconds(2)).until(() -> !b.thread().isAlive());
@@ -54,8 +54,8 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void link_crashB_interruptsA() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
         ProcLink.link(a, b);
         b.tell(new Msg.Boom());
         await().atMost(Duration.ofSeconds(2)).until(() -> !a.thread().isAlive());
@@ -63,9 +63,11 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void link_normalStopA_doesNotAffectB() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
         ProcLink.link(a, b);
+
+        // Graceful stop of a — OTP: normal exit does not propagate
         a.stop();
         Thread.sleep(100);
         assertThat(b.thread().isAlive()).isTrue();
@@ -77,25 +79,25 @@ class ProcessLinkTest implements WithAssertions {
 
     @Test
     void spawnLink_parentCrash_killsChild() throws Exception {
-        var parent = new Proc<>(0, ProcessLinkTest::handle);
-        var child = ProcLink.spawnLink(parent, 0, ProcessLinkTest::handle);
+        var parent = new Proc<>(0, ProcLinkTest::handle);
+        var child = ProcLink.spawnLink(parent, 0, ProcLinkTest::handle);
         parent.tell(new Msg.Boom());
         await().atMost(Duration.ofSeconds(2)).until(() -> !child.thread().isAlive());
     }
 
     @Test
     void spawnLink_childCrash_killsParent() throws Exception {
-        var parent = new Proc<>(0, ProcessLinkTest::handle);
-        var child = ProcLink.spawnLink(parent, 0, ProcessLinkTest::handle);
+        var parent = new Proc<>(0, ProcLinkTest::handle);
+        var child = ProcLink.spawnLink(parent, 0, ProcLinkTest::handle);
         child.tell(new Msg.Boom());
         await().atMost(Duration.ofSeconds(2)).until(() -> !parent.thread().isAlive());
     }
 
     @Test
     void linkChain_oneCrashPropagatesTransitively() throws Exception {
-        var a = new Proc<>(0, ProcessLinkTest::handle);
-        var b = new Proc<>(0, ProcessLinkTest::handle);
-        var c = new Proc<>(0, ProcessLinkTest::handle);
+        var a = new Proc<>(0, ProcLinkTest::handle);
+        var b = new Proc<>(0, ProcLinkTest::handle);
+        var c = new Proc<>(0, ProcLinkTest::handle);
         ProcLink.link(a, b);
         ProcLink.link(b, c);
         a.tell(new Msg.Boom());

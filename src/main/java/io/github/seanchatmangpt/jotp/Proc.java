@@ -107,6 +107,21 @@ public final class Proc<S, M> {
     private final List<Consumer<Throwable>> terminationCallbacks = new CopyOnWriteArrayList<>();
 
     /**
+     * Static factory: create and start a process — mirrors Erlang's {@code spawn/3}.
+     *
+     * <p>Prefer this factory over the constructor in new code.
+     *
+     * @param initial initial state
+     * @param handler {@code (state, message) -> nextState} — pure function, no side-effects
+     * @param <S> state type
+     * @param <M> message type
+     * @return a new running process
+     */
+    public static <S, M> Proc<S, M> spawn(S initial, BiFunction<S, M, S> handler) {
+        return new Proc<>(initial, handler);
+    }
+
+    /**
      * Create and start a process.
      *
      * <p><strong>Java 26 Implementation Notes:</strong>

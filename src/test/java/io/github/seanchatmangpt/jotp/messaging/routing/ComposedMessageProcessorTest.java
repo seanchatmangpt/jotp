@@ -15,9 +15,11 @@ class ComposedMessageProcessorTest {
     @DisplayName("should compose multiple routers sequentially")
     void testComposedRouters() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(
-                        msg -> msg.trim(), msg -> msg.toUpperCase(), msg -> msg + "!");
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose(
+                        (String msg) -> msg.trim(),
+                        (String msg) -> msg.toUpperCase(),
+                        (String msg) -> msg + "!");
 
         // Act
         String result = processor.apply("  hello world  ");
@@ -30,10 +32,10 @@ class ComposedMessageProcessorTest {
     @DisplayName("should apply filters and reject non-matching messages")
     void testFiltering() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.trim())
-                        .thenFilter(msg -> !msg.isEmpty())
-                        .thenFilter(msg -> msg.length() > 2);
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.trim())
+                        .thenFilter((String msg) -> !msg.isEmpty())
+                        .thenFilter((String msg) -> msg.length() > 2);
 
         // Act & Assert
         assertThat(processor.apply("hi")).isNull(); // Too short
@@ -45,7 +47,8 @@ class ComposedMessageProcessorTest {
     @DisplayName("should support null messages in apply")
     void testNullHandling() {
         // Arrange
-        var processor = ComposedMessageProcessor.compose(String::toUpperCase);
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.toUpperCase());
 
         // Act & Assert
         assertThat(processor.apply(null)).isNull();
@@ -55,13 +58,14 @@ class ComposedMessageProcessorTest {
     @DisplayName("should chain multiple processors with andThen")
     void testChaining() {
         // Arrange
-        var first =
-                ComposedMessageProcessor.compose(msg -> msg.trim())
-                        .thenFilter(msg -> !msg.isEmpty());
+        ComposedMessageProcessor<String> first =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.trim())
+                        .thenFilter((String msg) -> !msg.isEmpty());
 
-        var second = ComposedMessageProcessor.compose(msg -> msg.toUpperCase());
+        ComposedMessageProcessor<String> second =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.toUpperCase());
 
-        var combined = first.andThen(second);
+        ComposedMessageProcessor<String> combined = first.andThen(second);
 
         // Act
         String result = combined.apply("  hello  ");
@@ -75,10 +79,10 @@ class ComposedMessageProcessorTest {
     void testPeek() {
         // Arrange
         List<String> observed = new ArrayList<>();
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.toUpperCase())
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.toUpperCase())
                         .peek(observed::add)
-                        .thenRoute(msg -> msg + "!");
+                        .thenRoute((String msg) -> msg + "!");
 
         // Act
         String result = processor.apply("hello");
@@ -92,9 +96,9 @@ class ComposedMessageProcessorTest {
     @DisplayName("should support Optional wrapper with applyOptional")
     void testApplyOptional() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.trim())
-                        .thenFilter(msg -> msg.length() > 3);
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.trim())
+                        .thenFilter((String msg) -> msg.length() > 3);
 
         // Act
         Optional<String> result1 = processor.applyOptional("hello");
@@ -109,9 +113,10 @@ class ComposedMessageProcessorTest {
     @DisplayName("should execute routers before filters")
     void testRouterBeforeFilter() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.trim(), msg -> msg.toUpperCase())
-                        .thenFilter(msg -> msg.startsWith("HELLO"));
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose(
+                                (String msg) -> msg.trim(), (String msg) -> msg.toUpperCase())
+                        .thenFilter((String msg) -> msg.startsWith("HELLO"));
 
         // Act
         String result = processor.apply("  hello world  ");
@@ -126,19 +131,19 @@ class ComposedMessageProcessorTest {
         // Arrange
         List<String> trace = new ArrayList<>();
 
-        var processor =
-                ComposedMessageProcessor.compose(
-                                msg -> {
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose(
+                                (String msg) -> {
                                     trace.add("router");
                                     return msg.toUpperCase();
                                 })
                         .thenFilter(
-                                msg -> {
+                                (String msg) -> {
                                     trace.add("filter1");
                                     return msg.contains("X");
                                 })
                         .thenFilter(
-                                msg -> {
+                                (String msg) -> {
                                     trace.add("filter2");
                                     return true;
                                 });
@@ -156,8 +161,9 @@ class ComposedMessageProcessorTest {
     @DisplayName("should handle compose with null routers (skip them)")
     void testComposeWithNullRouters() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.trim(), null, msg -> msg.toUpperCase());
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose(
+                        (String msg) -> msg.trim(), null, (String msg) -> msg.toUpperCase());
 
         // Act
         String result = processor.apply("  hello  ");
@@ -172,15 +178,16 @@ class ComposedMessageProcessorTest {
         // Arrange
         record Order(String item, int quantity) {}
 
-        var processor =
+        ComposedMessageProcessor<Order> processor =
                 ComposedMessageProcessor.<Order>compose(
-                                order -> new Order(order.item().toUpperCase(), order.quantity()))
-                        .thenFilter(order -> order.quantity > 0)
+                                (Order order) ->
+                                        new Order(order.item().toUpperCase(), order.quantity()))
+                        .thenFilter((Order order) -> order.quantity() > 0)
                         .thenRoute(
-                                order ->
+                                (Order order) ->
                                         new Order(
-                                                order.item + " [Q:" + order.quantity + "]",
-                                                order.quantity));
+                                                order.item() + " [Q:" + order.quantity() + "]",
+                                                order.quantity()));
 
         // Act
         Order input = new Order("apple", 5);
@@ -194,14 +201,14 @@ class ComposedMessageProcessorTest {
     @DisplayName("should maintain message integrity through multi-stage pipeline")
     void testMultiStagePipeline() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(
-                                msg -> msg.replaceAll("\\s+", " "), // Normalize spaces
-                                msg -> msg.trim() // Trim ends
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose(
+                                (String msg) -> msg.replaceAll("\\s+", " "), // Normalize spaces
+                                (String msg) -> msg.trim() // Trim ends
                                 )
-                        .thenFilter(msg -> msg.length() >= 5) // Min length
-                        .thenFilter(msg -> !msg.startsWith("ERROR")) // Reject errors
-                        .thenRoute(msg -> "[PROCESSED] " + msg);
+                        .thenFilter((String msg) -> msg.length() >= 5) // Min length
+                        .thenFilter((String msg) -> !msg.startsWith("ERROR")) // Reject errors
+                        .thenRoute((String msg) -> "[PROCESSED] " + msg);
 
         // Act & Assert
         assertThat(processor.apply("  hello   world  ")).isEqualTo("[PROCESSED] hello world");
@@ -213,12 +220,13 @@ class ComposedMessageProcessorTest {
     @DisplayName("should compose message routers for declarative DSL")
     void testDeclarativeDSL() {
         // Arrange: Build a message routing DSL
-        var processor =
-                ComposedMessageProcessor.compose(
-                                msg -> msg.toLowerCase(), // Normalize case
-                                msg -> msg.replaceAll("[^a-z0-9 ]", "")) // Remove special chars
-                        .thenFilter(msg -> !msg.isBlank()) // Reject blank
-                        .thenRoute(msg -> "[ROUTED] " + msg);
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose(
+                                (String msg) -> msg.toLowerCase(), // Normalize case
+                                (String msg) ->
+                                        msg.replaceAll("[^a-z0-9 ]", "")) // Remove special chars
+                        .thenFilter((String msg) -> !msg.isBlank()) // Reject blank
+                        .thenRoute((String msg) -> "[ROUTED] " + msg);
 
         // Act
         String result = processor.apply("Hello-World_123!");
@@ -231,10 +239,10 @@ class ComposedMessageProcessorTest {
     @DisplayName("should allow thenRoute null (skip it)")
     void testThenRouteNull() {
         // Arrange
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.toUpperCase())
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.toUpperCase())
                         .thenRoute(null) // Skip
-                        .thenRoute(msg -> msg + "!");
+                        .thenRoute((String msg) -> msg + "!");
 
         // Act
         String result = processor.apply("hello");
@@ -249,11 +257,11 @@ class ComposedMessageProcessorTest {
         // Arrange
         List<String> log = new ArrayList<>();
 
-        var processor =
-                ComposedMessageProcessor.compose(msg -> msg.toUpperCase())
-                        .peek(msg -> log.add("Step 1: " + msg))
-                        .thenRoute(msg -> msg + "!")
-                        .peek(msg -> log.add("Step 2: " + msg));
+        ComposedMessageProcessor<String> processor =
+                ComposedMessageProcessor.<String>compose((String msg) -> msg.toUpperCase())
+                        .peek((String msg) -> log.add("Step 1: " + msg))
+                        .thenRoute((String msg) -> msg + "!")
+                        .peek((String msg) -> log.add("Step 2: " + msg));
 
         // Act
         processor.apply("hello");

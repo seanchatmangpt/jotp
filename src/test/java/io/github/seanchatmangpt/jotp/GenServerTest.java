@@ -165,7 +165,7 @@ class GenServerTest {
 
         // Verify ordering
         var result =
-                server.<java.util.List<String>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
+                server.<List<String>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         assertThat(result).containsExactly("first", "second", "third");
 
         server.stop();
@@ -465,7 +465,7 @@ class GenServerTest {
         }
 
         var result =
-                server.<java.util.List<Integer>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
+                server.<List<Integer>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         // List should have exactly 5 elements (1, 2, 3, 4, 5)
         assertThat(result).hasSize(5).containsExactly(1, 2, 3, 4, 5);
 
@@ -556,7 +556,7 @@ class GenServerTest {
         // Launch 10 concurrent callers
         var futures = new ArrayList<CompletableFuture<Integer>>();
         for (int i = 0; i < 10; i++) {
-            var f =
+            CompletableFuture<Integer> f =
                     CompletableFuture.supplyAsync(
                             () -> {
                                 try {

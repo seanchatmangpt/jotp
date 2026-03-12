@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -52,8 +53,8 @@ class ApplicationTest {
 
         var phases = new CopyOnWriteArrayList<Application.ApplicationPhase>();
 
-        var app =
-                Application.builder("test-app") //
+        Application<AppState> app =
+                Application.<AppState>builder("test-app") //
                         .init(
                                 () -> {
                                     phases.add(new Application.ApplicationPhase.INIT());
@@ -78,8 +79,8 @@ class ApplicationTest {
     void testServiceLookup() throws Exception {
         record AppState(String name) {}
 
-        var handler =
-                (Integer state, TestMessage msg) -> {
+        BiFunction<Integer, TestMessage, Integer> handler =
+                (state, msg) -> {
                     if (msg instanceof TestMessage.Increment) return state + 1;
                     return state;
                 };
@@ -105,8 +106,8 @@ class ApplicationTest {
     void testMultipleServices() throws Exception {
         record AppState(String name) {}
 
-        var handler =
-                (Integer state, TestMessage msg) -> {
+        BiFunction<Integer, TestMessage, Integer> handler =
+                (state, msg) -> {
                     if (msg instanceof TestMessage.Increment) return state + 1;
                     return state;
                 };
@@ -136,8 +137,8 @@ class ApplicationTest {
     void testGracefulShutdown() throws Exception {
         record AppState(String name) {}
 
-        var handler =
-                (Integer state, TestMessage msg) -> {
+        BiFunction<Integer, TestMessage, Integer> handler =
+                (state, msg) -> {
                     if (msg instanceof TestMessage.Increment) return state + 1;
                     return state;
                 };
@@ -219,8 +220,8 @@ class ApplicationTest {
     void testStateManagement() throws Exception {
         record AppState(String name, int counter) {}
 
-        var app =
-                Application.builder("test-app") //
+        Application<AppState> app =
+                Application.<AppState>builder("test-app") //
                         .init(() -> new AppState("test-app", 42))
                         .build();
 
@@ -253,8 +254,8 @@ class ApplicationTest {
     void testBuilderPattern() throws Exception {
         record AppState(String config) {}
 
-        var app =
-                Application.builder("my-service") //
+        Application<AppState> app =
+                Application.<AppState>builder("my-service") //
                         .init(() -> new AppState("configured"))
                         .stop(
                                 state -> {
@@ -306,8 +307,8 @@ class ApplicationTest {
 
         var supervisor = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
 
-        var handler =
-                (Integer state, TestMessage msg) -> {
+        BiFunction<Integer, TestMessage, Integer> handler =
+                (state, msg) -> {
                     if (msg instanceof TestMessage.Increment) return state + 1;
                     return state;
                 };
@@ -336,8 +337,8 @@ class ApplicationTest {
 
         var receivedState = new AtomicBoolean(false);
 
-        var app =
-                Application.builder("test-app") //
+        Application<AppState> app =
+                Application.<AppState>builder("test-app") //
                         .init(() -> new AppState("test-app", 123))
                         .stop(
                                 state -> {
@@ -358,8 +359,8 @@ class ApplicationTest {
     void testServiceMessaging() throws Exception {
         record AppState(String name) {}
 
-        var handler =
-                (Integer state, TestMessage msg) -> {
+        BiFunction<Integer, TestMessage, Integer> handler =
+                (state, msg) -> {
                     if (msg instanceof TestMessage.Increment) return state + 1;
                     return state;
                 };

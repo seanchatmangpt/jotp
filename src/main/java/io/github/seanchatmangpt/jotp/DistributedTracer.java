@@ -520,4 +520,18 @@ public final class DistributedTracer implements Application.Infrastructure {
     public String name() {
         return name;
     }
+
+    @Override
+    public void onStop(Application<?> app) {
+        // End any span still active on the calling thread so it is captured before draining.
+        SpanImpl active = currentSpan.get();
+        if (active != null && active.isRecording()) {
+            active.end();
+        }
+        currentSpan.remove();
+
+        // Drain all completed spans; callers may have registered an export pipeline via
+        // exportSpans(), so we clear the queue to release references and avoid memory leaks.
+        completedSpans.clear();
+    }
 }

@@ -238,7 +238,17 @@ class EventSourcingAuditLogTest implements WithAssertions {
 
         // Act: replay transitions with a simple transition function
         var finalData =
-                log.replay(ENTITY_ID, new LockData(CODE, ""), (data, change) -> change.data());
+                log.streamHistory(ENTITY_ID)
+                        .filter(e -> e instanceof EventSourcingAuditLog.StateChange)
+                        .map(
+                                e ->
+                                        (EventSourcingAuditLog.StateChange<
+                                                        LockState, LockEvent, LockData>)
+                                                e)
+                        .reduce(
+                                new LockData(CODE, ""),
+                                (data, change) -> change.data(),
+                                (d1, d2) -> d2);
 
         // Assert: final state should match the last logged entry
         assertThat(finalData.entered()).isEmpty();
@@ -581,7 +591,7 @@ class EventSourcingAuditLogTest implements WithAssertions {
     void integration_auditLogWithStateMachine() throws InterruptedException {
         // Arrange
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, LockData>(
                         new LockState.Locked(),
                         new LockData(CODE, ""),
                         (state, event, data) ->
@@ -602,10 +612,14 @@ class EventSourcingAuditLogTest implements WithAssertions {
                                     case LockState.Open() ->
                                             switch (event) {
                                                 case LockEvent.Lock() ->
-                                                        StateMachine.Transition.nextState(
-                                                                new LockState.Locked(),
-                                                                data.withEntered(""));
-                                                default -> StateMachine.Transition.keepState(data);
+                                                        StateMachine.Transition
+                                                                .<LockState, LockData>nextState(
+                                                                        new LockState.Locked(),
+                                                                        data.withEntered(""));
+                                                default ->
+                                                        StateMachine.Transition
+                                                                .<LockState, LockData>keepState(
+                                                                        data);
                                             };
                                 });
 

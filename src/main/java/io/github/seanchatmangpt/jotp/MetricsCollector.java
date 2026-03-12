@@ -437,6 +437,19 @@ public final class MetricsCollector implements Application.Infrastructure {
         return name;
     }
 
+    @Override
+    public void onStop(Application<?> app) {
+        // Deregister from the global registry so the collector can be GC'd.
+        REGISTRY.remove(name, this);
+
+        // Release all accumulated metric state to free memory.
+        counters.clear();
+        gauges.clear();
+        histograms.clear();
+        timers.clear();
+        metadata.clear();
+    }
+
     // ── Global registry ──────────────────────────────────────────────────────────
 
     private static final ConcurrentHashMap<String, MetricsCollector> REGISTRY =

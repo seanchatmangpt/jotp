@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Demonstration of standardized factory method patterns across all OTP primitives.
@@ -129,8 +130,10 @@ public final class FactoryMethodPatterns {
                         new Counter(0),
                         (state, msg) ->
                                 switch (msg) {
-                                    case CounterMsg.Increment _ -> new Counter(state.value() + 1);
-                                    case CounterMsg.Reset _ -> new Counter(0);
+                                    case CounterMsg.Increment ignored ->
+                                            new Counter(state.value() + 1);
+                                    case CounterMsg.Reset ignored -> new Counter(0);
+                                    default -> state;
                                 });
 
         // Send messages
@@ -290,6 +293,7 @@ public final class FactoryMethodPatterns {
                                                                 new LockState.Locked(), data);
                                                 default -> StateMachine.Transition.keepState(data);
                                             };
+                                    default -> StateMachine.Transition.keepState(data);
                                 });
     }
 
@@ -342,6 +346,7 @@ public final class FactoryMethodPatterns {
                                     System.err.println("ERROR: " + msg);
                             case LogEvent.WarningEvent(var msg) ->
                                     System.out.println("WARN: " + msg);
+                            default -> {}
                         }
                     }
                 };
@@ -373,14 +378,17 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleParallelAll() {
-        var tasks = List.of(() -> "result1", () -> "result2", () -> "result3");
+        List<Supplier<String>> tasks =
+                List.of(() -> "result1", () -> "result2", () -> "result3");
 
         // Run all tasks in parallel
         Result<List<String>, Exception> result = Parallel.all(tasks);
 
         switch (result) {
+            case Result.Ok(var results) -> results.forEach(r -> System.out.println("Got: " + r));
             case Result.Success(var results) ->
                     results.forEach(r -> System.out.println("Got: " + r));
+            case Result.Err(var ex) -> System.err.println("Failed: " + ex);
             case Result.Failure(var ex) -> System.err.println("Failed: " + ex);
         }
     }
@@ -410,7 +418,9 @@ public final class FactoryMethodPatterns {
         Result<String, Exception> result = CrashRecovery.retry(3, () -> "result from attempt");
 
         switch (result) {
+            case Result.Ok(var value) -> System.out.println("Success: " + value);
             case Result.Success(var value) -> System.out.println("Success: " + value);
+            case Result.Err(var ex) -> System.err.println("Failed: " + ex);
             case Result.Failure(var ex) -> System.err.println("Failed: " + ex);
         }
     }
@@ -476,6 +486,7 @@ public final class FactoryMethodPatterns {
                         (state, msg) ->
                                 switch (msg) {
                                     case CounterMsg.Increment _ -> new Counter(state.value() + 1);
+                                    default -> state;
                                 });
 
         // 3. Create event manager

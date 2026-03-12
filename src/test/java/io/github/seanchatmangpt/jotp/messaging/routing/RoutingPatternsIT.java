@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
-import io.github.seanchatmangpt.jotp.ProcessRegistry;
+import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,8 +25,8 @@ class RoutingPatternsIT implements WithAssertions {
 
     @AfterEach
     void cleanup() {
-        for (String name : ProcessRegistry.registered()) {
-            ProcessRegistry.unregister(name);
+        for (String name : ProcRegistry.registered()) {
+            ProcRegistry.unregister(name);
         }
     }
 

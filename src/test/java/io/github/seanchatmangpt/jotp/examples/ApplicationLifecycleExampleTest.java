@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.examples;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.Result;
+import io.github.seanchatmangpt.jotp.StartType;
 import io.github.seanchatmangpt.jotp.examples.ApplicationLifecycleExample.*;
 import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -194,7 +196,7 @@ class ApplicationLifecycleExampleTest {
             ApplicationConfig.setCurrent(config);
 
             // Act
-            var result = app.start(StartType.NORMAL);
+            var result = app.start(new StartType.Normal());
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -207,7 +209,7 @@ class ApplicationLifecycleExampleTest {
             ApplicationConfig.setCurrent(config);
 
             // Act
-            var result = app.start(StartType.NORMAL);
+            var result = app.start(new StartType.Normal());
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -220,7 +222,7 @@ class ApplicationLifecycleExampleTest {
             ApplicationConfig.setCurrent(config);
 
             // Act
-            var result = app.start(StartType.TAKEOVER);
+            var result = app.start(new StartType.Takeover(""));
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -233,7 +235,7 @@ class ApplicationLifecycleExampleTest {
             ApplicationConfig.setCurrent(config);
 
             // Act
-            var result = app.start(StartType.FAILOVER);
+            var result = app.start(new StartType.Failover(""));
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -244,7 +246,7 @@ class ApplicationLifecycleExampleTest {
         void testStopExecutes() {
             // Arrange
             ApplicationConfig.setCurrent(config);
-            app.start(StartType.NORMAL);
+            app.start(new StartType.Normal());
 
             // Act & Assert
             assertThatCode(() -> app.stop(null)).doesNotThrowAnyException();
@@ -255,7 +257,7 @@ class ApplicationLifecycleExampleTest {
         void testConfigAccessibleFromCallback() {
             // Arrange & Act
             ApplicationConfig.setCurrent(config);
-            var result = app.start(StartType.NORMAL);
+            var result = app.start(new StartType.Normal());
 
             // Assert - the fact that start() succeeded means config was accessible
             assertThat(result.isSuccess()).isTrue();
@@ -269,7 +271,7 @@ class ApplicationLifecycleExampleTest {
             ApplicationConfig.setCurrent(config);
 
             // Act
-            var result = app.start(StartType.NORMAL, "arg1", "arg2");
+            var result = app.start(new StartType.Normal(), "arg1", "arg2");
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -351,8 +353,13 @@ class ApplicationLifecycleExampleTest {
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.successValue()).isPresent();
-            assertThat(result.successValue().get()).startsWith("CHANNEL-");
+            String channelId =
+                    switch (result) {
+                        case Result.Ok<String, Exception>(var id) -> id;
+                        case Result.Success<String, Exception>(var id) -> id;
+                        default -> null;
+                    };
+            assertThat(channelId).isNotNull().startsWith("CHANNEL-");
         }
 
         @Test
@@ -375,7 +382,12 @@ class ApplicationLifecycleExampleTest {
             // Arrange
             var allocResult = channelPool.allocateChannel();
             assertThat(allocResult.isSuccess()).isTrue();
-            var channelId = allocResult.successValue().get();
+            var channelId =
+                    switch (allocResult) {
+                        case Result.Ok<String, Exception>(var id) -> id;
+                        case Result.Success<String, Exception>(var id) -> id;
+                        default -> null;
+                    };
             assertThat(channelPool.getActiveChannels()).isEqualTo(1);
 
             // Act
@@ -397,7 +409,13 @@ class ApplicationLifecycleExampleTest {
             assertThat(channelPool.getActiveChannels()).isEqualTo(3);
 
             // Act
-            channelPool.releaseChannel(result1.successValue().get());
+            var channelId1 =
+                    switch (result1) {
+                        case Result.Ok<String, Exception>(var id) -> id;
+                        case Result.Success<String, Exception>(var id) -> id;
+                        default -> null;
+                    };
+            channelPool.releaseChannel(channelId1);
 
             // Assert
             assertThat(channelPool.getActiveChannels()).isEqualTo(2);
@@ -412,9 +430,25 @@ class ApplicationLifecycleExampleTest {
             var result3 = channelPool.allocateChannel();
 
             // Assert
-            assertThat(result1.successValue().get())
-                    .isNotEqualTo(result2.successValue().get())
-                    .isNotEqualTo(result3.successValue().get());
+            String id1 =
+                    switch (result1) {
+                        case Result.Ok<String, Exception>(var id) -> id;
+                        case Result.Success<String, Exception>(var id) -> id;
+                        default -> null;
+                    };
+            String id2 =
+                    switch (result2) {
+                        case Result.Ok<String, Exception>(var id) -> id;
+                        case Result.Success<String, Exception>(var id) -> id;
+                        default -> null;
+                    };
+            String id3 =
+                    switch (result3) {
+                        case Result.Ok<String, Exception>(var id) -> id;
+                        case Result.Success<String, Exception>(var id) -> id;
+                        default -> null;
+                    };
+            assertThat(id1).isNotEqualTo(id2).isNotEqualTo(id3);
         }
 
         @Test
@@ -492,7 +526,8 @@ class ApplicationLifecycleExampleTest {
         @DisplayName("startApplication() with NORMAL start type")
         void testStartApplicationNormal() {
             // Act
-            var result = ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+            var result =
+                    ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -502,7 +537,9 @@ class ApplicationLifecycleExampleTest {
         @DisplayName("startApplication() with TAKEOVER start type")
         void testStartApplicationTakeover() {
             // Act
-            var result = ApplicationLifecycleManager.startApplication(config, StartType.TAKEOVER);
+            var result =
+                    ApplicationLifecycleManager.startApplication(
+                            config, new StartType.Takeover(""));
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -512,7 +549,9 @@ class ApplicationLifecycleExampleTest {
         @DisplayName("startApplication() with FAILOVER start type")
         void testStartApplicationFailover() {
             // Act
-            var result = ApplicationLifecycleManager.startApplication(config, StartType.FAILOVER);
+            var result =
+                    ApplicationLifecycleManager.startApplication(
+                            config, new StartType.Failover(""));
 
             // Assert
             assertThat(result.isSuccess()).isTrue();
@@ -522,7 +561,7 @@ class ApplicationLifecycleExampleTest {
         @DisplayName("stopApplication() succeeds")
         void testStopApplicationSuccess() {
             // Arrange
-            ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+            ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
 
             // Act
             var result = ApplicationLifecycleManager.stopApplication(config);
@@ -539,7 +578,7 @@ class ApplicationLifecycleExampleTest {
             assertThat(loadResult.isSuccess()).isTrue();
 
             var startResult =
-                    ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+                    ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
             assertThat(startResult.isSuccess()).isTrue();
 
             var stopResult = ApplicationLifecycleManager.stopApplication(config);
@@ -571,7 +610,7 @@ class ApplicationLifecycleExampleTest {
             assertThat(loadResult.isSuccess()).isTrue();
 
             var startResult =
-                    ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+                    ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
             assertThat(startResult.isSuccess()).isTrue();
 
             var stopResult = ApplicationLifecycleManager.stopApplication(config);
@@ -586,10 +625,12 @@ class ApplicationLifecycleExampleTest {
             var config2 = ApplicationSetup.createConfigWithEnv("trace", 500);
 
             // Act & Assert
-            var start1 = ApplicationLifecycleManager.startApplication(config1, StartType.NORMAL);
+            var start1 =
+                    ApplicationLifecycleManager.startApplication(config1, new StartType.Normal());
             assertThat(start1.isSuccess()).isTrue();
 
-            var start2 = ApplicationLifecycleManager.startApplication(config2, StartType.NORMAL);
+            var start2 =
+                    ApplicationLifecycleManager.startApplication(config2, new StartType.Normal());
             assertThat(start2.isSuccess()).isTrue();
 
             var stop1 = ApplicationLifecycleManager.stopApplication(config1);
@@ -607,7 +648,7 @@ class ApplicationLifecycleExampleTest {
 
             // Act
             ApplicationLifecycleManager.loadApplication(config);
-            ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+            ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
 
             // Assert - config is still available
             assertThat(ApplicationConfig.getCurrent()).isNotNull();
@@ -625,15 +666,17 @@ class ApplicationLifecycleExampleTest {
 
             // Act
             var normalResult =
-                    ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+                    ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
             ApplicationLifecycleManager.stopApplication(config);
 
             var takeoverResult =
-                    ApplicationLifecycleManager.startApplication(config, StartType.TAKEOVER);
+                    ApplicationLifecycleManager.startApplication(
+                            config, new StartType.Takeover(""));
             ApplicationLifecycleManager.stopApplication(config);
 
             var failoverResult =
-                    ApplicationLifecycleManager.startApplication(config, StartType.FAILOVER);
+                    ApplicationLifecycleManager.startApplication(
+                            config, new StartType.Failover(""));
             ApplicationLifecycleManager.stopApplication(config);
 
             // Assert - all should succeed
@@ -800,7 +843,7 @@ class ApplicationLifecycleExampleTest {
 
             // Act
             ApplicationConfig.setCurrent(config);
-            ApplicationLifecycleManager.startApplication(config, StartType.NORMAL);
+            ApplicationLifecycleManager.startApplication(config, new StartType.Normal());
 
             // Assert
             assertThat(ApplicationConfig.getCurrent()).isEqualTo(config);

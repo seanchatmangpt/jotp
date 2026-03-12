@@ -4,6 +4,8 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcLink;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -17,7 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Armstrong's link cascade stress tests — finding the breaking points of {@link ProcessLink}.
+ * Armstrong's link cascade stress tests — finding the breaking points of {@link ProcLink}.
  *
  * <p>Joe Armstrong: <em>"Links are the fundamental mechanism for building fault-tolerant systems.
  * But a link chain is also a fault amplifier — one crash propagates to everything connected."</em>

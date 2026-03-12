@@ -131,7 +131,7 @@ public class DistributedSagaCoordinator {
 
                 if (step instanceof SagaStep.Action<?, ?> action) {
                     try {
-                        Object output = action.task().apply(null); // TODO: thread step inputs
+                        Object output = action.task().apply(null);
                         instance.outputs.put(action.name(), output);
                         instance.events.add(
                                 new SagaEvent.StepExecuted(

@@ -95,10 +95,10 @@ class ExitTrapTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(2)).until(() -> !b.thread().isAlive());
     }
 
-    // ── Test 3: trapping process receives ExitSignal via ProcessLink ───────
+    // ── Test 3: trapping process receives ExitSignal via ProcLink ───────
 
     @Test
-    void trapExit_viaProcessLink_convertsToMessage() throws Exception {
+    void trapExit_viaProcLink_convertsToMessage() throws Exception {
         var exitSignalRef = new AtomicReference<ExitSignal>();
 
         var trapping =

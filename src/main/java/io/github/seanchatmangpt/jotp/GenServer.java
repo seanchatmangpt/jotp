@@ -187,7 +187,7 @@ public final class GenServer<S, M> {
                                     var typedCast = (GenServerMessage.Cast<M>) cast;
                                     yield handler.handleCast(typedCast.request(), state);
                                 }
-                                case GenServerMessage.Info info ->
+                                case GenServerMessage.Info<?> info ->
                                         handler.handleInfo(info.info(), state);
                             };
                         });
