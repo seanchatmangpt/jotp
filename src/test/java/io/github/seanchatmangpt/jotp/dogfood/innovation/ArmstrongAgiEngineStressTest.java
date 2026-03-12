@@ -105,9 +105,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         // Parallel.all uses StructuredTaskScope — fail-fast semantics, all-or-nothing
         var result = Parallel.all(tasks);
 
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
         assertThat(assessments).hasSize(n);
 
         for (int i = 0; i < n; i++) {
@@ -177,9 +177,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
                         .toList();
 
         var result = Parallel.all(tasks);
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
 
         // All invocations with the same source must produce the same score and violation count
         int expectedScore = assessments.get(0).evidence().score().overallScore();
@@ -210,9 +210,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
                         .toList();
 
         var result = Parallel.all(tasks);
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
 
         int totalChains = 0;
         for (var a : assessments) {
