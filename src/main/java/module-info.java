@@ -98,6 +98,15 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.messaging;
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
 
+    // Enterprise Patterns
+    exports io.github.seanchatmangpt.jotp.enterprise.health;
+    exports io.github.seanchatmangpt.jotp.enterprise.backpressure;
+    exports io.github.seanchatmangpt.jotp.enterprise.recovery;
+    exports io.github.seanchatmangpt.jotp.enterprise.bulkhead;
+    exports io.github.seanchatmangpt.jotp.enterprise.multitenancy;
+    exports io.github.seanchatmangpt.jotp.enterprise.eventbus;
+    exports io.github.seanchatmangpt.jotp.enterprise.saga;
+
     // Reactive Messaging Patterns (Vaughn Vernon port)
     exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
     exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
