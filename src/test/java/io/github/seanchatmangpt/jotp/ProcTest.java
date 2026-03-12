@@ -570,11 +570,7 @@ class ProcTest {
         record TestState(int value, String label) {}
 
         BiFunction<TestState, TestMsg, TestState> handler =
-<<<<<<< HEAD
                 (state, msg) -> {
-=======
-                (TestState state, TestMsg msg) -> {
->>>>>>> origin/main
                     if (msg instanceof TestMsg.Increment) {
                         return new TestState(state.value + 1, "incremented");
                     }

@@ -563,7 +563,7 @@ public final class Supervisor {
         proc.addCrashCallback(
                 () -> {
                     if (!entry.stopping)
-                        events.add(new SvEvent_ChildCrashed(entry.id, proc.lastError()));
+                        events.add(new SvEvent_ChildCrashed(entry.spec.id(), proc.lastError()));
                 });
 
         // Normal exit callback (exitReason == null means normal exit)
@@ -602,13 +602,13 @@ public final class Supervisor {
         if (entry == null || entry.stopping) return;
 
         Instant now = Instant.now();
-        entry.crashTimes.removeIf(t -> t.isBefore(now.minus(window)));
-        entry.crashTimes.add(now);
+        entry.restartHistory.removeIf(t -> t.isBefore(now.minus(window)));
+        entry.restartHistory.add(now);
 
-        if (entry.crashTimes.size() >= maxRestarts) {
+        if (entry.restartHistory.size() >= maxRestarts) {
             fatalError = cause;
             running = false;
-            stopAll();
+            stopAllOrdered();
             return;
         }
 
@@ -694,7 +694,7 @@ public final class Supervisor {
         // 2. Absorbs rapid re-crash messages that arrive during restart, preventing them from
         //    registering with the supervisor's restart-window tracker (they land on the dead proc).
         Thread.ofVirtual()
-                .name("supervisor-restart-" + entry.id)
+                .name("supervisor-restart-" + entry.spec.id())
                 .start(
                         () -> {
                             try {
@@ -702,7 +702,7 @@ public final class Supervisor {
                             } catch (InterruptedException ie) {
                                 Thread.currentThread().interrupt();
                             }
-                            Object freshState = entry.stateFactory.get();
+                            Object freshState = entry.spec.stateFactory().get();
                             Proc newProc = spawnProc(entry, freshState);
                             entry.stopping = false;
                             entry.ref.swap(newProc);
@@ -788,6 +788,10 @@ public final class Supervisor {
         return children.stream().filter(c -> c.spec.id().equals(id)).findFirst().orElse(null);
     }
 
+    private ChildEntry findByRef(ProcRef<?, ?> ref) {
+        return children.stream().filter(c -> c.ref == ref).findFirst().orElse(null);
+    }
+
     /**
      * Create a supervision tree node with the given restart strategy and limits.
      *
@@ -823,40 +827,4 @@ public final class Supervisor {
      * @see #supervise(String, Object, BiFunction) to add child processes
      * @see Strategy for restart policy details
      */
-    public static Supervisor create(Strategy strategy, int maxRestarts, Duration window) {
-        return new Supervisor(strategy, maxRestarts, window);
-    }
-
-    /**
-     * Create a named supervision tree node with the given restart strategy and limits.
-     *
-     * <p>Same as {@link #create(Strategy, int, Duration)} but with an explicit name used for thread
-     * naming and debugging.
-     *
-     * <p><b>Usage:</b>
-     *
-     * <pre>{@code
-     * var appSupervisor = Supervisor.create(
-     *     "app-supervisor",
-     *     Supervisor.Strategy.ONE_FOR_ALL,
-     *     3,
-     *     Duration.ofSeconds(30)
-     * );
-     * }</pre>
-     *
-     * @param name supervisor identifier (used in thread names and diagnostics)
-     * @param strategy restart policy (ONE_FOR_ONE, ONE_FOR_ALL, or REST_FOR_ONE)
-     * @param maxRestarts crash limit within the window; the supervisor gives up on the {@code
-     *     maxRestarts}-th crash (i.e., allows up to {@code maxRestarts - 1} restarts)
-     * @param window time window for counting restart attempts
-     * @return a new named supervisor instance
-     * @throws NullPointerException if {@code name}, {@code strategy}, or {@code window} is null
-     * @throws IllegalArgumentException if {@code maxRestarts < 0}
-     * @see #create(Strategy, int, Duration) for unnamed supervisors
-     * @see #supervise(String, Object, BiFunction) to add children
-     */
-    public static Supervisor create(
-            String name, Strategy strategy, int maxRestarts, Duration window) {
-        return new Supervisor(name, strategy, maxRestarts, window);
-    }
 }

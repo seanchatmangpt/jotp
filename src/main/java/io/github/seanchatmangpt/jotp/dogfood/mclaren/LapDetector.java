@@ -140,8 +140,16 @@ public final class LapDetector {
      */
     public static LapDetector start() {
         return new LapDetector(
-                new StateMachine<>(
-                        new LapState.OutLap(), LapData.empty(), LapDetector::transition));
+                StateMachine.of(
+                        new LapState.OutLap(),
+                        LapData.empty(),
+                        (state, event, data) -> {
+                            if (event instanceof StateMachine.SMEvent.User<?> user) {
+                                var lapEvent = (LapEvent) user.event();
+                                return transition(state, lapEvent, data);
+                            }
+                            return Transition.keepState(data);
+                        }));
     }
 
     // ---------------------------------------------------------------------------
