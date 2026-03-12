@@ -145,7 +145,7 @@ class GenServerExampleTest implements WithAssertions {
         void shouldRespectTimeout() throws InterruptedException {
             // Create a service with a handler that delays
             var slowCounterService =
-                    new Proc<>(
+                    new Proc<CounterState, CounterMessage>(
                             new CounterState(0),
                             (state, msg) -> {
                                 try {

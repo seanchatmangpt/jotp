@@ -125,7 +125,10 @@ public final class SupervisionTreeExample {
      * // Meanwhile: w2 and w3 continue unaffected (ONE_FOR_ONE isolation)
      * }</pre>
      */
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args)
+            throws InterruptedException,
+                    java.util.concurrent.ExecutionException,
+                    java.util.concurrent.TimeoutException {
         System.out.println("=== Supervision Tree Example (ONE_FOR_ONE) ===\n");
 
         // Create supervisor with ONE_FOR_ONE strategy
@@ -153,9 +156,9 @@ public final class SupervisionTreeExample {
         for (int i = 0; i < 6; i++) {
             Thread.sleep(100); // Stagger messages for visibility
             System.out.println("Cycle " + (i + 1) + ":");
-            worker1.send(new WorkerMessage.Increment());
-            worker2.send(new WorkerMessage.Increment());
-            worker3.send(new WorkerMessage.Increment());
+            worker1.tell(new WorkerMessage.Increment());
+            worker2.tell(new WorkerMessage.Increment());
+            worker3.tell(new WorkerMessage.Increment());
         }
 
         // Wait for crash and restart
@@ -167,9 +170,9 @@ public final class SupervisionTreeExample {
         var state2 = new java.util.concurrent.CompletableFuture<WorkerState>();
         var state3 = new java.util.concurrent.CompletableFuture<WorkerState>();
 
-        worker1.send(new WorkerMessage.GetState(state1));
-        worker2.send(new WorkerMessage.GetState(state2));
-        worker3.send(new WorkerMessage.GetState(state3));
+        worker1.tell(new WorkerMessage.GetState(state1));
+        worker2.tell(new WorkerMessage.GetState(state2));
+        worker3.tell(new WorkerMessage.GetState(state3));
 
         WorkerState s1 = state1.get(1, TimeUnit.SECONDS);
         WorkerState s2 = state2.get(1, TimeUnit.SECONDS);
@@ -191,7 +194,7 @@ public final class SupervisionTreeExample {
         System.out.println("Now causing w1 to crash 4 more times (exceeding limit)...");
         for (int i = 0; i < 30; i++) {
             try {
-                worker1.send(new WorkerMessage.Increment());
+                worker1.tell(new WorkerMessage.Increment());
                 Thread.sleep(100);
             } catch (Exception e) {
                 // Worker may stop responding if supervisor terminates

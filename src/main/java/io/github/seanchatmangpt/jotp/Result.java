@@ -46,18 +46,24 @@ import java.util.function.Supplier;
  * <p><strong>Two naming conventions:</strong>
  *
  * <ul>
- *   <li>{@link Ok}/{@link Err} — Erlang-style short names
- *   <li>{@link Success}/{@link Failure} — more explicit names for readability
+ *   <li>{@link Ok}/{@link Err} — Erlang-style short names; the canonical sealed variants
+ *   <li>{@code success()}/{@code failure()} — explicit factory aliases for railway-oriented style
  * </ul>
  *
- * <p>Both conventions are equivalent; use whichever reads better in context.
+ * <p>Both naming conventions produce the same behavior for {@link #isSuccess()}, {@link
+ * #isError()}, {@link #map(Function)}, {@link #fold(Function, Function)}, and all other operations.
+ * Factory methods {@code success(x)} and {@code failure(x)} delegate to {@link Ok} and {@link Err}
+ * respectively, so {@code Result.ok(x).equals(Result.success(x))} is {@code true}.
+ *
+ * <p>Prefer {@code ok}/{@code err} for Erlang-style code or {@code success}/{@code failure} for
+ * railway-oriented programming style. Use one convention consistently throughout your codebase.
  *
  * <p><strong>Java 26 Features Used:</strong>
  *
  * <ul>
  *   <li><strong>Sealed Interface:</strong> {@code public sealed interface Result<S, F>} restricts
- *       implementations to {@code Ok}, {@code Err}, {@code Success}, {@code Failure}, enabling
- *       exhaustive pattern matching and compiler verification of all cases.
+ *       implementations to {@code Ok} and {@code Err}, enabling exhaustive pattern matching and
+ *       compiler verification of all cases.
  *   <li><strong>Records:</strong> Each variant is a record (immutable, transparent, with
  *       destructuring support for pattern matching).
  *   <li><strong>Pattern Matching:</strong> Use {@code switch} expressions with sealed patterns:
@@ -73,19 +79,27 @@ import java.util.function.Supplier;
  * @see CrashRecovery
  * @see Parallel
  */
-public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Success, Result.Failure {
+public sealed interface Result<S, F> permits Result.Ok, Result.Err {
     /** Successful result carrying a value — Erlang's {@code {ok, Value}}. */
     record Ok<S, F>(S value) implements Result<S, F> {}
 
     /** Failed result carrying an error — Erlang's {@code {error, Reason}}. */
     record Err<S, F>(F error) implements Result<S, F> {}
 
-    // Aliases for pattern matching
-    /** Alias for {@link Ok} — more explicit naming. */
-    record Success<S, F>(S value) implements Result<S, F> {}
+    // Success/Failure are type aliases — not separate sealed variants.
+    // They are kept as nested interfaces for Javadoc / import convenience,
+    // but callers must use Ok/Err as the canonical pattern-match targets.
+    /**
+     * @deprecated Use {@link Ok} for pattern matching; {@link #success} factory for construction.
+     */
+    @Deprecated
+    interface Success<S, F> {}
 
-    /** Alias for {@link Err} — more explicit naming. */
-    record Failure<S, F>(F error) implements Result<S, F> {}
+    /**
+     * @deprecated Use {@link Err} for pattern matching; {@link #failure} factory for construction.
+     */
+    @Deprecated
+    interface Failure<S, F> {}
 
     /**
      * Create a successful result.
@@ -112,20 +126,20 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
      * Alias for {@link #ok(Object)} — more explicit naming.
      *
      * @param value the success value
-     * @return {@code Success(value)}
+     * @return {@code Ok(value)}
      */
     static <S, F> Result<S, F> success(S value) {
-        return new Success<>(value);
+        return new Ok<>(value);
     }
 
     /**
      * Alias for {@link #err(Object)} — more explicit naming.
      *
      * @param error the error value
-     * @return {@code Failure(error)}
+     * @return {@code Err(error)}
      */
     static <S, F> Result<S, F> failure(F error) {
-        return new Failure<>(error);
+        return new Err<>(error);
     }
 
     /**
@@ -148,12 +162,12 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
 
     /** Returns {@code true} if this is a successful result. */
     default boolean isSuccess() {
-        return this instanceof Ok<S, F> || this instanceof Success<S, F>;
+        return this instanceof Ok<S, F>;
     }
 
     /** Returns {@code true} if this is a failed result. */
     default boolean isError() {
-        return this instanceof Err<S, F> || this instanceof Failure<S, F>;
+        return this instanceof Err<S, F>;
     }
 
     /** Alias for {@link #isError()}. */
@@ -173,9 +187,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     default <T> Result<T, F> map(Function<? super S, ? extends T> mapper) {
         return switch (this) {
             case Ok<S, F>(var v) -> new Ok<>(mapper.apply(v));
-            case Success<S, F>(var v) -> new Success<>(mapper.apply(v));
             case Err<S, F>(var e) -> new Err<>(e);
-            case Failure<S, F>(var e) -> new Failure<>(e);
         };
     }
 
@@ -192,9 +204,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     default <T> Result<T, F> flatMap(Function<? super S, ? extends Result<T, F>> mapper) {
         return switch (this) {
             case Ok<S, F>(var v) -> mapper.apply(v);
-            case Success<S, F>(var v) -> mapper.apply(v);
             case Err<S, F> ignored -> (Result<T, F>) this;
-            case Failure<S, F> ignored -> (Result<T, F>) this;
         };
     }
 
@@ -207,9 +217,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     default S orElse(S defaultValue) {
         return switch (this) {
             case Ok<S, F>(var v) -> v;
-            case Success<S, F>(var v) -> v;
             case Err<S, F> ignored -> defaultValue;
-            case Failure<S, F> ignored -> defaultValue;
         };
     }
 
@@ -227,13 +235,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     default S orElseThrow() {
         return switch (this) {
             case Ok<S, F>(var v) -> v;
-            case Success<S, F>(var v) -> v;
             case Err<S, F>(var e) -> {
-                if (e instanceof RuntimeException re) throw re;
-                if (e instanceof Throwable t) throw new RuntimeException(t);
-                throw new RuntimeException(String.valueOf(e));
-            }
-            case Failure<S, F>(var e) -> {
                 if (e instanceof RuntimeException re) throw re;
                 if (e instanceof Throwable t) throw new RuntimeException(t);
                 throw new RuntimeException(String.valueOf(e));
@@ -256,9 +258,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
             Function<? super S, ? extends T> onSuccess, Function<? super F, ? extends T> onError) {
         return switch (this) {
             case Ok<S, F>(var v) -> onSuccess.apply(v);
-            case Success<S, F>(var v) -> onSuccess.apply(v);
             case Err<S, F>(var e) -> onError.apply(e);
-            case Failure<S, F>(var e) -> onError.apply(e);
         };
     }
 
@@ -288,12 +288,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
                 action.accept(v);
                 yield this;
             }
-            case Success<S, F>(var v) -> {
-                action.accept(v);
-                yield this;
-            }
             case Err<S, F> ignored -> this;
-            case Failure<S, F> ignored -> this;
         };
     }
 
@@ -323,9 +318,7 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err, Result.Succe
     default Result<S, F> recover(Function<? super F, ? extends Result<S, F>> handler) {
         return switch (this) {
             case Ok<S, F> ignored -> this;
-            case Success<S, F> ignored -> this;
             case Err<S, F>(var e) -> handler.apply(e);
-            case Failure<S, F>(var e) -> handler.apply(e);
         };
     }
 }

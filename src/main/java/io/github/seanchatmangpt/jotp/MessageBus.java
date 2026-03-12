@@ -300,9 +300,8 @@ public final class MessageBus implements Application.Infrastructure {
                 topicSubscribers.size());
     }
 
-    // ── Infrastructure lifecycle ─────────────────────────────────────────────────
+    // ── Lifecycle ────────────────────────────────────────────────────────────────
 
-    @Override
     public String name() {
         return name;
     }

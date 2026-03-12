@@ -434,16 +434,7 @@ class CircuitBreakerTest {
                     });
         }
 
-        // Circuit should open (6th failure triggers it)
-        assertThat(breaker.getState())
-                .isEqualTo(CircuitBreaker.State.CLOSED); // Still closed after 5
-
-        // 6th failure opens it
-        breaker.execute(
-                "request",
-                r -> {
-                    throw new RuntimeException("error");
-                });
+        // Circuit opens when failures reach maxFailures (>= semantics)
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
     }
 

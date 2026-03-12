@@ -37,6 +37,11 @@ public sealed interface LoadProfile {
         public long getLoad(long elapsedMs) {
             return load;
         }
+
+        @Override
+        public Duration getDuration() {
+            return duration;
+        }
     }
 
     /**
@@ -52,6 +57,11 @@ public sealed interface LoadProfile {
             if (elapsedMs >= duration.toMillis()) return endLoad;
             long durationMs = duration.toMillis();
             return startLoad + (endLoad - startLoad) * elapsedMs / durationMs;
+        }
+
+        @Override
+        public Duration getDuration() {
+            return duration;
         }
     }
 
@@ -122,6 +132,11 @@ public sealed interface LoadProfile {
         @Override
         public long getLoad(long elapsedMs) {
             return function.apply(elapsedMs);
+        }
+
+        @Override
+        public Duration getDuration() {
+            return duration;
         }
     }
 }

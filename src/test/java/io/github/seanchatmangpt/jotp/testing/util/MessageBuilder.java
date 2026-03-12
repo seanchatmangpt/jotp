@@ -150,7 +150,7 @@ public class MessageBuilder {
             return; // No sealed type constraints
         }
 
-        var permitted = messageClass.permittedSubclasses();
+        var permitted = messageClass.getPermittedSubclasses();
         var messageTypeName = messageType;
         var isValid =
                 Arrays.stream(permitted).anyMatch(c -> c.getSimpleName().equals(messageTypeName));

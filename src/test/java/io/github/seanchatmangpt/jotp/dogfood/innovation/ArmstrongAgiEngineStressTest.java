@@ -105,9 +105,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         // Parallel.all uses StructuredTaskScope — fail-fast semantics, all-or-nothing
         var result = Parallel.all(tasks);
 
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
         assertThat(assessments).hasSize(n);
 
         for (int i = 0; i < n; i++) {
@@ -177,9 +177,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
                         .toList();
 
         var result = Parallel.all(tasks);
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
 
         // All invocations with the same source must produce the same score and violation count
         int expectedScore = assessments.get(0).evidence().score().overallScore();
@@ -210,9 +210,9 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
                         .toList();
 
         var result = Parallel.all(tasks);
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
 
         int totalChains = 0;
         for (var a : assessments) {
@@ -249,14 +249,14 @@ class ArmstrongAgiEngineStressTest implements WithAssertions {
         var result = Parallel.all(tasks);
         var elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
 
-        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result).isInstanceOf(Result.Ok.class);
         assertThat(elapsedMs)
                 .as("100 parallel assessments should finish within 20 s")
                 .isLessThan(20_000L);
 
         // Derive throughput for informational logging (not a hard assertion)
         @SuppressWarnings("unchecked")
-        var assessments = ((Result.Success<List<AgiAssessment>, Exception>) result).value();
+        var assessments = ((Result.Ok<List<AgiAssessment>, Exception>) result).value();
         double tputPerSec = n * 1_000.0 / Math.max(elapsedMs, 1L);
         assertThat(assessments).hasSize(n);
         assertThat(tputPerSec)

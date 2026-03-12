@@ -4,7 +4,7 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
-import io.github.seanchatmangpt.jotp.ProcessLink;
+import io.github.seanchatmangpt.jotp.ProcLink;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
@@ -63,7 +63,7 @@ class ExitTrapTest implements WithAssertions {
                         });
 
         // Link them — crasher crash should deliver ExitSignal to trapping
-        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError));
+        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError()));
 
         crasher.tell("boom");
 
@@ -87,7 +87,7 @@ class ExitTrapTest implements WithAssertions {
                         });
         var b = new Proc<>(0, (Integer s, String m) -> s); // passive
 
-        ProcessLink.link(a, b);
+        ProcLink.link(a, b);
         // b does NOT trap exits (default)
 
         a.tell("crash");
@@ -121,13 +121,13 @@ class ExitTrapTest implements WithAssertions {
                             throw new RuntimeException("linked crash");
                         });
 
-        // Use ProcessLink.link — it calls deliverExitSignal which checks trapExits
+        // Use ProcLink.link — it calls deliverExitSignal which checks trapExits
         @SuppressWarnings("unchecked")
         Proc<Integer, Object> trappingTyped = (Proc<Integer, Object>) (Proc<?, ?>) trapping;
         @SuppressWarnings("unchecked")
         Proc<Integer, Object> crasherTyped = (Proc<Integer, Object>) (Proc<?, ?>) crasher;
 
-        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError));
+        crasher.addCrashCallback(() -> trapping.deliverExitSignal(crasher.lastError()));
 
         crasher.tell("crash");
 
