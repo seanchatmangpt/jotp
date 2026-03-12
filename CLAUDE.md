@@ -1,114 +1,29 @@
-# JOTP — Java OTP Primitives
+# JOTP
 
-Java 26 JPMS library (`io.github.seanchatmangpt.jotp`) implementing Erlang/OTP
-fault-tolerance patterns using virtual threads and sealed types.
-
-## Toolchain
-
-```bash
-# Verify on session start
-java -version 2>&1 | grep 26        # must be OpenJDK 26
-mvnd --version | grep mvnd          # must be 2.0.0-rc-3
-
-# Paths
-JAVA_HOME=/usr/lib/jvm/openjdk-26
-mvnd: /root/.mvnd/mvnd-2.0.0-rc-3/bin/mvnd  (also /opt/mvnd2/bin/mvnd)
-cargo: /root/.cargo/bin/cargo
-```
-
-Setup runs automatically on session start via `.claude/setup.sh`. To run manually:
-```bash
-bash .claude/setup.sh
-```
+Java 26 OTP library (`io.github.seanchatmangpt.jotp`). Always `mvnd`, never `mvn`. Setup: `bash .claude/setup.sh`.
 
 ## Build
 
-**Primary — dx.sh (preferred):**
-```bash
-./dx.sh compile          # compile
-./dx.sh test             # unit tests
-./dx.sh all              # full build + guards
-./dx.sh validate         # guard scan only
-```
+`./dx.sh all` · `mvnd test` · `mvnd verify` · `mvnd test -Dtest=Foo` · `mvnd verify -Dit.test=FooIT`
 
-**Direct mvnd:**
-```bash
-mvnd test                          # unit tests (*Test.java)
-mvnd verify                        # all tests + quality checks
-mvnd test -Dtest=ProcTest          # single test class
-mvnd verify -Dit.test=ProcIT       # single integration test
-mvnd spotless:apply -q             # format manually if needed
-```
+## Guards — NEVER in `src/main/java`
 
-**Never use raw `mvn` or `./mvnw`** — use `mvnd`.
+PostToolUse hook enforces on every edit. Fix: implement or `throw new UnsupportedOperationException()`.
 
-## Guard Rules — NEVER write these in `src/main/java`
+- **H_TODO** — `// TODO`, `// FIXME`, `// HACK`, `// LATER`
+- **H_MOCK** — class/method named `Mock*`, `Stub*`, `Fake*`
+- **H_STUB** — `return "";` or `return null; // stub`
 
-The PostToolUse hook scans every Java edit. Violations block the build.
+Tests (`*Test.java`, `*IT.java`) are excluded from scanning.
 
-| Pattern | Forbidden | Fix |
-|---------|-----------|-----|
-| H_TODO | `// TODO`, `// FIXME`, `// HACK`, `// LATER` | Implement now or throw `UnsupportedOperationException` |
-| H_MOCK | Class/method named `Mock*`, `Stub*`, `Fake*` | Delete or implement real |
-| H_STUB | `return "";`, `return null; // stub` | Real impl or throw |
+## Quality + Tests
 
-Test files (`*Test.java`, `*IT.java`) are excluded from guard scanning.
+Spotless (Google Java Format AOSP) auto-formats after every `.java` edit — never run manually.
+`*Test.java` unit (surefire) · `*IT.java` integration (failsafe) · all parallel.
+AssertJ (`implements WithAssertions`) · jqwik (`@Property/@ForAll`) · Awaitility · `Result.of()`.
 
-## Code Quality
+## Reference
 
-- **Spotless** (Google Java Format, AOSP style) runs automatically after every Java
-  file edit via PostToolUse hook. Never run it manually.
-- **Compile-time**: `spotless:check` runs at compile phase — hooks prevent failures.
-- `--enable-preview` required at compile and runtime (already configured in pom.xml).
+@.claude/ARCHITECTURE.md · @.claude/SKILLS.md · @.claude/AGENTS.md · @.claude/HOOKS.md
 
-## Test Conventions
-
-| Kind | Naming | Runner |
-|------|--------|--------|
-| Unit | `*Test.java` | surefire (`mvnd test`) |
-| Integration | `*IT.java` | failsafe (`mvnd verify`) |
-
-All tests run in parallel (JUnit 5 dynamic strategy, concurrent mode).
-
-**Test libraries:** JUnit 5, AssertJ (`implements WithAssertions`), jqwik
-(`@Property`/`@ForAll`), Instancio, ArchUnit, Awaitility.
-
-**Result<T,E>:** Use `Result.of(supplier)` to wrap throwing ops. Supports `map`,
-`flatMap`, `fold`, `recover`, `peek`.
-
-## OTP Primitives
-
-| Erlang/OTP | JOTP | Notes |
-|---|---|---|
-| `spawn/3` | `Proc.spawn(init, handler, args)` | Virtual-thread mailbox |
-| `link/2` | `Proc.link(pid)` + `trapExits(true)` | Bilateral crash propagation |
-| `gen_server:call` | `Proc.ask(msg, timeout)` | Sync request-reply |
-| `gen_statem` | `StateMachine<S,E,D>` | Sealed `Transition` hierarchy |
-| `supervisor` | `Supervisor(strategy, children)` | ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE |
-| `pmap` | `Parallel` | `StructuredTaskScope` fan-out |
-| `monitor/2` | `ProcMonitor.monitor(pid)` | Unilateral DOWN, no kill |
-| `global:register_name` | `ProcRegistry.register(name, pid)` | Auto-deregisters on exit |
-| `timer:send_after` | `ProcTimer.sendAfter(delay, msg)` | Timed delivery |
-| `crash_recovery` | `CrashRecovery` | Let-it-crash + retry |
-| `trap_exit` | `Proc.trapExits(true)` | Exit signals as messages |
-| `sys` | `ProcSys` | Inspect/suspend/resume |
-| `proc_lib` | `ProcLib` | `initAck()` startup handshake |
-| `gen_event` | `EventManager<E>` | Independent handler crashes |
-| `gen_server` | `Proc<S,M>` | Core primitive |
-
-All primitives use sealed types for exhaustive pattern matching.
-
-## Claude Code Config
-
-**Hooks (automatic):**
-- SessionStart: runs `setup.sh`, shows git status + branch + commits
-- PostToolUse (Edit/Write on `.java`): Spotless format + guard scan
-
-**Permissions pre-approved:** `mvnd *`, `./mvnw *`, `git *`, `./dx.sh *`, `cargo build *`
-
-**Reference docs:**
-- Architecture: @.claude/ARCHITECTURE.md
-- Integration patterns: @.claude/INTEGRATION-PATTERNS.md
-- Skills (/simplify, /loop, /claude-api): @.claude/SKILLS.md
-- Agents (Explore, Plan): @.claude/AGENTS.md
-- Hooks detail: @.claude/HOOKS.md
+OTP primitives + Java 26 patterns load from `.claude/rules/java-source.md` when editing Java files.
