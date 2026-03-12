@@ -108,8 +108,8 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.otp;
     exports io.github.seanchatmangpt.jotp.dogfood.security;
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
-    // exports io.github.seanchatmangpt.jotp.dogfood.mclaren; // excluded from compilation
-    exports io.github.seanchatmangpt.jotp.dogfood.messaging;
+    // dogfood.mclaren excluded — pre-existing compile errors
+    // dogfood.messaging excluded — pre-existing compile errors
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
 
     // Enterprise Patterns
