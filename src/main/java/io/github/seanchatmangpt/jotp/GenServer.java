@@ -7,13 +7,14 @@ import java.util.concurrent.CompletableFuture;
  * GenServer: A standardized wrapper over {@link Proc} that provides typed Call/Cast message
  * semantics, mirroring OTP's {@code gen_server} behavior.
  *
- * <p>Joe Armstrong: "A generic server is a component that implements the standard protocol by
- * which other components in a system can call one another. The actual service provided by the
- * server is left to the implementation."
+ * <p>Joe Armstrong: "A generic server is a component that implements the standard protocol by which
+ * other components in a system can call one another. The actual service provided by the server is
+ * left to the implementation."
  *
  * <p><strong>Overview:</strong>
  *
  * <p>GenServer separates message handling into three categories:
+ *
  * <ul>
  *   <li><strong>Call</strong> — synchronous request-reply (blocks caller until response)
  *   <li><strong>Cast</strong> — asynchronous one-way message (fire-and-forget)
@@ -21,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
  * </ul>
  *
  * <p>The handler is a sealed interface with three callback methods:
+ *
  * <ul>
  *   <li>{@code handleCall(request, state)} → {@code (nextState, response)}
  *   <li>{@code handleCast(request, state)} → {@code nextState}
@@ -32,7 +34,8 @@ import java.util.concurrent.CompletableFuture;
  * <p>{@code cast(msg)} fires immediately and returns a CompletableFuture that completes when the
  * message is enqueued (not when it is processed). {@code call(msg, timeout)} sends a request and
  * returns a CompletableFuture that completes with the response after the handler processes the
- * message — supporting timeouts via {@link CompletableFuture#orTimeout(long, java.util.concurrent.TimeUnit)}.
+ * message — supporting timeouts via {@link CompletableFuture#orTimeout(long,
+ * java.util.concurrent.TimeUnit)}.
  *
  * <p><strong>State Isolation:</strong>
  *
@@ -92,188 +95,192 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class GenServer<S, M> {
 
-  /**
-   * Sealed hierarchy of GenServer message types.
-   *
-   * <p>Each message carries either a request (Call, Cast) or out-of-band info (Info), and Call
-   * messages hold a reply future for the request-reply pattern.
-   */
-  sealed interface GenServerMessage<M> permits GenServerMessage.Call, GenServerMessage.Cast, GenServerMessage.Info {
-    /** Synchronous request-reply: {@code (request, replyFuture)} */
-    record Call<M>(M request, CompletableFuture<Object> reply) implements GenServerMessage<M> {}
-
-    /** Asynchronous one-way: {@code request} only */
-    record Cast<M>(M request) implements GenServerMessage<M> {}
-
-    /** Out-of-band message (timeout, external event, etc.) */
-    record Info(Object info) implements GenServerMessage<Object> {}
-  }
-
-  /**
-   * Handler interface for GenServer message processing.
-   *
-   * <p>Implement this interface to define callback logic for handling Call, Cast, and Info
-   * messages. The handler returns new state and (for Call) a response.
-   *
-   * @param <S> process state type
-   * @param <M> message type
-   */
-  public interface Handler<S, M> {
     /**
-     * Handle a synchronous request-reply call.
+     * Sealed hierarchy of GenServer message types.
      *
-     * @param request the request sent by the caller
-     * @param state the current server state
-     * @return a {@link CallResult} containing the updated state and the reply
+     * <p>Each message carries either a request (Call, Cast) or out-of-band info (Info), and Call
+     * messages hold a reply future for the request-reply pattern.
      */
-    CallResult<S> handleCall(M request, S state);
+    sealed interface GenServerMessage<M>
+            permits GenServerMessage.Call, GenServerMessage.Cast, GenServerMessage.Info {
+        /** Synchronous request-reply: {@code (request, replyFuture)} */
+        record Call<M>(M request, CompletableFuture<Object> reply) implements GenServerMessage<M> {}
+
+        /** Asynchronous one-way: {@code request} only */
+        record Cast<M>(M request) implements GenServerMessage<M> {}
+
+        /** Out-of-band message (timeout, external event, etc.) */
+        record Info(Object info) implements GenServerMessage<Object> {}
+    }
 
     /**
-     * Handle an asynchronous one-way cast message.
+     * Handler interface for GenServer message processing.
      *
-     * @param request the message sent by the caller
-     * @param state the current server state
-     * @return the updated server state
+     * <p>Implement this interface to define callback logic for handling Call, Cast, and Info
+     * messages. The handler returns new state and (for Call) a response.
+     *
+     * @param <S> process state type
+     * @param <M> message type
      */
-    S handleCast(M request, S state);
+    public interface Handler<S, M> {
+        /**
+         * Handle a synchronous request-reply call.
+         *
+         * @param request the request sent by the caller
+         * @param state the current server state
+         * @return a {@link CallResult} containing the updated state and the reply
+         */
+        CallResult<S> handleCall(M request, S state);
+
+        /**
+         * Handle an asynchronous one-way cast message.
+         *
+         * @param request the message sent by the caller
+         * @param state the current server state
+         * @return the updated server state
+         */
+        S handleCast(M request, S state);
+
+        /**
+         * Handle an out-of-band info message (e.g., from a monitor or timer).
+         *
+         * @param info the info object
+         * @param state the current server state
+         * @return the updated server state
+         */
+        S handleInfo(Object info, S state);
+    }
 
     /**
-     * Handle an out-of-band info message (e.g., from a monitor or timer).
+     * Pair of (next state, reply) returned by {@link Handler#handleCall}.
      *
-     * @param info the info object
-     * @param state the current server state
-     * @return the updated server state
+     * @param <S> state type
      */
-    S handleInfo(Object info, S state);
-  }
+    public record CallResult<S>(S nextState, Object reply) {}
 
-  /**
-   * Pair of (next state, reply) returned by {@link Handler#handleCall}.
-   *
-   * @param <S> state type
-   */
-  public record CallResult<S>(S nextState, Object reply) {}
+    private final Proc<S, GenServerMessage<M>> proc;
 
-  private final Proc<S, GenServerMessage<M>> proc;
+    /**
+     * Create and start a GenServer with the given initial state and handler.
+     *
+     * <p>The handler is invoked sequentially for each message in FIFO order. It is responsible for
+     * pattern-matching on the message type (Call, Cast, Info) and returning the next state.
+     *
+     * @param initial the initial state
+     * @param handler the message handler
+     */
+    private GenServer(S initial, Handler<S, M> handler) {
+        this.proc =
+                new Proc<>(
+                        initial,
+                        (state, msg) -> {
+                            return switch (msg) {
+                                case GenServerMessage.Call<?> call -> {
+                                    @SuppressWarnings("unchecked")
+                                    var typedCall = (GenServerMessage.Call<M>) call;
+                                    var result = handler.handleCall(typedCall.request(), state);
+                                    typedCall.reply().complete(result.reply());
+                                    yield result.nextState();
+                                }
+                                case GenServerMessage.Cast<?> cast -> {
+                                    @SuppressWarnings("unchecked")
+                                    var typedCast = (GenServerMessage.Cast<M>) cast;
+                                    yield handler.handleCast(typedCast.request(), state);
+                                }
+                                case GenServerMessage.Info info ->
+                                        handler.handleInfo(info.info(), state);
+                            };
+                        });
+    }
 
-  /**
-   * Create and start a GenServer with the given initial state and handler.
-   *
-   * <p>The handler is invoked sequentially for each message in FIFO order. It is responsible for
-   * pattern-matching on the message type (Call, Cast, Info) and returning the next state.
-   *
-   * @param initial the initial state
-   * @param handler the message handler
-   */
-  private GenServer(S initial, Handler<S, M> handler) {
-    this.proc =
-        new Proc<>(
-            initial,
-            (state, msg) -> {
-              return switch (msg) {
-                case GenServerMessage.Call<?> call -> {
-                  @SuppressWarnings("unchecked")
-                  var typedCall = (GenServerMessage.Call<M>) call;
-                  var result = handler.handleCall(typedCall.request(), state);
-                  typedCall.reply().complete(result.reply());
-                  yield result.nextState();
-                }
-                case GenServerMessage.Cast<?> cast -> {
-                  @SuppressWarnings("unchecked")
-                  var typedCast = (GenServerMessage.Cast<M>) cast;
-                  yield handler.handleCast(typedCast.request(), state);
-                }
-                case GenServerMessage.Info info -> handler.handleInfo(info.info(), state);
-              };
-            });
-  }
+    /**
+     * Factory method to create and start a GenServer with the given initial state and handler.
+     *
+     * @param <S> state type
+     * @param <M> message type
+     * @param initial initial state
+     * @param handler the message handler
+     * @return a new GenServer instance
+     */
+    public static <S, M> GenServer<S, M> start(S initial, Handler<S, M> handler) {
+        return new GenServer<>(initial, handler);
+    }
 
-  /**
-   * Factory method to create and start a GenServer with the given initial state and handler.
-   *
-   * @param <S> state type
-   * @param <M> message type
-   * @param initial initial state
-   * @param handler the message handler
-   * @return a new GenServer instance
-   */
-  public static <S, M> GenServer<S, M> start(S initial, Handler<S, M> handler) {
-    return new GenServer<>(initial, handler);
-  }
+    /**
+     * Send an asynchronous one-way message (Cast).
+     *
+     * <p>Returns a CompletableFuture that completes when the message is enqueued, not when it is
+     * processed. This is equivalent to OTP's {@code gen_server:cast/2}.
+     *
+     * @param msg the message to send
+     * @return a CompletableFuture that completes when the message is enqueued
+     */
+    public CompletableFuture<Void> cast(M msg) {
+        return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Cast<>(msg)));
+    }
 
-  /**
-   * Send an asynchronous one-way message (Cast).
-   *
-   * <p>Returns a CompletableFuture that completes when the message is enqueued, not when it is
-   * processed. This is equivalent to OTP's {@code gen_server:cast/2}.
-   *
-   * @param msg the message to send
-   * @return a CompletableFuture that completes when the message is enqueued
-   */
-  public CompletableFuture<Void> cast(M msg) {
-    return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Cast<>(msg)));
-  }
+    /**
+     * Send a synchronous request-reply message (Call) with the given timeout.
+     *
+     * <p>Returns a CompletableFuture that completes with the response after the handler processes
+     * the request. The future completes exceptionally with {@link
+     * java.util.concurrent.TimeoutException} if the server does not respond within the timeout.
+     * This is equivalent to OTP's {@code gen_server:call(Server, Request, Timeout)}.
+     *
+     * <p>OTP: "An unbounded call is a latent deadlock. Every call must have a timeout."
+     *
+     * @param <R> the response type
+     * @param msg the request message
+     * @param timeout the maximum time to wait for a response
+     * @return a CompletableFuture that completes with the response
+     */
+    @SuppressWarnings("unchecked")
+    public <R> CompletableFuture<R> call(M msg, Duration timeout) {
+        CompletableFuture<Object> reply = new CompletableFuture<>();
+        proc.tell(new GenServerMessage.Call<>(msg, reply));
+        return reply.thenApply(r -> (R) r)
+                .orTimeout(timeout.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
 
-  /**
-   * Send a synchronous request-reply message (Call) with the given timeout.
-   *
-   * <p>Returns a CompletableFuture that completes with the response after the handler processes
-   * the request. The future completes exceptionally with {@link java.util.concurrent.TimeoutException}
-   * if the server does not respond within the timeout. This is equivalent to OTP's
-   * {@code gen_server:call(Server, Request, Timeout)}.
-   *
-   * <p>OTP: "An unbounded call is a latent deadlock. Every call must have a timeout."
-   *
-   * @param <R> the response type
-   * @param msg the request message
-   * @param timeout the maximum time to wait for a response
-   * @return a CompletableFuture that completes with the response
-   */
-  @SuppressWarnings("unchecked")
-  public <R> CompletableFuture<R> call(M msg, Duration timeout) {
-    CompletableFuture<Object> reply = new CompletableFuture<>();
-    proc.tell(new GenServerMessage.Call<>(msg, reply));
-    return reply
-        .thenApply(r -> (R) r)
-        .orTimeout(timeout.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
-  }
+    /**
+     * Send an out-of-band message (Info).
+     *
+     * <p>Used for timeouts, external events, or other asynchronous notifications. The info message
+     * is delivered to the process's mailbox and handled like any other message.
+     *
+     * @param info the info payload
+     * @return a CompletableFuture that completes when the message is enqueued
+     */
+    public CompletableFuture<Void> info(Object info) {
+        return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Info(info)));
+    }
 
-  /**
-   * Send an out-of-band message (Info).
-   *
-   * <p>Used for timeouts, external events, or other asynchronous notifications. The info message
-   * is delivered to the process's mailbox and handled like any other message.
-   *
-   * @param info the info payload
-   * @return a CompletableFuture that completes when the message is enqueued
-   */
-  public CompletableFuture<Void> info(Object info) {
-    return CompletableFuture.runAsync(() -> proc.tell(new GenServerMessage.Info(info)));
-  }
+    /**
+     * Gracefully shut down the GenServer.
+     *
+     * <p>Drains remaining messages from the mailbox and waits for the underlying process to finish.
+     * Does not fire crash callbacks. This is equivalent to OTP's {@code gen_server:stop/1}.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    public void stop() throws InterruptedException {
+        proc.stop();
+    }
 
-  /**
-   * Gracefully shut down the GenServer.
-   *
-   * <p>Drains remaining messages from the mailbox and waits for the underlying process to finish.
-   * Does not fire crash callbacks. This is equivalent to OTP's {@code gen_server:stop/1}.
-   *
-   * @throws InterruptedException if interrupted while waiting
-   */
-  public void stop() throws InterruptedException {
-    proc.stop();
-  }
+    /**
+     * Register a callback to be invoked when this GenServer terminates abnormally.
+     *
+     * @param cb the callback to register
+     */
+    public void addCrashCallback(Runnable cb) {
+        proc.addCrashCallback(cb);
+    }
 
-  /**
-   * Register a callback to be invoked when this GenServer terminates abnormally.
-   *
-   * @param cb the callback to register
-   */
-  public void addCrashCallback(Runnable cb) {
-    proc.addCrashCallback(cb);
-  }
-
-  /** Returns the underlying {@link Proc} for low-level operations (e.g., monitoring, introspection). */
-  public Proc<S, GenServerMessage<M>> underlying() {
-    return proc;
-  }
+    /**
+     * Returns the underlying {@link Proc} for low-level operations (e.g., monitoring,
+     * introspection).
+     */
+    public Proc<S, GenServerMessage<M>> underlying() {
+        return proc;
+    }
 }

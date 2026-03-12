@@ -466,8 +466,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("applies action to success value")
         void appliesActionToSuccess() {
             var log = new java.util.ArrayList<String>();
-            Result<String, String> result =
-                    Result.<String, String>ok("hello").peek(log::add);
+            Result<String, String> result = Result.<String, String>ok("hello").peek(log::add);
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(log).containsExactly("hello");
@@ -486,8 +485,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("does not apply action to failure")
         void doesNotApplyActionToFailure() {
             var log = new java.util.ArrayList<String>();
-            Result<String, String> result =
-                    Result.<String, String>err("error").peek(log::add);
+            Result<String, String> result = Result.<String, String>err("error").peek(log::add);
 
             assertThat(result.isError()).isTrue();
             assertThat(log).isEmpty();
@@ -506,8 +504,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("works with Success alias")
         void worksWithSuccessAlias() {
             var log = new java.util.ArrayList<Integer>();
-            Result<Integer, String> result =
-                    Result.<Integer, String>success(42).peek(log::add);
+            Result<Integer, String> result = Result.<Integer, String>success(42).peek(log::add);
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(log).containsExactly(42);
@@ -517,8 +514,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("works with Failure alias")
         void worksWithFailureAlias() {
             var log = new java.util.ArrayList<String>();
-            Result<String, String> result =
-                    Result.<String, String>failure("error").peek(log::add);
+            Result<String, String> result = Result.<String, String>failure("error").peek(log::add);
 
             assertThat(result.isError()).isTrue();
             assertThat(log).isEmpty();
@@ -542,8 +538,7 @@ class ResultTest implements WithAssertions {
         void throwsNullPointerExceptionForNullAction() {
             Result<String, String> result = Result.ok("value");
 
-            assertThatThrownBy(() -> result.peek(null))
-                    .isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> result.peek(null)).isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -584,8 +579,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("does not apply handler to success")
         void doesNotApplyHandlerToSuccess() {
             Result<String, String> result =
-                    Result.<String, String>ok("value")
-                            .recover(e -> Result.ok("recovered"));
+                    Result.<String, String>ok("value").recover(e -> Result.ok("recovered"));
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.orElseThrow()).isEqualTo("value");
@@ -604,8 +598,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("applies handler to failure")
         void appliesHandlerToFailure() {
             Result<String, String> result =
-                    Result.<String, String>err("error")
-                            .recover(e -> Result.ok("recovered: " + e));
+                    Result.<String, String>err("error").recover(e -> Result.ok("recovered: " + e));
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.orElseThrow()).isEqualTo("recovered: error");
@@ -615,13 +608,11 @@ class ResultTest implements WithAssertions {
         @DisplayName("handler can return failure")
         void handlerCanReturnFailure() {
             Result<String, String> result =
-                    Result.<String, String>err("error1")
-                            .recover(e -> Result.err("error2"));
+                    Result.<String, String>err("error1").recover(e -> Result.err("error2"));
 
             assertThat(result.isError()).isTrue();
             switch (result) {
-                case Result.Err<String, String>(var e) ->
-                        assertThat(e).isEqualTo("error2");
+                case Result.Err<String, String>(var e) -> assertThat(e).isEqualTo("error2");
                 default -> fail("Expected Err");
             }
         }
@@ -630,8 +621,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("works with Success alias")
         void worksWithSuccessAlias() {
             Result<String, String> result =
-                    Result.<String, String>success("value")
-                            .recover(e -> Result.ok("fallback"));
+                    Result.<String, String>success("value").recover(e -> Result.ok("fallback"));
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.orElseThrow()).isEqualTo("value");
@@ -641,8 +631,7 @@ class ResultTest implements WithAssertions {
         @DisplayName("works with Failure alias")
         void worksWithFailureAlias() {
             Result<String, String> result =
-                    Result.<String, String>failure("error")
-                            .recover(e -> Result.ok("recovered"));
+                    Result.<String, String>failure("error").recover(e -> Result.ok("recovered"));
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.orElseThrow()).isEqualTo("recovered");
@@ -665,8 +654,7 @@ class ResultTest implements WithAssertions {
         void throwsNullPointerExceptionForNullHandler() {
             Result<String, String> result = Result.err("error");
 
-            assertThatThrownBy(() -> result.recover(null))
-                    .isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> result.recover(null)).isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -764,9 +752,7 @@ class ResultTest implements WithAssertions {
                                                     ? Result.ok(order)
                                                     : Result.err("invalid quantity"))
                             .recover(e -> Result.ok(new Order("default", 0)))
-                            .fold(
-                                    order -> "processed=" + order.id(),
-                                    e -> "error=" + e);
+                            .fold(order -> "processed=" + order.id(), e -> "error=" + e);
 
             assertThat(result).isEqualTo("processed=order-123");
         }

@@ -97,7 +97,7 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("tracks and routes replies to requesters")
-        void tracksReplies() {
+        void tracksReplies() throws InterruptedException {
             var serviceReceived = new CopyOnWriteArrayList<Request>();
             var proxy =
                     new SmartProxy<Request, Reply>(Request::id, Reply::id, serviceReceived::add);

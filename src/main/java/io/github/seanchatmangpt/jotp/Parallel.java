@@ -21,8 +21,8 @@ import java.util.function.Supplier;
  *   <li><strong>Virtual Threads:</strong> Each task runs on its own virtual thread spawned by the
  *       scope (zero overhead, thousands per process).
  *   <li><strong>StructuredTaskScope:</strong> Java 26's primary concurrency primitive for
- *       structured fan-out patterns. The try-with-resources ensures proper cleanup and
- *       cancellation semantics (no orphaned tasks).
+ *       structured fan-out patterns. The try-with-resources ensures proper cleanup and cancellation
+ *       semantics (no orphaned tasks).
  *   <li><strong>Joiner Semantics:</strong> {@code awaitAllSuccessfulOrThrow()} enforces fail-fast:
  *       if any task throws, all remaining tasks are cancelled immediately.
  *   <li><strong>Railway-Oriented Result:</strong> Success path carries {@code List<T>} (results in

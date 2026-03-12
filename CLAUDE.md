@@ -305,7 +305,7 @@ Check [OpenJDK Enhancement Proposals](https://openjdk.org/jeps/) for graduation 
 | `link/2` | `Proc.link(pid)` + `Proc.trapExits(true)` | Bilateral crash propagation; both die if one fails |
 | `gen_server:call` | `Proc.ask(msg, timeout)` | Synchronous request-reply with timeout |
 | `gen_statem` | `StateMachine<S,E,D>` | State/event/data separation + sealed `Transition` hierarchy |
-| `supervisor` | `Supervisor(strategy, children)` | Supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE |
+| `supervisor` | `Supervisor(strategy, children)` | Supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE / SIMPLE_ONE_FOR_ONE; per-child `ChildSpec` (RestartType, Shutdown, ChildType); AutoShutdown; dynamic `startChild`/`terminateChild`/`deleteChild`/`whichChildren` |
 | `pmap` | `Parallel` | Structured fan-out with fail-fast (uses `StructuredTaskScope`) |
 | `monitor/2` | `ProcMonitor.monitor(pid)` | Unilateral DOWN notifications; doesn't kill watcher |
 | `global:register_name` | `ProcRegistry.register(name, pid)` | Global name table with auto-deregistration |
@@ -323,7 +323,7 @@ Details on each primitive:
 
 - `Proc<S,M>` — lightweight process: virtual-thread mailbox + pure state handler (OTP: `spawn/3`)
 - `ProcRef<S,M>` — stable Pid: opaque handle that survives supervisor restarts
-- `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window
+- `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE / SIMPLE_ONE_FOR_ONE (dynamic homogeneous pools) with sliding restart window; per-child `ChildSpec<S,M>` declares `RestartType` (PERMANENT/TRANSIENT/TEMPORARY), `Shutdown` (BrutalKill/Timeout/Infinity), and `ChildType` (WORKER/SUPERVISOR); `AutoShutdown` (NEVER/ANY_SIGNIFICANT/ALL_SIGNIFICANT) controls supervisor lifecycle on significant-child exit; dynamic management via `startChild(ChildSpec)`, `startChild()`, `terminateChild(id)`, `terminateChild(ref)`, `deleteChild(id)`, `whichChildren()`; factory methods `Supervisor.create()` and `Supervisor.createSimple()`
 - `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads
 - `StateMachine<S,E,D>` — gen_statem: state/event/data separation + sealed `Transition` hierarchy
 - `ProcLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)

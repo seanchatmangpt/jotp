@@ -25,9 +25,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("Supervision Tree Example Tests")
 class SupervisionTreeExampleTest {
 
-    /**
-     * Test ONE_FOR_ONE isolation: when one worker crashes, other workers continue unaffected.
-     */
+    /** Test ONE_FOR_ONE isolation: when one worker crashes, other workers continue unaffected. */
     @Test
     @DisplayName("ONE_FOR_ONE isolation: crash of w1 doesn't affect w2 and w3")
     void testOneForOneIsolation() throws InterruptedException {
@@ -41,11 +39,14 @@ class SupervisionTreeExampleTest {
 
         // Spawn 3 workers
         ProcRef<WorkerState, WorkerMessage> w1 =
-                supervisor.supervise("w1", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "w1", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
         ProcRef<WorkerState, WorkerMessage> w2 =
-                supervisor.supervise("w2", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "w2", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
         ProcRef<WorkerState, WorkerMessage> w3 =
-                supervisor.supervise("w3", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "w3", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
 
         // Send increments to all workers until w1 crashes (at counter=5)
         for (int i = 0; i < 6; i++) {
@@ -85,9 +86,7 @@ class SupervisionTreeExampleTest {
         supervisor.shutdown();
     }
 
-    /**
-     * Test fresh state after restart: when a worker is restarted, its state is clean.
-     */
+    /** Test fresh state after restart: when a worker is restarted, its state is clean. */
     @Test
     @DisplayName("Crashed worker is restarted with fresh state")
     void testFreshStateAfterRestart() throws InterruptedException {
@@ -99,7 +98,8 @@ class SupervisionTreeExampleTest {
                         Duration.ofSeconds(30));
 
         ProcRef<WorkerState, WorkerMessage> worker =
-                supervisor.supervise("worker", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "worker", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
 
         // Cycle 1: Increment until crash (counter reaches 5)
         for (int i = 0; i < 6; i++) {
@@ -114,12 +114,8 @@ class SupervisionTreeExampleTest {
         worker.send(new WorkerMessage.GetState(stateAfterRestart));
         WorkerState state1 = stateAfterRestart.get(5, TimeUnit.SECONDS);
 
-        assertThat(state1.counter())
-                .as("counter reset to 0 after first crash")
-                .isEqualTo(0);
-        assertThat(state1.restarts())
-                .as("worker has been restarted once")
-                .isEqualTo(1);
+        assertThat(state1.counter()).as("counter reset to 0 after first crash").isEqualTo(0);
+        assertThat(state1.restarts()).as("worker has been restarted once").isEqualTo(1);
 
         // Cycle 2: Increment again and crash again
         for (int i = 0; i < 6; i++) {
@@ -134,9 +130,7 @@ class SupervisionTreeExampleTest {
         worker.send(new WorkerMessage.GetState(stateAfterSecondRestart));
         WorkerState state2 = stateAfterSecondRestart.get(5, TimeUnit.SECONDS);
 
-        assertThat(state2.counter())
-                .as("counter reset to 0 after second crash")
-                .isEqualTo(0);
+        assertThat(state2.counter()).as("counter reset to 0 after second crash").isEqualTo(0);
         assertThat(state2.restarts())
                 .as("worker has been restarted twice")
                 .isGreaterThanOrEqualTo(2);
@@ -160,7 +154,8 @@ class SupervisionTreeExampleTest {
                         Duration.ofSeconds(30));
 
         ProcRef<WorkerState, WorkerMessage> worker =
-                supervisor.supervise("worker", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "worker", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
 
         // Trigger crashes repeatedly to exceed the limit
         // Each cycle: send 6 increments (causes crash at 5), wait, repeat
@@ -201,9 +196,7 @@ class SupervisionTreeExampleTest {
         }
     }
 
-    /**
-     * Test graceful shutdown: supervisor and all workers terminate cleanly.
-     */
+    /** Test graceful shutdown: supervisor and all workers terminate cleanly. */
     @Test
     @DisplayName("Graceful shutdown terminates supervisor and workers")
     void testGracefulShutdown() throws InterruptedException {
@@ -215,9 +208,11 @@ class SupervisionTreeExampleTest {
                         Duration.ofSeconds(30));
 
         ProcRef<WorkerState, WorkerMessage> w1 =
-                supervisor.supervise("w1", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "w1", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
         ProcRef<WorkerState, WorkerMessage> w2 =
-                supervisor.supervise("w2", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
+                supervisor.supervise(
+                        "w2", new WorkerState(), SupervisionTreeExample.WORKER_HANDLER);
 
         // Send some messages
         w1.send(new WorkerMessage.Increment());
