@@ -15,4 +15,12 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.mclaren;
     exports io.github.seanchatmangpt.jotp.dogfood.messaging;
     exports io.github.seanchatmangpt.jotp.dogfood.reactive;
+
+    // Reactive Messaging Patterns (Vaughn Vernon port)
+    exports io.github.seanchatmangpt.jotp.messagepatterns.channel;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.construction;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.routing;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.transformation;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
+    exports io.github.seanchatmangpt.jotp.messagepatterns.management;
 }
