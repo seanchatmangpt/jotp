@@ -393,18 +393,18 @@ public final class ArmstrongAgiEngine {
     // ── StateMachine transition function ──────────────────────────────────────
 
     private static StateMachine.Transition<AgiState, AgiData> transition(
-            AgiState state, AgiEvent event, AgiData data) {
+            AgiState state, StateMachine.SMEvent<AgiEvent> event, AgiData data) {
         return switch (state) {
             case AgiState.Idle() ->
                     switch (event) {
-                        case AgiEvent.Start(var src, var cls) ->
+                        case StateMachine.SMEvent.User(AgiEvent.Start(var src, var cls)) ->
                                 StateMachine.Transition.nextState(
                                         new AgiState.Assessing(), AgiData.initial(src, cls));
                         default -> StateMachine.Transition.keepState(data);
                     };
             case AgiState.Assessing() ->
                     switch (event) {
-                        case AgiEvent.AssessmentComplete(var evidence) ->
+                        case StateMachine.SMEvent.User(AgiEvent.AssessmentComplete(var evidence)) ->
                                 StateMachine.Transition.nextState(
                                         new AgiState.Explaining(),
                                         new AgiData(
@@ -417,7 +417,7 @@ public final class ArmstrongAgiEngine {
                     };
             case AgiState.Explaining() ->
                     switch (event) {
-                        case AgiEvent.ExplanationsReady(var chains) ->
+                        case StateMachine.SMEvent.User(AgiEvent.ExplanationsReady(var chains)) ->
                                 StateMachine.Transition.nextState(
                                         new AgiState.Planning(),
                                         new AgiData(
@@ -430,7 +430,7 @@ public final class ArmstrongAgiEngine {
                     };
             case AgiState.Planning() ->
                     switch (event) {
-                        case AgiEvent.PlanReady(var plan) ->
+                        case StateMachine.SMEvent.User(AgiEvent.PlanReady(var plan)) ->
                                 StateMachine.Transition.nextState(
                                         new AgiState.Done(),
                                         new AgiData(

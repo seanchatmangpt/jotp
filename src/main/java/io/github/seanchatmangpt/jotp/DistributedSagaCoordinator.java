@@ -9,7 +9,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * Distributed Saga Coordinator — orchestrates multi-service workflows with compensating transactions.
+ * Distributed Saga Coordinator — orchestrates multi-service workflows with compensating
+ * transactions.
  *
  * <p>Joe Armstrong: "In a distributed system, a saga coordinates a sequence of local transactions
  * across multiple services. If any service fails, compensating transactions roll back the entire
@@ -26,7 +27,8 @@ import java.util.function.Function;
  *   <li><strong>Log Execution:</strong> Track which steps succeeded for later compensation
  *   <li><strong>Handle Failure:</strong> If timeout or error, trigger compensation chain
  *   <li><strong>Compensation:</strong> Execute logged steps in reverse order
- *   <li><strong>Recovery:</strong> Saga state transitions define how to recover (retry, abort, etc.)
+ *   <li><strong>Recovery:</strong> Saga state transitions define how to recover (retry, abort,
+ *       etc.)
  * </ol>
  *
  * <p><strong>Saga State Machine:</strong>
@@ -80,10 +82,10 @@ import java.util.function.Function;
  *       hierarchies for type-safe coordination logic.
  *   <li><strong>Virtual Threads:</strong> Saga coordinator runs on a virtual thread; each service
  *       call is an ask() with timeout on the Proc's virtual thread.
- *   <li><strong>CompletableFuture:</strong> Timeout handling via {@code orTimeout(duration)}
- *       and exception handling.
- *   <li><strong>Generics:</strong> Generic over saga state {@code S}, events {@code E}, and
- *       data {@code D} for flexible saga composition.
+ *   <li><strong>CompletableFuture:</strong> Timeout handling via {@code orTimeout(duration)} and
+ *       exception handling.
+ *   <li><strong>Generics:</strong> Generic over saga state {@code S}, events {@code E}, and data
+ *       {@code D} for flexible saga composition.
  * </ul>
  *
  * @param <S> saga state type (use sealed interface of records)
@@ -126,8 +128,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
     // ── Sealed Saga Transition Hierarchy ─────────────────────────────────────
 
     /**
-     * Return type of a saga transition function, analogous to {@link
-     * StateMachine.Transition}.
+     * Return type of a saga transition function, analogous to {@link StateMachine.Transition}.
      *
      * @param <S> saga state type
      * @param <D> saga data type
@@ -206,7 +207,8 @@ public final class DistributedSagaCoordinator<S, E, D> {
          * @param stepName name of the step being rolled back
          * @param action function to execute during rollback
          */
-        static <D> CompensationAction<D> rollback(String stepName, Function<D, Result<D, String>> action) {
+        static <D> CompensationAction<D> rollback(
+                String stepName, Function<D, Result<D, String>> action) {
             return new Rollback<>(stepName, action);
         }
 
@@ -255,7 +257,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
             BiFunction<S, E, SagaTransition<S, D>> stateMachine,
             Duration stepTimeout) {
         this.name = name;
-        this.currentState = initialState;
+        this.currentState = new SagaState.Executing<>(initialState, 0, List.of());
         this.currentData = initialData;
         this.stateMachine = stateMachine;
         this.stepTimeout = stepTimeout;
@@ -301,10 +303,16 @@ public final class DistributedSagaCoordinator<S, E, D> {
         try {
             CompletableFuture<Object> response = ref.ask(message);
             @SuppressWarnings("unchecked")
-            Response result = (Response) response.orTimeout(stepTimeout.toMillis(), TimeUnit.MILLISECONDS).join();
+            Response result =
+                    (Response)
+                            response.orTimeout(stepTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                                    .join();
             return Result.ok(result);
-        } catch (TimeoutException e) {
-            return Result.err("Service call timeout: " + serviceName);
+        } catch (java.util.concurrent.CompletionException e) {
+            if (e.getCause() instanceof TimeoutException) {
+                return Result.err("Service call timeout: " + serviceName);
+            }
+            return Result.err("Service call failed: " + e.getMessage());
         } catch (Exception e) {
             return Result.err("Service call failed: " + e.getMessage());
         }
@@ -314,6 +322,7 @@ public final class DistributedSagaCoordinator<S, E, D> {
      * Execute a saga step with compensation.
      *
      * <p>This method:
+     *
      * <ol>
      *   <li>Calls the service (with timeout)
      *   <li>Logs the compensation action if successful
@@ -341,7 +350,14 @@ public final class DistributedSagaCoordinator<S, E, D> {
                 response -> {
                     compensationLog.add(compensation);
                     // Return a NextStep transition (caller applies it)
-                    return Result.ok(SagaTransition.nextStep(currentState, currentData));
+                    S businessState =
+                            switch (currentState) {
+                                case SagaState.Executing<S>(var s, _, _) -> s;
+                                case SagaState.Compensating<S>(var s, _, _) -> s;
+                                case SagaState.Completed<S>(var s, _) -> s;
+                                case SagaState.Failed<S> ignored -> null;
+                            };
+                    return Result.ok(SagaTransition.nextStep(businessState, currentData));
                 },
                 // Failure: trigger compensation
                 error -> Result.err(error));
@@ -459,36 +475,40 @@ public final class DistributedSagaCoordinator<S, E, D> {
      * @return true if transition succeeded, false if saga must fail
      */
     public boolean applyTransition(SagaTransition<S, D> transition) {
-        switch (transition) {
+        return switch (transition) {
             case SagaTransition.NextStep<S, D>(var newState, var newData) -> {
-                this.currentState = newState;
+                int nextIndex =
+                        switch (currentState) {
+                            case SagaState.Executing<S>(_, var idx, var steps) -> idx + 1;
+                            default -> 0;
+                        };
+                this.currentState = new SagaState.Executing<>(newState, nextIndex, List.of());
                 this.currentData = newData;
-                return true;
+                yield true;
             }
             case SagaTransition.Compensate<S, D>(var reason, var newData) -> {
                 this.currentData = newData;
-                return true;
+                yield true;
             }
             case SagaTransition.Complete<S, D>(var newState, var newData) -> {
-                this.currentState = newState;
+                this.currentState = new SagaState.Completed<>(newState, List.of());
                 this.currentData = newData;
                 this.running = false;
-                return true;
+                yield true;
             }
             case SagaTransition.Fail<S, D>(var reason) -> {
                 this.running = false;
                 this.stopReason = reason;
-                return false;
+                yield false;
             }
-        }
-        return false;
+        };
     }
 
     /**
      * Create a saga coordinator with supervision.
      *
-     * <p>The returned {@link ProcRef} can be used with a {@link Supervisor} for automatic
-     * restart on failure.
+     * <p>The returned {@link ProcRef} can be used with a {@link Supervisor} for automatic restart
+     * on failure.
      *
      * @param name saga name
      * @param initialState initial saga state
@@ -506,18 +526,22 @@ public final class DistributedSagaCoordinator<S, E, D> {
             D initialData,
             BiFunction<S, E, SagaTransition<S, D>> stateMachine,
             Duration stepTimeout) {
-        var coordinator = new DistributedSagaCoordinator<>(
-                name, initialState, initialData, stateMachine, stepTimeout);
+        var coordinator =
+                new DistributedSagaCoordinator<>(
+                        name, initialState, initialData, stateMachine, stepTimeout);
 
-        var proc = new Proc<>(
-                coordinator.currentState,
-                (state, msg) -> switch (msg) {
-                    case SagaCoordinatorMsg.GetState<S, D> ignored -> state;
-                    case SagaCoordinatorMsg.Stop<S, D>(var reason) -> {
-                        coordinator.stop(reason);
-                        yield state;
-                    }
-                });
+        @SuppressWarnings("unchecked")
+        var proc =
+                new Proc<SagaState<S>, SagaCoordinatorMsg<S, D>>(
+                        coordinator.currentState,
+                        (state, msg) ->
+                                switch (msg) {
+                                    case SagaCoordinatorMsg.GetState<S, D> ignored -> state;
+                                    case SagaCoordinatorMsg.Stop<S, D>(var reason) -> {
+                                        coordinator.stop(reason);
+                                        yield state;
+                                    }
+                                });
 
         return new ProcRef<>(proc);
     }

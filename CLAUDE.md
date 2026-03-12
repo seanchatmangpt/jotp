@@ -304,7 +304,7 @@ Check [OpenJDK Enhancement Proposals](https://openjdk.org/jeps/) for graduation 
 | `spawn/3` | `Proc.spawn(init, handler, args)` | Spawn lightweight process with state handler |
 | `link/2` | `Proc.link(pid)` + `Proc.trapExits(true)` | Bilateral crash propagation; both die if one fails |
 | `gen_server:call` | `Proc.ask(msg, timeout)` | Synchronous request-reply with timeout |
-| `gen_statem` | `StateMachine<S,E,D>` | State/event/data separation + sealed `Transition` hierarchy |
+| `gen_statem` | `StateMachine<S,E,D>` | Full gen_statem parity: `SMEvent<E>` sealed hierarchy (User, StateTimeout, EventTimeout, GenericTimeout, Internal, Enter); `Action` sealed hierarchy (Postpone, NextEvent, Set/CancelStateTimeout, Set/CancelEventTimeout, Set/CancelGenericTimeout, Reply); `Transition` variants (NextState, KeepState, RepeatState, Stop, StopAndReply); `TransitionFn<S,E,D>`; builder with `withStateEnter()`; engine loop with insertedEvents priority, stale-timeout discard, postpone/replay |
 | `supervisor` | `Supervisor(strategy, children)` | Supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE |
 | `pmap` | `Parallel` | Structured fan-out with fail-fast (uses `StructuredTaskScope`) |
 | `monitor/2` | `ProcMonitor.monitor(pid)` | Unilateral DOWN notifications; doesn't kill watcher |
@@ -325,7 +325,7 @@ Details on each primitive:
 - `ProcRef<S,M>` — stable Pid: opaque handle that survives supervisor restarts
 - `Supervisor` — supervision tree: ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE with sliding restart window
 - `CrashRecovery` — "let it crash" + supervised retry via isolated virtual threads
-- `StateMachine<S,E,D>` — gen_statem: state/event/data separation + sealed `Transition` hierarchy
+- `StateMachine<S,E,D>` — gen_statem full parity: `SMEvent<E>` sealed hierarchy (User, StateTimeout, EventTimeout, GenericTimeout, Internal, Enter); `Action` sealed hierarchy (Postpone, NextEvent, Set/CancelStateTimeout, Set/CancelEventTimeout, Set/CancelGenericTimeout, Reply); `Transition` variants (NextState, KeepState, RepeatState, Stop, StopAndReply all with `actions()`); `TransitionFn<S,E,D>` with `apply(S, SMEvent<E>, D)`; builder with `withStateEnter()`; engine: insertedEvents priority queue, EventTimeout auto-cancel on any event, StateTimeout stale-discard on state change, postpone/replay across state transitions
 - `ProcLink` — process links: bilateral crash propagation (`link/1`, `spawn_link/3`)
 - `Parallel` — structured fan-out with fail-fast semantics (`StructuredTaskScope`, OTP: `pmap`)
 - `ProcMonitor` — unilateral DOWN notifications: `monitor(process, Pid)` / `demonitor/1`; fires on any exit (normal or abnormal); does NOT kill the monitoring side (unlike links)

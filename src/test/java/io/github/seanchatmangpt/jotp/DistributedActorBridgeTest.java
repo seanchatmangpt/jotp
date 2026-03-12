@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.*;
 
 import java.io.Serializable;
 import java.time.Duration;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,8 +31,8 @@ import org.junit.jupiter.api.Test;
  * <ul>
  *   <li><strong>Local process simulation:</strong> Test with real local Proc instances to verify
  *       ProcRegistry integration.
- *   <li><strong>Remote stub simulation:</strong> RemoteActorStub provides mock gRPC behavior
- *       (echo responses for now; full gRPC integration documented for future).
+ *   <li><strong>Remote stub simulation:</strong> RemoteActorStub provides mock gRPC behavior (echo
+ *       responses for now; full gRPC integration documented for future).
  *   <li><strong>Sealed pattern matching:</strong> Verify ActorLocation dispatch logic.
  *   <li><strong>Serialization roundtrip:</strong> Encode/decode message types.
  * </ul>
@@ -46,12 +44,12 @@ import org.junit.jupiter.api.Test;
 @DisplayName("DistributedActorBridge: Location-Transparent Actor Routing")
 class DistributedActorBridgeTest {
 
-    /**
-     * Test message types: sealed interface hierarchy for pattern matching.
-     */
+    /** Test message types: sealed interface hierarchy for pattern matching. */
     sealed interface TestActorMsg extends Serializable
-            permits TestActorMsg.Increment, TestActorMsg.SetValue, TestActorMsg.Get,
-                TestActorMsg.Crash {
+            permits TestActorMsg.Increment,
+                    TestActorMsg.SetValue,
+                    TestActorMsg.Get,
+                    TestActorMsg.Crash {
 
         record Increment() implements TestActorMsg {}
 
@@ -62,9 +60,7 @@ class DistributedActorBridgeTest {
         record Crash() implements TestActorMsg {}
     }
 
-    /**
-     * Simple test actor state: carries an integer counter.
-     */
+    /** Simple test actor state: carries an integer counter. */
     private record CounterState(int count) implements Serializable {
         CounterState {
             if (count < 0) throw new IllegalArgumentException("count must be non-negative");
@@ -125,15 +121,19 @@ class DistributedActorBridgeTest {
         var local = new DistributedActorBridge.ActorLocation.Local("actor-1");
         var remote = new DistributedActorBridge.ActorLocation.Remote("host", 9000);
 
-        String localResult = switch (local) {
-            case DistributedActorBridge.ActorLocation.Local(var name) -> "local:" + name;
-            case DistributedActorBridge.ActorLocation.Remote(var h, var p) -> "remote:" + h + ":" + p;
-        };
+        String localResult =
+                switch (local) {
+                    case DistributedActorBridge.ActorLocation.Local(var name) -> "local:" + name;
+                    case DistributedActorBridge.ActorLocation.Remote(var h, var p) ->
+                            "remote:" + h + ":" + p;
+                };
 
-        String remoteResult = switch (remote) {
-            case DistributedActorBridge.ActorLocation.Local(var name) -> "local:" + name;
-            case DistributedActorBridge.ActorLocation.Remote(var h, var p) -> "remote:" + h + ":" + p;
-        };
+        String remoteResult =
+                switch (remote) {
+                    case DistributedActorBridge.ActorLocation.Local(var name) -> "local:" + name;
+                    case DistributedActorBridge.ActorLocation.Remote(var h, var p) ->
+                            "remote:" + h + ":" + p;
+                };
 
         assertThat(localResult).isEqualTo("local:actor-1");
         assertThat(remoteResult).isEqualTo("remote:host:9000");
@@ -163,7 +163,7 @@ class DistributedActorBridgeTest {
         var codec = new DistributedActorBridge.JavaSerializationCodec<TestActorMsg>();
 
         TestActorMsg[] messages =
-                new TestActorMsg[]{
+                new TestActorMsg[] {
                     new TestActorMsg.Increment(),
                     new TestActorMsg.SetValue(100),
                     new TestActorMsg.Get(),
@@ -180,23 +180,24 @@ class DistributedActorBridgeTest {
     @Test
     @DisplayName("MessageCodec: Can be plugged in for custom serialization")
     void testCustomMessageCodec() throws Exception {
-        var customCodec = new DistributedActorBridge.MessageCodec<TestActorMsg>() {
-            @Override
-            public String encode(TestActorMsg msg) {
-                // Custom encoding: just return class name for testing
-                return msg.getClass().getSimpleName();
-            }
+        var customCodec =
+                new DistributedActorBridge.MessageCodec<TestActorMsg>() {
+                    @Override
+                    public String encode(TestActorMsg msg) {
+                        // Custom encoding: just return class name for testing
+                        return msg.getClass().getSimpleName();
+                    }
 
-            @Override
-            public TestActorMsg decode(String encoded) {
-                // Custom decoding: reconstruct based on class name
-                return switch (encoded) {
-                    case "Increment" -> new TestActorMsg.Increment();
-                    case "Get" -> new TestActorMsg.Get();
-                    default -> throw new RuntimeException("Unknown message: " + encoded);
+                    @Override
+                    public TestActorMsg decode(String encoded) {
+                        // Custom decoding: reconstruct based on class name
+                        return switch (encoded) {
+                            case "Increment" -> new TestActorMsg.Increment();
+                            case "Get" -> new TestActorMsg.Get();
+                            default -> throw new RuntimeException("Unknown message: " + encoded);
+                        };
+                    }
                 };
-            }
-        };
 
         String encoded = customCodec.encode(new TestActorMsg.Increment());
         assertThat(encoded).isEqualTo("Increment");
@@ -244,7 +245,8 @@ class DistributedActorBridgeTest {
     @Test
     @DisplayName("remoteRef: Creates handle to remote actor")
     void testRemoteRefCreatesHandle() {
-        var handle = bridge.<CounterState, TestActorMsg>remoteRef("localhost", 9001, "counter-remote");
+        var handle =
+                bridge.<CounterState, TestActorMsg>remoteRef("localhost", 9001, "counter-remote");
 
         assertThat(handle).isNotNull();
         // Handle is created but not yet connected (no real server)
@@ -270,9 +272,12 @@ class DistributedActorBridgeTest {
         ProcRegistry.register("local-actor", proc);
 
         var localLoc = new DistributedActorBridge.ActorLocation.Local("local-actor");
-        var handle = new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
-                localLoc, "test-id", Duration.ofSeconds(5),
-                new DistributedActorBridge.JavaSerializationCodec<>());
+        var handle =
+                new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
+                        localLoc,
+                        "test-id",
+                        Duration.ofSeconds(5),
+                        new DistributedActorBridge.JavaSerializationCodec<>());
 
         handle.tell(new TestActorMsg.Increment());
         Thread.sleep(100); // Allow message processing
@@ -290,9 +295,12 @@ class DistributedActorBridgeTest {
         ProcRegistry.register("local-actor-2", proc);
 
         var localLoc = new DistributedActorBridge.ActorLocation.Local("local-actor-2");
-        var handle = new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
-                localLoc, "test-id-2", Duration.ofSeconds(5),
-                new DistributedActorBridge.JavaSerializationCodec<>());
+        var handle =
+                new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
+                        localLoc,
+                        "test-id-2",
+                        Duration.ofSeconds(5),
+                        new DistributedActorBridge.JavaSerializationCodec<>());
 
         var stateF = handle.ask(new TestActorMsg.Get());
         var state = stateF.get(5, TimeUnit.SECONDS);
@@ -307,9 +315,12 @@ class DistributedActorBridgeTest {
         ProcRegistry.register("stoppable-actor", proc);
 
         var localLoc = new DistributedActorBridge.ActorLocation.Local("stoppable-actor");
-        var handle = new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
-                localLoc, "test-id-3", Duration.ofSeconds(5),
-                new DistributedActorBridge.JavaSerializationCodec<>());
+        var handle =
+                new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
+                        localLoc,
+                        "test-id-3",
+                        Duration.ofSeconds(5),
+                        new DistributedActorBridge.JavaSerializationCodec<>());
 
         handle.stop();
         Thread.sleep(100);
@@ -326,14 +337,16 @@ class DistributedActorBridgeTest {
     @DisplayName("RemoteActorHandle.ask(): Fails gracefully for missing local actor")
     void testRemoteActorHandleAskFailsForMissingLocal() {
         var localLoc = new DistributedActorBridge.ActorLocation.Local("missing-actor");
-        var handle = new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
-                localLoc, "test-id-4", Duration.ofSeconds(5),
-                new DistributedActorBridge.JavaSerializationCodec<>());
+        var handle =
+                new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
+                        localLoc,
+                        "test-id-4",
+                        Duration.ofSeconds(5),
+                        new DistributedActorBridge.JavaSerializationCodec<>());
 
         var stateF = handle.ask(new TestActorMsg.Get());
 
-        assertThatThrownBy(() -> stateF.get(5, TimeUnit.SECONDS))
-                .isInstanceOf(Exception.class);
+        assertThatThrownBy(() -> stateF.get(5, TimeUnit.SECONDS)).isInstanceOf(Exception.class);
     }
 
     @Test
@@ -343,14 +356,16 @@ class DistributedActorBridgeTest {
         ProcRegistry.register("slow-actor", proc);
 
         var localLoc = new DistributedActorBridge.ActorLocation.Local("slow-actor");
-        var handle = new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
-                localLoc, "test-id-5", Duration.ofMillis(100),
-                new DistributedActorBridge.JavaSerializationCodec<>());
+        var handle =
+                new DistributedActorBridge.RemoteActorHandle<CounterState, TestActorMsg>(
+                        localLoc,
+                        "test-id-5",
+                        Duration.ofMillis(100),
+                        new DistributedActorBridge.JavaSerializationCodec<>());
 
         var stateF = handle.ask(new TestActorMsg.Get());
 
-        assertThatThrownBy(() -> stateF.get(5, TimeUnit.SECONDS))
-                .isInstanceOf(Exception.class);
+        assertThatThrownBy(() -> stateF.get(5, TimeUnit.SECONDS)).isInstanceOf(Exception.class);
     }
 
     // ============================================================================
@@ -439,8 +454,9 @@ class DistributedActorBridgeTest {
 
         // In a real scenario, clientBridge would connect to serverBridge's gRPC endpoint
         // For now, we simulate by accessing the server's registry directly
-        var remoteHandle = clientBridge.<CounterState, TestActorMsg>remoteRef(
-                "localhost", 9000, "jvm1-counter");
+        var remoteHandle =
+                clientBridge.<CounterState, TestActorMsg>remoteRef(
+                        "localhost", 9000, "jvm1-counter");
 
         // Client sends tell message
         remoteHandle.tell(new TestActorMsg.Increment());

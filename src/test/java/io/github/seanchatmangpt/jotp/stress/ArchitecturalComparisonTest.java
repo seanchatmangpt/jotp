@@ -6,187 +6,191 @@ import org.junit.jupiter.api.Test;
 /**
  * ArchitecturalComparisonTest — JOTP vs competing architectures (Akka, Vert.x, etc).
  *
- * <p>Compares JOTP process model against industry alternatives on:
- * - Throughput & latency (Pareto frontier)
- * - Resource consumption (CPU, memory, threads)
- * - Operational complexity
- * - Cost of ownership
- * - Risk & failure modes
+ * <p>Compares JOTP process model against industry alternatives on: - Throughput & latency (Pareto
+ * frontier) - Resource consumption (CPU, memory, threads) - Operational complexity - Cost of
+ * ownership - Risk & failure modes
  *
  * <p>Produces executive summary for architecture selection decision.
  */
 @DisplayName("JOTP vs Industry Alternatives - Architectural Comparison")
 class ArchitecturalComparisonTest {
 
-  /**
-   * Compare JOTP against Akka, Vert.x, Loom-based custom, and traditional ThreadPool.
-   *
-   * <p>Scenarios:
-   * 1. JOTP Proc with virtual threads (LinkedTransferQueue)
-   * 2. Akka actor model (Java implementation)
-   * 3. Vert.x event-driven (vertx-core)
-   * 4. Java 21 Loom ThreadPool (ExecutorService with virtual threads)
-   * 5. Traditional ThreadPool (ExecutorService with platform threads)
-   */
-  @Test
-  @DisplayName("Comparative Analysis: JOTP vs Akka vs Vert.x vs Loom vs ThreadPool")
-  void compareArchitectures() {
-    ArchitecturalTradeoffAnalysis analysis = new ArchitecturalTradeoffAnalysis(
-        "Message Processing - 100K TPS Requirement"
-    );
+    /**
+     * Compare JOTP against Akka, Vert.x, Loom-based custom, and traditional ThreadPool.
+     *
+     * <p>Scenarios: 1. JOTP Proc with virtual threads (LinkedTransferQueue) 2. Akka actor model
+     * (Java implementation) 3. Vert.x event-driven (vertx-core) 4. Java 21 Loom ThreadPool
+     * (ExecutorService with virtual threads) 5. Traditional ThreadPool (ExecutorService with
+     * platform threads)
+     */
+    @Test
+    @DisplayName("Comparative Analysis: JOTP vs Akka vs Vert.x vs Loom vs ThreadPool")
+    void compareArchitectures() {
+        ArchitecturalTradeoffAnalysis analysis =
+                new ArchitecturalTradeoffAnalysis("Message Processing - 100K TPS Requirement");
 
-    // ── JOTP: Proc with virtual threads ────────────────────────────────
+        // ── JOTP: Proc with virtual threads ────────────────────────────────
 
-    // Based on benchmark results: 150K msg/sec sustained, p99 <5ms
-    analysis.addArchitecture(new ArchitecturalTradeoffAnalysis.Architecture(
-        "JOTP Proc (Virtual Threads + LinkedTransferQueue)",
-        150_000.0,      // throughput
-        4.2,            // latency p99
-        18.0,           // CPU%
-        256.0,          // memory MB
-        10_000,         // thread count (virtual)
-        0.5,            // GC pause ms
-        3,              // complexity (1-10)
-        12.50,          // cost per billion ops ($)
-        "Process crash → supervisor restart <100ms",
-        95.0            // recovery time
-    ));
+        // Based on benchmark results: 150K msg/sec sustained, p99 <5ms
+        analysis.addArchitecture(
+                new ArchitecturalTradeoffAnalysis.Architecture(
+                        "JOTP Proc (Virtual Threads + LinkedTransferQueue)",
+                        150_000.0, // throughput
+                        4.2, // latency p99
+                        18.0, // CPU%
+                        256.0, // memory MB
+                        10_000, // thread count (virtual)
+                        0.5, // GC pause ms
+                        3, // complexity (1-10)
+                        12.50, // cost per billion ops ($)
+                        "Process crash → supervisor restart <100ms",
+                        95.0 // recovery time
+                        ));
 
-    // ── AKKA: Actor model with dispatcher ──────────────────────────────
+        // ── AKKA: Actor model with dispatcher ──────────────────────────────
 
-    // Akka: highly optimized, but higher overhead
-    analysis.addArchitecture(new ArchitecturalTradeoffAnalysis.Architecture(
-        "Akka (Java) - Actor Model",
-        120_000.0,      // throughput (slightly lower due to envelope overhead)
-        6.5,            // latency p99 (higher due to scheduler contention)
-        22.0,           // CPU% (more scheduler work)
-        512.0,          // memory (more metadata per actor)
-        256,            // thread count (platform threads in dispatcher)
-        2.0,            // GC pause ms (more object allocation)
-        7,              // complexity (learning curve, configuration)
-        15.75,          // cost per billion ops
-        "Actor crash → supervisor strategy up to 3s recovery",
-        3000.0          // recovery time
-    ));
+        // Akka: highly optimized, but higher overhead
+        analysis.addArchitecture(
+                new ArchitecturalTradeoffAnalysis.Architecture(
+                        "Akka (Java) - Actor Model",
+                        120_000.0, // throughput (slightly lower due to envelope overhead)
+                        6.5, // latency p99 (higher due to scheduler contention)
+                        22.0, // CPU% (more scheduler work)
+                        512.0, // memory (more metadata per actor)
+                        256, // thread count (platform threads in dispatcher)
+                        2.0, // GC pause ms (more object allocation)
+                        7, // complexity (learning curve, configuration)
+                        15.75, // cost per billion ops
+                        "Actor crash → supervisor strategy up to 3s recovery",
+                        3000.0 // recovery time
+                        ));
 
-    // ── VERT.X: Event-driven, non-blocking ─────────────────────────────
+        // ── VERT.X: Event-driven, non-blocking ─────────────────────────────
 
-    // Vert.x: excellent latency, but lower throughput scaling
-    analysis.addArchitecture(new ArchitecturalTradeoffAnalysis.Architecture(
-        "Vert.x (Event-Driven)",
-        85_000.0,       // throughput (limited by single-threaded model per core)
-        3.1,            // latency p99 (excellent, no GC pauses in hot path)
-        25.0,           // CPU% (reactive overhead)
-        180.0,          // memory (lightweight handlers)
-        64,             // thread count (1 per core, verticals)
-        0.0,            // GC pause ms (mostly off-heap)
-        5,              // complexity (async/await paradigm shift)
-        11.20,          // cost per billion ops
-        "Unhandled exception → handler dropped, message lost",
-        0.0             // recovery time (fire-and-forget failure)
-    ));
+        // Vert.x: excellent latency, but lower throughput scaling
+        analysis.addArchitecture(
+                new ArchitecturalTradeoffAnalysis.Architecture(
+                        "Vert.x (Event-Driven)",
+                        85_000.0, // throughput (limited by single-threaded model per core)
+                        3.1, // latency p99 (excellent, no GC pauses in hot path)
+                        25.0, // CPU% (reactive overhead)
+                        180.0, // memory (lightweight handlers)
+                        64, // thread count (1 per core, verticals)
+                        0.0, // GC pause ms (mostly off-heap)
+                        5, // complexity (async/await paradigm shift)
+                        11.20, // cost per billion ops
+                        "Unhandled exception → handler dropped, message lost",
+                        0.0 // recovery time (fire-and-forget failure)
+                        ));
 
-    // ── LOOM: Custom implementation with virtual threads ────────────────
+        // ── LOOM: Custom implementation with virtual threads ────────────────
 
-    // Loom-based but without library support: more dev time, similar perf
-    analysis.addArchitecture(new ArchitecturalTradeoffAnalysis.Architecture(
-        "Custom Loom (Virtual Threads + Custom Queue)",
-        140_000.0,      // throughput (comparable to JOTP, slight overhead from custom code)
-        5.8,            // latency p99 (less tuned than JOTP)
-        19.0,           // CPU%
-        290.0,          // memory (custom data structures less optimized)
-        9_500,          // thread count
-        1.2,            // GC pause ms
-        8,              // complexity (no library support, custom everything)
-        18.90,          // cost per billion ops (more maintenance)
-        "Restart logic homegrown, <200ms recovery",
-        200.0           // recovery time
-    ));
+        // Loom-based but without library support: more dev time, similar perf
+        analysis.addArchitecture(
+                new ArchitecturalTradeoffAnalysis.Architecture(
+                        "Custom Loom (Virtual Threads + Custom Queue)",
+                        140_000.0, // throughput (comparable to JOTP, slight overhead from custom
+                        // code)
+                        5.8, // latency p99 (less tuned than JOTP)
+                        19.0, // CPU%
+                        290.0, // memory (custom data structures less optimized)
+                        9_500, // thread count
+                        1.2, // GC pause ms
+                        8, // complexity (no library support, custom everything)
+                        18.90, // cost per billion ops (more maintenance)
+                        "Restart logic homegrown, <200ms recovery",
+                        200.0 // recovery time
+                        ));
 
-    // ── TRADITIONAL: ThreadPool with platform threads ───────────────────
+        // ── TRADITIONAL: ThreadPool with platform threads ───────────────────
 
-    // Java 8-20 baseline: ThreadPool with 256 platform threads
-    analysis.addArchitecture(new ArchitecturalTradeoffAnalysis.Architecture(
-        "Traditional ThreadPool (Platform Threads)",
-        45_000.0,       // throughput (limited by thread count, context switch overhead)
-        25.0,           // latency p99 (high variance from GC + context switching)
-        65.0,           // CPU% (context switch overhead)
-        1024.0,         // memory (1-2MB per platform thread × 256)
-        256,            // thread count (platform)
-        8.0,            // GC pause ms (heap pressure from threads)
-        2,              // complexity (simple API, hard to tune)
-        35.60,          // cost per billion ops (more servers needed)
-        "Thread crash → entire application unstable",
-        10000.0         // recovery time (might not recover, cascading failure)
-    ));
+        // Java 8-20 baseline: ThreadPool with 256 platform threads
+        analysis.addArchitecture(
+                new ArchitecturalTradeoffAnalysis.Architecture(
+                        "Traditional ThreadPool (Platform Threads)",
+                        45_000.0, // throughput (limited by thread count, context switch overhead)
+                        25.0, // latency p99 (high variance from GC + context switching)
+                        65.0, // CPU% (context switch overhead)
+                        1024.0, // memory (1-2MB per platform thread × 256)
+                        256, // thread count (platform)
+                        8.0, // GC pause ms (heap pressure from threads)
+                        2, // complexity (simple API, hard to tune)
+                        35.60, // cost per billion ops (more servers needed)
+                        "Thread crash → entire application unstable",
+                        10000.0 // recovery time (might not recover, cascading failure)
+                        ));
 
-    // ── EXECUTE ANALYSIS ───────────────────────────────────────────────
+        // ── EXECUTE ANALYSIS ───────────────────────────────────────────────
 
-    System.out.println("\n" + "=".repeat(80));
-    System.out.println(analysis.executiveSummary());
-    System.out.println("=".repeat(80));
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println(analysis.executiveSummary());
+        System.out.println("=".repeat(80));
 
-    // ── SCENARIO ANALYSIS ──────────────────────────────────────────────
+        // ── SCENARIO ANALYSIS ──────────────────────────────────────────────
 
-    System.out.println("\n" + "=".repeat(80));
-    System.out.println("SCENARIO-BASED RECOMMENDATIONS");
-    System.out.println("=".repeat(80));
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("SCENARIO-BASED RECOMMENDATIONS");
+        System.out.println("=".repeat(80));
 
-    // Scenario 1: Ultra-low latency financial trading
-    System.out.println("\nScenario 1: Financial Trading (p99 <5ms required, $any cost)");
-    System.out.println(analysis.recommendForRequirements(
-        5.0,            // maxLatencyP99Ms
-        null,           // no throughput requirement
-        null,           // cost no object
-        false           // don't prefer simplicity over performance
-    ));
+        // Scenario 1: Ultra-low latency financial trading
+        System.out.println("\nScenario 1: Financial Trading (p99 <5ms required, $any cost)");
+        System.out.println(
+                analysis.recommendForRequirements(
+                        5.0, // maxLatencyP99Ms
+                        null, // no throughput requirement
+                        null, // cost no object
+                        false // don't prefer simplicity over performance
+                        ));
 
-    // Scenario 2: E-commerce with cost constraints
-    System.out.println("\nScenario 2: E-commerce (p99 <50ms, 100K TPS, <$20 per billion ops)");
-    System.out.println(analysis.recommendForRequirements(
-        50.0,           // maxLatencyP99Ms
-        100_000L,       // minThroughputTps
-        20.0,           // maxCostPerBillion
-        false           // performance over simplicity
-    ));
+        // Scenario 2: E-commerce with cost constraints
+        System.out.println("\nScenario 2: E-commerce (p99 <50ms, 100K TPS, <$20 per billion ops)");
+        System.out.println(
+                analysis.recommendForRequirements(
+                        50.0, // maxLatencyP99Ms
+                        100_000L, // minThroughputTps
+                        20.0, // maxCostPerBillion
+                        false // performance over simplicity
+                        ));
 
-    // Scenario 3: Internal service with cost-first priority
-    System.out.println("\nScenario 3: Internal Service (cost-first, prefer simplicity)");
-    System.out.println(analysis.recommendForRequirements(
-        100.0,          // maxLatencyP99Ms
-        10_000L,        // minThroughputTps
-        null,           // cost no object
-        true            // prefer simplicity
-    ));
+        // Scenario 3: Internal service with cost-first priority
+        System.out.println("\nScenario 3: Internal Service (cost-first, prefer simplicity)");
+        System.out.println(
+                analysis.recommendForRequirements(
+                        100.0, // maxLatencyP99Ms
+                        10_000L, // minThroughputTps
+                        null, // cost no object
+                        true // prefer simplicity
+                        ));
 
-    // Scenario 4: Real-time dashboard (throughput priority)
-    System.out.println("\nScenario 4: Real-Time Dashboard (max throughput, p99 <10ms)");
-    System.out.println(analysis.recommendForRequirements(
-        10.0,           // maxLatencyP99Ms
-        null,           // no hard throughput requirement
-        null,           // cost no object
-        false           // performance focus
-    ));
+        // Scenario 4: Real-time dashboard (throughput priority)
+        System.out.println("\nScenario 4: Real-Time Dashboard (max throughput, p99 <10ms)");
+        System.out.println(
+                analysis.recommendForRequirements(
+                        10.0, // maxLatencyP99Ms
+                        null, // no hard throughput requirement
+                        null, // cost no object
+                        false // performance focus
+                        ));
 
-    // ── COST ANALYSIS ──────────────────────────────────────────────────
+        // ── COST ANALYSIS ──────────────────────────────────────────────────
 
-    System.out.println("\n" + "=".repeat(80));
-    System.out.println("COST OF OWNERSHIP (5-YEAR PROJECTION)");
-    System.out.println("=".repeat(80));
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("COST OF OWNERSHIP (5-YEAR PROJECTION)");
+        System.out.println("=".repeat(80));
 
-    System.out.println(buildCostProjection(analysis));
+        System.out.println(buildCostProjection(analysis));
 
-    // ── RISK ANALYSIS ──────────────────────────────────────────────────
+        // ── RISK ANALYSIS ──────────────────────────────────────────────────
 
-    System.out.println("\n" + "=".repeat(80));
-    System.out.println("RISK ASSESSMENT & MITIGATION");
-    System.out.println("=".repeat(80));
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("RISK ASSESSMENT & MITIGATION");
+        System.out.println("=".repeat(80));
 
-    System.out.println(buildRiskAssessment());
-  }
+        System.out.println(buildRiskAssessment());
+    }
 
-  private String buildCostProjection(ArchitecturalTradeoffAnalysis analysis) {
-    return """
+    private String buildCostProjection(ArchitecturalTradeoffAnalysis analysis) {
+        return """
         Infrastructure Assumptions:
         - AWS pricing: $0.25/vCPU-hour, $0.10/GB-hour
         - Operations cost: $200K/year per engineer
@@ -225,10 +229,10 @@ class ArchitecturalComparisonTest {
 
         ✓ JOTP saves $535K-$2.1M over 5 years vs alternatives.
         """;
-  }
+    }
 
-  private String buildRiskAssessment() {
-    return """
+    private String buildRiskAssessment() {
+        return """
         ┌──────────────────────────┬─────────────────────┬──────────────────────────────────┐
         │ Architecture             │ Risk Level          │ Mitigation Strategy              │
         ├──────────────────────────┼─────────────────────┼──────────────────────────────────┤
@@ -302,5 +306,5 @@ class ArchitecturalComparisonTest {
           - Don't reinvent supervisor/restart logic
           - Use proven library, not custom code
         """;
-  }
+    }
 }
