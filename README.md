@@ -137,6 +137,39 @@ supervisor.shutdown();
 
 ---
 
+## Java 26 Launch: Vision 2030
+
+**JOTP is production-ready for Java 26.** We're not just porting Erlang to Java—we're synthesizing OTP's battle-tested fault tolerance with Java 26's sealed types, pattern matching, and virtual threads to create the platform for autonomous, self-healing enterprise systems.
+
+### 🚀 Launch Materials (March 23, 2026)
+
+**For CTOs & Decision Makers:**
+- **[VISION-2030.md](VISION-2030.md)** (5 min) — Why autonomous agents are inevitable. Why JOTP is the only JVM platform built for this future.
+- **[LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md)** — Execution plan, proof points, success metrics
+
+**For Architects:**
+- **[Building Autonomous Systems with JOTP](docs/how-to/building-autonomous-systems.md)** (20 min) — Deep dive into core concepts, real examples (distributed cache, payment processing), migration path
+
+**For Developers:**
+- **[Chaos Demo](src/main/java/io/github/seanchatmangpt/jotp/examples/ChaosDemo.java)** (5 min) — Watch JOTP self-heal: 30s of random process kills, 100% uptime
+  ```bash
+  mvnd exec:java -Dexec.mainClass="io.github.seanchatmangpt.jotp.examples.ChaosDemo"
+  ```
+- **[Spring Boot Migration Example](src/main/java/io/github/seanchatmangpt/jotp/examples/SpringBootIntegration.java)** — Gradual adoption: state machines, dual-write, supervisor safety
+- **[Examples README](src/main/java/io/github/seanchatmangpt/jotp/examples/README.md)** — Complete on-ramp with use cases and architecture patterns
+
+### Core Value Proposition
+
+| Question | Answer | Result |
+|----------|--------|--------|
+| **Can I prevent all failures?** | No. | ❌ Defensive programming fails |
+| **Can I recover from all failures automatically?** | Yes, with JOTP. | ✅ Supervisor trees + sealed types |
+| **Can I scale to millions of concurrent agents?** | Only with virtual threads. | ✅ Java 26 + JOTP |
+| **Can I do this with my Java team?** | Only with JOTP. | ✅ 12M Java developers, not 500K Erlang developers |
+| **Can I migrate gradually from Spring Boot?** | Only with JOTP. | ✅ See SpringBootIntegration example |
+
+---
+
 ## Architecture: 5-Minute Overview
 
 ```
