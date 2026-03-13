@@ -1,0 +1,108 @@
+@startuml Crash Recovery with Exponential Backoff - Retry on Failure
+
+title Crash Recovery: Supervised Retry with Exponential Backoff
+
+participant Client as client
+participant "CrashRecovery" as recovery
+participant "Attempt 1\n(Virtual Thread)" as attempt1
+participant "Attempt 2\n(Virtual Thread)" as attempt2
+participant "Attempt 3\n(Virtual Thread)" as attempt3
+participant "External\nService" as service
+
+== Setup ==
+
+client -> recovery: execute(() -> operation(), maxRetries=3, baseDelay=100ms)
+note right of recovery
+  Supplier<T> operation
+  int maxRetries (number of retries after initial failure)
+  long baseDelay (100ms minimum backoff)
+end note
+
+recovery -> recovery: initialize retryCount=0, delay=baseDelay
+
+== Attempt 1 ==
+
+recovery -> attempt1: spawn virtual thread
+attempt1 -> service: call operation (e.g., fetch data)
+service --> attempt1: timeout (transient failure)
+attempt1 -> attempt1: throw TimeoutException
+attempt1 -> recovery: exception propagated
+
+recovery -> recovery: retryCount++
+recovery -> recovery: catch exception
+note right of recovery
+  Not a fatal error
+  Increment retry counter
+end note
+
+== Backoff: 2^0 * 100ms = 100ms ==
+
+recovery -> recovery: sleep(100ms)
+
+== Attempt 2 ==
+
+recovery -> attempt2: spawn virtual thread
+attempt2 -> service: call operation
+service --> attempt2: connection refused (transient failure)
+attempt2 -> attempt2: throw ConnectException
+attempt2 -> recovery: exception propagated
+
+recovery -> recovery: retryCount++
+note right of recovery
+  Still within maxRetries limit
+  Compute next backoff
+end note
+
+== Backoff: 2^1 * 100ms = 200ms ==
+
+recovery -> recovery: sleep(200ms)
+
+== Attempt 3 ==
+
+recovery -> attempt3: spawn virtual thread
+attempt3 -> service: call operation
+service --> attempt3: success (temporary issue resolved)
+attempt3 -> attempt3: return result = "data"
+attempt3 -> recovery: result returned
+
+recovery -> recovery: success!
+note right of recovery
+  retryCount=2, maxRetries=3
+  Within limit
+  Operation succeeded
+end note
+
+recovery --> client: return result
+
+== Failure Case ==
+
+note over recovery, attempt3
+  If Attempt 3 also failed:
+  - retryCount would be 2
+  - Would exceed maxRetries (3)
+  - No more attempts
+  - Throw last exception to client
+  - Client must handle failure
+end note
+
+== Key Properties ==
+
+note right of recovery
+  Exponential Backoff Formula:
+  delay(n) = baseDelay * 2^(n-1)
+  - Attempt 1 fails
+  - Wait 100ms (2^0 * 100)
+  - Attempt 2 fails
+  - Wait 200ms (2^1 * 100)
+  - Attempt 3 fails
+  - Wait 400ms (2^2 * 100)
+
+  Prevents:
+  1. Retry storms (pounding failing service)
+  2. Thundering herd (all clients retry together)
+
+  Isolation:
+  - Each attempt in isolated virtual thread
+  - Exception in one doesn't affect others
+  - Thread cleanup automatic (virtual threads)
+end note

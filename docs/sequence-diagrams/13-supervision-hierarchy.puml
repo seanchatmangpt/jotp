@@ -1,0 +1,181 @@
+@startuml Hierarchical Supervision Tree - Multi-Level Fault Domains
+
+title Hierarchical Supervision Tree: Enterprise Service Architecture
+
+participant Application as app
+participant "Root Supervisor\n(ONE_FOR_ALL)" as root
+participant "API Supervisor\n(ONE_FOR_ONE)" as apiSup
+participant "Data Supervisor\n(ONE_FOR_ONE)" as dataSup
+participant "Cache Supervisor\n(ONE_FOR_ONE)" as cacheSup
+participant "API-1" as api1
+participant "API-2" as api2
+participant "DB-1" as db1
+participant "DB-2" as db2
+participant "Cache-1" as cache1
+participant "Cache-2" as cache2
+
+== Initialization ==
+
+app -> root: Supervisor.create(ONE_FOR_ALL, maxRestarts=3, window=60s)
+
+root -> apiSup: supervise("api-layer", apiState, apiHandler)
+apiSup -> apiSup: Supervisor.create(ONE_FOR_ONE)
+
+root -> dataSup: supervise("data-layer", dataState, dataHandler)
+dataSup -> dataSup: Supervisor.create(ONE_FOR_ONE)
+
+root -> cacheSup: supervise("cache-layer", cacheState, cacheHandler)
+cacheSup -> cacheSup: Supervisor.create(ONE_FOR_ONE)
+
+== Leaf Process Spawning ==
+
+apiSup -> api1: supervise("api-1", initState, handler)
+apiSup -> api2: supervise("api-2", initState, handler)
+
+dataSup -> db1: supervise("db-1", dbState, dbHandler)
+dataSup -> db2: supervise("db-2", dbState, dbHandler)
+
+cacheSup -> cache1: supervise("cache-1", cacheState, cacheHandler)
+cacheSup -> cache2: supervise("cache-2", cacheState, cacheHandler)
+
+note right of root
+  Hierarchy:
+  Root (ONE_FOR_ALL)
+   ├── API Supervisor (ONE_FOR_ONE)
+   │    ├── API-1 worker
+   │    └── API-2 worker
+   ├── Data Supervisor (ONE_FOR_ONE)
+   │    ├── DB-1 worker
+   │    └── DB-2 worker
+   └── Cache Supervisor (ONE_FOR_ONE)
+        ├── Cache-1 worker
+        └── Cache-2 worker
+end note
+
+== Normal Operation ==
+
+api1 -> api1: serving requests
+api2 -> api2: serving requests
+db1 -> db1: serving queries
+db2 -> db2: serving queries
+cache1 -> cache1: serving cache hits
+cache2 -> cache2: serving cache hits
+
+== Scenario 1: Single Worker Crash ==
+
+db1 -> db1: OutOfMemoryException
+
+dataSup -> dataSup: onCrash callback (db1)
+note right of dataSup
+  ONE_FOR_ONE strategy:
+  - db1 crashed
+  - db2 unaffected (continues running)
+  - API layer unaffected
+  - Cache layer unaffected
+  - Only db1 restarted
+end note
+
+dataSup -> db1: spawn (fresh db1)
+db1 -> db1: new process, new state
+
+note right of dataSup
+  Query routing updated:
+  - db2: handles traffic during restart
+  - db1: comes back online
+  - Seamless failover (ProcRef.swap())
+end note
+
+== Scenario 2: Supervisor Crash ==
+
+dataSup -> dataSup: Supervisor crash (internal error)
+note right of dataSup
+  Root sees: Data Supervisor crashed
+  Root strategy: ONE_FOR_ALL
+  All supervisors + workers must restart
+end note
+
+root -> apiSup: stop (graceful shutdown)
+apiSup -> api1: stop
+apiSup -> api2: stop
+root -> dataSup: stop
+root -> cacheSup: stop
+cacheSup -> cache1: stop
+cacheSup -> cache2: stop
+
+note right of root
+  ONE_FOR_ALL effect:
+  All layers restarted:
+  - API Supervisor (fresh)
+  - Data Supervisor (fresh)
+  - Cache Supervisor (fresh)
+  - All workers (fresh state)
+
+  Atomic restart ensures:
+  - Consistent initialization order
+  - No stale cross-layer references
+end note
+
+root -> apiSup: spawn (fresh)
+root -> dataSup: spawn (fresh)
+root -> cacheSup: spawn (fresh)
+
+apiSup -> api1: supervise
+apiSup -> api2: supervise
+dataSup -> db1: supervise
+dataSup -> db2: supervise
+cacheSup -> cache1: supervise
+cacheSup -> cache2: supervise
+
+note right of root
+  All processes back online
+  Fresh state shared across layers
+end note
+
+== Fault Isolation Benefits ==
+
+note over root, cache2
+  Level 1 Isolation (Leaf):
+  - api1 crash → api2 continues
+  - db1 crash → db2 continues
+  - cache1 crash → cache2 continues
+
+  Level 2 Isolation (Supervisor):
+  - API Supervisor crash → Data/Cache unaffected
+  - Data Supervisor crash → API/Cache unaffected
+  - Cache Supervisor crash → API/Data unaffected
+
+  Level 3 Coordination (Root):
+  - Root crash (rare) → entire system restarts
+  - ONE_FOR_ALL ensures atomic restart
+
+  Result:
+  - Granular recovery (low impact)
+  - Bounded blast radius (fault domains)
+  - Fast MTTR (mean time to recovery)
+end note
+
+== Scaling Pattern ==
+
+note right of root
+  This hierarchy scales to enterprise systems:
+  Root Supervisor (ONE_FOR_ALL)
+   ├── API Layer Supervisor
+   │    ├── HTTP Server Supervisor
+   │    ├── WebSocket Supervisor
+   │    └── GraphQL Supervisor
+   ├── Business Logic Layer
+   │    ├── User Service Supervisor
+   │    ├── Product Service Supervisor
+   │    └── Order Service Supervisor
+   ├── Data Layer
+   │    ├── Primary DB Supervisor
+   │    ├── Read Replica Supervisor
+   │    └── Cache Supervisor
+   └── Infrastructure Layer
+        ├── Metrics Supervisor
+        ├── Logging Supervisor
+        └── Health Check Supervisor
+
+  Each supervisor can have hundreds of workers
+  Each worker is a virtual thread (lightweight)
+end note

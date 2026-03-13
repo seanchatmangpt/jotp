@@ -1,0 +1,94 @@
+@startuml Exit Signal Trapping - Receive Crash Signals as Messages
+
+title Exit Signal Trapping: Handle Linked Process Crashes as Mailbox Messages
+
+participant "Proc B" as procB
+participant "Proc B Mailbox" as mailboxB
+participant "Message Loop" as loopB
+participant "Trap Handler" as trapHandler
+participant "Proc A" as procA
+
+== Setup: Trap Exits ==
+
+procB -> procB: trapExits(true)
+note right of procB
+  Signal handling mode enabled
+  Exit signals delivered as messages
+  (not immediate crash)
+end note
+
+== Normal Operation ==
+
+procA -> procA: process normally
+
+procB -> loopB: wait for messages
+loopB -> loopB: ready for messages
+
+== Proc A Crashes ==
+
+procA -> procA: exception in handler
+procA -> procA: lastError = exception
+procA -> procA: exit message loop
+
+note right of procA
+  Linked to procB
+  Crash callback fires
+end note
+
+== Exit Signal Delivery ==
+
+procA -> procB: onCrash callback (bilateral link)
+procB -> mailboxB: enqueue ExitSignal(procA, reason)
+note right of mailboxB
+  ExitSignal is a record:
+  - from: Proc<S,M> procA
+  - reason: Throwable exception
+  Delivered as normal message
+end note
+
+== Signal Processing ==
+
+loopB -> mailboxB: poll next message
+mailboxB --> loopB: ExitSignal(procA, exception)
+
+loopB -> trapHandler: handle(ExitSignal)
+note right of trapHandler
+  procB's message handler
+  receives signal like any message
+end note
+
+alt Handle and Recover
+  trapHandler -> trapHandler: log crash
+  trapHandler -> trapHandler: spawn replacement
+  trapHandler --> loopB: newState (recovery)
+else Propagate Crash
+  trapHandler -> procB: re-throw exception
+  procB -> procB: exit message loop
+  procB -> procB: crash propagates upward
+end
+
+== Key Difference ==
+
+note over procB, procA
+  WITHOUT trapExits(true):
+  - Crash callback fires
+  - procB.interrupt() is called
+  - InterruptedException immediately
+  - procB crashes (unless caught)
+  - Cascading failure
+
+  WITH trapExits(true):
+  - Crash callback fires
+  - ExitSignal enqueued to mailbox
+  - procB continues running
+  - Signal processed in next iteration
+  - Can handle gracefully
+end note
+
+note right of procB
+  procB can:
+  1. Ignore signal (skip handling)
+  2. Handle + recover (spawn replacement)
+  3. Log + continue (monitoring)
+  4. Deliberately propagate (re-throw)
+end note

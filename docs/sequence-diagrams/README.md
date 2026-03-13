@@ -4,17 +4,35 @@ PlantUML sequence diagrams documenting real-time interaction patterns in JOTP (J
 
 ## Quick Reference
 
+### Foundations (01-03)
 | Diagram | Pattern | Key Concepts |
 |---------|---------|--------------|
 | **01-process-spawning.puml** | Process Creation | Virtual threads, message mailbox, state handler |
 | **02-message-passing.puml** | Messaging | tell() (fire-and-forget), ask() (request-reply) |
 | **03-process-linking.puml** | Process Links | Bilateral crash propagation, exit trapping |
+
+### Process Relationships (04-06)
+| Diagram | Pattern | Key Concepts |
+|---------|---------|--------------|
 | **04-supervised-lifecycle.puml** | Supervision | Child spawning, crash detection, atomic ProcRef.swap() |
 | **05-restart-strategies.puml** | Restart Modes | ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE |
 | **06-process-monitoring.puml** | Monitoring | Unilateral DOWN signals, health checks |
+
+### Advanced Patterns (07-09)
+| Diagram | Pattern | Key Concepts |
+|---------|---------|--------------|
 | **07-state-machine-events.puml** | State Machines | Event queues, transitions, timeout actions |
 | **08-event-manager.puml** | Event Broadcasting | Handler decoupling, crash isolation |
 | **09-process-registry.puml** | Name Registry | Registration, lookup, auto-deregistration |
+
+### Enterprise Patterns (10-14) — 80/20 Coverage
+| Diagram | Pattern | Key Concepts |
+|---------|---------|--------------|
+| **10-exit-signal-trapping.puml** | Exit Signals | trapExits, mailbox signals vs direct crash |
+| **11-crash-recovery.puml** | Retry Pattern | Exponential backoff, supervised retries |
+| **12-parallel-fan-out.puml** | Structured Concurrency | StructuredTaskScope, fail-fast, resource cleanup |
+| **13-supervision-hierarchy.puml** | Multi-Level Trees | Hierarchical fault domains, atomic restarts |
+| **14-proclib-startup.puml** | Synchronized Init | Startup handshake, initialization ordering |
 
 ---
 
@@ -270,6 +288,191 @@ sealed interface Transition<S> {
 
 ---
 
+## Enterprise Patterns (80/20 Completion)
+
+### 10. Exit Signal Trapping (`10-exit-signal-trapping.puml`)
+
+**Scenario:** Process A crashes; Process B traps exits and receives signal as mailbox message.
+
+**Key Difference from Links:**
+- **Without trapExits**: Crash callback interrupts immediately → cascading failure
+- **With trapExits(true)**: Exit signal enqueued as message → process stays alive, can handle gracefully
+
+**Signal Structure:**
+```
+ExitSignal {
+  from: Proc<S,M>        // source of signal
+  reason: Throwable      // why it crashed (null = normal exit)
+}
+```
+
+**When to Use:**
+- Building fault-tolerant worker pools that can survive linked crashes
+- Implementing supervisor-like recovery without using Supervisor
+- Monitoring process health and taking corrective action
+- Graceful degradation when dependencies fail
+
+---
+
+### 11. Crash Recovery with Exponential Backoff (`11-crash-recovery.puml`)
+
+**Scenario:** Operation fails; retry with exponential backoff; succeed on 3rd attempt.
+
+**Backoff Formula:**
+```
+delay(attempt) = baseDelay × 2^(attempt - 1)
+Example (baseDelay=100ms):
+  Attempt 1 fails → wait 100ms
+  Attempt 2 fails → wait 200ms
+  Attempt 3 fails → wait 400ms
+```
+
+**Why Exponential Backoff:**
+1. **Prevents retry storms** — servers aren't pounded
+2. **Avoids thundering herd** — clients don't all retry at once
+3. **Respects transient failures** — gives system time to recover
+
+**Use Cases:**
+- Network timeouts (temporary connectivity loss)
+- Rate limiting (temporary quota exhaustion)
+- Service unavailability (temporary deployment, maintenance)
+- Database connection pools (temporary connection exhaustion)
+
+**Key Property:** Each attempt runs in isolated virtual thread with automatic cleanup.
+
+---
+
+### 12. Parallel Fan-Out with StructuredTaskScope (`12-parallel-fan-out.puml`)
+
+**Scenario:** Spawn 3 independent tasks in parallel; one fails; all shut down immediately (fail-fast).
+
+**Java 26 Pattern:**
+```java
+Parallel.run(List.of(
+  () -> processPartition1(),
+  () -> processPartition2(),
+  () -> processPartition3()
+))
+```
+
+**Guaranteed Cleanup:**
+- All tasks spawn in virtual threads (lightweight, no thread pool overhead)
+- On any task failure: others cancelled immediately
+- Resources cleaned up automatically (try-with-resources pattern)
+- No leaked threads or dangling resources
+
+**Contrast with Unstructured Threads:**
+| Aspect | StructuredTaskScope | Unstructured Threads |
+|--------|-------------------|----------------------|
+| **Cancellation** | Automatic on failure | Must manually cancel |
+| **Cleanup** | Guaranteed by JVM | Risk of leaks |
+| **Lifetime** | Scoped (clear boundaries) | Unbounded |
+| **Overhead** | Virtual threads (1-2 KB each) | OS threads (1-8 MB each) |
+
+**Use Cases:**
+- MapReduce: partition data, process in parallel, collect results
+- Batch processing: divide work across cores, fail-fast if any task fails
+- Fan-out queries: fetch from multiple sources, fail if any source fails
+- Divide-and-conquer: binary search, quicksort, parallel tree traversal
+
+---
+
+### 13. Hierarchical Supervision Tree (`13-supervision-hierarchy.puml`)
+
+**Scenario:** Multi-level supervision: Root → API/Data/Cache Supervisors → Leaf Processes.
+
+**Typical Enterprise Hierarchy:**
+```
+Root Supervisor (ONE_FOR_ALL)
+ ├── API Layer (ONE_FOR_ONE)
+ │    ├── API-1 (HTTP handler)
+ │    └── API-2 (HTTP handler)
+ ├── Data Layer (ONE_FOR_ONE)
+ │    ├── DB-1 (connection pool)
+ │    └── DB-2 (connection pool)
+ └── Cache Layer (ONE_FOR_ONE)
+      ├── Cache-1 (Redis client)
+      └── Cache-2 (Redis client)
+```
+
+**Fault Isolation:**
+- **Level 1 (Leaf):** API-1 crashes → API-2 continues (ONE_FOR_ONE)
+- **Level 2 (Supervisor):** Data Supervisor crashes → API/Cache unaffected (Root's ONE_FOR_ALL restarts only Data)
+- **Level 3 (Root):** Root crashes → entire system restarts (rare, coordinated recovery)
+
+**Why Hierarchical:**
+1. **Bounded blast radius** — fault contained to supervisor's domain
+2. **Granular recovery** — only affected layer restarts
+3. **Coordinated startup** — parent starts children in order
+4. **Observable structure** — mirrors business architecture (API/Data/Cache layers)
+5. **Scales to large systems** — hundreds of supervisors, thousands of workers
+
+**Strategy Selection:**
+- **ONE_FOR_ONE:** Independent workers (most common, workers are stateless)
+- **ONE_FOR_ALL:** Coordinated restart (layers depend on each other, need atomic startup)
+- **REST_FOR_ONE:** Dependency chains (microservice A depends on B which depends on C)
+
+---
+
+### 14. ProcLib Startup Handshake (`14-proclib-startup.puml`)
+
+**Scenario:** Parent blocks until child calls `initAck()`, ensuring child fully initialized.
+
+**Erlang Pattern (proc_lib:start_link/3):**
+```
+Parent → ProcLib: start_link(init, handler)
+  Parent BLOCKS here (no return yet)
+  Child spawns, runs init code
+Child → ProcLib: initAck()
+  ProcLib releases latch
+Parent returns with Ok(childProc)
+  Child guaranteed initialized
+```
+
+**Without ProcLib (Fire-and-Forget):**
+```
+Parent → Child: spawn(init, handler)
+Parent → Child: tell(firstMessage)  ← RACE CONDITION!
+Parent continues
+
+Problem: Child may not be ready
+  - Database not connected
+  - Configuration not loaded
+  - firstMessage arrives before init complete
+```
+
+**With ProcLib:**
+```
+Parent → ProcLib: start_link(init, handler)
+  [BLOCKS]
+Child initializes
+Child → ProcLib: initAck()
+Parent UNBLOCKS
+Parent → Child: tell(firstMessage)  ← SAFE, child ready
+```
+
+**Failure Handling:**
+```
+Child encounters initialization error
+Child → ProcLib: initAck(StartResult.Err(reason))
+Parent UNBLOCKS with Err
+Parent can:
+  - Retry with different params
+  - Use fallback
+  - Shutdown service
+```
+
+**Use Cases:**
+- Database connection pool initialization
+- Configuration loading and validation
+- Health checks before accepting traffic
+- Warm-up (pre-populate cache before serving)
+- Service startup sequencing (A must start before B)
+
+**Why Critical:** Ensures parent knows exactly when child is ready, eliminating race conditions in initialization-dependent systems.
+
+---
+
 ## How to View These Diagrams
 
 ### Option 1: PlantUML Online
@@ -297,23 +500,78 @@ plantuml docs/sequence-diagrams/01-process-spawning.puml
 
 ## Learning Path
 
-**New to JOTP?** Follow this order:
+### 🟢 Beginner (Foundations 01-03)
+**Goal:** Understand core JOTP concepts — processes, messaging, and basic fault propagation.
 
-1. **01-process-spawning.puml** — Understand what a Proc is
-2. **02-message-passing.puml** — Learn tell() vs ask()
-3. **04-supervised-lifecycle.puml** — See how Supervisor restarts children
-4. **05-restart-strategies.puml** — Compare recovery modes
-5. **03-process-linking.puml** — Understand bilateral fault propagation
-6. **06-process-monitoring.puml** — Learn unilateral monitoring
-7. **07-state-machine-events.puml** — Advanced: state machines
-8. **08-event-manager.puml** — Advanced: event broadcasting
-9. **09-process-registry.puml** — Advanced: process discovery
+1. **01-process-spawning.puml** — What is a Proc? (virtual thread + mailbox)
+2. **02-message-passing.puml** — How do processes communicate? (tell vs ask)
+3. **03-process-linking.puml** — How do failures propagate? (bilateral links)
 
-**Enterprise Focus?** Jump to:
-- **04-supervised-lifecycle.puml** + **05-restart-strategies.puml** (reliability)
-- **07-state-machine-events.puml** (workflow engines)
-- **08-event-manager.puml** (event sourcing / CQRS)
-- **09-process-registry.puml** (service discovery)
+**Outcomes:** You can spawn processes and send messages; you understand virtual threads.
+
+---
+
+### 🟡 Intermediate (Process Relationships 04-06)
+**Goal:** Learn process relationships — supervision, monitoring, and discovery.
+
+4. **04-supervised-lifecycle.puml** — How does Supervisor restart children?
+5. **05-restart-strategies.puml** — When to use ONE_FOR_ONE vs ONE_FOR_ALL vs REST_FOR_ONE?
+6. **06-process-monitoring.puml** — How to monitor without killing the watcher?
+
+**Outcomes:** You can build reliable systems with automatic child restarts; you know the difference between links and monitors.
+
+---
+
+### 🔴 Advanced (Patterns 07-09)
+**Goal:** Master stateful systems, event handling, and distributed discovery.
+
+7. **07-state-machine-events.puml** — How do finite state machines work in JOTP?
+8. **08-event-manager.puml** — How to decouple producers and consumers?
+9. **09-process-registry.puml** — How to discover processes by name?
+
+**Outcomes:** You can build workflows with state machines, implement pub/sub patterns, and enable service discovery.
+
+---
+
+### 🚀 Enterprise (80/20 Patterns 10-14)
+**Goal:** Solve production challenges — retries, concurrency, hierarchies, and initialization.
+
+10. **10-exit-signal-trapping.puml** — How to handle linked crashes gracefully?
+11. **11-crash-recovery.puml** — How to retry with exponential backoff?
+12. **12-parallel-fan-out.puml** — How to run parallel tasks safely?
+13. **13-supervision-hierarchy.puml** — How to structure real-world systems hierarchically?
+14. **14-proclib-startup.puml** — How to ensure initialization dependencies are met?
+
+**Outcomes:** You can build enterprise-grade fault-tolerant systems with retry logic, parallel processing, and coordinated startup.
+
+---
+
+### 🎯 Learning Paths by Role
+
+**For Beginners:**
+1. Foundations (01-03) → Intermediate (04-06) → Advanced (07-09)
+
+**For CTOs / Architects:**
+- Start with 13-supervision-hierarchy.puml (real-world structure)
+- Then 05-restart-strategies.puml (reliability patterns)
+- Then 11-crash-recovery.puml (production resilience)
+- Then 14-proclib-startup.puml (initialization discipline)
+
+**For Microservice Teams:**
+- 06-process-monitoring.puml (health checks)
+- 09-process-registry.puml (service discovery)
+- 12-parallel-fan-out.puml (fan-out queries)
+- 13-supervision-hierarchy.puml (service layers)
+
+**For Workflow Engine Builders:**
+- 07-state-machine-events.puml (state machines)
+- 10-exit-signal-trapping.puml (signal handling)
+- 14-proclib-startup.puml (initialization)
+
+**For Performance Engineers:**
+- 12-parallel-fan-out.puml (structured concurrency)
+- 11-crash-recovery.puml (intelligent retries)
+- 02-message-passing.puml (mailbox performance)
 
 ---
 
