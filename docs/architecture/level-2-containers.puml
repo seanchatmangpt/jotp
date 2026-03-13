@@ -1,0 +1,24 @@
+@startuml level-2-containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4/C4_Container.puml
+
+title JOTP Framework - Containers
+
+Person(javadev, "Java Developer", "")
+
+System_Boundary(jotp_framework, "JOTP Framework") {
+    Container(core_otp, "Core OTP Primitives", "Java 26 JPMS library", "15 production-ready classes:\n- Process: Proc, ProcRef\n- Supervision: Supervisor, CrashRecovery\n- Workflows: StateMachine, EventManager, Parallel\n- Naming: ProcRegistry, ProcTimer\n- Introspection: ProcSys, ProcLib\n- Linking: ProcLink, ProcMonitor\n- Error Handling: Result")
+
+    Container(enterprise_patterns, "Enterprise Patterns", "Production reliability patterns", "Health checks (without killing)\nBackpressure & flow control\nSaga orchestration\nMulti-tenant isolation (per-supervisor)\nBulkhead isolation\nCrash recovery\nEvent broadcasting")
+
+    Container(dogfood_examples, "Dogfood Examples", "Template-generated reference code", "Core patterns (records, sealed types)\nConcurrency (virtual threads)\nGoF patterns (strategy, state, etc.)\nAPI patterns (HttpClient, java.time)\nTesting (JUnit 5, jqwik, AssertJ)\nError handling (Result<T,E>)\nSecurity (validation, crypto)\nOTP-specific examples")
+
+    Container(reactive_messaging, "Reactive Messaging", "Patterns from Vaughn Vernon", "Message channels & pipes\nMessage routing strategies\nMessage transformations\nMessage endpoints\nChannel management\nPublisher bindings")
+}
+
+Rel(javadev, core_otp, "Uses primitives: spawn, ask, tell, monitor, link, supervisor")
+Rel(enterprise_patterns, core_otp, "Built on top of")
+Rel(dogfood_examples, core_otp, "Examples using")
+Rel(dogfood_examples, enterprise_patterns, "Examples using")
+Rel(reactive_messaging, core_otp, "Wraps for reactive streams")
+
+@enduml

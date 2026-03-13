@@ -1,0 +1,80 @@
+@startuml level-4o-code-saga-pattern
+!define DIRECTION left to right
+skinparam {
+    backgroundColor #F5F5F5
+    defaultFontSize 11
+}
+skinparam rectangle {
+    BackgroundColor<<statemachine>> #E1BEE7
+    BackgroundColor<<service>> #FFCCBC
+    BackgroundColor<<log>> #C8E6C9
+    BorderColor #4A148C
+}
+
+title Level 4: Saga Pattern for Multi-Service Coordination (Orchestration)
+
+rectangle "SagaOrchestrator\nStateMachine<SagaState, Event, Data>" as saga <<statemachine>> {
+    rectangle "State: Init" as init
+    rectangle "State: Step1Done" as s1
+    rectangle "State: Step2Done" as s2
+    rectangle "State: Compensating" as comp
+    rectangle "Event transitions\n(Step1OK, Step2OK, Step3OK)\n(AnyFailed → Compensate)" as trans
+}
+
+rectangle "ServiceA\nProc<State>" as svcA <<service>> {
+    rectangle "Receives ask(Step1Request)\nReplies: Success|Failure\nNo compensation needed" as aReply
+}
+
+rectangle "ServiceB\nProc<State>" as svcB <<service>> {
+    rectangle "Receives ask(Step2Request)\nReplies: Success|Failure\nIf fails: ServiceA auto-reverts" as bReply
+}
+
+rectangle "ServiceC\nProc<State>" as svcC <<service>> {
+    rectangle "Receives ask(Step3Request)\nIf fails: compensate B then A" as cReply
+}
+
+rectangle "CompensationLog\n(Persistent DB)" as log <<log>> {
+    rectangle "Step1 undo-action\nStep2 undo-action\nStep3 undo-action\nEach idempotent-key" as logData
+}
+
+saga --> svcA: ask(Step1Request)
+svcA --> saga: reply(Result)
+saga --> svcB: if Step1OK:\nask(Step2Request)
+svcB --> saga: reply(Result)
+saga --> svcC: if Step2OK:\nask(Step3Request)
+svcC --> saga: reply(Result)
+
+saga --> log: write undo-actions\nas each step succeeds
+
+saga --> svcB: if Step3Fail:\nask(UndoStep2)
+saga --> svcA: then ask(UndoStep1)
+
+note right of saga
+  Saga = Distributed Transaction
+  1. Sequence of steps via ask()
+  2. Each step has compensation
+  3. On any failure → execute all compensations
+  4. State persisted → survives restarts
+end note
+
+note right of svcA
+  Step 1: ReserveInventory
+  Success: inventory.reserved++
+  Compensation: inventory.reserved--
+  Idempotent: idkey=order-123-reserve
+end note
+
+note right of log
+  Compensation log structure:
+  {
+    sagaId: "order-123",
+    step: 1,
+    action: "undo-reserve",
+    idempotentKey: "order-123-reserve",
+    executed: false
+  }
+  Ensures compensation
+  survives orchestrator crash
+end note
+
+@enduml

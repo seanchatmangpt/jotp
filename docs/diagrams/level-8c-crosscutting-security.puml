@@ -1,0 +1,47 @@
+@startuml level-8c-crosscutting-security
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title JOTP Level 8: Cross-Cutting Security
+
+Person(seceng, "Security Engineer", "Audits/hardens")
+
+System_Boundary(security, "Security Framework") {
+
+  Container(validation, "Input Validation", "Preconditions", "Guard clauses\nError accumulation\nField-level rules")
+
+  Container(encryption, "Encryption", "TLS/AES-256", "TLS 1.3 for network\nAES-256-GCM for data at rest\nKey rotation policy")
+
+  Container(auth, "Authentication", "OAuth2/JWT", "JWT token validation\nExpiry check\nSignature verification")
+
+  Container(authz, "Authorization", "Role-Based", "RBAC: role -> permissions\nResource-level checks\nAudit log on denial")
+
+  Container(audit, "Audit Logging", "Immutable Log", "Who, what, when, where\nAll state changes\nTamper detection")
+
+  Container(secrets, "Secrets Management", "Vault/K8s", "API keys, passwords\nRotation on interval\nAccess control")
+
+  Container(injection, "Injection Protection", "Parameterized", "SQL: prepared statements\nTemplate: escape output\nCode: no eval()")
+
+  Container(ratelimit, "Rate Limiting", "Admission Control", "Per-user quota\nPer-IP quota\nAdaptive backoff")
+
+  Container(encapsulation, "Encapsulation", "Sealed Packages", "Sealed types enforce invariants\nPackage scoping hides impl\nNo public internals")
+
+  Container(validator, "Validation Engine", "Rule Engine", "Combine multiple rules\nError accumulation\nClear error messages")
+
+  Rel(seceng, validation, "defines rules")
+  Rel(seceng, auth, "configures")
+  Rel(seceng, secrets, "rotates")
+
+  Rel(validation, validator, "uses")
+  Rel(validator, encryption, "encrypts after validate")
+  Rel(auth, authz, "token decoded by")
+  Rel(authz, audit, "decision logged")
+  Rel(audit, secrets, "uses key from")
+  Rel(injection, encryption, "protects via")
+  Rel(ratelimit, authz, "enforces per-role")
+  Rel(encapsulation, auth, "hides impl details")
+
+  note on link : Zero-trust: validate all inputs, authenticate all requests\nEncryption: in transit (TLS) and at rest (AES-256)\nAudit: immutable log of all changes, searchable\nSealed types: enforce invariants via compiler\nRate limiting: per-tenant/user/IP to prevent abuse
+}
+
+SHOW_LEGEND()
+@enduml

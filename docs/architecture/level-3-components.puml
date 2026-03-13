@@ -1,0 +1,67 @@
+@startuml level-3-components
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4/C4_Component.puml
+
+title JOTP Core OTP Primitives - Components (5 Subsystems)
+
+Container_Boundary(core, "Core OTP Primitives") {
+
+    Component_Boundary(processes, "Process Management (8 classes)") {
+        Component(proc, "Proc<S,M>", "Virtual thread mailbox + state handler", "tell(msg), ask(msg, timeout)")
+        Component(procref, "ProcRef<S,M>", "Stable process handle", "Survives supervisor restarts")
+        Component(proclink, "ProcLink", "Bilateral crash propagation", "link(pid), trapExits(true)")
+        Component(procmonitor, "ProcMonitor", "Unilateral monitoring", "monitor(pid) → DOWN signal")
+        Component(procregistry, "ProcRegistry", "Global name table", "register(name, pid), whereis(name)")
+        Component(proctimer, "ProcTimer", "Timed message delivery", "sendAfter(delay, msg), sendInterval(period, msg)")
+        Component(procsys, "ProcSys", "Live introspection", "getState(), suspend(), resume(), statistics()")
+        Component(proclib, "ProcLib", "Startup handshake", "startLink() blocks until initAck()")
+    }
+
+    Component_Boundary(supervision, "Supervision & Recovery (7 classes)") {
+        Component(supervisor, "Supervisor", "Fault-tolerance tree", "Strategies: ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE, SIMPLE_ONE_FOR_ONE")
+        Component(crashrecovery, "CrashRecovery", "Isolated retry + recovery", "Let it crash pattern + supervised retry")
+        Component(appcontroller, "ApplicationController", "App lifecycle orchestrator", "start(), stop(), restart()")
+        Component(appspec, "ApplicationSpec", "App metadata", "Record: name, version, modules, env")
+        Component(appcallback, "ApplicationCallback", "App behavior", "Interface: start(args) → Result")
+        Component(starttype, "StartType", "Sealed enum", "NORMAL, TAKEOVER, FAILOVER")
+        Component(runtype, "RunType", "Sealed enum", "PERMANENT, TRANSIENT, TEMPORARY")
+    }
+
+    Component_Boundary(workflows, "State Machines & Events (4 classes)") {
+        Component(statemachine, "StateMachine<S,E,D>", "Full gen_statem parity", "SMEvent<E>, Action, Transition<S,D>")
+        Component(eventmanager, "EventManager<E>", "Typed event bus", "addHandler(), notify(), syncNotify(), deleteHandler()")
+        Component(parallel, "Parallel", "Structured fan-out", "StructuredTaskScope-based, fail-fast semantics")
+        Component(transitionalias, "Transition", "Sealed type", "NextState, KeepState, RepeatState, Stop, StopAndReply")
+    }
+
+    Component_Boundary(errors, "Error Handling (1 class)") {
+        Component(result, "Result<T,E>", "Railway-oriented sealed type", "Ok(value) | Err(reason)\nmap(), flatMap(), fold(), recover(), peek()")
+    }
+
+    Component_Boundary(messaging, "Exit Signals & Messaging (2 classes)") {
+        Component(exitsignal, "ExitSignal", "Exit signal message", "Delivered when trapExits(true)")
+        Component(envelope, "Envelope", "Message wrapper", "Type, sender, replyTo, payload")
+    }
+}
+
+Rel(proc, proclink, "Can be linked")
+Rel(proc, procmonitor, "Can be monitored")
+Rel(proc, procregistry, "Can register name")
+Rel(proc, proctimer, "Receives timed messages")
+Rel(proc, procsys, "Can introspect")
+Rel(proc, result, "Can return")
+
+Rel(supervisor, proc, "Manages (supervises)")
+Rel(supervisor, crashrecovery, "Uses for restart logic")
+Rel(procref, proc, "Stable handle to")
+
+Rel(statemachine, proc, "Typically runs in")
+Rel(eventmanager, proc, "Event handlers run in")
+Rel(parallel, proc, "Coordinates multiple")
+
+Rel(appcontroller, supervisor, "Manages supervisors")
+Rel(appspec, appcontroller, "Metadata for")
+
+Rel(proc, exitsignal, "Receives when trapExits=true")
+Rel(proc, envelope, "Messages wrapped in")
+
+@enduml

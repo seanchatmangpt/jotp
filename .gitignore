@@ -110,7 +110,6 @@ local.properties
 /docs/.asciidoctor/
 
 .bundle
-/docs/diagrams/
 pom.xml.releaseBackup
 release.properties
 

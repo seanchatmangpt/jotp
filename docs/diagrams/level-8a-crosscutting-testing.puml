@@ -1,0 +1,45 @@
+@startuml level-8a-crosscutting-testing
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title JOTP Level 8: Cross-Cutting Testing Framework
+
+Person(developer, "Test Developer", "Writes test cases")
+
+System_Boundary(testing, "Testing Infrastructure") {
+
+  Container(junit5, "JUnit 5", "Test Engine", "@Test @ParameterizedTest\nDynamic parallel execution\nExtensions for JOTP")
+
+  Container(jqwik, "jqwik", "Property-Based", "@Property @ForAll\nRandom input generation\nShrinking on failure\nStateful testing")
+
+  Container(assertj, "AssertJ", "Fluent Assertions", "assertThat(x).isEqualTo(y)\nWithAssertions mixin\nCustom assertions")
+
+  Container(archunit, "ArchUnit", "Architecture Rules", "Module boundary checks\nCyclic dependency detection\nSealed package verification")
+
+  Container(awaitility, "Awaitility", "Async Assertions", "await().until(() -> condition)\nTimeout + polling\nNested conditions")
+
+  Container(gatling, "Gatling", "Load Testing", "Simulation scenarios\nRamp-up profiles\nLatency distribution")
+
+  Container(testcontainers, "TestContainers", "Integration", "Docker containers in tests\nPostgreSQL, Redis, Kafka\nCleanup on exit")
+
+  Container(mockito, "Mockito", "Mocking", "mock(T.class)\nverify() interactions\nCaptor for arguments")
+
+  Container(prochelper, "ProcTestHelper", "JOTP Utilities", "awaitProcess(pid)\nverifyMessage(pid, msg)\ncreateMockProc()")
+
+  Container(testdata, "Instancio", "Test Data Gen", "@InstancioExtension\nRandom object creation\nCustom blueprints")
+
+  Rel(developer, junit5, "writes with")
+  Rel(junit5, jqwik, "runs property tests")
+  Rel(junit5, assertj, "makes assertions")
+  Rel(junit5, archunit, "validates arch")
+  Rel(junit5, awaitility, "waits async")
+  Rel(junit5, gatling, "runs perf tests")
+  Rel(junit5, testcontainers, "provisions containers")
+  Rel(junit5, mockito, "mocks dependencies")
+  Rel(junit5, prochelper, "helpers for JOTP")
+  Rel(junit5, testdata, "generates data")
+
+  note on link : JUnit 5: test engine\njqwik: property-based for state machine testing\nAssertJ: fluent readable assertions\nAwaitility: async/concurrent assertions\nTestContainers: real external dependencies
+}
+
+SHOW_LEGEND()
+@enduml

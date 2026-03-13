@@ -1,0 +1,82 @@
+@startuml level-5i-sequence-supervisor-restart
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title Supervisor Restart Sequence
+
+participant "Supervisor" as SUP
+participant "Child Process" as CHILD
+participant "ChildSpec" as SPEC
+participant "Restart Detector" as RD
+participant "Sliding Window" as SW
+participant "New Child" as NEWCHILD
+
+CHILD -> CHILD: execute handler()
+activate CHILD
+note over CHILD: Process running\nHandling messages
+
+CHILD -> CHILD: unhandled exception
+activate CHILD
+note over CHILD: Crash detected\nException thrown
+
+CHILD -> SUP: exit(abnormal, reason)
+deactivate CHILD
+
+SUP -> RD: recordFailure(childId, timestamp)
+activate RD
+note over RD: Timestamp: 2024-03-13T10:15:00Z
+
+RD -> SW: add(timestamp)
+activate SW
+note over SW: Sliding restart window\nDefault: 60 seconds, max 5 restarts
+
+SW -> SW: countRestartsInWindow()
+activate SW
+note over SW: Query: how many restarts\nin past 60 seconds?
+SW -> RD: count(restarts)
+deactivate SW
+
+alt Restarts exceed max in window
+  RD -> SUP: RestartsExceeded(5, 60s)
+  deactivate RD
+  SUP -> CHILD: exit(permanently)
+  note over CHILD: Kill permanently\nDon't restart
+  SUP -> SUP: apply OneForOne strategy
+  note over SUP: Only this child dies\nOthers continue
+else Restarts within threshold
+  RD -> SUP: RestartAllowed
+  deactivate RD
+  
+  SUP -> SPEC: getRestartType()
+  activate SPEC
+  
+  alt RestartType: PERMANENT
+    SPEC -> SUP: restart always
+    note over SPEC: Restart even if not requested
+  else RestartType: TRANSIENT
+    SPEC -> SUP: restart if abnormal
+    note over SPEC: Restart only on abnormal exit
+  else RestartType: TEMPORARY
+    SPEC -> SUP: never restart
+    note over SPEC: Treat as temporary worker
+  end
+  
+  deactivate SPEC
+  
+  SUP -> SPEC: getShutdown()
+  activate SPEC
+  note over SPEC: Shutdown strategy
+  deactivate SPEC
+  
+  SUP -> NEWCHILD: spawn(init, handler, args)
+  activate NEWCHILD
+  note over NEWCHILD: Create new process instance\nFresh virtual thread\nReset mailbox
+  
+  NEWCHILD -> SUP: initialized()
+  
+  deactivate NEWCHILD
+  
+  SUP -> SUP: recordRestart()
+  note over SUP: Log restart event\nUpdate restart count
+end
+
+@enduml

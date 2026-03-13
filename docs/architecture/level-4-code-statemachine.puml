@@ -1,0 +1,89 @@
+@startuml level-4-code-statemachine
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4/C4_Component.puml
+
+title StateMachine<S,E,D>: Full gen_statem Parity
+
+Container_Boundary(sm_impl, "StateMachine<S,E,D> Implementation") {
+
+    Component(sm_type, "StateMachine<S,E,D>", "Core type", "S = State (sealed or enum)\nE = Event user type\nD = Data (context/accumulator)")
+
+    Component_Boundary(events, "SMEvent<E> (Sealed Hierarchy)") {
+        Component(event_user, "User(event: E)", "User-generated event", "tell(event) → queued")
+        Component(event_state_timeout, "StateTimeout(data: Any)", "State timeout fired", "Set via Action.SetStateTimeout")
+        Component(event_event_timeout, "EventTimeout(id: String, data: Any)", "Event-specific timeout", "Set via Action.SetEventTimeout")
+        Component(event_generic_timeout, "GenericTimeout(id: String, data: Any)", "Generic timeout", "Set via Action.SetGenericTimeout")
+        Component(event_internal, "Internal(event: E)", "Internal queued event", "Queue via Action.NextEvent")
+        Component(event_enter, "Enter(prevState: S)", "State entry signal", "Fired on every state change")
+    }
+
+    Component_Boundary(actions, "Action (Sealed Hierarchy)") {
+        Component(action_postpone, "Postpone", "Queue event for next state", "Event replayed on state entry")
+        Component(action_next_event, "NextEvent(event: E)", "Insert event ahead in queue", "Priority over pending events")
+        Component(action_set_state_timeout, "SetStateTimeout(duration, data)", "Arm state timeout", "Auto-cancel on any event")
+        Component(action_cancel_state_timeout, "CancelStateTimeout", "Cancel state timeout", "")
+        Component(action_set_event_timeout, "SetEventTimeout(id, duration, data)", "Arm event-specific timeout", "Must cancel explicitly")
+        Component(action_cancel_event_timeout, "CancelEventTimeout(id)", "Cancel event timeout", "")
+        Component(action_set_generic_timeout, "SetGenericTimeout(id, duration, data)", "Arm generic timeout", "Manual management")
+        Component(action_cancel_generic_timeout, "CancelGenericTimeout(id)", "Cancel generic timeout", "")
+        Component(action_reply, "Reply(to: ProcRef, reply: R)", "Send async reply", "Via Proc.ask() channel")
+    }
+
+    Component_Boundary(transitions, "Transition<S,D> (Sealed Hierarchy)") {
+        Component(trans_next_state, "NextState(newState: S, newData: D, actions)", "State change", "→ fires Enter event")
+        Component(trans_keep_state, "KeepState(newData: D, actions)", "Keep current state", "No Enter event fired")
+        Component(trans_repeat_state, "RepeatState(actions)", "Keep state, keep data", "Used for internal transitions")
+        Component(trans_stop, "Stop(reason: StopReason)", "Halt state machine", "Process terminates")
+        Component(trans_stop_reply, "StopAndReply(reply: R, reason: StopReason)", "Reply then halt", "For sync initiators")
+    }
+
+    Component(transition_fn, "TransitionFn<S,E,D>", "Pure handler function", "apply(state: S, event: SMEvent<E>, data: D)\n  → Transition<S,D>\nDeterministic, no side effects")
+
+    Component_Boundary(engine, "State Machine Engine") {
+        Component(event_queue, "Event Queue", "insertedEvents (priority) + pending", "NextEvent has priority\nUser events queued after")
+        Component(engine_loop, "Engine Loop (in Proc)", "Dequeue → handler → transition", "1. Check StateTimeout (auto-cancel on any event)\n2. Dequeue from queue (priority first)\n3. Call handler(state, event, data)\n4. Execute transition (NextState/KeepState/etc)\n5. Execute actions (Postpone/NextEvent/SetTimeout/Reply)\n6. Repeat")
+        Component(timeout_handling, "Timeout Semantics", "Expiry detection", "StateTimeout: auto-cancel on any event\nEventTimeout: must cancel explicitly\nGenericTimeout: manual lifecycle")
+        Component(postpone_replay, "Postpone & Replay", "Cross-state event retention", "Postpone → queue for next state\nReplay on StateTimeout or NextState\nGUARANTEES: no event loss on state change")
+        Component(state_enter, "Enter Signal", "State entry hook", "Fired when: NextState transition\nAllows state-specific initialization\nCan set StateTimeout, etc")
+    }
+
+    Component(builder, "Builder Pattern", "DSL for setup", "stateMachine<S,E,D>(initialState, initialData)\n  .withStateEnter(state, handler)\n  .build()")
+}
+
+Rel(sm_type, events, "Uses events from")
+Rel(sm_type, actions, "Produces actions via")
+Rel(sm_type, transitions, "Returns transitions of type")
+Rel(transition_fn, sm_type, "Typed as handler for")
+Rel(engine_loop, event_queue, "Manages")
+Rel(engine_loop, transition_fn, "Calls handler")
+Rel(engine_loop, timeout_handling, "Implements semantics for")
+Rel(engine_loop, postpone_replay, "Implements mechanism for")
+Rel(engine_loop, state_enter, "Fires on state change")
+Rel(builder, sm_type, "Creates")
+
+note right of event_queue
+  insertedEvents: priority deque
+  User events + pending: regular queue
+  Ensures NextEvent has priority
+end note
+
+note right of timeout_handling
+  StateTimeout: "re-arm on entry"
+  - Auto-cancel on any event
+  - Stale timeouts discarded
+  - No race conditions
+
+  EventTimeout: "explicit lifecycle"
+  - Must cancel manually
+  - Tied to specific event
+  - For async workflows
+end note
+
+note right of postpone_replay
+  Postpone prevents event loss:
+  - Current state → event doesn't match
+  - Queue event for next state
+  - Replay when state changes
+  - GUARANTEES: no lost events
+end note
+
+@enduml

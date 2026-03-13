@@ -1,0 +1,255 @@
+@startuml level-3g-components-reactive
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Level 3G: Reactive Messaging & Integration
+
+LAYOUT_WITH_LEGEND()
+
+package "Channel Layer (Message Transport)" as CHANNEL_PKG #FFF8DC {
+    component "Channel<M>" as CHANNEL [
+        Message channel abstraction
+        ----
+        Type-safe message transport
+        Capacity policies
+        Buffer management
+    ]
+
+    component "ChannelBuffer" as CHANNELBUFFER [
+        FIFO message queue
+        ----
+        Bounded/unbounded
+        Backpressure on full
+        Sealed capacity policies
+    ]
+
+    component "ChannelSender" as CHANNELSENDER [
+        Send-side channel endpoint
+        ----
+        Non-blocking send
+        Backpressure awareness
+        Timeout support
+    ]
+
+    component "ChannelReceiver" as CHANNELRECEIVER [
+        Receive-side endpoint
+        ----
+        Message dequeue
+        Async/sync modes
+        Batch receive
+    ]
+}
+
+package "Router Layer (Message Routing)" as ROUTER_PKG #E6F3FF {
+    component "Router<M>" as ROUTER [
+        Message routing engine
+        ----
+        Route decision logic
+        Destination selection
+        Message filtering
+    ]
+
+    component "Route Matcher" as ROUTE_MATCHER [
+        Route selection logic
+        ----
+        Predicate-based routing
+        Type-safe patterns
+        Sealed route types
+    ]
+
+    component "Load Balancer" as LOAD_BALANCER [
+        Destination selection
+        ----
+        Round-robin
+        Least-loaded
+        Custom strategies
+    ]
+
+    component "Dead Letter Queue" as DLQ [
+        Failed message capture
+        ----
+        Unroutable messages
+        Retry mechanism
+        Poison pill handling
+    ]
+}
+
+package "Transformer Layer (Message Processing)" as TRANSFORM_PKG #F0FFF0 {
+    component "Transformer<T,R>" as TRANSFORMER [
+        Message transformation
+        ----
+        Type-safe conversion
+        Chainable operations
+        Error handling
+    ]
+
+    component "Pipeline" as PIPELINE [
+        Multi-step transformation
+        ----
+        Sequential processing
+        Parallel branches
+        Aggregation
+    ]
+
+    component "Enricher" as ENRICHER [
+        Message enrichment
+        ----
+        Add context data
+        External lookups
+        State injection
+    ]
+
+    component "Splitter" as SPLITTER [
+        Message decomposition
+        ----
+        Batch splitting
+        Collection expansion
+        Multicast routing
+    ]
+}
+
+package "Endpoint Layer (External Integration)" as ENDPOINT_PKG #FFE4E1 {
+    component "Endpoint<M>" as ENDPOINT [
+        External system bridge
+        ----
+        Source / Sink abstraction
+        Protocol handling
+        Serialization/deserialization
+    ]
+
+    component "Source Endpoint" as SOURCE_ENDPOINT [
+        Inbound message source
+        ----
+        Polling/push modes
+        Error recovery
+        Acknowledgment handling
+    ]
+
+    component "Sink Endpoint" as SINK_ENDPOINT [
+        Outbound message sink
+        ----
+        HTTP/messaging/DB
+        Retry strategy
+        Idempotency
+    ]
+
+    component "Protocol Handler" as PROTOCOL [
+        Protocol-specific logic
+        ----
+        HTTP/AMQP/Kafka/gRPC
+        Serialization
+        Error mapping
+    ]
+}
+
+package "Integration Orchestration" as ORCHESTRATION_PKG #F5F5F5 {
+    component "IntegrationFlow" as FLOW [
+        Integration blueprint
+        ----
+        Declarative topology
+        Channel configuration
+        Endpoint wiring
+    ]
+
+    component "FlowBuilder" as FLOWBUILDER [
+        Fluent DSL
+        ----
+        Readable configuration
+        Type-safe routing
+        Composition
+    ]
+
+    component "MessageBroker" as BROKER [
+        Central message hub
+        ----
+        Topics/queues
+        Fan-out distribution
+        Message ordering
+    ]
+
+    component "IntegrationMonitor" as INTEGRATION_MONITOR [
+        Flow observability
+        ----
+        Message throughput
+        Latency tracking
+        Error rates
+    ]
+}
+
+'Channel relationships
+CHANNEL --> CHANNELBUFFER : "backed by"
+CHANNEL --> CHANNELSENDER : "provides"
+CHANNEL --> CHANNELRECEIVER : "provides"
+CHANNELSENDER --> CHANNELBUFFER : "pushes to"
+CHANNELRECEIVER --> CHANNELBUFFER : "pulls from"
+
+'Router relationships
+ROUTER --> ROUTE_MATCHER : "applies"
+ROUTER --> LOAD_BALANCER : "selects via"
+ROUTER --> DLQ : "catches failures"
+LOAD_BALANCER -.-> CHANNEL : "routes to"
+
+'Transformer relationships
+TRANSFORMER --> PIPELINE : "part of"
+PIPELINE --> ENRICHER : "stage: enrich"
+PIPELINE --> SPLITTER : "stage: split"
+SPLITTER --> TRANSFORMER : "feeds"
+
+'Endpoint relationships
+ENDPOINT --> SOURCE_ENDPOINT : "extends"
+ENDPOINT --> SINK_ENDPOINT : "extends"
+ENDPOINT --> PROTOCOL : "uses"
+PROTOCOL --> TRANSFORMER : "deserializes via"
+
+'Orchestration relationships
+FLOW --> FLOWBUILDER : "built with"
+FLOW --> CHANNEL : "configures"
+FLOW --> ROUTER : "includes"
+FLOW --> ENDPOINT : "connects"
+FLOWBUILDER --> FLOW : "produces"
+BROKER --> CHANNEL : "manages"
+INTEGRATION_MONITOR --> FLOW : "observes"
+
+'Cross-package integrations
+CHANNEL --> ROUTER : "carries messages to"
+ROUTER --> TRANSFORMER : "routes to"
+TRANSFORMER --> ENDPOINT : "outputs to"
+ENDPOINT --> BROKER : "publishes via"
+DLQ --> INTEGRATION_MONITOR : "signals alerts"
+
+note on right of CHANNEL_PKG
+  Virtual thread-backed message
+  channels. ChannelBuffer enforces
+  backpressure via sealed capacity
+  policies (BOUNDED/UNBOUNDED).
+end note
+
+note on right of ROUTER_PKG
+  Content-based routing with
+  type-safe matchers. Dead Letter
+  Queue captures unroutable/failed
+  messages for analysis + retry.
+end note
+
+note on right of TRANSFORM_PKG
+  Functional message transformation.
+  Pipeline chains Transformer,
+  Enricher, Splitter stages.
+  Result<T,E> errors propagate.
+end note
+
+note on right of ENDPOINT_PKG
+  Protocol-agnostic bridge to
+  external systems: HTTP, AMQP,
+  Kafka, gRPC. Handles serialization
+  and error recovery.
+end note
+
+note on right of ORCHESTRATION_PKG
+  Declarative IntegrationFlow DSL
+  wires channels, routers, transformers,
+  endpoints. FlowBuilder provides fluent
+  API. IntegrationMonitor tracks
+  throughput, latency, errors.
+end note
+
+@enduml

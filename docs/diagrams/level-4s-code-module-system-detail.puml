@@ -1,0 +1,42 @@
+@startuml level-4s-code-module-system-detail
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Java 26 Module System (JPMS) Details
+
+Container_Boundary(jpmsdetail, "Module System Implementation") {
+
+  Component(modinfo, "module-info.java", "Module Descriptor", "module M { exports X; requires N; opens Y; }")
+
+  Component(exports, "Exports Clause", "Public API", "exports io.github.seanchatmangpt.jotp.core\nExpose Proc, Supervisor, StateMachine\nOthers stay internal")
+
+  Component(requires, "Requires Clause", "Dependency", "requires java.base\nrequires transitive X (API visible)\nrequires Y (internal only)")
+
+  Component(opens, "Opens Clause", "Reflection", "opens io.github.seanchatmangpt.jotp.core to java.base\nEnable reflection for testing\nQualified opens to test modules")
+
+  Component(sealed, "Sealed Packages", "Encapsulation", "package io.github.seanchatmangpt.jotp._internal permits C1, C2\nPrevents external subclassing\nEnforces sealed type hierarchy")
+
+  Component(jpl, "JPL (Java Platform Modules)", "Standard Library", "Sealed modules\njava.base, java.lang, etc.\nStrict encapsulation\nVersion management")
+
+  Component(internal, "_internal Package", "Hidden APIs", "Internal implementation details\nNot exported\nSealed package restriction\nBreak at any version")
+
+  Component(qualified, "Qualified Exports", "Limited Access", "exports X to Y, Z only\nRestrict access to known modules\nExample: test-only exports")
+
+  Component(transitive, "Transitive Requires", "API Dependency", "requires transitive J\nIf A requires M, gets M's transitive\nIf not transitive: implementation detail")
+
+  Component(readability, "Readability Graph", "Resolution", "JVM resolves at startup\nBuild readability graph\nDetect cycles (error)\nVerify sealed invariants")
+
+  Rel(modinfo, exports, "declares")
+  Rel(modinfo, requires, "declares")
+  Rel(modinfo, opens, "declares")
+  Rel(exports, sealed, "protects")
+  Rel(sealed, internal, "seals")
+  Rel(requires, transitive, "uses")
+  Rel(qualified, exports, "restricts")
+  Rel(modinfo, readability, "used for")
+
+  note on link : --enable-preview compiles with preview features\nmodule-info.java compiled to module-info.class\nJVM loads all module-info.class at startup\nSealed packages prevent split packages across modules\nReadability graph enforces DAG (no cycles allowed)
+}
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,61 @@
+@startuml level-1b-system-context-spring-boot
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+HIDE_STEREOTYPE()
+title System Context: JOTP Integration with Spring Boot
+
+Person(devs, "Spring Boot Developers", "Enterprise Java teams\nadopting JOTP")
+
+System_Boundary(spring_app, "Spring Boot Application") {
+    Container(spring_core, "Spring Framework", "Spring Data, Transactions,\nDependency Injection")
+    Container(jotp_integration, "JOTP Integration Layer", "Spring Boot starters,\nauto-configuration")
+    Container(jotp_lib, "JOTP Library", "15 OTP primitives,\nenterprise patterns")
+}
+
+System(spring_cloud, "Spring Cloud Components", "Service discovery, config,\nmessaging, gateway")
+
+System(kafka, "Kafka", "Message broker")
+
+System(db, "Database", "Spring Data JDBC/JPA\nwith transactions")
+
+System(rest_clients, "REST Clients", "Calling JOTP services")
+
+System(monitoring, "Spring Cloud Monitoring", "Micrometer, Prometheus,\ndistributed tracing")
+
+Rel(devs, rest_clients, "Use")
+Rel(rest_clients, spring_app, "Call")
+
+Rel(spring_app, spring_cloud, "Integrates with")
+Rel(spring_app, kafka, "Publishes/subscribes via\nJOTP processes")
+Rel(spring_app, db, "Queries via Spring Data")
+Rel(spring_app, monitoring, "Exports metrics")
+
+note right of spring_core
+  **Spring Core Responsibilities:**
+  - Dependency injection
+  - Transaction management
+  - Configuration management
+end note
+
+note right of jotp_integration
+  **JOTP-Spring Bridge:**
+  - @EnableJotp annotation
+  - ProcSpringFactory for Spring bean creation
+  - ConfigurableApplicationContext integration
+  - Supervisor bean lifecycle
+end note
+
+note right of jotp_lib
+  **JOTP in Spring Context:**
+  - Processes spawned by Spring (not raw Java)
+  - Spring beans injected into handlers
+  - Logging via SLF4J + Spring logging
+  - Metrics collected via Micrometer
+end note
+
+Rel(jotp_integration, spring_core, "Uses")
+Rel(jotp_integration, jotp_lib, "Wraps")
+Rel(spring_cloud, jotp_lib, "Coordinates with\nJOTP processes")
+
+SHOW_LEGEND()
+@enduml

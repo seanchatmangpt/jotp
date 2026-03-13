@@ -1,0 +1,63 @@
+@startuml level-5b-sequence-tell
+!define DIRECTION top to bottom
+title Level 5: Dynamic Sequence - Tell (Fire-and-Forget Async Message)
+
+actor Caller as caller
+participant "Proc<State, Msg>" as proc
+participant "Mailbox\n(concurrent queue)" as mb
+participant "Virtual Thread\nEventLoop" as loop
+participant "StateHandler" as handler
+
+caller -> proc: tell(MyMessage)
+note right of caller
+  Async fire-and-forget
+  Caller does NOT wait
+  Returns immediately
+end note
+
+activate proc
+proc -> mb: enqueue(MyMessage)
+deactivate proc
+note right of mb
+  O(1) enqueue operation
+  Thread-safe (concurrent queue)
+  Lock-free if possible
+end note
+
+caller --> caller: continue\n(no blocking)
+
+par Virtual Thread Event Loop (concurrent)
+  loop -> mb: dequeue(next message)
+  activate loop
+  activate mb
+  note right of mb
+    FIFO order guaranteed
+    Even if multiple threads
+    send tell() simultaneously
+  end note
+  deactivate mb
+
+  loop -> handler: handler(state, msg)
+  activate handler
+
+  handler --> handler: compute new state
+  note right of handler
+    Pure function
+    No IO, no external state
+    Deterministic
+  end note
+
+  handler --> loop: new state
+  deactivate handler
+
+  loop -> loop: update state\n(atomic CAS)
+  deactivate loop
+
+  note right of loop
+    Handler processed message
+    State updated
+    Ready for next message
+  end note
+end
+
+@enduml

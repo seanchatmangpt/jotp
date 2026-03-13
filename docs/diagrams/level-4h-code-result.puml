@@ -1,0 +1,179 @@
+@startuml level-4h-code-result
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Result<S,F> - Railway-Oriented Programming
+
+Container_Boundary(sealed_type, "Sealed Result Interface") {
+  Component(result_iface, "sealed interface Result<S, F>\npermits Ok, Err", "Type", "Tagged union: Success OR Failure")
+
+  Component(ok_record, "record Ok<S,F>(S value) implements Result", "Variant", "Success case\nCarries success value")
+
+  Component(err_record, "record Err<S,F>(F error) implements Result", "Variant", "Failure case\nCarries error value")
+}
+
+Container_Boundary(factories, "Factory Methods") {
+  Component(ok_factory, "static <S,F> Result<S,F> ok(S value)", "Factory", "Create Ok(value)")
+
+  Component(err_factory, "static <S,F> Result<S,F> err(F error)", "Factory", "Create Err(error)")
+
+  Component(success_alias, "static <S,F> Result<S,F> success(S value)", "Alias", "Same as ok()")
+
+  Component(failure_alias, "static <S,F> Result<S,F> failure(F error)", "Alias", "Same as err()")
+
+  Component(of_supplier, "static <S,F> Result<S,F> of(Supplier<S>)", "Exception Bridge", "Execute supplier\nIf throws → Err(exception)\nIf succeeds → Ok(value)")
+}
+
+Container_Boundary(transformations, "Railway Operations") {
+  Component(map, "map(Function<S, S2>)", "Success Track", "If Ok → apply function\nIf Err → pass through")
+
+  Component(flatmap, "flatMap(Function<S, Result<S2,F>>)", "Chain Success", "If Ok → apply function (returns Result)\nIf Err → pass through\nFlattens nested Result")
+
+  Component(fold, "fold(Function<S,R>, Function<F,R>)", "Pattern Match", "If Ok(v) → apply success fn\nIf Err(e) → apply error fn\nBoth return same type R")
+
+  Component(peek, "peek(Consumer<S>)", "Side Effect", "If Ok → invoke consumer (side effect)\nIf Err → skip\nReturn self (chainable)")
+
+  Component(recover, "recover(Function<F, Result<S,F2>>)", "Error Track", "If Err → apply function\nIf Ok → pass through\nCan transform or recover")
+
+  Component(or_else_throw, "orElseThrow()", "Extract or Throw", "If Ok(v) → return v\nIf Err(e) → throw new ResultException(e)")
+}
+
+Container_Boundary(pattern_matching, "Exhaustive Pattern Matching") {
+  note right
+  **Java 26 Pattern Matching on Sealed Type**
+
+  switch (result) {
+    case Result.Ok<String, MyError>(var msg) ->
+      println("Success: " + msg);
+    case Result.Err<String, MyError>(var e) ->
+      println("Error: " + e);
+  }
+
+  Compiler enforces:
+  - All cases handled
+  - No default needed
+  - Variables bound: var msg, var e
+  - Type-safe extraction
+  end note
+}
+
+Container_Boundary(railroad_diagram, "Railway-Oriented Flow") {
+  note bottom
+  **Two Parallel Tracks: Success & Failure**
+
+  Input
+    ├─→ [Success Path] ─→ map(f) ─→ flatMap(g) ─→ [Ok value]
+    │                    (skipped if Err)
+    │
+    └─→ [Failure Path] ─→ recover(h) ─→ [Err value or recovered]
+                       (skipped if Ok)
+
+  Example: Data validation pipeline
+
+  Result<Order, ValidationError> =
+    Result.of(() → validateRequest(req))      // May fail
+      .flatMap(req → validatePrice(req))      // Chain success
+      .flatMap(req → reserveInventory(req))   // Chain success
+      .peek(order → auditLog.add(order))      // Side effect on Ok
+      .recover(error → {
+        metrics.recordFailure(error);
+        return Result.failure(error);
+      })
+
+  If any step fails:
+  - Remaining steps skipped
+  - Error flows to recover()
+  - Success path never touched
+  end note
+}
+
+Container_Boundary(vs_exceptions, "Contrast: Result vs Exceptions") {
+  note bottom
+  **Exception-based (Traditional)**
+  try {
+    order = validateRequest(req);
+    order = validatePrice(order);
+    order = reserveInventory(order);
+    log(order);
+    return order;
+  } catch (ValidationError e) {
+    metrics.recordFailure(e);
+    throw e;  // or rethrow
+  }
+
+  Problems:
+  - Control flow implicit (where does exception go?)
+  - Must nest try-catch or throw
+  - Error paths hidden in catch blocks
+  - Checked exceptions verbose
+
+  **Result-based (Railway)**
+  return Result.of(() → validateRequest(req))
+    .flatMap(r → validatePrice(r))
+    .flatMap(r → reserveInventory(r))
+    .peek(o → log(o))
+    .recover(e → {...});
+
+  Benefits:
+  - Control flow explicit (success vs error track)
+  - Composable transformations
+  - No nesting hell
+  - Error handling upfront
+  - Type-safe extraction
+  end note
+}
+
+Container_Boundary(otp_parallel, "OTP Parallel: Erlang Tagged Tuples") {
+  note bottom
+  **Erlang/OTP Style**
+
+  validate_request(Req) →
+    {ok, Order} | {error, Reason}
+
+  case validate_request(Req) of
+    {ok, Order} →
+      case validate_price(Order) of
+        {ok, Price} → ... ;
+        {error, E} → handle_error(E)
+      end ;
+    {error, E} → handle_error(E)
+  end
+
+  OTP Pipeline: gen_server operations return {ok, V} | {error, R}
+
+  **JOTP Equivalence**
+
+  Result<Order, ValidationError> represents exactly this:
+  - Ok(value) ≡ {ok, Value}
+  - Err(error) ≡ {error, Reason}
+  - Sealed interface forces both cases handled
+  - flatMap chains results without nesting
+  end note
+}
+
+Rel(sealed_type, pattern_matching, "enables")
+Rel(factories, transformations, "supports")
+Rel(transformations, railroad_diagram, "visualized by")
+Rel(ok_factory, ok_record, "creates")
+Rel(err_factory, err_record, "creates")
+
+note bottom
+  **Design Principle: Railway-Oriented Programming**
+
+  Inspired by Scott Wlaschin's concept:
+  - Two tracks: success and failure
+  - Operations move along one track
+  - Errors switch to failure track
+  - Once on failure track, success operations skipped
+  - Explicit error handling via recover()
+
+  Mirrors Erlang's tuplestyle where operations return {ok,V} or {error,E}
+
+  **Naming Conventions**
+  - ok/err - Erlang-style (canonical, use for pattern matching)
+  - success/failure - Explicit (use for factories)
+  - Both produce identical values (Ok, Err)
+end note
+
+@enduml

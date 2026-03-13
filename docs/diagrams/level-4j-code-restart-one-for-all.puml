@@ -1,0 +1,50 @@
+@startuml level-4j-code-restart-one-for-all
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Restart Strategy - ONE_FOR_ALL
+
+Container_Boundary(oneforall, "ONE_FOR_ALL Restart Cascade") {
+
+  Component(supervisor, "Supervisor", "Parent", "Manages 3 children: S1, S2, S3\nRestartStrategy.ONE_FOR_ALL\nWindow limits")
+
+  Component(s1child, "Service 1", "Child Process", "Running normally\nDatabase handler")
+
+  Component(s2child, "Service 2", "Child Process", "Running normally\nCache handler")
+
+  Component(s3child, "Service 3", "Child Process", "Running normally\nQueue handler")
+
+  Component(s2crash, "Service 2 Crashes", "Failure Event", "Database connection lost\nS2 exits\nSuper receives signal")
+
+  Component(restartdecision, "Restart Decision", "Check Window", "Is S2.RestartType = PERMANENT?\nWindow < 5 restarts in 15s?\nBoth true: restart ALL")
+
+  Component(terms1, "Terminate S1", "Cascade", "S1 receives exit signal\nMailbox drained\nCleanup resources")
+
+  Component(terms2, "Terminate S2", "Cascade", "S2 already crashed\nMailbox drained\nCleanup resources")
+
+  Component(terms3, "Terminate S3", "Cascade", "S3 receives exit signal\nMailbox drained\nCleanup resources")
+
+  Component(spawns1new, "Spawn New S1", "Cascade Restart", "New virtual thread\nNew generation Pid")
+
+  Component(spawns2new, "Spawn New S2", "Cascade Restart", "New virtual thread\nNew generation Pid")
+
+  Component(spawns3new, "Spawn New S3", "Cascade Restart", "New virtual thread\nNew generation Pid")
+
+  Rel(supervisor, s1child, "manages")
+  Rel(supervisor, s2child, "manages")
+  Rel(supervisor, s3child, "manages")
+  Rel(s2child, s2crash, "")
+  Rel(s2crash, restartdecision, "")
+  Rel(restartdecision, terms1, "cascade")
+  Rel(restartdecision, terms2, "cascade")
+  Rel(restartdecision, terms3, "cascade")
+  Rel(terms1, spawns1new, "")
+  Rel(terms2, spawns2new, "")
+  Rel(terms3, spawns3new, "")
+
+  note on link : ONE_FOR_ALL: one child crash kills all\nUseful for tightly coupled services\nExample: multi-component database driver\nAll restart together maintaining invariants
+}
+
+SHOW_LEGEND()
+@enduml

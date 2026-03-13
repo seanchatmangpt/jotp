@@ -1,0 +1,261 @@
+@startuml level-3h-components-module-system
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Level 3H: JPMS Module System & Exports
+
+LAYOUT_WITH_LEGEND()
+
+package "JOTP Module Hierarchy" as JOTP_MODULES #FFF9E6 {
+    component "jotp" as ROOT_MODULE [
+        Root aggregator module
+        ----
+        Platform bill of materials
+        Module versioning
+        Dependency management
+    ]
+}
+
+package "Core OTP Primitives" as CORE_MODULE #FFFACD {
+    component "jotp.core" as CORE [
+        Core OTP primitives
+        ----
+        Exports:
+        - io.github.seanchatmangpt.jotp
+        - io.github.seanchatmangpt.jotp.proc
+        - io.github.seanchatmangpt.jotp.supervisor
+        
+        15 primitives (Proc, Supervisor,
+        StateMachine, EventManager, etc.)
+    ]
+
+    component "Core Types" as CORE_TYPES [
+        Sealed type hierarchies
+        ----
+        Proc<S,M>
+        ProcRef<S,M>
+        ChildSpec<S,M>
+        Transition<S,D>
+        SMEvent<E>
+    ]
+
+    component "Message Primitives" as CORE_MSG [
+        Messaging support
+        ----
+        Envelope<M>
+        ExitSignal
+        StartResult
+        ProcLib helpers
+    ]
+}
+
+package "Reactive Extensions" as REACTIVE_MODULE #F0F8FF {
+    component "jotp.reactive" as REACTIVE [
+        Reactive channels & routers
+        ----
+        Exports:
+        - io.github.seanchatmangpt.jotp.reactive
+        - io.github.seanchatmangpt.jotp.reactive.channel
+        - io.github.seanchatmangpt.jotp.reactive.router
+        - io.github.seanchatmangpt.jotp.reactive.transform
+        - io.github.seanchatmangpt.jotp.reactive.endpoint
+    ]
+
+    component "Channel Abstractions" as REACTIVE_CHANNEL [
+        Channel<M>
+        ChannelBuffer (sealed)
+        ChannelSender/Receiver
+        Capacity policies
+    ]
+
+    component "Reactive Infrastructure" as REACTIVE_INFRA [
+        Router<M>
+        Transformer<T,R>
+        Endpoint<M>
+        IntegrationFlow
+    ]
+}
+
+package "Message Patterns Module" as MSGPAT_MODULE #F5F5F5 {
+    component "jotp.message-patterns" as MSGPAT [
+        Pattern standardization
+        ----
+        Exports:
+        - io.github.seanchatmangpt.jotp.patterns
+        - io.github.seanchatmangpt.jotp.patterns.request
+        - io.github.seanchatmangpt.jotp.patterns.pub
+    ]
+
+    component "Messaging Patterns" as PATTERNS_LIB [
+        Standard message contracts
+        ----
+        Request-Reply pattern
+        Publish-Subscribe pattern
+        Saga pattern interfaces
+    ]
+}
+
+package "Enterprise Patterns" as ENTERPRISE_MODULE #FFE4E1 {
+    component "jotp.enterprise" as ENTERPRISE [
+        Distributed patterns
+        ----
+        Exports:
+        - io.github.seanchatmangpt.jotp.enterprise
+        - io.github.seanchatmangpt.jotp.enterprise.saga
+        - io.github.seanchatmangpt.jotp.enterprise.circuit
+        - io.github.seanchatmangpt.jotp.enterprise.health
+        - io.github.seanchatmangpt.jotp.enterprise.observability
+    ]
+
+    component "Fault Tolerance" as FT_PATTERNS [
+        8 enterprise patterns
+        ----
+        Saga (distributed txn)
+        CircuitBreaker
+        Bulkhead
+        Backpressure
+        CrashRecovery
+        HealthCheck
+        EventBus
+        Multitenancy
+    ]
+
+    component "Observability" as OBSERVABILITY [
+        Metrics & monitoring
+        ----
+        Process metrics
+        Event tracing
+        SLA dashboards
+        Golden Signals
+    ]
+}
+
+package "Dogfood Examples" as DOGFOOD_MODULE #F0FFF0 {
+    component "jotp.dogfood" as DOGFOOD [
+        Example implementations
+        ----
+        Exports:
+        - io.github.seanchatmangpt.jotp.dogfood
+        - io.github.seanchatmangpt.jotp.dogfood.core
+        - io.github.seanchatmangpt.jotp.dogfood.patterns
+        - io.github.seanchatmangpt.jotp.dogfood.concurrency
+        - io.github.seanchatmangpt.jotp.dogfood.testing
+        - io.github.seanchatmangpt.jotp.dogfood.innovation
+    ]
+
+    component "Category Examples" as CATEGORY_EXAMPLES [
+        72 template examples
+        ----
+        core/ (14 templates)
+        concurrency/ (5)
+        patterns/ (17)
+        api/ (6)
+        testing/ (12)
+        error-handling/ (3)
+        security/ (4)
+        build/ (7)
+        modules/ (4)
+    ]
+
+    component "Innovation Engines" as INNOVATION_ENGINES [
+        Refactoring engines
+        ----
+        OntologyMigrationEngine
+        ModernizationScorer
+        TemplateCompositionEngine
+        BuildDiagnosticEngine
+        LivingDocGenerator
+        RefactorEngine (orchestrator)
+    ]
+}
+
+'Module dependency hierarchy
+ROOT_MODULE --> CORE : "depends on"
+ROOT_MODULE --> REACTIVE : "depends on"
+ROOT_MODULE --> MSGPAT : "depends on"
+ROOT_MODULE --> ENTERPRISE : "depends on"
+ROOT_MODULE --> DOGFOOD : "depends on (test scope)"
+
+'Core module dependencies
+CORE --> CORE_TYPES : "defines"
+CORE --> CORE_MSG : "includes"
+
+'Reactive module dependencies
+REACTIVE --> REACTIVE_CHANNEL : "includes"
+REACTIVE --> REACTIVE_INFRA : "includes"
+REACTIVE --> CORE : "requires"
+
+'Message patterns dependencies
+MSGPAT --> PATTERNS_LIB : "defines"
+MSGPAT --> CORE : "uses"
+
+'Enterprise module dependencies
+ENTERPRISE --> FT_PATTERNS : "implements"
+ENTERPRISE --> OBSERVABILITY : "includes"
+ENTERPRISE --> CORE : "requires"
+ENTERPRISE --> REACTIVE : "may use"
+
+'Dogfood dependencies
+DOGFOOD --> CATEGORY_EXAMPLES : "contains"
+DOGFOOD --> INNOVATION_ENGINES : "contains"
+DOGFOOD --> CORE : "tests"
+DOGFOOD --> REACTIVE : "tests"
+DOGFOOD --> ENTERPRISE : "tests"
+
+'Cross-module exports
+REACTIVE --> MSGPAT : "implements patterns"
+ENTERPRISE --> MSGPAT : "standardizes on"
+
+'Innovation uses all modules
+INNOVATION_ENGINES -.-> CORE : "analyzes/generates"
+INNOVATION_ENGINES -.-> REACTIVE : "analyzes/generates"
+INNOVATION_ENGINES -.-> ENTERPRISE : "analyzes/generates"
+
+note on right of CORE_MODULE
+  Core module (jotp.core) exports
+  15 OTP primitives. All sealed types
+  for Java 26 pattern matching
+  exhaustiveness. Virtual thread backed.
+end note
+
+note on right of REACTIVE_MODULE
+  Reactive extensions (jotp.reactive)
+  for message channels, routers,
+  transformers. Uses Core primitives
+  for internal process management.
+end note
+
+note on right of MSGPAT_MODULE
+  Standardized message pattern library
+  (jotp.message-patterns). Request-Reply,
+  Pub-Sub, Saga interfaces. Used by
+  both Reactive and Enterprise modules.
+end note
+
+note on right of ENTERPRISE_MODULE
+  Enterprise fault tolerance patterns
+  (jotp.enterprise). Includes 8 patterns
+  for 99.95%+ SLA: CircuitBreaker,
+  Bulkhead, Saga, Backpressure, etc.
+  Observability via metrics/tracing.
+end note
+
+note on right of DOGFOOD_MODULE
+  Real example code rendered from
+  72 templates. Proves templates
+  compile and pass tests. Categories:
+  core, concurrency, GoF patterns, APIs,
+  testing, error-handling, security.
+  Innovation engines (RefactorEngine, etc.)
+  provide automated refactoring.
+end note
+
+legend right
+  |<#FFE4E1> Supervision & Patterns |
+  |<#FFFACD> Core OTP Primitives |
+  |<#F0F8FF> Reactive Extensions |
+  |<#F5F5F5> Message Patterns |
+  |<#FFE4E1> Enterprise Patterns |
+  |<#F0FFF0> Dogfood Examples |
+endlegend
+
+@enduml

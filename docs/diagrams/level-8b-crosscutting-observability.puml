@@ -1,0 +1,46 @@
+@startuml level-8b-crosscutting-observability
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title JOTP Level 8: Cross-Cutting Observability
+
+Person(operator, "SRE/Operations", "Monitors production")
+
+System_Boundary(obs, "Observability Stack") {
+
+  Container(logging, "Structured Logging", "SLF4J", "log.info(), error()\nStructured JSON\nTimestamp, context")
+
+  Container(metrics, "Metrics Collection", "Micrometer", "Counters: requests, errors\nGauges: queue depth, connections\nTimers: latency, duration")
+
+  Container(tracing, "Distributed Tracing", "OpenTelemetry", "Span: request ID\nPropagation across services\nLatency breakdown")
+
+  Container(profiling, "Profiling", "JFR/Async", "CPU flame graphs\nMemory allocation\nLock contention")
+
+  Container(debugging, "Live Debugging", "JShell/JDB", "Interactive REPL\nState inspection\nBreakpoints (dev only)")
+
+  Container(promservice, "Prometheus", "Time-Series DB", "Scrape /metrics\nStore metrics\nQuery language PromQL")
+
+  Container(grafana, "Grafana", "Dashboards", "Graph metrics\nAlert thresholds\nHistorical analysis")
+
+  Container(loki, "Loki", "Log Aggregation", "Scrape logs\nQuery by labels\nCorrelate with metrics")
+
+  Container(jaeger, "Jaeger", "Trace Visualization", "Visualize traces\nLatency waterfall\nService topology")
+
+  Container(alerts, "Alerting", "AlertManager", "Rule evaluation\nNotification: PagerDuty, Slack\nEscalation policies")
+
+  Rel(operator, promservice, "queries")
+  Rel(operator, grafana, "views dashboards")
+  Rel(operator, loki, "searches logs")
+  Rel(operator, jaeger, "investigates traces")
+  Rel(operator, alerts, "responds to alerts")
+
+  Rel(logging, loki, "shipped via Promtail")
+  Rel(metrics, promservice, "scraped by")
+  Rel(tracing, jaeger, "exported to")
+  Rel(promservice, grafana, "data source")
+  Rel(promservice, alerts, "evaluated by")
+
+  note on link : Four Golden Signals: latency, traffic, errors, saturation\nStructured logging: service, error, stack trace, context\nMetrics: expose /metrics for Prometheus\nTracing: propagate context ID across service boundary\nAlerts: page on latency p99 > threshold OR error rate > 5%
+}
+
+SHOW_LEGEND()
+@enduml

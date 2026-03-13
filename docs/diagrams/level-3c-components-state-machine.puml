@@ -1,0 +1,110 @@
+@startuml level-3c-components-state-machine
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 3: State Machine Components
+
+Container_Boundary(stm, "State Machine Engine") {
+
+  Component(statemachine, "StateMachine<S,E,D>", "Engine", "gen_statem full parity\nSealed event/action/transition\nEngine event loop\nTimeout management")
+
+  Component(smevent, "SMEvent<E>", "Event Sealed Type", "User(E): application event\nStateTimeout: per-state timer\nEventTimeout: event timer\nGenericTimeout: arbitrary timer\nInternal: synthetic\nEnter: state entry")
+
+  Component(action, "Action", "Action Sealed Type", "Postpone: defer event\nNextEvent(E): queue event\nSetStateTimeout/CancelStateTimeout\nSetEventTimeout/CancelEventTimeout\nSetGenericTimeout/CancelGenericTimeout\nReply(pid, msg): reply to caller")
+
+  Component(transition, "Transition", "Transition Sealed", "NextState(S): move to S\nKeepState(): stay in S\nRepeatState(): loop handler\nStop(reason): terminate\nStopAndReply(pid, msg): reply + stop\nAll include actions()")
+
+  Component(transitionfn, "TransitionFn<S,E,D>", "Handler Interface", "apply(S, SMEvent<E>, D) -> Transition\nPure function: state + event + data\nReturns transition + actions\nCan modify data")
+
+  Component(builder, "StateMachineBuilder", "Fluent Builder", "withStateEnter() callbacks\nBuilder<S,E,D> sealed type\nDefine all states before build\nOptional Enter event")
+
+  Component(eventmanager, "EventManager<E>", "Event Dispatcher", "Typed event hub\naddHandler(id, handler)\nnotify(event) async dispatch\nsyncNotify(event) blocking\nHandler isolation: crash ≠ kill manager")
+
+  Component(parallel, "Parallel", "Structured Fan-Out", "StructuredTaskScope wrapper\nFail-fast: cancel on first error\nWait semantics\nVirtual thread per task")
+
+  Rel(statemachine, smevent, "receives")
+  Rel(statemachine, action, "produces actions")
+  Rel(statemachine, transition, "applies")
+  Rel(statemachine, transitionfn, "invokes handler")
+  Rel(builder, statemachine, "builds")
+  Rel(eventmanager, transitionfn, "dispatches to")
+  Rel(parallel, transitionfn, "fan-out parallel")
+
+  note right of statemachine
+    **StateMachine<S,E,D>** — OTP gen_statem:
+    Full parity with Erlang gen_statem.
+    Engine manages sealed event/action/transition hierarchy.
+    Timeout management: StateTimeout, EventTimeout, GenericTimeout.
+    Priorities: User > Enter > Internal > Postponed.
+  end note
+
+  note right of smevent
+    **SMEvent<E>** — Sealed event hierarchy:
+    User(E): application event.
+    StateTimeout: per-state timer fired.
+    EventTimeout: specific event timer.
+    GenericTimeout: arbitrary named timer.
+    Internal: synthetic internal transition.
+    Enter: state entry notification.
+  end note
+
+  note right of action
+    **Action** — Sealed result actions:
+    Postpone: defer event to next state.
+    NextEvent(E): insert into priority queue.
+    SetStateTimeout/CancelStateTimeout.
+    SetEventTimeout/CancelEventTimeout.
+    SetGenericTimeout/CancelGenericTimeout.
+    Reply(pid, msg): reply to caller (gen_server call).
+  end note
+
+  note right of transition
+    **Transition** — Sealed state transitions:
+    NextState(S, actions): move to state S.
+    KeepState(actions): remain in current state.
+    RepeatState(actions): re-invoke handler.
+    Stop(reason): terminate state machine.
+    StopAndReply(pid, msg, reason): reply + terminate.
+    All variants include actions() list.
+  end note
+
+  note right of transitionfn
+    **TransitionFn<S,E,D>** — Handler interface:
+    apply(S state, SMEvent<E> event, D data).
+    Pure function: no side effects allowed.
+    Returns Transition (sealed).
+    Can mutate data (passed by reference).
+  end note
+
+  note right of builder
+    **StateMachineBuilder** — Fluent builder:
+    withStateEnter() adds Enter event callbacks.
+    Builder<S,E,D> sealed type.
+    Define all states before build().
+    Optional initial state Enter.
+  end note
+
+  note right of eventmanager
+    **EventManager<E>** — Event dispatcher:
+    Typed event hub: addHandler(id, handler).
+    notify(event): async dispatch to all.
+    syncNotify(event): blocking dispatch.
+    Handler isolation: crash ≠ kill manager.
+  end note
+
+  note right of parallel
+    **Parallel** — Structured fan-out:
+    StructuredTaskScope wrapper (Java 21+).
+    Fail-fast: cancel on first error.
+    One virtual thread per task.
+    Scope auto-closes (cleanup).
+  end note
+
+  note on link : Engine loop: dequeue SMEvent -> handler(state, event, data) -> Transition<actions> -> apply actions -> new state
+  note on link : InsertedEvents priority queue (User > Internal > Postponed)
+  note on link : StateTimeout auto-cancel on state change; EventTimeout auto-cancel on any event
+  note on link : Postpone/replay across state transitions; stale timeouts discarded
+}
+
+SHOW_LEGEND()
+@enduml

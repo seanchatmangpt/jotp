@@ -1,0 +1,93 @@
+@startuml level-5h-sequence-graceful-shutdown
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title Graceful Shutdown Sequence
+caption JOTP: Supervised process tree shutdown with timeout
+
+actor Operator
+participant "Supervisor" as Sup
+participant "Child 1" as C1
+participant "Child 2" as C2
+participant "Child N" as CN
+participant "Exit Signal" as Exit
+
+autonumber
+Operator -> Sup: shutdown()
+activate Sup
+
+note over Sup
+  Supervisor strategy: ONE_FOR_ONE
+  Children: [C1, C2, ..., CN]
+  Shutdown timeout: 30s
+end note
+
+par Shutdown Child 1
+  Sup -> C1: terminate(shutdown=Timeout(5000ms))
+  activate C1
+  note over C1
+    Child 1 received SIGTERM
+    Graceful cleanup begins
+  end note
+  C1 -> C1: cleanup resources
+  note over C1
+    - Close DB connections
+    - Drain in-flight messages
+    - Save state
+  end note
+  C1 --> Sup: (exited normally)
+  deactivate C1
+end
+
+par Shutdown Child 2
+  Sup -> C2: terminate(shutdown=Timeout(5000ms))
+  activate C2
+  note over C2
+    Child 2 processes SIGTERM
+    Graceful shutdown
+  end note
+  C2 -> C2: flush message queue
+  C2 --> Sup: (exited)
+  deactivate C2
+end
+
+par Shutdown Child N
+  Sup -> CN: terminate(shutdown=Timeout(5000ms))
+  activate CN
+  note over CN
+    Child N begins shutdown
+  end note
+  
+  alt Timeout (5s expires)
+    note over CN
+      Child N did not exit gracefully
+      Force kill applied
+    end note
+    CN --> Sup: (killed)
+    deactivate CN
+  else Graceful exit
+    CN -> CN: cleanup complete
+    CN --> Sup: (exited normally)
+    deactivate CN
+  end
+end
+
+note over Sup
+  Supervisor waits for all children
+  Max 30s total shutdown
+end note
+
+Sup -> Sup: verify all children exited
+Sup -> Exit: propagate shutdown
+to parent supervisor
+Sup --> Operator: (shutdown complete)
+deactivate Sup
+
+note over Operator
+  Graceful shutdown summary:
+  - C1: clean exit (5s)
+  - C2: clean exit (3s)
+  - CN: killed (5s timeout)
+  - Total: 5s (parallel)
+end note
+
+@enduml

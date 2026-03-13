@@ -1,0 +1,37 @@
+@startuml level-4d-code-statemachine
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: StateMachine<S,E,D> Engine Loop
+
+Container_Boundary(stmimpl, "StateMachine Engine Details") {
+
+  Component(smqueue, "InsertedEvents Queue", "Priority Queue", "SMEvent<E> priority queue\nInternal events first\nUser events second\nStateTimeout third\nStale timeout discard")
+
+  Component(smevent, "SMEvent<E> Sealed", "Event Hierarchy", "User(E): application event\nStateTimeout(data): per-state timer\nEventTimeout(id, E): named timer\nGenericTimeout(id): arbitrary id\nInternal(action): synthetic\nEnter(S): state entry")
+
+  Component(state, "Current State", "State Holder", "S current state\nS data (sealed type)\nTimeout set/pending\nEventTimeout set/pending")
+
+  Component(handler, "TransitionFn Handler", "Event Logic", "apply(state, event, data)\nReturns Transition<S,E,D>\nMay modify data\nPure function (no side effects)")
+
+  Component(transition, "Transition Sealed", "Return Type", "NextState(S, actions)\nKeepState(actions)\nRepeatState(actions)\nStop(reason)\nStopAndReply(pid, msg, reason)")
+
+  Component(action, "Action Sealed", "Effect Type", "Postpone: defer event\nNextEvent(E): enqueue\nSetStateTimeout/Cancel\nSetEventTimeout/Cancel\nSetGenericTimeout/Cancel\nReply(pid, msg)")
+
+  Component(actionapply, "Apply Actions", "Effects Engine", "Postpone: add to deferred\nNextEvent: insert into queue\nSetStateTimeout: start timer\nCancelEventTimeout: cancel by id\nReply: send message")
+
+  Component(loop, "Engine Loop", "Main Cicle", "1. Dequeue from InsertedEvents\n2. Call handler\n3. Apply transition\n4. Apply all actions\n5. Repeat until Stop\nTimeout on no event")
+
+  Rel(loop, smqueue, "dequeues from")
+  Rel(smqueue, smevent, "contains")
+  Rel(loop, state, "tracks current")
+  Rel(loop, handler, "invokes")
+  Rel(handler, transition, "returns")
+  Rel(transition, action, "contains")
+  Rel(action, actionapply, "applies")
+
+  note on link : StateTimeout auto-cancels on state change\nEventTimeout by id enables multiple timers\nPostponed events replay in order on state change\nEnter event automatic on NextState
+}
+
+SHOW_LEGEND()
+@enduml

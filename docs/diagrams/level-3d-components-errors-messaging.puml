@@ -1,0 +1,162 @@
+@startuml level-3d-components-errors-messaging
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Level 3D: Error Handling & Messaging Components
+
+LAYOUT_WITH_LEGEND()
+
+package "Error Handling & Railway-Oriented Programming" as ERR_PKG #FFFACD {
+    component "Result<T,E>" as RESULT [
+        Sealed interface for
+        railway-oriented programming
+        ----
+        Supports:
+        - map/flatMap chaining
+        - fold/recover operations
+        - peek for side effects
+        - orElseThrow
+    ]
+
+    component "Success<T>" as SUCCESS [
+        Sealed permit:
+        Success variant
+        ----
+        Wraps successful value T
+        Enables flatMap chains
+    ]
+
+    component "Failure<E>" as FAILURE [
+        Sealed permit:
+        Failure variant
+        ----
+        Wraps error value E
+        Propagates through chain
+    ]
+
+    component "Result Factory" as RESULT_FACTORY [
+        Result.of(supplier)
+        ----
+        Wraps throwing operations
+        into Result<T,E>
+        Type-safe error handling
+    ]
+}
+
+package "Messaging & Process Communication" as MSG_PKG #F0F8FF {
+    component "Envelope<M>" as ENVELOPE [
+        Message wrapper for
+        virtual-thread mailbox
+        ----
+        Core messaging primitive
+        Type-safe message passing
+        Supports timeouts
+    ]
+
+    component "Proc<S,M>" as PROC [
+        Core OTP primitive:
+        Virtual-thread mailbox +
+        pure state handler
+        ----
+        spawn(init, handler, args)
+        ask(msg, timeout)
+        trapExits(true)
+    ]
+
+    component "Message Handler" as MSG_HANDLER [
+        Pure function for
+        message processing
+        ----
+        (state, message) -> (state, reply)
+        Immutable state transitions
+        Type-safe via generics
+    ]
+
+    component "Process Registry" as PROC_REG [
+        Global name table
+        ----
+        register(name, pid)
+        whereis(name)
+        unregister(name)
+        Auto-deregistration on exit
+    ]
+
+    component "Mailbox Queue" as MAILBOX [
+        Virtual thread-backed
+        message queue
+        ----
+        FIFO delivery semantics
+        Timeout support
+        Non-blocking operations
+    ]
+}
+
+package "Process Control & Signals" as CTRL_PKG #F5F5F5 {
+    component "ExitSignal" as EXIT_SIGNAL [
+        Exit signal record
+        ----
+        Delivered as mailbox message
+        When process traps exits
+        Carries reason (normal/abnormal)
+    ]
+
+    component "ProcTimer" as PROC_TIMER [
+        Timed message delivery
+        ----
+        sendAfter(delay, msg)
+        sendInterval(period, msg)
+        cancel(timerRef)
+    ]
+
+    component "ProcSys" as PROC_SYS [
+        Process introspection
+        ----
+        get_state
+        suspend/resume
+        statistics
+        No process interruption
+    ]
+}
+
+'Relationships within Error Handling
+RESULT --> SUCCESS : "sealed permit"
+RESULT --> FAILURE : "sealed permit"
+RESULT_FACTORY --> RESULT : "creates"
+
+'Relationships within Messaging
+PROC --> ENVELOPE : "sends/receives"
+PROC --> MSG_HANDLER : "applies to state"
+PROC --> MAILBOX : "uses for delivery"
+PROC --> PROC_REG : "registers with"
+MSG_HANDLER --> ENVELOPE : "processes"
+
+'Relationships within Process Control
+PROC --> EXIT_SIGNAL : "emits when trapExits"
+PROC --> PROC_TIMER : "schedules with"
+PROC --> PROC_SYS : "queried by"
+
+'Cross-package relationships
+ENVELOPE --> RESULT : "wraps in Result"
+RESULT_FACTORY -.-> MAILBOX : "protects operations in"
+
+note on right of ERR_PKG
+  Railway-Oriented Programming (ROP) pattern
+  enables type-safe error propagation without
+  exceptions. Result<T,E> chains operations
+  with automatic error short-circuiting.
+end note
+
+note on right of MSG_PKG
+  Type-safe virtual-thread mailbox system.
+  Proc<S,M> combines OTP's spawn/3 with
+  Java 26 sealed types for compile-time
+  message exhaustiveness checking.
+end note
+
+note on right of CTRL_PKG
+  Process lifecycle and introspection.
+  ExitSignal enables trap_exit semantics.
+  ProcTimer bridges async messaging.
+  ProcSys provides live introspection.
+end note
+
+@enduml

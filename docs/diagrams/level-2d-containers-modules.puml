@@ -1,0 +1,364 @@
+@startuml level-2d-containers-modules
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+HIDE_STEREOTYPE()
+
+' ==========================================
+' JOTP Java Platform Module System (JPMS)
+' Level 2D: Module Structure Diagram
+' ==========================================
+'
+' This container diagram shows the Java 26 module
+' organization of the JOTP library. Each module
+' exports public APIs via `requires` and `opens`
+' directives, enforcing strict encapsulation.
+'
+' Module Hierarchy (9 modules total):
+'
+' 1. io.github.seanchatmangpt.jotp.core
+'    (Core OTP primitives - no internal deps)
+'
+' 2. io.github.seanchatmangpt.jotp.supervision
+'    (Supervisor trees - depends on core)
+'
+' 3. io.github.seanchatmangpt.jotp.statemachine
+'    (State machine engine - depends on core)
+'
+' 4. io.github.seanchatmangpt.jotp.messaging
+'    (Messaging & communication - depends on core)
+'
+' 5. io.github.seanchatmangpt.jotp.resilience
+'    (Fault tolerance - depends on core, messaging)
+'
+' 6. io.github.seanchatmangpt.jotp.observability
+'    (Observability & sys module - depends on core)
+'
+' 7. io.github.seanchatmangpt.jotp.registry
+'    (Global services - depends on core)
+'
+' 8. io.github.seanchatmangpt.jotp.integration
+'    (Spring/Quarkus/ecosystem - depends on all)
+'
+' 9. io.github.seanchatmangpt.jotp
+'    (Facade & re-exports - depends on all)
+'
+' Rationale for separation:
+' - Each module exports a focused set of types
+' - Compile-time safety: circular deps impossible
+' - Test isolation: unit tests per module
+' - Incremental builds: change in core rebuilds all
+' - Native image compatibility: closed-world assumption
+
+System_Boundary("jpms", "Java 26 JPMS Module Hierarchy") {
+
+    ' Module 1: Core Foundation
+    Container(mod_core, "io.github.seanchatmangpt.jotp.core",
+              "Sealed Type Hierarchy",
+              "Lightweight process primitives:\n\n" +
+              "Exports:\n" +
+              "  - Proc<S,M>\n" +
+              "  - ProcRef<S,M>\n" +
+              "  - ProcessId\n" +
+              "  - Mailbox<M>\n" +
+              "  - MessageHandler<S,M>\n" +
+              "  - Result<T,E>\n" +
+              "  - StartResult\n\n" +
+              "Internal:\n" +
+              "  - ProcessState<S>\n" +
+              "  - MailboxImpl<M>\n" +
+              "  - ProcessConfig")
+
+    ' Module 2: Supervision Tree
+    Container(mod_supervision, "io.github.seanchatmangpt.jotp.supervision",
+              "Fault-Tolerance Tree",
+              "Hierarchical process supervision:\n\n" +
+              "Exports:\n" +
+              "  - Supervisor\n" +
+              "  - ChildSpec<S,M>\n" +
+              "  - RestartType enum\n" +
+              "  - Shutdown enum\n" +
+              "  - ChildType enum\n" +
+              "  - SupervisionStrategy\n\n" +
+              "Internal:\n" +
+              "  - RestartWindow\n" +
+              "  - SupervisionEngine\n" +
+              "  - ChildTracker")
+
+    ' Module 3: State Machine
+    Container(mod_statemachine, "io.github.seanchatmangpt.jotp.statemachine",
+              "gen_statem Parity",
+              "Full Erlang gen_statem implementation:\n\n" +
+              "Exports:\n" +
+              "  - StateMachine<S,E,D>\n" +
+              "  - SMEvent<E> sealed\n" +
+              "  - Action sealed hierarchy\n" +
+              "  - Transition sealed\n" +
+              "  - TransitionFn<S,E,D>\n" +
+              "  - StateMachineBuilder\n\n" +
+              "Internal:\n" +
+              "  - EventQueue\n" +
+              "  - TimeoutManager\n" +
+              "  - StateTransitionEngine")
+
+    ' Module 4: Messaging
+    Container(mod_messaging, "io.github.seanchatmangpt.jotp.messaging",
+              "Communication Patterns",
+              "Synchronous & async messaging:\n\n" +
+              "Exports:\n" +
+              "  - ask(Msg, timeout)\n" +
+              "  - tell(Msg)\n" +
+              "  - cast(Msg)\n" +
+              "  - ReplyTo<R>\n" +
+              "  - RequestId\n" +
+              "  - Timeout\n\n" +
+              "Internal:\n" +
+              "  - MessageDispatcher\n" +
+              "  - RequestTracker\n" +
+              "  - DeadLetterQueue")
+
+    ' Module 5: Resilience
+    Container(mod_resilience, "io.github.seanchatmangpt.jotp.resilience",
+              "Crash Recovery",
+              "Supervised fault tolerance:\n\n" +
+              "Exports:\n" +
+              "  - CrashRecovery\n" +
+              "  - ExitSignal\n" +
+              "  - CircuitBreaker\n" +
+              "  - RetryPolicy sealed\n" +
+              "  - FailureMetrics\n\n" +
+              "Internal:\n" +
+              "  - RetryEngine\n" +
+              "  - BackoffCalculator\n" +
+              "  - MetricsCollector")
+
+    ' Module 6: Observability
+    Container(mod_observability, "io.github.seanchatmangpt.jotp.observability",
+              "sys Module Parity",
+              "Process introspection:\n\n" +
+              "Exports:\n" +
+              "  - ProcSys\n" +
+              "  - ProcessMetrics\n" +
+              "  - MailboxStats\n" +
+              "  - DebugTrace\n" +
+              "  - HeapSnapshot\n\n" +
+              "Internal:\n" +
+              "  - MetricsCollector\n" +
+              "  - ProcessInspector\n" +
+              "  - StackTraceAnalyzer")
+
+    ' Module 7: Global Services
+    Container(mod_registry, "io.github.seanchatmangpt.jotp.registry",
+              "Named Services",
+              "Cluster-aware registry & timers:\n\n" +
+              "Exports:\n" +
+              "  - ProcRegistry\n" +
+              "  - ProcTimer\n" +
+              "  - ClusterRegistry\n" +
+              "  - RegistryListener\n\n" +
+              "Internal:\n" +
+              "  - RegistryImpl\n" +
+              "  - TimerWheel\n" +
+              "  - ClusterSync")
+
+    ' Module 8: Integration
+    Container(mod_integration, "io.github.seanchatmangpt.jotp.integration",
+              "Ecosystem Bridges",
+              "Spring/Quarkus/GraalVM integration:\n\n" +
+              "Exports:\n" +
+              "  - ProcLib\n" +
+              "  - Parallel\n" +
+              "  - EventManager<E>\n" +
+              "  - CompletableFutureAdapter\n" +
+              "  - ReactiveStreamsBridge\n" +
+              "  - SpringBootIntegration\n\n" +
+              "Internal:\n" +
+              "  - AdapterBase\n" +
+              "  - NativeImageConfig")
+
+    ' Module 9: Facade
+    Container(mod_facade, "io.github.seanchatmangpt.jotp",
+              "Public API Facade",
+              "Re-exports core types for users:\n\n" +
+              "Exports (from *all* modules):\n" +
+              "  - Proc, ProcRef, Supervisor\n" +
+              "  - StateMachine, SMEvent\n" +
+              "  - ask, tell, cast\n" +
+              "  - CrashRecovery, CircuitBreaker\n" +
+              "  - ProcSys, ProcessMetrics\n" +
+              "  - ProcRegistry, ProcTimer\n" +
+              "  - Parallel, EventManager\n\n" +
+              "Sealed hierarchy root:\n" +
+              "  - exports all public sealed types")
+
+}
+
+' ==========================================
+' Module Dependencies (Requires Directives)
+' ==========================================
+
+Rel(mod_supervision, mod_core, "requires io.github.seanchatmangpt.jotp.core")
+Rel(mod_statemachine, mod_core, "requires io.github.seanchatmangpt.jotp.core")
+Rel(mod_messaging, mod_core, "requires io.github.seanchatmangpt.jotp.core")
+
+Rel(mod_resilience, mod_core, "requires io.github.seanchatmangpt.jotp.core")
+Rel(mod_resilience, mod_messaging, "requires messaging")
+
+Rel(mod_observability, mod_core, "requires io.github.seanchatmangpt.jotp.core")
+
+Rel(mod_registry, mod_core, "requires io.github.seanchatmangpt.jotp.core")
+
+Rel(mod_integration, mod_core, "requires core")
+Rel(mod_integration, mod_supervision, "requires supervision")
+Rel(mod_integration, mod_statemachine, "requires statemachine")
+Rel(mod_integration, mod_messaging, "requires messaging")
+Rel(mod_integration, mod_resilience, "requires resilience")
+Rel(mod_integration, mod_observability, "requires observability")
+Rel(mod_integration, mod_registry, "requires registry")
+
+Rel(mod_facade, mod_core, "re-exports")
+Rel(mod_facade, mod_supervision, "re-exports")
+Rel(mod_facade, mod_statemachine, "re-exports")
+Rel(mod_facade, mod_messaging, "re-exports")
+Rel(mod_facade, mod_resilience, "re-exports")
+Rel(mod_facade, mod_observability, "re-exports")
+Rel(mod_facade, mod_registry, "re-exports")
+Rel(mod_facade, mod_integration, "re-exports")
+
+' ==========================================
+' Module-Level Architecture Notes
+' ==========================================
+'
+' JPMS ENCAPSULATION STRATEGY:
+'
+' 1. Core Module (mod_core):
+'    - No external dependencies
+'    - Opens only sealed type roots to submodules
+'    - Enforces referential transparency (immutability)
+'    - JVM Preview: --enable-preview required
+'    - Package structure:
+'      * io.github.seanchatmangpt.jotp.core (public)
+'      * io.github.seanchatmangpt.jotp.core.impl (internal)
+'
+' 2. Specialized Modules:
+'    - supervision: depends on core only
+'    - statemachine: depends on core only
+'    - messaging: depends on core only
+'    - resilience: depends on core + messaging (optional)
+'    - observability: depends on core only
+'    - registry: depends on core only
+'
+' 3. Integration Module (mod_integration):
+'    - "Depends on all" pattern for adapters
+'    - Bridges to Spring, Quarkus, CompletableFuture
+'    - GraalVM reflection hints in resource files
+'    - Not required for standalone JOTP usage
+'
+' 4. Facade Module (mod_facade):
+'    - Single entry point for users
+'    - Re-exports all public APIs
+'    - Compile alias: import from io.github.seanchatmangpt.jotp
+'    - Enables migration paths (core-only → full JOTP)
+'
+' ==========================================
+' Compilation & Dependency Resolution
+' ==========================================
+'
+' Compilation Order (Maven):
+' 1. jotp-core           (baseline)
+' 2. jotp-supervision    (parallel: core-only)
+' 3. jotp-statemachine   (parallel: core-only)
+' 4. jotp-messaging      (parallel: core-only)
+' 5. jotp-resilience     (depends on messaging)
+' 6. jotp-observability  (parallel: core-only)
+' 7. jotp-registry       (parallel: core-only)
+' 8. jotp-integration    (depends on all prev)
+' 9. jotp                (facade, re-exports all)
+'
+' Build cache (mvnd): Classpath pre-computed
+'   after core; enables parallel phase 2-7.
+'
+' ==========================================
+' Module-Info.java Directives
+' ==========================================
+'
+' Example: io.github.seanchatmangpt.jotp.core
+' ──────────────────────────────────────────
+'   module io.github.seanchatmangpt.jotp.core {
+'     opens io.github.seanchatmangpt.jotp.core.impl
+'       to io.github.seanchatmangpt.jotp.supervision,
+'          io.github.seanchatmangpt.jotp.statemachine,
+'          io.github.seanchatmangpt.jotp.messaging;
+'     exports io.github.seanchatmangpt.jotp.core;
+'   }
+'
+' Example: io.github.seanchatmangpt.jotp
+' ──────────────────────────────────────
+'   module io.github.seanchatmangpt.jotp {
+'     requires io.github.seanchatmangpt.jotp.core;
+'     requires io.github.seanchatmangpt.jotp.supervision;
+'     requires io.github.seanchatmangpt.jotp.statemachine;
+'     requires io.github.seanchatmangpt.jotp.messaging;
+'     requires io.github.seanchatmangpt.jotp.resilience;
+'     requires io.github.seanchatmangpt.jotp.observability;
+'     requires io.github.seanchatmangpt.jotp.registry;
+'     requires io.github.seanchatmangpt.jotp.integration;
+'
+'     exports io.github.seanchatmangpt.jotp;
+'     exports io.github.seanchatmangpt.jotp.core;
+'     exports io.github.seanchatmangpt.jotp.supervision;
+'     (... re-exports all public APIs)
+'   }
+'
+' ==========================================
+' Java 26 Feature Usage Per Module
+' ==========================================
+'
+' Core Module:
+'   - Sealed types for exhaustiveness
+'   - Record types for immutable data
+'   - Pattern matching in switch expressions
+'   - Virtual threads (JEP 425 final)
+'   - Structured concurrency (JEP 453 preview)
+'
+' Specialized Modules:
+'   - All use sealed types from core
+'   - Scoped values (ThreadLocal replacement)
+'   - Text blocks for SQL/logging
+'   - Record patterns for nested destructuring
+'
+' Integration Module:
+'   - Reflection-free adapters via records
+'   - GraalVM native-image metadata
+'   - Sealed type introspection
+'   - Unnamed classes (Java 21+)
+'
+' ==========================================
+' Distributable Artifacts (Maven)
+' ==========================================
+'
+' Single JAR distribution:
+'   jotp-uber.jar: All 9 modules bundled
+'   size: ~2-3 MB (fat JAR with shade)
+'   JPMS: Multi-release artifact with module descriptors
+'
+' Modular distribution:
+'   jotp-core.jar              (750 KB)
+'   jotp-supervision.jar       (450 KB)
+'   jotp-statemachine.jar      (650 KB)
+'   jotp-messaging.jar         (380 KB)
+'   jotp-resilience.jar        (320 KB)
+'   jotp-observability.jar     (290 KB)
+'   jotp-registry.jar          (310 KB)
+'   jotp-integration.jar       (400 KB)
+'   jotp.jar                   (50 KB facade)
+'
+' GraalVM native-image targets:
+'   jotp-native: Native executable (requires
+'   reflection config from integration module)
+'
+'
+
+SHOW_LEGEND()
+
+@enduml

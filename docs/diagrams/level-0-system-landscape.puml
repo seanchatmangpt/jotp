@@ -1,0 +1,76 @@
+@startuml level-0-system-landscape
+!define AWSPUML https://raw.githubusercontent.com/awslabs/aws-icons-for-plantuml/v14.0/dist
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+HIDE_STEREOTYPE()
+title System Landscape: JOTP in the Java Ecosystem
+
+' == Actors ==
+Person(devTeam, "Development Teams", "Fortune 500 engineers\nbuilding fault-tolerant systems")
+
+' == Primary Systems ==
+System(jotp, "JOTP", "OTP-equivalent fault tolerance\n+ Java ecosystem\n+ Java 26 type safety")
+
+' == Competitor Systems ==
+System(erlang, "Erlang/OTP", "Battle-tested supervisor trees\n+ pattern library\n- Non-JVM ecosystem")
+
+System(akka, "Akka (Scala/Java)", "Actor framework\nfor JVM\n+ partial OTP features\n- Complex API\n- Licensing concerns")
+
+System(go, "Go + Goroutines", "Lightweight concurrency\n+ simple syntax\n- No supervision model")
+
+System(rust, "Rust + Tokio", "Memory safety\n+ performance\n- Learning curve\n- Not JVM")
+
+' == Java Ecosystem ==
+System(spring, "Spring Boot", "Enterprise Java framework\n+ ecosystem\n- No OTP patterns")
+
+System(quarkus, "Quarkus", "Cloud-native Java\nsubsecond startup\n- No OTP patterns")
+
+System(micronaut, "Micronaut", "Lightweight framework\nlow memory\n- No OTP patterns")
+
+' == Enterprise Services ==
+System(kafka, "Apache Kafka", "Distributed message broker\nfor inter-system communication")
+
+System(postgresql, "PostgreSQL", "Relational database\nfor persistence")
+
+System(kubernetes, "Kubernetes", "Container orchestration\nfor deployment at scale")
+
+System(prometheus, "Prometheus/Grafana", "Monitoring & observability\nalerts & dashboards")
+
+' == Relationships ==
+
+Rel(devTeam, jotp, "Uses for fault tolerance")
+Rel(devTeam, erlang, "Migrating from")
+Rel(devTeam, akka, "Evaluating vs")
+Rel(devTeam, go, "Evaluating vs")
+Rel(devTeam, rust, "Evaluating vs")
+
+Rel(jotp, spring, "Integrates with")
+Rel(jotp, kafka, "Publishes/subscribes via")
+Rel(jotp, postgresql, "Persists state to")
+Rel(jotp, kubernetes, "Runs on")
+Rel(jotp, prometheus, "Exports metrics to")
+
+Rel(spring, kafka, "Message broker")
+Rel(spring, postgresql, "Queries data")
+
+Rel(erlang, kafka, "Can bridge to JOTP via")
+Rel(akka, kafka, "Can interop with JOTP via")
+
+note right of jotp
+  **Competitive Position:**
+  - Erlang/OTP: Lose Java ecosystem
+  - Akka: Complex API, licensing
+  - Go: No supervision, concurrency limits
+  - Rust: Not JVM-based
+  - **JOTP = OTP patterns + Java + Type safety**
+end note
+
+note bottom of devTeam
+  **Decision context:** Teams choosing
+  between OTP reliability and Java ecosystem
+  can now have both with JOTP
+end note
+
+SHOW_LEGEND()
+@enduml

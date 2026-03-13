@@ -1,0 +1,75 @@
+@startuml level-5c-sequence-ask
+!define DIRECTION top to bottom
+title Level 5: Dynamic Sequence - Ask (Request-Reply with Timeout)
+
+actor Caller as caller
+participant "Proc<State, Msg>" as proc
+participant "Mailbox" as mb
+participant "Virtual Thread\nEventLoop" as loop
+participant "StateHandler" as handler
+participant "Timeout Timer" as timer
+
+caller -> proc: ask(Request, timeout=5s)
+note right of caller
+  Sync request-reply
+  Caller BLOCKS until reply or timeout
+  Returns CompletableFuture
+end note
+
+activate proc
+proc -> proc: create CompletableFuture<Reply>
+note right of proc
+  Internal: correlate request → reply
+  Caller thread waits on future
+end note
+
+proc -> mb: enqueue(Request)
+proc -> timer: schedule timeout(5s)
+activate timer
+deactivate proc
+
+par Virtual Thread Event Loop Processing
+  loop -> mb: dequeue(Request)
+  activate loop
+
+  loop -> handler: handler(state, Request)
+  activate handler
+
+  handler --> loop: (newState, Reply)
+  deactivate handler
+
+  loop -> proc: complete(Reply)
+  deactivate loop
+end
+
+par Timeout Handler (concurrent)
+  timer --> timer: wait 5s
+
+  alt Reply arrives before timeout
+    timer -> timer: cancel timeout
+    deactivate timer
+    note right of timer
+      Request succeeded
+      Timeout cancelled
+    end note
+  else Timeout fires
+    timer -> proc: timeout()
+    deactivate timer
+    note right of proc
+      No reply after 5s
+      Return TimeoutException
+      (caller unblocks)
+    end note
+  end
+end
+
+proc --> caller: CompletableFuture<Reply>
+note right of caller
+  Future resolved with:
+  • Reply: if succeeded in time
+  • TimeoutException: if 5s exceeded
+
+  Caller unblocks and proceeds
+end note
+
+@enduml

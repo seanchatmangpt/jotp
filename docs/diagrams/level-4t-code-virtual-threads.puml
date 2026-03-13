@@ -1,0 +1,39 @@
+@startuml level-4t-code-virtual-threads
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Virtual Threads & Structured Concurrency
+
+Container_Boundary(vthreadimpl, "Virtual Threads (JEP 425, 430)") {
+
+  Component(vthread, "Virtual Thread", "Lightweight Process", "Millions can create\nFew actual OS threads\nCheap: ~100 bytes RAM\nPark/unpark at checkpoints")
+
+  Component(scheduler, "Virtual Thread Scheduler", "ForkJoinPool", "Carrier threads (platform threads)\nSchedule virtuals on carriers\nWork-stealing queues\nAuto-tune carrier pool")
+
+  Component(parking, "Parking (Yield)", "Checkpoint", "Virtual thread parks\nCarrier available for other\nOn unpark: resume computation\nTransparent to code")
+
+  Component(carriers, "Carrier Threads", "OS Threads", "Platform threads run virtuals\nAuto-pool sizing\nReuse across many virtuals\nNumber ~= CPU cores")
+
+  Component(structured, "StructuredTaskScope", "Concurrency Pattern", "try (...) { task1.fork(); task2.fork(); } join();\nFail-fast cancellation\nStructured lifetime\nResource cleanup guarantee")
+
+  Component(scopes, "Task Scopes", "Lifetime Management", "ShutdownOnFailure: cancel on error\nShutdownOnSuccess: success cancels others\nJoin waits for all\nClose() cleanup")
+
+  Component(scopedvalues, "Scoped Values", "Thread-local Light", "Immutable: no Set\nShadow per scope\nNo inheritance leak\nReplace ThreadLocal")
+
+  Component(cpubound, "CPU-Bound Work", "Performance", "Virtual threads not good\nUse ForkJoinPool.commonPool()\nWork-stealing for parallelism")
+
+  Component(iobound, "I/O-Bound Work", "Performance", "Virtual threads excellent\nBlocking I/O parks thread\nCarrier picks other work\nZero-copy context switch")
+
+  Rel(vthread, scheduler, "scheduled by")
+  Rel(scheduler, carriers, "runs on")
+  Rel(vthread, parking, "parks at")
+  Rel(structured, vthread, "forks")
+  Rel(structured, scopes, "manages lifetime")
+  Rel(scopes, scopedvalues, "shadows values in")
+  Rel(iobound, parking, "benefits from")
+
+  note on link : Virtual thread = Java's lightweight process\nStructuredTaskScope = Kotlin's coroutineScope equivalent\nScoped values = replacement for ThreadLocal (no inheritance)\nVirtual threads require JEP 425 (preview in 21, likely final in 23+)
+}
+
+SHOW_LEGEND()
+@enduml

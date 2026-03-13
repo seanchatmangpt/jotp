@@ -1,0 +1,61 @@
+@startuml level-4n-code-health-pattern
+!define DIRECTION top to bottom
+skinparam {
+    backgroundColor #F5F5F5
+    defaultFontSize 11
+}
+skinparam rectangle {
+    BackgroundColor<<supervised>> #C8E6C9
+    BackgroundColor<<monitor>> #FFE0B2
+    BackgroundColor<<mailbox>> #BBDEFB
+    BorderColor #1B5E20
+}
+
+title Level 4: Health Monitoring Pattern with Unilateral Monitoring
+
+rectangle "ServiceA (Monitored Process)" as svc <<supervised>> {
+    rectangle "Mailbox\n(async message queue)" as svc_mb <<mailbox>>
+    rectangle "State Handler\n(pure function)" as svc_handler
+    svc_handler --> svc_mb
+}
+
+rectangle "HealthMonitor (Monitoring Process)" as mon <<monitor>> {
+    rectangle "Mailbox\n(DOWN signals only)" as mon_mb <<mailbox>>
+    rectangle "Monitor Handler\n(observe, react, NOT crash)" as mon_handler
+    mon_handler --> mon_mb
+}
+
+rectangle "RootSupervisor" as root #E8F5E9 {
+    rectangle "Restart Policy\nONE_FOR_ONE\nMax 5 crashes/60s" as policy
+}
+
+svc_mb ..> mon_mb: DOWN(pid, reason)\non ServiceA exit
+mon_handler --> policy: trigger restart\nif needed
+
+note right of svc
+  Independent execution
+  No knowledge of monitor
+  Crashes isolated to this process
+end note
+
+note right of mon
+  Unilateral observation
+  Does NOT link to ServiceA
+  Does NOT propagate crashes
+  Metrics: observe, log, alert
+end note
+
+note right of mon_mb
+  DOWN signal contains:
+  • pid: crashed process
+  • reason: normal|exception
+  • timestamp: when it crashed
+
+  Monitor decides action:
+  ✓ Log & metric
+  ✓ Trigger restart
+  ✓ Escalate alert
+  ✗ Does NOT crash itself
+end note
+
+@enduml

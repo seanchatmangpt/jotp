@@ -1,0 +1,70 @@
+@startuml level-2b-containers-core-otp
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+HIDE_STEREOTYPE()
+title Container Diagram: Core OTP Primitives Subsystem
+
+System_Boundary(core_otp_subsystem, "Core OTP Primitives (io.github.seanchatmangpt.jotp)") {
+    Container(process_mgmt, "Process Management", "Lightweight virtual-thread processes", "Proc<S,M>, ProcRef<S,M>,\nProcLink, ProcMonitor,\nProcRegistry, ProcTimer,\nProcSys, ProcLib\n(8 classes)")
+
+    Container(supervision, "Supervision & Recovery", "Tree-based fault tolerance", "Supervisor,\nCrashRecovery,\nApplicationController,\nApplicationSpec,\nApplicationCallback,\nStartType, RunType\n(7 classes)")
+
+    Container(state_machines, "State Machines & Events", "gen_statem + event dispatch", "StateMachine<S,E,D>,\nEventManager<E>, Parallel,\nSMEvent, Action,\nTransition\n(6 classes)")
+
+    Container(error_handling, "Error Handling", "Railway-oriented programming", "Result<T,E>,\nOk<T>, Err<E>,\nExitSignal\n(4 classes)")
+
+    Container(messaging, "Messaging & Signals", "Process communication", "Envelope<M>,\nexitSignal semantics\n(2 concepts)")
+}
+
+Rel(process_mgmt, process_mgmt, "Spawns/monitors")
+Rel(supervision, process_mgmt, "Manages lifecycle of")
+Rel(state_machines, process_mgmt, "Runs event handlers on")
+Rel(state_machines, messaging, "Delivers events via")
+Rel(supervision, supervision, "Nests hierarchies")
+Rel(supervision, error_handling, "Recovers using")
+Rel(process_mgmt, error_handling, "Wraps operations in")
+Rel(error_handling, messaging, "Represents outcomes as")
+
+note right of process_mgmt
+  **8 Process Classes:**
+  Core virtual-thread mailbox
+  with state handler pattern.
+  Proc is OTP's spawn/3.
+  Monitors are unilateral.
+  Registry for global lookup.
+end note
+
+note right of supervision
+  **7 Supervision Classes:**
+  ONE_FOR_ONE, ONE_FOR_ALL,
+  REST_FOR_ONE hierarchies.
+  ChildSpec per-process config.
+  AutoShutdown lifecycle rules.
+end note
+
+note right of state_machines
+  **6 State Machine Classes:**
+  Full gen_statem parity:
+  sealed SMEvent, Action,
+  Transition hierarchies.
+  EventManager for pub/sub.
+  Parallel for fan-out.
+end note
+
+note right of error_handling
+  **4 Error Classes:**
+  Result<T,E> railway-oriented.
+  Ok/Err sealed variants.
+  ExitSignal for crash flow.
+  Type-safe failure handling.
+end note
+
+note right of messaging
+  **2 Messaging Concepts:**
+  Envelope wraps payloads.
+  ExitSignal for exits.
+  Both async, immutable.
+end note
+
+SHOW_LEGEND()
+@enduml

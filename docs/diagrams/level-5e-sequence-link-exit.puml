@@ -1,0 +1,103 @@
+@startuml level-5e-sequence-link-exit
+!define DIRECTION top to bottom
+title Level 5: Dynamic Sequence - Process Linking & Exit Propagation
+
+participant "ProcessA" as pA
+participant "ProcessB" as pB
+participant "Supervisor" as sup
+participant "Link Manager\n(bilateral)" as link
+
+pA -> link: Proc.link(pB)
+note right of link
+  Establish BILATERAL link
+  Not just A watching B
+  Both configured to crash together
+end note
+activate link
+
+link -> link: register bilateral\nmapping A <-> B
+link -> pA: install trap_exit handler\n(for B's exit signals)
+link -> pB: install trap_exit handler\n(for A's exit signals)
+deactivate link
+
+pA -> pA: normal operation
+activate pA
+pB -> pB: normal operation
+activate pB
+
+note right of pB
+  ProcessB crashes
+  Exception thrown
+  Handler fails
+end note
+
+pB --> pB: exception!
+deactivate pB
+
+link --> link: detect B crashed
+activate link
+
+link -> pA: send EXIT(B, reason)
+note right of link
+  EXIT signal propagates
+  Bilateral contract:
+  If B dies, A dies too
+end note
+
+pA -> pA: receives EXIT message
+deactivate pA
+
+alt ProcessA trap_exit = false
+  pA --> pA: EXIT not trapped\nProcess terminates
+  deactivate pA
+  note right of pA
+    A crashes immediately
+    No intervention
+    Both A and B dead
+  end note
+else ProcessA trap_exit = true
+  pA -> pA: handler processes EXIT\nas regular message
+  activate pA
+  note right of pA
+    Can decide:
+    ✓ Recover
+    ✓ Restart B
+    ✗ Crash self
+  end note
+
+  alt Handler decides to crash
+    pA --> pA: throw exception
+    deactivate pA
+
+    link -> pB: send EXIT(A, reason)
+    note right of link
+      A intentionally crashes
+      Propagates to B (already dead)
+      Both confirmed dead
+    end note
+  else Handler recovers
+    pA -> pA: continue running
+    deactivate pA
+    note right of pA
+      A survives
+      B remains dead
+      Link can be restored
+      or A can supervise B restart
+    end note
+  end
+end
+
+sup --> sup: detect both dead
+activate sup
+note right of sup
+  Supervisor sees:
+  • A exited (EXIT reason)
+  • B exited (original crash)
+
+  Restart policy activates
+  Restart A then B
+  or restart only A (depends)
+end note
+deactivate sup
+
+@enduml

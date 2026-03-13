@@ -1,0 +1,142 @@
+@startuml level-4g-code-eventmanager
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title JOTP Code Level: EventManager<E> - Handler Registry & Dispatch
+
+Container_Boundary(manager_core, "EventManager<E> Core") {
+  Component(manager_class, "public class EventManager<E>", "API", "Manages typed event handlers\nFire-and-forget + sync notify")
+
+  Component(manager_handlers, "  private final Map<HandlerId, Handler<E>>", "Field", "Registry of active handlers\nConcurrentHashMap for thread safety\nDynamic add/remove/replace")
+
+  Component(handler_id, "public record HandlerId", "Value Type", "id: UUID\nHashable for map keys")
+
+  Component(handler_iface, "public interface Handler<E>", "Contract", "handle(E event): void\nMay throw checked/unchecked")
+
+  Component(manager_executor, "  private final ExecutorService", "Threads", "Virtual thread executor\nstructured per handler for isolation\nCleanup on deleteHandler")
+}
+
+Container_Boundary(notify_async, "Async Notify (Fire-and-Forget)") {
+  Component(notify_call, "public void notify(E event)", "Entry", "Publish event to all handlers\nreturns immediately (async)")
+
+  Component(notify_iterate, "For each HandlerId id", "Loop", "snapshot handlers at call time")
+
+  Component(notify_spawn, "executor.submit(() -> handler.handle(event))", "Spawn", "Spawn virtual thread per handler\nisolated execution context")
+
+  Component(notify_execute, "handler.handle(event)", "Execute", "Handler processes event\nmay take time")
+
+  Component(notify_exception, "catch Exception", "Error Handling", "Log exception\nDO NOT rethrow\nContinue iteration")
+
+  Component(notify_next, "Continue to next handler", "Loop End", "Other handlers unaffected")
+
+  Rel(notify_call, notify_iterate, "")
+  Rel(notify_iterate, notify_spawn, "for each")
+  Rel(notify_spawn, notify_execute, "virtual thread")
+  Rel(notify_execute, notify_exception, "if throw")
+  Rel(notify_exception, notify_next, "recover")
+  Rel(notify_next, notify_iterate, "")
+
+  note on link : notify() returns immediately\nHandlers run concurrently\nCrash in one handler\ndoes NOT affect others
+}
+
+Container_Boundary(syncnotify_sync, "Sync Notify (Wait-for-All)") {
+  Component(syncnotify_call, "public void syncNotify(E event)", "Entry", "Publish and wait for completion")
+
+  Component(syncnotify_iterate, "For each HandlerId id", "Loop", "snapshot handlers")
+
+  Component(syncnotify_fork, "List<Future> futures = new ArrayList<>()", "Collection", "Collect all futures")
+
+  Component(syncnotify_submit, "futures.add(executor.submit(...))", "Spawn", "Same as async notify")
+
+  Component(syncnotify_wait, "for (Future f : futures)", "Collect", "Join all handlers\nwait for completion")
+
+  Component(syncnotify_get, "f.get() → collect exception", "Blocking", "May throw TimeoutException")
+
+  Component(syncnotify_composite, "throw CompositeException", "Error", "If ANY handler threw\ninclude all exceptions")
+
+  Component(syncnotify_success, "Otherwise return normally", "Success", "All handlers completed")
+
+  Rel(syncnotify_call, syncnotify_iterate, "")
+  Rel(syncnotify_iterate, syncnotify_fork, "")
+  Rel(syncnotify_fork, syncnotify_submit, "add")
+  Rel(syncnotify_submit, syncnotify_wait, "all submitted")
+  Rel(syncnotify_wait, syncnotify_get, "join")
+  Rel(syncnotify_get, syncnotify_composite, "if failed")
+  Rel(syncnotify_get, syncnotify_success, "if all ok")
+
+  note on link : syncNotify() blocks caller\nUntil all handlers complete or timeout\nUse for transactional event semantics
+}
+
+Container_Boundary(handler_lifecycle, "Handler Registration Lifecycle") {
+  Component(add_handler, "public HandlerId addHandler(Handler<E> h)", "Register", "Create new HandlerId UUID\nAllocate virtual thread executor")
+
+  Component(add_check, "if (id already exists)", "Idempotent", "Replace old handler\nStop old virtual thread")
+
+  Component(add_registry, "handlers.put(id, h)", "Store", "Atomic ConcurrentHashMap put\nready for next notify()")
+
+  Component(delete_handler, "public void deleteHandler(HandlerId id)", "Unregister", "Remove from registry")
+
+  Component(delete_remove, "handlers.remove(id)", "Stop", "Remove handler\nstop executor service")
+
+  Component(delete_shutdown, "executor.shutdown()", "Cleanup", "Wait for in-flight events\nthen terminate virtual threads")
+
+  Component(delete_ignore, "Subsequent events", "Idempotent", "notify() skips deleted id\nno error thrown")
+
+  Rel(add_handler, add_check, "")
+  Rel(add_check, add_registry, "")
+  Rel(delete_handler, delete_remove, "")
+  Rel(delete_remove, delete_shutdown, "")
+  Rel(delete_shutdown, delete_ignore, "")
+
+  note on link : Handler registration is dynamic\nCan add/remove while events flowing\nViirtual thread isolation prevents races
+}
+
+Container_Boundary(isolation, "Handler Isolation Guarantee") {
+  Component(handler_a, "Handler A", "Virtual Thread 1", "Processes event\nno shared state with B/C")
+
+  Component(handler_b, "Handler B", "Virtual Thread 2", "Processes event\nindependent mailbox\nindependent lifecycle")
+
+  Component(handler_c, "Handler C", "Virtual Thread 3", "Processes event\ncrash does NOT affect A/B")
+
+  Component(event_notify, "notify(event)", "Dispatch", "Spawn all handlers\nreturns before any complete")
+
+  Component(handler_a_work, "A.handle(event)\nprocess...", "Work", "May take time\nblock on I/O")
+
+  Component(handler_b_work, "B.handle(event)\nprocess...", "Work", "Concurrent with A")
+
+  Component(handler_c_crash, "C.handle(event)\nthrow RuntimeException", "Failure", "Virtual thread exception handler")
+
+  Component(a_unaffected, "A continues\nprocess...", "Isolation", "Unaware of C's crash")
+
+  Component(b_unaffected, "B continues\nprocess...", "Isolation", "Unaware of C's crash")
+
+  Rel(event_notify, handler_a, "spawn")
+  Rel(event_notify, handler_b, "spawn")
+  Rel(event_notify, handler_c, "spawn")
+  Rel(handler_a, handler_a_work, "execute")
+  Rel(handler_b, handler_b_work, "execute")
+  Rel(handler_c, handler_c_crash, "execute")
+  Rel(handler_c_crash, a_unaffected, "independent")
+  Rel(handler_c_crash, b_unaffected, "independent")
+
+  note on link : Virtual thread isolation is KEY\neach handler runs in own call stack\nno shared state between handlers\ncatch-all in virtual thread UEH\nprevents cascade\n\nContrast:\n- If handlers shared thread pool and A crashed,\n  B/C would block or starve\n- If notify() invoked handlers sequentially,\n  crash in C would prevent B from running
+}
+
+note bottom of manager_class
+  **EventManager Lifecycle:**
+  - Created by caller (not a Proc itself)
+  - Wraps handler registry + executor
+  - Can be injected into multiple Procs
+  - Survives handler crashes via isolation
+  - Used for pub-sub, event sourcing, aggregators
+end note
+
+note bottom of handler_lifecycle
+  **Race-Free Design:**
+  - handlers is ConcurrentHashMap
+  - notify/syncNotify snapshot at call time
+  - add/deleteHandler don't block notify
+  - In-flight events continue safely
+  - Deleted handlers cleaned up after in-flight finish
+end note
+
+@enduml

@@ -1,0 +1,37 @@
+@startuml level-4c-code-supervisor
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Supervisor Restart Mechanics
+
+Container_Boundary(supervimpl, "Supervisor Engine") {
+
+  Component(rootsupervisor, "Supervisor<S,M>", "Root Process", "Manages children lifecycle\nRestart strategy (sealed)\nSliding window tracking\nDynamic operation support")
+
+  Component(strategy, "RestartStrategy", "Sealed Enum", "ONE_FOR_ONE: child isolated\nONE_FOR_ALL: cascade all\nREST_FOR_ONE: ordered deps\nSIMPLE_ONE_FOR_ONE: pool")
+
+  Component(childspecs, "ChildSpec Registry", "Child Metadata", "Map<Id, ChildSpec<S,M>>\nFor each: Restart/Shutdown/Type\nRunning ProcRef per child\nRestart count tracking")
+
+  Component(slidingwindow, "Sliding Restart Window", "Failure Detection", "Time window (15s default)\nRestart count per window\nMax restarts per window (5)\nExceed = permanent failure")
+
+  Component(exithandler, "Exit Signal Handler", "Crash Detection", "Monitor each child\nReceive ExitSignal\nCheck failed vs normal\nDecide restart logic")
+
+  Component(restartdecision, "Restart Decision", "Logic Engine", "PERMANENT: always restart\nTRANSIENT: only if abnormal\nTEMPORARY: never restart\nCheck window limits")
+
+  Component(spawnlogic, "Spawn New Child", "Child Creation", "Call ChildSpec supplier\nIncrement generation\nAdd to ChildSpec registry\nLink/Monitor new Proc")
+
+  Component(autoshutdown, "AutoShutdown Logic", "Supervisor Lifecycle", "NEVER: ignore child exit\nANY_SIGNIFICANT: one PERMANENT exit kills supervisor\nALL_SIGNIFICANT: all PERMANENT exit kills supervisor\nTerminate all children")
+
+  Rel(rootsupervisor, strategy, "uses")
+  Rel(rootsupervisor, childspecs, "manages")
+  Rel(exithandler, slidingwindow, "checks window")
+  Rel(slidingwindow, restartdecision, "feeds")
+  Rel(restartdecision, spawnlogic, "triggers spawn")
+  Rel(spawnlogic, childspecs, "registers")
+  Rel(autoshutdown, rootsupervisor, "controls")
+
+  note on link : Supervisor is itself a Proc\nLinked to all children\nExit signal trap = true\nOne child crash -> decision -> restart or supervise exit
+}
+
+SHOW_LEGEND()
+@enduml

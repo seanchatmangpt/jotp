@@ -1,0 +1,81 @@
+@startuml level-1c-system-context-distributed
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+HIDE_STEREOTYPE()
+title System Context: JOTP in Distributed Systems
+
+Person(operators, "DevOps / SRE Teams", "Managing distributed\nJOTP deployments")
+
+System_Boundary(datacenter, "Data Center / Kubernetes Cluster") {
+    System(node1, "JOTP Node 1", "Java 26 JVM\nwith JOTP supervisor tree\nfor domain service A")
+    System(node2, "JOTP Node 2", "Java 26 JVM\nwith JOTP supervisor tree\nfor domain service B")
+    System(nodeN, "JOTP Node N", "Java 26 JVM\nwith JOTP supervisor tree")
+}
+
+System(kafka, "Apache Kafka Cluster", "Inter-node message bridge\nfor JOTP process communication")
+
+System(postgres, "PostgreSQL Cluster", "Shared persistence\nfor all JOTP nodes")
+
+System(config_server, "Configuration Server", "Spring Cloud Config\nor Consul")
+
+System(registry, "Service Registry", "Kubernetes DNS\nor Consul")
+
+System(monitoring, "Monitoring Stack", "Prometheus + Grafana\nJFR, OpenTelemetry")
+
+System(backup, "Backup Storage", "S3, GCS, NFS\nfor state snapshots")
+
+Rel(operators, node1, "Deploys JOTP to")
+Rel(operators, node2, "Deploys JOTP to")
+Rel(operators, nodeN, "Scales to N nodes")
+
+Rel(node1, kafka, "Publishes supervisor\nevents via")
+Rel(node2, kafka, "Publishes supervisor\nevents via")
+Rel(nodeN, kafka, "Publishes via")
+
+Rel(kafka, node1, "Delivers messages to\nfor inter-service communication")
+Rel(kafka, node2, "Delivers to")
+Rel(kafka, nodeN, "Bridges nodes")
+
+Rel(node1, postgres, "Persists process state")
+Rel(node2, postgres, "Persists to")
+Rel(nodeN, postgres, "Shares database")
+
+Rel(node1, config_server, "Reads configuration from")
+Rel(node2, config_server, "Reads from")
+Rel(nodeN, config_server, "Reads from")
+
+Rel(node1, registry, "Registers with")
+Rel(node2, registry, "Registers")
+Rel(nodeN, registry, "Service discovery")
+
+Rel(node1, monitoring, "Exports metrics &\nlogs to")
+Rel(node2, monitoring, "Exports to")
+Rel(nodeN, monitoring, "Observability")
+
+note right of kafka
+  **Kafka's Role:**
+  - Bridge between JOTP nodes
+  - Supervisor exit signals
+  - Saga coordination messages
+  - Event sourcing log
+end note
+
+note bottom of postgres
+  **Shared Database:**
+  - Single source of truth
+  - Prevents split-brain
+  - Enables fast failover
+  - All nodes query same data
+end note
+
+note right of monitoring
+  **Observability Requirements:**
+  - Per-node metrics (memory, CPU)
+  - Per-supervisor stats (restart count)
+  - Cross-node tracing (request paths)
+  - Alert on supervisor crashes
+  - Blue-green deployment support
+end note
+
+SHOW_LEGEND()
+@enduml

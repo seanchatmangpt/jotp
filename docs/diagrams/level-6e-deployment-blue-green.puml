@@ -1,0 +1,82 @@
+@startuml level-6e-deployment-blue-green
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+title Blue-Green Deployment Strategy
+caption JOTP: Zero-downtime rolling updates with instant rollback
+
+Deployment_Node(k8s, "Kubernetes Cluster", "") {
+  
+  Deployment_Node(blue_env, "Blue Environment", "Active") {
+    Deployment_Node(blue_pod1, "Pod: jotp-blue-1", "") {
+      Deployment_Node(blue_cont1, "Container", "Docker") {
+        Component(blue_jvm1, "JVM v2.1.0", "OpenJDK 26") {
+          description = "Handling 100% traffic"
+        }
+        Component(blue_sup1, "RootSupervisor", "ONE_FOR_ALL")
+      }
+    }
+    
+    Deployment_Node(blue_pod2, "Pod: jotp-blue-2", "") {
+      Deployment_Node(blue_cont2, "Container", "Docker") {
+        Component(blue_jvm2, "JVM v2.1.0", "OpenJDK 26") {
+          description = "Replica"
+        }
+        Component(blue_sup2, "RootSupervisor", "ONE_FOR_ALL")
+      }
+    }
+  }
+  
+  Deployment_Node(green_env, "Green Environment", "Standby") {
+    Deployment_Node(green_pod1, "Pod: jotp-green-1", "") {
+      Deployment_Node(green_cont1, "Container", "Docker") {
+        Component(green_jvm1, "JVM v2.2.0-rc", "OpenJDK 26") {
+          description = "New version, no traffic"
+        }
+        Component(green_sup1, "RootSupervisor", "ONE_FOR_ALL")
+      }
+    }
+    
+    Deployment_Node(green_pod2, "Pod: jotp-green-2", "") {
+      Deployment_Node(green_cont2, "Container", "Docker") {
+        Component(green_jvm2, "JVM v2.2.0-rc", "OpenJDK 26") {
+          description = "New version, no traffic"
+        }
+        Component(green_sup2, "RootSupervisor", "ONE_FOR_ALL")
+      }
+    }
+  }
+  
+  Deployment_Node(routing, "Routing Layer", "") {
+    Component(lb, "Load Balancer", "Ingress") {
+      description = "90% blue, 10% canary green"
+    }
+  }
+}
+
+Deployment_Node(testing, "Testing", "") {
+  Component(smoke, "Smoke Tests", "Automated") {
+    description = "Green health checks"
+  }
+}
+
+Rel(lb, blue_jvm1, "route: 50%")
+Rel(lb, blue_jvm2, "route: 40%")
+Rel(lb, green_jvm1, "route: 10% canary")
+Rel(smoke, green_jvm1, "validate v2.2.0-rc")
+
+note right of green_env
+  Phase 1: Canary deployment
+  - Deploy green (v2.2.0-rc)
+  - Route 10% traffic
+  - Monitor metrics
+  - If OK: promote green
+end note
+
+note right of blue_env
+  Phase 2: Instant rollback available
+  - If green fails
+  - Revert LB to 100% blue
+  - Takes < 500ms
+end note
+
+@enduml

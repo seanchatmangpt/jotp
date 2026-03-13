@@ -1,0 +1,296 @@
+@startuml level-3f-components-dogfood
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Level 3F: Dogfood Example Categories (72 Templates)
+
+LAYOUT_WITH_LEGEND()
+
+package "Core Language Features" as CORE_PKG #FFF9E6 {
+    component "Records" as RECORDS [
+        Java 26 records
+        ----
+        Immutable data classes
+        Auto-generated accessors
+        Pattern matching support
+    ]
+
+    component "Sealed Types" as SEALED [
+        Sealed type hierarchy
+        ----
+        Restrict inheritance
+        Exhaustiveness checking
+        14 templates (sealed + permits)
+    ]
+
+    component "Pattern Matching" as PATTERN_MATCH [
+        instanceof patterns
+        Record patterns
+        Switch expressions
+        Nested destructuring
+    ]
+
+    component "Modern Streams & Var" as STREAMS [
+        Stream API usage
+        Lambda expressions
+        Local variable type inference
+        Gatherers (collectors)
+    ]
+}
+
+package "Concurrency & Virtual Threads" as CONC_PKG #F0F5FF {
+    component "Virtual Threads" as VTHREADS [
+        Lightweight threads
+        ----
+        Millions of processes
+        OTP process model
+        StructuredTaskScope
+    ]
+
+    component "Structured Concurrency" as STRUCT_CONC [
+        JEP 453 patterns
+        ----
+        Task scope management
+        Cancelation
+        Structured shutdown
+    ]
+
+    component "Scoped Values" as SCOPED_VALUES [
+        Context propagation
+        ----
+        Alternative to ThreadLocal
+        Virtual thread safe
+        Task-local storage
+    ]
+}
+
+package "Gang of Four Patterns (17)" as GOF_PKG #FFE4E1 {
+    component "Builder & Factory" as BUILDER [
+        Creational patterns
+        ----
+        Fluent builders
+        Factory methods
+        Static factories
+    ]
+
+    component "Strategy Pattern" as STRATEGY [
+        Behavioral pattern
+        ----
+        Functional strategy
+        Function<T,R> based
+        Modern interfaces
+    ]
+
+    component "State Machine" as STATE_MACH [
+        State pattern + gen_statem
+        ----
+        Sealed event hierarchy
+        Sealed action hierarchy
+        Transition functions
+    ]
+
+    component "Visitor & Observer" as VISITOR [
+        Behavioral patterns
+        ----
+        Sealed type visitors
+        EventManager<E>
+        Type-safe dispatch
+    ]
+}
+
+package "Modern Java APIs" as API_PKG #E6F9FF {
+    component "HttpClient" as HTTPCLIENT [
+        Modern HTTP client
+        ----
+        java.net.http
+        Virtual thread compatible
+        Non-blocking I/O
+    ]
+
+    component "java.time & NIO.2" as DATETIME_NIO [
+        Date/time handling
+        Path-based file I/O
+        Modern APIs
+    ]
+
+    component "Collections & Strings" as COLLECTIONS [
+        Immutable collections
+        Modern String methods
+        Stream integration
+    ]
+
+    component "ProcessBuilder" as PROCESSBUILDER [
+        Process execution
+        ----
+        System integration
+        Subprocess management
+    ]
+}
+
+package "Testing Frameworks" as TEST_PKG #F0FFF0 {
+    component "JUnit 5" as JUNIT5 [
+        Modern test framework
+        ----
+        Parallel execution
+        Parameterized tests
+        @Property support
+    ]
+
+    component "Property-Based Testing" as JQWIK [
+        jqwik library
+        ----
+        @Property / @ForAll
+        Shrinking
+        Edge case discovery
+    ]
+
+    component "Test Data Generation" as INSTANCIO [
+        Instancio library
+        ----
+        Domain object builders
+        Random test data
+        Nested object graphs
+    ]
+
+    component "BDD & Architecture" as TESTING_MISC [
+        AssertJ fluent assertions
+        ArchUnit architecture rules
+        Awaitility async assertions
+    ]
+}
+
+package "Error Handling & Security" as ERROR_SEC_PKG #FFE6F0 {
+    component "Result Railway" as RESULT_RW [
+        Result<T,E> pattern
+        ----
+        Type-safe errors
+        Error accumulation
+        Functional composition
+    ]
+
+    component "Validation Pipeline" as VALIDATION [
+        Input validation
+        ----
+        Preconditions
+        Error accumulation
+        Jakarta EE migration
+    ]
+
+    component "Modern Cryptography" as CRYPTO [
+        Secure operations
+        ----
+        Encapsulation
+        Key management
+    ]
+}
+
+package "Build & Module System" as BUILD_PKG #F5F5F5 {
+    component "JPMS Modules" as JPMS [
+        Module-info.java
+        ----
+        Explicit dependencies
+        Qualified exports
+        Multi-module structure
+    ]
+
+    component "Maven & Spotless" as MAVEN_BUILD [
+        Build toolchain
+        ----
+        POM structure
+        Maven wrapper
+        Google Java Format
+    ]
+
+    component "CI/CD & Quality" as CI_CD [
+        Build pipeline
+        ----
+        Surefire/Failsafe
+        Build cache
+        Continuous integration
+    ]
+}
+
+'Core relationships
+RECORDS --> SEALED : "uses for immutable ADTs"
+SEALED --> PATTERN_MATCH : "enables exhaustiveness"
+PATTERN_MATCH --> STREAMS : "composed with"
+PATTERN_MATCH -.-> RECORDS : "supports record patterns"
+
+'Concurrency relationships
+VTHREADS --> STRUCT_CONC : "managed by"
+STRUCT_CONC --> SCOPED_VALUES : "coordinates"
+
+'GoF relationships
+BUILDER --> STRATEGY : "composes with"
+STRATEGY --> STATE_MACH : "implements behavior"
+STATE_MACH --> VISITOR : "uses for traversal"
+
+'API relationships
+HTTPCLIENT --> VTHREADS : "runs on"
+DATETIME_NIO --> COLLECTIONS : "manages"
+PROCESSBUILDER -.-> HTTPCLIENT : "alternative to"
+
+'Testing relationships
+JUNIT5 --> JQWIK : "extends with"
+JQWIK --> INSTANCIO : "generates data for"
+TESTING_MISC --> JUNIT5 : "integrates with"
+
+'Error & Security
+RESULT_RW --> VALIDATION : "validates into"
+VALIDATION --> CRYPTO : "protects data"
+ERROR_SEC_PKG --> RESULT_RW : "uses Result pattern"
+
+'Build relationships
+JPMS --> MAVEN_BUILD : "configured in"
+MAVEN_BUILD --> CI_CD : "executes via"
+
+'Cross-package: concurrency uses all others
+VTHREADS -.-> HTTPCLIENT : "executes I/O on"
+VTHREADS -.-> JUNIT5 : "runs parallel tests"
+
+note bottom of CORE_PKG
+  14 templates: sealed types, records,
+  pattern matching, streams, lambdas,
+  var inference, gatherers
+end note
+
+note bottom of CONC_PKG
+  5 templates: virtual threads,
+  structured concurrency,
+  scoped values (JEP 429)
+end note
+
+note bottom of GOF_PKG
+  17 Gang of Four patterns
+  reimagined for Java 26:
+  Sealed + sealed types +
+  pattern matching
+end note
+
+note bottom of API_PKG
+  6 templates covering modern
+  Java APIs: HttpClient, java.time,
+  NIO.2, ProcessBuilder,
+  Collections, Strings
+end note
+
+note bottom of TEST_PKG
+  12 templates: JUnit 5, jqwik,
+  Instancio, AssertJ, ArchUnit,
+  Awaitility, Mockito, BDD,
+  Testcontainers
+end note
+
+note bottom of ERROR_SEC_PKG
+  3 templates: Result<T,E> railway,
+  functional errors, Optional<->Result,
+  validation, modern crypto
+end note
+
+note bottom of BUILD_PKG
+  7 templates: POM structure,
+  Maven wrapper, Spotless,
+  Surefire/Failsafe, build cache,
+  CI/CD (GitHub Actions, GitLab CI)
+end note
+
+@enduml
