@@ -175,11 +175,21 @@ if [ -n "${https_proxy:-}${HTTPS_PROXY:-}${http_proxy:-}${HTTP_PROXY:-}" ]; then
   if [ -f "${PROXY_SCRIPT}" ] && ! pgrep -f "python3.*maven-proxy" >/dev/null 2>&1; then
     echo "Starting Maven proxy bridge (127.0.0.1:3128)..."
     nohup python3 "${PROXY_SCRIPT}" >/dev/null 2>&1 &
-    sleep 1
-    if pgrep -f "python3.*maven-proxy" >/dev/null 2>&1; then
-      echo "Maven proxy bridge started"
+    sleep 2
+
+    # Validate bridge is listening
+    if python3 -c "import socket; s=socket.socket(); s.connect(('127.0.0.1', 3128)); s.close()" 2>/dev/null; then
+      echo "Maven proxy bridge started and listening"
+
+      # CRITICAL FIX: Route Maven through LOCAL bridge instead of direct upstream
+      # This prevents concurrent auth storms that trigger 3-attempt limit
+      export http.proxyHost=127.0.0.1
+      export http.proxyPort=3128
+      export https.proxyHost=127.0.0.1
+      export https.proxyPort=3128
+      # Note: No auth credentials needed for local proxy; bridge injects them internally
     else
-      echo "Maven proxy bridge failed to start (continuing anyway)"
+      echo "WARNING: Maven proxy bridge failed to start or not listening"
     fi
   fi
 fi
