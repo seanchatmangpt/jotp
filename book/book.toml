@@ -1,0 +1,9 @@
+[book]
+title = "Designing Java Systems with JOTP"
+authors = ["Sean Chatman"]
+description = "Write Highly Scalable, Self-Healing Software with Layers"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "target/book"
