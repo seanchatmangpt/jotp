@@ -1,0 +1,71 @@
+@startuml level-4-code-supervisor
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4/C4_Component.puml
+
+title Supervisor: Fault-Tolerance Tree & Restart Logic
+
+Container_Boundary(supervisor_impl, "Supervisor Implementation") {
+
+    Component(strategy, "RestartStrategy (Enum)", "ONE_FOR_ONE", "ONE_FOR_ALL", "REST_FOR_ONE", "SIMPLE_ONE_FOR_ONE")
+
+    Component(childspec, "ChildSpec<S,M>", "Per-child metadata", "id: String\nfactory: ChildFactory<S,M>\nrestartType: RestartType\nshutdown: Shutdown\nchildType: ChildType")
+
+    Component(restart_type, "RestartType (Sealed)", "Child lifecycle", "PERMANENT: always restart\nTRANSIENT: restart only on abnormal exit\nTEMPORARY: never restart, just remove")
+
+    Component(shutdown, "Shutdown (Sealed)", "Termination policy", "BrutalKill: fast termination\nTimeout(duration): graceful shutdown\nInfinity: wait forever")
+
+    Component(child_type, "ChildType (Enum)", "Supervision role", "WORKER: carries no children\nSUPERVISOR: supervises other processes")
+
+    Component(restart_window, "Sliding Restart Window", "Restart rate limiting", "maxRestarts: int\nwithinSeconds: Duration\nIf maxRestarts exceeded → supervisor dies")
+
+    Component(auto_shutdown, "AutoShutdown (Sealed)", "Supervisor lifecycle", "NEVER: supervisor lives regardless\nANY_SIGNIFICANT: supervisor dies if any significant child dies\nALL_SIGNIFICANT: supervisor dies if all significant children exit")
+
+    Component(state_machine, "Supervisor State Machine", "Running → Child Crash → Decision", "1. Child exits (normal|abnormal)\n2. Check RestartType:\n   - PERMANENT: restart now\n   - TRANSIENT (abnormal): restart\n   - TEMPORARY: just remove\n3. Check restart window (sliding)\n4. Restart child (with new ProcRef)\n5. Return to Running")
+
+    Component(one_for_one, "ONE_FOR_ONE", "Isolate failures", "Only restart failed child\nOther children unaffected\nBest for independent workers")
+
+    Component(one_for_all, "ONE_FOR_ALL", "Cascade restart", "Child fails → restart ALL\nUsed when children are interdependent\nHigher blast radius but guaranteed consistency")
+
+    Component(rest_for_one, "REST_FOR_ONE", "Ordered restart", "Child fails → restart failed child + all started after\nUsed for dependency chains\nA→B→C: if B fails, restart B+C (not A)")
+
+    Component(simple_one_for_one, "SIMPLE_ONE_FOR_ONE", "Dynamic pool", "Homogeneous child processes\nDynamic startChild()/terminateChild()\nUsed for autoscaling worker pools")
+
+    Component(operations, "Dynamic Operations", "Runtime child management", "startChild(ChildSpec) → ProcRef<S,M>\nstartChild() → auto-generated ID\nterminateChild(id | ref) → ok | not_found\ndeleteChild(id) → ok | not_found (must be terminated first)\nwhichChildren() → List<ChildSpec>")
+}
+
+Rel(strategy, childspec, "Determines restart behavior for")
+Rel(childspec, restart_type, "Contains")
+Rel(childspec, shutdown, "Contains")
+Rel(childspec, child_type, "Contains")
+Rel(restart_window, state_machine, "Enforces rate limiting in")
+Rel(auto_shutdown, state_machine, "Determines lifecycle in")
+Rel(strategy, one_for_one, "Strategy variant")
+Rel(strategy, one_for_all, "Strategy variant")
+Rel(strategy, rest_for_one, "Strategy variant")
+Rel(strategy, simple_one_for_one, "Strategy variant")
+Rel(operations, strategy, "Supported by SIMPLE_ONE_FOR_ONE")
+
+note right of state_machine
+  On PERMANENT restart failure:
+  (max restarts exceeded within window)
+  → Supervisor itself terminates
+  → Propagates to parent supervisor
+  → Cascades until handled
+end note
+
+note right of one_for_one
+  Preferred for:
+  - HTTP request handlers
+  - DB connection workers
+  - Independent services
+  Failure isolation is key
+end note
+
+note right of one_for_all
+  Preferred for:
+  - Coordinated subsystems
+  - Shared resource dependencies
+  - Must be consistent
+  Higher coordination cost
+end note
+
+@enduml

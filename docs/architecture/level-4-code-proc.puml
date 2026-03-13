@@ -1,0 +1,55 @@
+@startuml level-4-code-proc
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4/C4_Component.puml
+
+title Proc<S,M>: Virtual Thread Process with Mailbox
+
+Container_Boundary(proc_impl, "Proc<S,M> Implementation") {
+
+    Component(vthread, "Virtual Thread", "JEP 425 preview", "~1 KB heap per process\nMillion-scale concurrency\nStructured via StructuredTaskScope")
+
+    Component(mailbox, "LinkedTransferQueue<Envelope<M>>", "Lock-free MPMC queue", "tell(msg) → ~50-150 ns latency\nNon-blocking, work-stealing")
+
+    Component(envelope, "Envelope<M>", "Message wrapper", "type: Message | ExitSignal\nsender: ProcRef<?, ?>\nreplyTo: TransferQueue<R>\npayload: M")
+
+    Component(handler, "StateHandler: BiFunction<S, M, S>", "Pure state function", "Deterministic, no side effects\nS = current state\nM = message\nReturns: S (new state)")
+
+    Component(tell_method, "tell(msg: M)", "Async fire-and-forget", "queue.put(Envelope(msg, sender))\nReturns immediately\nNon-blocking")
+
+    Component(ask_method, "ask(msg: M, timeout: Duration)", "Sync request-reply", "Create replyTo channel\nqueue.put(Envelope(msg, replyTo))\nWait with timeout\nBlocking caller until reply")
+
+    Component(trap_exits, "trapExits(bool)", "Process flag", "If true: ExitSignal → mailbox message\nIf false: ExitSignal → crash\nUsed for supervision")
+
+    Component(loop, "Engine Loop (Virtual Thread)", "Mailbox processing", "While running:\n  1. Dequeue Envelope\n  2. Call handler(state, message)\n  3. Update state\n  4. Process reply if ask")
+
+    Component(link_monitor, "Links & Monitors", "Crash notification", "link/2: bilateral crash propagation\nmonitor/2: unilateral DOWN signal\nBoth enqueue to mailbox")
+
+    Component(pid, "ProcRef<S,M>", "Process identifier", "Opaque stable handle\nSurvives supervisor restarts\nUsed as send target")
+}
+
+Rel(vthread, mailbox, "Contains")
+Rel(vthread, loop, "Runs")
+Rel(tell_method, mailbox, "Enqueues to")
+Rel(ask_method, mailbox, "Enqueues to")
+Rel(ask_method, envelope, "Uses replyTo channel")
+Rel(loop, handler, "Calls on each message")
+Rel(loop, envelope, "Dequeues from mailbox")
+Rel(trap_exits, loop, "Controls behavior")
+Rel(link_monitor, mailbox, "Enqueue signals to")
+Rel(pid, vthread, "Identifies")
+
+note right of mailbox
+  Non-blocking architecture:
+  - Multiple senders can tell() concurrently
+  - Single receiver dequeues in loop
+  - ask() creates temporary reply channel
+  - No synchronous locks in hot path
+end note
+
+note right of handler
+  Pure function: S × M → S
+  No side effects during transition
+  Failures thrown out to supervisor
+  External effects via tell() to other processes
+end note
+
+@enduml

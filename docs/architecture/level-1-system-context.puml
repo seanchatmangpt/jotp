@@ -1,0 +1,27 @@
+@startuml level-1-system-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4/C4_Context.puml
+
+title JOTP: Erlang/OTP Patterns in Java 26 - System Context
+
+Person(javadev, "Java Developer", "Uses JOTP primitives to build fault-tolerant systems")
+Person(architect, "Architect / CTO", "Evaluates JOTP vs. Erlang/OTP, Akka, Go")
+
+System(jotp, "JOTP Framework", "15 OTP primitives (Proc, Supervisor, StateMachine, etc.)\nVirtual threads + fault-tolerance semantics\nJava 26 JPMS library")
+
+System_Ext(javaapps, "Java Applications", "Spring Boot microservices, standalone services, batch systems")
+System_Ext(kafka, "Kafka / Event Bus", "Inter-JVM message streaming (interim distributed actor bridge)")
+System_Ext(databases, "Databases", "PostgreSQL, MySQL, MongoDB - for persistent state")
+System_Ext(grpc, "gRPC / REST APIs", "External service communication")
+System_Ext(otp_legacy, "Erlang/OTP Systems", "Legacy systems or interop requirements")
+
+Rel(javadev, jotp, "Imports + spawns processes")
+Rel(architect, jotp, "Evaluates architecture")
+Rel(jotp, javaapps, "Integrated into")
+Rel(jotp, kafka, "Publishes events / reads from topics (for distributed actors)")
+Rel(javaapps, databases, "Reads/writes state")
+Rel(javaapps, grpc, "Calls external services")
+Rel(jotp, otp_legacy, "Can bridge via Kafka or gRPC")
+
+BiRel(javaapps, jotp, "Message passing (ask/tell/monitor)")
+
+@enduml
