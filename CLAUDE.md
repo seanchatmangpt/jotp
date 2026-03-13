@@ -110,7 +110,7 @@ bash .claude/setup.sh
 
 - **Build cache warmup** (before long sessions):
   ```bash
-  mvnd compile -q -T1C              # Warm classpath cache
+  make cache-warm                   # Warm classpath cache (mvnd compile -q -T1C)
   mvnd compile -q -T1C --offline    # Offline mode (no downloads)
   ```
 
@@ -134,21 +134,68 @@ bash .claude/setup.sh
 
 ## Commands
 
+Use `make` for all common tasks — it's the unified entry point:
+
 ```bash
-./mvnw test              # Run unit tests only
-./mvnw verify            # Run all tests (unit + integration) and quality checks
-./mvnw spotless:apply    # Format code (Google Java Format, AOSP style)
-./mvnw spotless:check    # Check formatting without applying
-./mvnw jshell:run        # Start interactive JShell REPL
-./mvnw package -Dshade   # Build a fat/uber JAR (shade profile)
-./mvnw verify -Ddogfood  # Run dogfood: generate-check + compile + test + report
-bin/mvndw verify          # Same as ./mvnw but with Maven Daemon (faster)
+make                     # Show all available targets (help)
+make compile             # Compile sources
+make test                # Run unit tests
+make verify              # Run all tests + quality checks
+make format              # Apply Spotless formatting (Google Java Format, AOSP)
+make format-check        # Check formatting without modifying
+make clean               # Remove target/
+make package             # Build library JAR
+make shade               # Build fat/uber JAR
+make repl                # Start interactive JShell REPL
+make cache-warm          # Pre-warm mvnd classpath cache
 ```
 
-**Run a single test class:**
+**Single test / integration test:**
 ```bash
+make test-single T=MathsTest
+make it-single T=MathsIT
+```
+
+**Benchmarking (JMH):**
+```bash
+make benchmark-quick     # 1 fork, 1 warmup, 2 iterations
+make benchmark           # Standard (1 fork, 3 warmup, 5 iterations)
+make benchmark-full      # 3 forks, 5 warmup, 10 iterations
+make benchmark-view      # Print last results (target/benchmark-results.json)
+```
+
+**Maven Central / Release:**
+```bash
+make deploy-snapshot              # Deploy SNAPSHOT to OSSRH
+make deploy-release GPG_KEY=<id>  # Deploy signed release
+make gpg-check                    # Verify GPG key available
+```
+
+**Cloud deployment:**
+```bash
+make deploy-status       # Show deployment status
+make cloud-config        # Show active cloud provider config
+make deploy-build        # Build fat JAR for deployment
+make deploy-infra        # Provision infrastructure (Terraform)
+make deploy-destroy      # Tear down infrastructure
+```
+
+**Guard system:**
+```bash
+make guard-build         # Build Rust dx-guard binary
+make guard-check         # Validate sources (H_TODO, H_MOCK, H_STUB)
+```
+
+**Direct mvnd commands** (when bypassing make):
+```bash
+mvnd compile -T1C
 mvnd test -Dtest=MathsTest
-mvnd verify -Dit.test=MathsIT  # integration test
+mvnd verify -Dit.test=MathsIT
+mvnd spotless:apply -q
+mvnd spotless:check
+mvnd jshell:run
+mvnd package -Dshade -Dmaven.test.skip=true
+mvnd verify -Dbenchmark
 ```
 
 ## Claude Code Features
@@ -249,7 +296,8 @@ The guard system detects forbidden patterns in production code:
 
 **Build guard system:**
 ```bash
-cd guard-system && cargo build --release
+make guard-build         # preferred
+cd guard-system && cargo build --release  # direct
 ```
 
 ## Architecture
@@ -286,8 +334,8 @@ The jotp library uses several preview APIs that require `--enable-preview`:
 Check [OpenJDK Enhancement Proposals](https://openjdk.org/jeps/) for graduation status.
 
 **Test separation:**
-- Unit tests: `*Test.java` — run by maven-surefire-plugin via `./mvnw test`
-- Integration tests: `*IT.java` — run by maven-failsafe-plugin during `verify` phase
+- Unit tests: `*Test.java` — run by maven-surefire-plugin via `make test`
+- Integration tests: `*IT.java` — run by maven-failsafe-plugin during `make verify`
 
 **Test execution:** JUnit 5 is configured for full parallel execution (dynamic strategy, concurrent mode for both methods and classes) via `src/test/resources/junit-platform.properties`.
 
