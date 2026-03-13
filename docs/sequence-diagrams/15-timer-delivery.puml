@@ -1,0 +1,99 @@
+@startuml 15-timer-delivery
+title JOTP: Timer Message Delivery (ProcTimer Pattern)
+skinparam backgroundColor #f0f0f0
+skinparam sequence {
+    BoxBackgroundColor LightBlue
+    LifeLineBorderColor DimGray
+    LifeLineBackgroundColor White
+}
+
+participant Client
+participant ProcTimer as "ProcTimer\n(scheduler)"
+participant "Proc<S,M>\n(target)"
+participant "Timer\nBackend"
+
+autonumber
+
+Client ->> ProcTimer: sendAfter(delay, message)
+activate ProcTimer
+note right of Client
+  Schedule message delivery
+  after 100ms
+end note
+
+ProcTimer ->> Timer: schedule(callback, 100ms)
+activate Timer
+note right of Timer
+  Virtual thread pool
+  with precision scheduling
+end note
+
+note over Client, Timer
+  Wait for timeout...
+end note
+
+Timer ->> ProcTimer: callback.fire()
+deactivate Timer
+activate ProcTimer
+
+ProcTimer ->> "Proc<S,M>": enqueue(message)
+activate "Proc<S,M>"
+
+note right of "Proc<S,M>"
+  Message now in mailbox
+  will be dequeued and
+  processed in order (FIFO)
+end note
+
+deactivate "Proc<S,M>"
+deactivate ProcTimer
+
+---
+
+Client ->> ProcTimer: sendInterval(interval, message)
+activate ProcTimer
+note right of Client
+  Schedule recurring
+  message every 500ms
+end note
+
+ProcTimer ->> Timer: scheduleAtFixedRate(callback, 500ms)
+activate Timer
+
+note over ProcTimer
+  TimerRef returned
+  for later cancellation
+end note
+
+loop Every 500ms
+  Timer ->> "Proc<S,M>": enqueue(message)
+  activate "Proc<S,M>"
+  deactivate "Proc<S,M>"
+end
+
+Client ->> ProcTimer: cancel(timerRef)
+deactivate Timer
+deactivate ProcTimer
+
+note right of Client
+  Timer cancelled,
+  no more messages
+end note
+
+---
+
+participant "Supervisor\n(monitoring)"
+
+note over Client, "Supervisor\n(monitoring)"
+  ADVANCED: Integration with Supervisor
+  Supervisor can schedule restart attempts
+  with exponential backoff timers
+end note
+
+"Supervisor\n(monitoring)" ->> ProcTimer: sendAfter(1000ms, RetryMessage)
+note right of "Supervisor\n(monitoring)"
+  Retry failed child
+  after 1 second
+end note
+
+@enduml

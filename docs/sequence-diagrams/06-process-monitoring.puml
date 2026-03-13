@@ -1,0 +1,65 @@
+@startuml Process Monitoring - Unilateral Down Signal
+
+title Process Monitoring: Receive DOWN Signals (Unilateral)
+
+participant Watcher as watcher
+participant "ProcMonitor" as monitor
+participant "Target Proc" as target
+participant Handler as handler
+
+== Monitor Installation ==
+
+watcher -> monitor: monitor(target, downHandler)
+note right of monitor
+  Returns MonitorRef
+  Handler will be invoked on target crash
+  Does NOT kill the watcher
+end note
+monitor -> target: install DOWN callback
+monitor --> watcher: return MonitorRef
+
+watcher -> watcher: continue running
+target -> target: continue processing
+
+== Normal Target Termination ==
+
+target -> target: exit message loop normally
+target -> handler: downHandler.accept(null)
+note right of handler
+  null = normal exit
+  Runs on target's thread context
+  Must not block (brief callback)
+end note
+
+== Target Crash ==
+
+target -> target: exception in handler
+target -> target: lastError = exception
+target -> target: exit message loop
+
+target -> handler: downHandler.accept(exception)
+note right of handler
+  non-null = abnormal exit
+  Handler logs/records the crash
+  Watcher is NOT affected
+end note
+
+watcher -> watcher: unaffected! still running
+note right of watcher
+  Unlike ProcLink:
+  - Monitoring is unilateral
+  - Watcher does not crash
+  - Does not receive exit signal as message
+
+  Use case: health checks
+  Can demonitor() if monitor no longer needed
+end note
+
+== Demonitoring ==
+
+watcher -> monitor: demonitor(monitorRef)
+monitor -> target: remove DOWN callback
+note right of watcher
+  If target crashes now,
+  no DOWN signal will be sent
+end note

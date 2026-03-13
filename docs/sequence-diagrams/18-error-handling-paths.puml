@@ -1,0 +1,117 @@
+@startuml 18-error-handling-paths
+title JOTP: Error Handling Strategy Selection
+skinparam backgroundColor #f0f0f0
+skinparam sequence {
+    BoxBackgroundColor LightBlue
+    LifeLineBorderColor DimGray
+    LifeLineBackgroundColor White
+}
+
+participant Handler as "State Handler\nor State Machine"
+participant Exit as "Exit Signal"
+participant Supervisor
+participant Recovery as "CrashRecovery"
+
+autonumber
+
+note over Handler, Recovery
+  Error handling in Erlang/OTP is sophisticated.
+  Each error drives a decision tree:
+  normal | shutdown | {error, Reason}
+end note
+
+Handler ->> Handler: processingLogic()
+
+Handler ->> Exit: throw Exception
+activate Exit
+
+note right of Exit
+  Exception caught
+  Exit reason determined:
+  - normal → clean shutdown
+  - shutdown → explicit stop
+  - {error, R} → failure
+end note
+
+alt normal exit
+  Exit ->> Supervisor: exit(normal)
+  activate Supervisor
+  note right of Supervisor
+    STRATEGY: Do not restart
+    (child completed successfully)
+  end note
+  Supervisor ->> Supervisor: removeChild()
+  deactivate Supervisor
+
+else shutdown exit
+  Exit ->> Supervisor: exit(shutdown)
+  activate Supervisor
+  note right of Supervisor
+    STRATEGY: Immediate restart
+    (clean shutdown, not an error)
+  end note
+  Supervisor ->> Supervisor: restartChild()
+  deactivate Supervisor
+
+else error exit
+  Exit ->> Supervisor: exit({error, Reason})
+  activate Supervisor
+
+  note right of Supervisor
+    ERROR HANDLING TREE:
+    Choose based on:
+    1. Child restart type (PERMANENT/TRANSIENT)
+    2. Frequency (sliding restart window)
+    3. Supervisor strategy (ONE_FOR_ONE/ALL/REST)
+  end note
+
+  alt restart type = PERMANENT
+    note right of Supervisor
+      Always restart permanent children
+      (they are essential services)
+    end note
+    Supervisor ->> Recovery: retryWithBackoff()
+    activate Recovery
+
+    Recovery ->> Supervisor: startChild()
+    deactivate Recovery
+
+  else restart type = TRANSIENT
+    note right of Supervisor
+      Restart only on abnormal exit
+      Normal termination → no restart
+    end note
+    Supervisor ->> Recovery: retryIfAbnormal(Reason)
+    activate Recovery
+
+    alt Reason.isAbnormal()
+      Recovery ->> Supervisor: startChild()
+    else Reason.isNormal()
+      note right of Recovery
+        Normal exit → don't restart
+        Remove from tree
+      end note
+      Recovery ->> Supervisor: removeChild()
+    end
+    deactivate Recovery
+
+  else restart type = TEMPORARY
+    note right of Supervisor
+      Never restart (job completed)
+    end note
+    Supervisor ->> Supervisor: removeChild()
+  end
+
+  alt maxRestarts exceeded
+    note right of Supervisor
+      Restart frequency exceeded
+      (may indicate cascading failure)
+      Escalate to parent supervisor
+    end note
+    Supervisor ->> Supervisor: exit({error, maxRestarts})
+  end
+
+  deactivate Supervisor
+end
+
+@enduml

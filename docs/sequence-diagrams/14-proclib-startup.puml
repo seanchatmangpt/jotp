@@ -1,0 +1,185 @@
+@startuml ProcLib Startup Handshake - Synchronized Initialization
+
+title ProcLib Startup: Synchronized Process Initialization
+
+participant "Parent Process" as parent
+participant "ProcLib" as proclib
+participant "Child Process" as child
+participant "Child Handler" as handler
+participant "Resources\n(DB, Config, etc.)" as resources
+
+== Setup: Parent Calls start_link ==
+
+parent -> proclib: start_link(childInit, childHandler, args)
+note right of proclib
+  Synchronous call (blocking parent)
+  Returns StartResult<T, E>:
+  - Ok(childProc)
+  - Err(exception)
+  Parent waits until child is ready
+end note
+
+proclib -> proclib: create CountDownLatch(1)
+note right of proclib
+  Latch ensures parent blocks
+  Child will countdown when ready
+end note
+
+== Child Process Spawns ==
+
+proclib -> child: spawn with child initialization
+note right of proclib
+  Child runs in its own virtual thread
+  Parent blocks on latch
+end note
+
+child -> child: start virtual thread
+
+parent -> parent: BLOCK on latch.await()
+note right of parent
+  Parent pauses here
+  Waiting for child to call initAck()
+end note
+
+== Child Initialization (Async) ==
+
+child -> handler: initialize()
+note right of handler
+  Child runs initialization code
+  Examples:
+  - Connect to database
+  - Load configuration
+  - Initialize resources
+  - Perform health checks
+end note
+
+handler -> resources: open connections
+resources --> handler: success (DB ready)
+
+handler -> handler: load configuration
+handler -> handler: verify all resources
+
+note right of handler
+  Initialization complete
+  Child is fully functional
+  Signify to parent: ready!
+end note
+
+== Child Acknowledges ==
+
+handler -> proclib: initAck()
+note right of proclib
+  Child signals: initialization complete
+  countDownLatch.countDown()
+end note
+
+proclib -> proclib: latch.countDown()
+
+parent -> parent: UNBLOCK from latch.await()
+note right of parent
+  Parent resumes
+  Child guaranteed initialized
+  Can now use child
+end note
+
+proclib --> parent: return Ok(childProc)
+
+parent -> parent: childProc now ready
+parent -> child: send first message
+note right of parent
+  Can confidently send messages
+  Child is fully initialized
+  No race conditions
+end note
+
+== Failure Case ==
+
+alt Child Initialization Fails
+
+  handler -> handler: exception during init
+  handler -> handler: catch exception
+
+  handler -> proclib: initAck(StartResult.Err(exception))
+
+  proclib -> proclib: latch.countDown(exception)
+
+  parent -> parent: UNBLOCK (error)
+
+  proclib --> parent: return Err(exception)
+
+  parent -> parent: handle initialization failure
+  note right of parent
+    Can:
+    1. Retry with different params
+    2. Use fallback child
+    3. Propagate error upward
+    4. Shutdown entire service
+  end note
+
+end
+
+== Contrast: Without ProcLib (Fire-and-Forget) ==
+
+note over parent, child
+  Without synchronized startup (spawn only):
+
+  parent -> child: spawn(init, handler)
+  parent -> child: tell(firstMessage) [IMMEDIATELY]
+  parent: continue without waiting
+
+  Problem:
+  - Child may not be initialized yet
+  - Message arrives during initialization
+  - Handler can't access resources (DB not connected)
+  - Race condition possible
+  - firstMessage lost or causes error
+
+  With ProcLib:
+  - Parent blocks on initAck()
+  - Child fully initialized before first message
+  - No race conditions
+  - Initialization failures detected immediately
+  - Parent can react intelligently
+end note
+
+== Use Cases ==
+
+note right of proclib
+  Essential for:
+
+  1. Database Connection Pools
+     - Child must connect before serving queries
+
+  2. Configuration Loading
+     - Child must load config before starting
+
+  3. Service Dependencies
+     - Child depends on parent being up
+
+  4. Health Checks
+     - Child must verify health before accepting traffic
+
+  5. Warm-up / Cache Initialization
+     - Child must pre-populate cache before serving
+
+  6. Dependent Service Startup
+     - Service A must start before Service B
+     - B's initAck() waits for A fully online
+end note
+
+== Exception Propagation ==
+
+note right of proclib
+  Erlang's proc_lib:start_link/3 pattern:
+
+  Ensures caller knows:
+  1. When child successfully initialized
+  2. Why child failed (exception details)
+  3. Can respond immediately (no timeouts/guessing)
+
+  Parent can then:
+  - Coordinate across service boundaries
+  - Build reliable startup sequences
+  - Handle failures early (fail-fast)
+  - Avoid partial/zombie processes
+end note

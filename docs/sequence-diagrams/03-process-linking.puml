@@ -1,0 +1,61 @@
+@startuml Process Linking - Bilateral Crash Propagation
+
+title Process Linking: Bilateral Crash Propagation
+
+participant Main as main
+participant "Proc A" as procA
+participant "Proc B" as procB
+participant ProcLink as link
+
+== Setup ==
+
+main -> procA: spawn(init, handler)
+procA -> procA: message loop running
+
+main -> procB: spawn(init, handler)
+procB -> procB: message loop running
+
+main -> link: link(procA, procB)
+note right of link
+  Installs mutual crash callbacks
+  both ← onCrash handlers
+end note
+link -> procA: onCrash callback
+link -> procB: onCrash callback
+
+== Crash Propagation ==
+
+procA -> procA: exception in handler
+procA -> procA: lastError = exception
+procA -> procA: exit message loop
+
+procA -> procB: onCrash callback fires
+note right of procA
+  Bilateral: procB will also crash
+  unless it traps exits
+end note
+procB -> procB: interrupt() virtual thread
+procB -> procB: InterruptedException
+procB -> procB: exit message loop
+
+alt procB traps exits
+  procA -> procB: deliver ExitSignal message
+  procB -> procB: handle signal in mailbox
+  note right of procB
+    If trapExits=true:
+    process stays alive
+    can handle the signal
+  end note
+else procB does not trap exits
+  procB -> main: propagates to supervisor
+  note right of procB
+    Crash cascades up to parent
+    Supervisor restarts if configured
+  end note
+end
+
+main -> main: both processes crashed
+note right of main
+  This is "let it crash" design
+  Supervisor restarts failed children
+end note

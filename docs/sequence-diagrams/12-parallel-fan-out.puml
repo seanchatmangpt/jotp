@@ -1,0 +1,143 @@
+@startuml Parallel Fan-Out - Structured Concurrency with Fail-Fast
+
+title Parallel Fan-Out: StructuredTaskScope with Virtual Threads
+
+participant Main as main
+participant "StructuredTaskScope" as scope
+participant "Virtual Thread A" as taskA
+participant "Virtual Thread B" as taskB
+participant "Virtual Thread C" as taskC
+participant "Result Aggregator" as aggregator
+
+== Setup ==
+
+main -> scope: Parallel.run(List.of(taskA, taskB, taskC))
+note right of scope
+  StructuredTaskScope Java 21+ preview
+  Guaranteed cleanup (try-with-resources pattern)
+  Virtual threads for lightweight concurrency
+end note
+
+== Fan-Out: Spawn All Tasks ==
+
+scope -> taskA: fork()
+scope -> taskB: fork()
+scope -> taskC: fork()
+
+note right of scope
+  All 3 tasks running concurrently
+  Each in its own virtual thread
+  No OS thread overhead
+end note
+
+== Parallel Processing ==
+
+par Concurrent Execution
+  taskA -> taskA: compute partition 1
+  taskA -> taskA: ~1000ms
+  taskB -> taskB: compute partition 2
+  taskB -> taskB: ~500ms
+  taskC -> taskC: compute partition 3
+  taskC -> taskC: ~2000ms
+end
+
+== Early Failure: Fail-Fast ==
+
+taskB -> taskB: data validation fails
+taskB -> taskB: throw IllegalArgumentException
+taskB -> scope: exception in task
+
+note right of scope
+  IMMEDIATE reaction to failure:
+  1. Cancel other tasks
+  2. Cleanup resources
+  3. Return exception to caller
+end note
+
+scope -> taskA: cancel() [via Thread.interrupt()]
+taskA -> taskA: receives interrupt
+taskA -> taskA: InterruptedException
+taskA -> taskA: cleanup + exit
+
+scope -> taskC: cancel() [via Thread.interrupt()]
+taskC -> taskC: receives interrupt
+taskC -> taskC: InterruptedException
+taskC -> taskC: cleanup + exit
+
+note right of scope
+  taskA had ~500ms left to run
+  taskC had ~1000ms left to run
+  Both cancelled immediately
+  No wasted computation
+end note
+
+== Resource Cleanup ==
+
+scope -> scope: close() [try-with-resources]
+note right of scope
+  Guaranteed cleanup:
+  - All threads joined
+  - Virtual thread resources freed
+  - No leaks possible
+  (differs from unstructured Thread.start())
+end note
+
+== Return to Caller ==
+
+scope --> main: throw exceptions
+aggregator -> main: all failures collected
+note right of main
+  Can choose strategy:
+  1. Return first exception (fail-fast default)
+  2. Collect all exceptions (fail-all)
+  3. Return partial results + exceptions
+
+  Caller must handle:
+  ExceptionGroup: multiple exceptions
+  or individual exception wrapper
+end note
+
+main -> main: handle failure
+alt Retry
+  main -> scope: retry with different params
+else Fallback
+  main -> main: use cached/default result
+else Propagate
+  main -> main: throw to caller
+end
+
+== Contrast: Unstructured Concurrency ==
+
+note over main, taskC
+  WITHOUT StructuredTaskScope:
+  - main calls executor.submit() on each task
+  - Tasks run in shared thread pool
+  - Failure in B: must manually cancel A, C
+  - Can forget cleanup (resource leak)
+  - Cascading failures possible
+  - Hard to reason about lifetime
+
+  WITH StructuredTaskScope:
+  - Scope defines lifetime boundaries
+  - Automatic cancellation on failure
+  - Guaranteed cleanup (Java guarantees)
+  - Virtual threads no thread pool overhead
+  - Easy to reason about: scope ← tasks
+end note
+
+== Use Cases ==
+
+note right of scope
+  Ideal for:
+  1. MapReduce patterns
+  2. Fan-out/fan-in queries
+  3. Batch processing
+  4. Parallel array processing
+  5. Divide-and-conquer algorithms
+
+  Key advantage:
+  - Lightweight: millions of virtual threads
+  - Safe: guaranteed cleanup
+  - Fast: fail-fast cancellation
+  - Clear: structured scope = clear lifetime
+end note

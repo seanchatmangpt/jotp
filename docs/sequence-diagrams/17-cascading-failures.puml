@@ -1,0 +1,127 @@
+@startuml 17-cascading-failures
+title JOTP: Cascading Failures & Multi-Level Recovery
+skinparam backgroundColor #f0f0f0
+skinparam sequence {
+    BoxBackgroundColor LightBlue
+    LifeLineBorderColor DimGray
+    LifeLineBackgroundColor White
+}
+
+participant Client
+participant "L1 Supervisor\n(root)"
+participant "L2 Supervisor\n(service)"
+participant "Worker A"
+participant "Worker B"
+participant "Worker C"
+
+autonumber
+
+note over Client, "Worker C"
+  Multi-level supervision tree with ONE_FOR_ALL strategy
+  L1 (root) supervises L2 (service), plus other branches
+  L2 (service) supervises 3 workers: A, B, C
+end note
+
+Client ->> "Worker A": send(message)
+activate "Worker A"
+
+note right of "Worker A"
+  Worker A handling request
+  ...
+end note
+
+"Worker A" ->> "Worker A": !! Unhandled Exception !!
+activate "Worker A"
+
+note right of "Worker A"
+  Crash occurs
+  Exception propagates
+end note
+
+deactivate "Worker A"
+
+"Worker A" ->> "L2 Supervisor\n(service)": DOWN signal (crashed)
+deactivate "Worker A"
+activate "L2 Supervisor\n(service)"
+
+note right of "L2 Supervisor\n(service)"
+  L2 detects crash via link/monitor
+  Strategy: ONE_FOR_ALL
+  → must restart ALL children
+end note
+
+"L2 Supervisor\n(service)" ->> "Worker B": terminate()
+activate "Worker B"
+deactivate "Worker B"
+
+"L2 Supervisor\n(service)" ->> "Worker C": terminate()
+activate "Worker C"
+deactivate "Worker C"
+
+note right of "L2 Supervisor\n(service)"
+  All children killed
+  (cascading down)
+end note
+
+"L2 Supervisor\n(service)" ->> "L1 Supervisor\n(root)": DOWN signal
+activate "L1 Supervisor\n(root)"
+
+note right of "L1 Supervisor\n(root)"
+  L1 detects L2 crash
+  L1 strategy: ONE_FOR_ONE
+  → restart only L2 (not siblings)
+end note
+
+deactivate "L2 Supervisor\n(service)"
+
+"L1 Supervisor\n(root)" ->> "L2 Supervisor\n(service)": spawn replacement
+activate "L2 Supervisor\n(service)"
+
+note right of "L2 Supervisor\n(service)"
+  L2 restarted with new instance
+  (old state lost, reset to init)
+end note
+
+"L2 Supervisor\n(service)" ->> "Worker A": spawn(init, handler)
+activate "Worker A"
+deactivate "Worker A"
+
+"L2 Supervisor\n(service)" ->> "Worker B": spawn(init, handler)
+activate "Worker B"
+deactivate "Worker B"
+
+"L2 Supervisor\n(service)" ->> "Worker C": spawn(init, handler)
+activate "Worker C"
+deactivate "Worker C"
+
+note right of "L2 Supervisor\n(service)"
+  All children restart cleanly
+  Process tree restored
+  Message queue drained
+end note
+
+deactivate "L2 Supervisor\n(service)"
+
+"L1 Supervisor\n(root)" ->> Client: service restored
+deactivate "L1 Supervisor\n(root)"
+
+note right of Client
+  Recovery complete
+  Total latency: ~200µs
+  (before load balancer timeout)
+  Message ordering preserved
+  in new worker instances
+end note
+
+---
+
+note over Client, "Worker C"
+  KEY INSIGHT: Why cascading works
+  1. Isolation: L2 failure doesn't kill L1 siblings
+  2. Atomicity: L2 restart is atomic (all-or-nothing)
+  3. Causality: Effect of crash = restart at that level
+  4. Fast: Virtual threads enable rapid restarts
+  5. Type Safety: New instances are sealed (no corruption)
+end note
+
+@enduml

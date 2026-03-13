@@ -1,0 +1,89 @@
+@startuml Process Registry - Global Name Registration and Lookup
+
+title Process Registry: Name Registration, Lookup, and Auto-Deregistration
+
+participant Client as client
+participant "ProcRegistry" as registry
+participant "Proc (auth-svc)" as procAuth
+participant "Proc (data-svc)" as procData
+
+== Process Registration ==
+
+client -> procAuth: spawn(init, handler)
+procAuth -> procAuth: message loop running
+
+client -> registry: register("auth-svc", procAuth)
+note right of registry
+  Global name table
+  Enables location transparency
+  Name → ProcRef<S,M> mapping
+end note
+registry -> registry: store "auth-svc" → procAuth
+
+== Process Lookup ==
+
+client -> registry: whereis("auth-svc")
+registry --> client: return procAuth reference
+note right of client
+  Can now send messages without
+  holding the original reference
+  Useful for distributed systems
+end note
+
+client -> procAuth: tell(request)
+procAuth -> procAuth: process request
+
+== Process Discovery ==
+
+client -> registry: registered()
+note right of registry
+  Returns all registered process names
+  List<String> or Set<String>
+end note
+registry --> client: ["auth-svc", "data-svc", ...]
+
+== Lookup Failure ==
+
+client -> registry: whereis("nonexistent-svc")
+registry --> client: return null
+note right of client
+  Process not registered
+  Must handle null case
+end note
+
+== Manual Deregistration ==
+
+client -> registry: unregister("auth-svc")
+registry -> registry: remove "auth-svc" from map
+
+client -> registry: whereis("auth-svc")
+registry --> client: return null
+
+== Automatic Deregistration on Crash ==
+
+procData -> procData: exception in handler
+procData -> procData: exit message loop
+
+registry -> registry: crash callback fires
+registry -> registry: auto-deregister "data-svc"
+
+note right of registry
+  Processes are linked to registry
+  On crash: name automatically removed
+  No stale entries
+end note
+
+client -> registry: whereis("data-svc")
+registry --> client: return null
+note right of client
+  Safe: registry cleaned automatically
+  Can safely re-register with same name
+end note
+
+== Re-registration ==
+
+client -> procData: spawn(newInit, handler)
+procData -> procData: fresh process
+
+client -> registry: register("data-svc", procData)
+registry -> registry: store "data-svc" → procData (new)

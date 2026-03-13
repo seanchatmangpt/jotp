@@ -1,0 +1,84 @@
+@startuml Event Manager - Decoupled Event Broadcasting
+
+title Event Manager: Multi-Handler Event Broadcasting with Isolation
+
+participant Publisher as pub
+participant "EventManager<E>" as mgr
+participant "Handler A" as handlerA
+participant "Handler B" as handlerB
+
+== Handler Registration ==
+
+pub -> mgr: addHandler(handlerA)
+mgr -> mgr: store handler in list
+
+pub -> mgr: addHandler(handlerB)
+mgr -> mgr: store handler in list
+
+note right of mgr
+  Handlers are isolated
+  Exceptions in one don't affect others
+end note
+
+== Event Broadcast ==
+
+pub -> mgr: notify(event)
+note right of pub
+  Fire-and-forget broadcast
+  All handlers receive event
+  Non-blocking
+end note
+
+mgr -> handlerA: handle(event)
+mgr -> handlerB: handle(event)
+
+handlerA -> handlerA: process event
+handlerB -> handlerB: process event
+
+== Handler Crash ==
+
+handlerA -> handlerA: exception during processing
+
+mgr -> mgr: catch exception
+mgr -> mgr: remove handlerA from list
+
+note right of mgr
+  handlerB continues unaffected!
+  Manager stays alive
+  Only failed handler is removed
+end note
+
+handlerB -> handlerB: continues running
+
+== Synchronous Broadcast ==
+
+pub -> mgr: syncNotify(event)
+note right of pub
+  Blocks until all handlers complete
+  Used when atomicity matters
+end note
+
+mgr -> handlerA: handle(event)
+handlerA -> handlerA: complete
+
+mgr -> handlerB: handle(event)
+handlerB -> handlerB: complete
+
+mgr --> pub: return (all done)
+
+note right of pub
+  If handler throws:
+  syncNotify propagates exception
+  Can be caught/handled
+end note
+
+== Handler Deregistration ==
+
+pub -> mgr: deleteHandler(handlerA)
+mgr -> mgr: remove handlerA from list
+
+pub -> mgr: notify(anotherEvent)
+mgr -> handlerB: handle(anotherEvent)
+note right of mgr
+  Only registered handlers receive events
+end note

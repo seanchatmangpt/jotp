@@ -1,0 +1,82 @@
+@startuml State Machine Events - Event Processing with Timeouts
+
+title State Machine Events: User Event to State Transition to Actions
+
+participant Client as client
+participant "StateMachine<S,E,D>" as sm
+participant "Event Queue" as queue
+participant "TransitionFn<S,E,D>" as fn
+participant "Action Executor" as executor
+
+== Event Sending ==
+
+client -> sm: send(userEvent)
+note right of client
+  E = sealed interface Event
+  S = sealed interface State
+  D = data class Data
+end note
+
+sm -> queue: enqueue(SMEvent.User(userEvent))
+note right of queue
+  SMEvent<E> sealed hierarchy:
+  - User(E event)
+  - StateTimeout
+  - EventTimeout
+  - GenericTimeout
+  - Internal(E event)
+  - Enter
+end note
+
+sm -> sm: dequeue and process
+
+== State Transition Function ==
+
+sm -> fn: apply(currentState, event, data)
+
+alt state match: LockedState
+  fn -> fn: pattern match on event
+  alt event match: ButtonPressed
+    fn --> fn: Transition.nextState(UnlockedState, actions)
+  else event match: StateTimeout
+    fn --> fn: Transition.keepState(data, actions)
+  else other
+    fn --> fn: Transition.keepState(data, Postpone)
+  end
+else state match: UnlockedState
+  fn -> fn: handle transitions...
+end
+
+== Action Execution ==
+
+fn --> executor: return Transition<S> with actions
+
+executor -> executor: for each action
+note right of executor
+  Action<S,E> sealed hierarchy:
+  - Postpone: save event for later
+  - NextEvent(E event): inject event
+  - SetStateTimeout(ms): start timeout
+  - CancelStateTimeout: stop timeout
+  - Reply(reply): send reply back
+end note
+
+executor -> executor: execute SetStateTimeout(10000)
+executor -> queue: schedule timeout at T+10s
+
+executor -> executor: execute Reply(result)
+executor -> client: deliver reply via mailbox
+
+client -> client: receive reply
+note right of client
+  Can await in ask():
+  var result = sm.ask(event, timeout)
+end note
+
+sm -> queue: wait for next event
+note right of queue
+  If StateTimeout fires at T+10s:
+  → enqueue SMEvent.StateTimeout
+  → transitionFn processes it
+  → may change state or repeat
+end note
