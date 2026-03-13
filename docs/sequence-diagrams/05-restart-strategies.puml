@@ -1,0 +1,77 @@
+@startuml Restart Strategies - ONE_FOR_ONE vs ONE_FOR_ALL vs REST_FOR_ONE
+
+title Restart Strategies: Comparing Supervisor Recovery Modes
+
+== ONE_FOR_ONE: Isolated Restart ==
+
+participant "Supervisor" as sup1
+participant "Child A" as childA
+participant "Child B" as childB
+participant "Child C" as childC
+
+sup1 -> childA: spawn
+sup1 -> childB: spawn
+sup1 -> childC: spawn
+
+childB -> childB: CRASH!
+sup1 -> childB: restart childB only
+note right of sup1
+  A: still running ✓
+  B: restarted (new process)
+  C: still running ✓
+end note
+
+== ONE_FOR_ALL: Restart All ==
+
+participant "Supervisor" as sup2
+participant "Worker A" as workerA
+participant "Worker B" as workerB
+participant "Worker C" as workerC
+
+sup2 -> workerA: spawn
+sup2 -> workerB: spawn
+sup2 -> workerC: spawn
+
+workerB -> workerB: CRASH!
+sup2 -> workerA: stop
+sup2 -> workerB: stop
+sup2 -> workerC: stop
+note right of sup2
+  All children stopped
+  (shutdown signal)
+end note
+
+sup2 -> workerA: spawn (new)
+sup2 -> workerB: spawn (new)
+sup2 -> workerC: spawn (new)
+note right of sup2
+  A: restarted (fresh state)
+  B: restarted (fresh state)
+  C: restarted (fresh state)
+  Use case: shared resource pool
+end note
+
+== REST_FOR_ONE: Cascade Restart ==
+
+participant "Supervisor" as sup3
+participant "Parent" as parent
+participant "Child 1" as child1
+participant "Child 2" as child2
+participant "Child 3" as child3
+
+sup3 -> parent: spawn
+sup3 -> child1: spawn(depends on parent)
+sup3 -> child2: spawn(depends on child1)
+sup3 -> child3: spawn(depends on child2)
+
+child1 -> child1: CRASH!
+sup3 -> child1: stop
+sup3 -> child2: stop (depends on child1)
+sup3 -> child3: stop (depends on child2)
+note right of sup3
+  Parent: still running ✓
+  Child 1: restarted
+  Child 2: restarted
+  Child 3: restarted
+  Use case: dependency chain
+end note

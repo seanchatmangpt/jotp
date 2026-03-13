@@ -1,0 +1,68 @@
+@startuml Supervised Process Lifecycle - Restart on Crash
+
+title Supervised Process Lifecycle: Child Spawning and Restart
+
+participant Main as main
+participant "Supervisor" as supervisor
+participant "Child Proc (v1)" as childV1
+participant "Crash Detector" as detector
+participant "Child Proc (v2)" as childV2
+participant "ProcRef<S,M>" as procRef
+
+== Supervision Setup ==
+
+main -> supervisor: create(ONE_FOR_ONE, maxRestarts=5, window=60s)
+supervisor -> supervisor: initialize state map
+
+main -> supervisor: supervise("worker", initialState, handler)
+note right of main
+  Returns ProcRef<S,M>
+  opaque stable handle
+end note
+
+== Child v1 Starts ==
+
+supervisor -> childV1: spawn(initialState, handler)
+childV1 -> childV1: virtual thread message loop
+childV1 -> procRef: wrap child process
+supervisor -> procRef: store in registry["worker"]
+procRef --> main: return to caller
+
+main -> childV1: tell(msg)
+childV1 -> childV1: process messages normally
+
+== Child Crashes ==
+
+childV1 -> childV1: exception in handler
+childV1 -> childV1: lastError = exception
+detector -> supervisor: onCrash callback
+
+== Restart Logic ==
+
+supervisor -> supervisor: check restarts in window
+note right of supervisor
+  If restarts > maxRestarts
+  and within window:
+    → SHUTDOWN strategy
+  Else: restart child
+end note
+
+supervisor -> childV2: spawn(initialState, handler)
+childV2 -> childV2: fresh virtual thread
+
+supervisor -> procRef: swap(childV2)
+note right of procRef
+  Atomically updates delegate
+  old childV1 → eligible for GC
+  new childV2 → now active
+end note
+
+main -> procRef: tell(msg)
+procRef -> childV2: delegate to new child
+childV2 -> childV2: process message
+
+note right of main
+  Main unaware of restart!
+  ProcRef provides location transparency
+  (like Erlang's process identifier)
+end note

@@ -1,0 +1,50 @@
+@startuml Message Passing - Fire-and-Forget vs Request-Reply
+
+title Message Passing: tell() vs ask()
+
+participant Sender as sender
+participant "Proc<S,M>" as proc
+participant Mailbox as mailbox
+participant "Message Loop" as loop
+participant Handler as handler
+
+== Fire-and-Forget: tell(msg) ==
+
+sender -> proc: tell(msg)
+note right of sender
+  Non-blocking
+  Returns immediately
+end note
+proc -> mailbox: offer(msg)
+mailbox --> proc: true (enqueued)
+proc --> sender: void (fire & forget)
+
+loop -> mailbox: poll()
+mailbox --> loop: msg
+loop -> handler: apply(state, msg)
+handler --> loop: newState
+
+== Request-Reply: ask(msg, timeout) ==
+
+sender -> proc: ask(msg, timeout)
+note right of sender
+  Returns CompletableFuture<S>
+  Blocks on future.get()
+end note
+proc -> mailbox: offer(msg)
+mailbox --> proc: CompletableFuture<S>
+proc --> sender: future
+
+sender -> sender: block on future.get()
+
+loop -> mailbox: poll()
+mailbox --> loop: msg
+loop -> handler: apply(state, msg)
+handler --> loop: newState
+loop -> proc: future.complete(newState)
+
+proc --> sender: newState (returns from blocking)
+note right of sender
+  Can timeout if takes too long
+  throws TimeoutException
+end note

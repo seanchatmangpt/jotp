@@ -1,0 +1,38 @@
+@startuml Process Spawning - Creating a Virtual Thread Process
+
+title Process Spawning: Creating a New Proc<S,M>
+
+actor Main as main
+participant "Proc.spawn()" as spawn
+participant "Virtual Thread" as vthread
+participant "LinkedTransferQueue<M>" as mailbox
+participant "Message Loop" as loop
+participant "Handler<S,M>" as handler
+
+main -> spawn: spawn(initialState=0, handler)
+note right of spawn
+  S = Integer (state type)
+  M = String (message type)
+end note
+
+spawn -> vthread: new VirtualThread
+vthread -> mailbox: create LinkedTransferQueue<M>
+mailbox -> loop: start message loop
+loop -> loop: wait for messages
+
+spawn -> main: return Proc<Integer, String>
+note right of main
+  Now can:
+  - tell(msg): fire-and-forget
+  - ask(msg, timeout): request-reply
+end note
+
+main -> mailbox: tell("hello")
+mailbox -> loop: enqueue "hello"
+loop -> handler: apply(state, "hello")
+handler -> loop: return newState = 5
+
+note right of loop
+  State updated: 0 → 5
+  Loop continues waiting
+end note
