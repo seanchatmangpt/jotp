@@ -1,0 +1,62 @@
+@startuml level-6b-deployment-multi-jvm-kafka
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+title Multi-JVM Deployment with Kafka
+caption JOTP: Distributed system with message broker coordination
+
+Deployment_Node(cluster, "Kubernetes Cluster", "") {
+  
+  Deployment_Node(node1, "Node 1", "Worker") {
+    Deployment_Node(jvm1, "JVM Instance 1", "OpenJDK 26") {
+      Component(sup1, "RootSupervisor", "ONE_FOR_ONE") {
+        description = "Service A processes"
+      }
+      Component(kafka1, "KafkaConsumer", "gen_server") {
+        description = "Consume topic: service-a"
+      }
+    }
+  }
+  
+  Deployment_Node(node2, "Node 2", "Worker") {
+    Deployment_Node(jvm2, "JVM Instance 2", "OpenJDK 26") {
+      Component(sup2, "RootSupervisor", "ONE_FOR_ONE") {
+        description = "Service B processes"
+      }
+      Component(kafka2, "KafkaConsumer", "gen_server") {
+        description = "Consume topic: service-b"
+      }
+    }
+  }
+  
+  Deployment_Node(node3, "Node 3", "Worker") {
+    Deployment_Node(jvm3, "JVM Instance 3", "OpenJDK 26") {
+      Component(sup3, "RootSupervisor", "ONE_FOR_ONE") {
+        description = "Service C processes"
+      }
+      Component(kafka3, "KafkaConsumer", "gen_server") {
+        description = "Consume topic: service-c"
+      }
+    }
+  }
+  
+  Deployment_Node(broker, "Kafka Brokers", "Message Broker") {
+    Component(kbroker, "Kafka Cluster", "3 brokers") {
+      description = "Topics: service-a, service-b, service-c"
+    }
+  }
+}
+
+Deployment_Node(external, "External", "") {
+  Component(db, "PostgreSQL", "Database") {
+    description = "Shared state"
+  }
+}
+
+Rel(kafka1, kbroker, "produce/consume")
+Rel(kafka2, kbroker, "produce/consume")
+Rel(kafka3, kbroker, "produce/consume")
+Rel(sup1, db, "queries")
+Rel(sup2, db, "queries")
+Rel(sup3, db, "queries")
+
+@enduml

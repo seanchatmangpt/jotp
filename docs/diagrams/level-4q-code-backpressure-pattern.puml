@@ -1,0 +1,85 @@
+@startuml level-4q-code-backpressure-pattern
+!define DIRECTION left to right
+skinparam {
+    backgroundColor #F5F5F5
+    defaultFontSize 11
+}
+skinparam rectangle {
+    BackgroundColor<<producer>> #FFCCBC
+    BackgroundColor<<queue>> #BBDEFB
+    BackgroundColor<<consumer>> #C8E6C9
+    BackgroundColor<<signal>> #FFE082
+    BorderColor #E65100
+}
+
+title Level 4: Backpressure & Flow Control Pattern (Adaptive Throttling)
+
+rectangle "Producer\n(Fast event source)" as prod <<producer>> {
+    rectangle "Proc<State, Msg>\ntell(DataMsg)\nRate: 100K msg/s" as prodProc
+}
+
+rectangle "Mailbox\n(Message Buffer)" as mbox <<queue>> {
+    rectangle "Bounded queue\nCapacity: 1000 messages\nThreshold 80%: 800 pending" as qData
+    rectangle "Queue pressure\n• 0-50%: normal\n• 50-80%: caution\n• 80-100%: backpressure" as qStat
+}
+
+rectangle "Consumer\n(Slow processor)" as cons <<consumer>> {
+    rectangle "Proc<State, Msg>\nprocess(msg) → 1K msg/s\n(10x slower!)" as consProc
+}
+
+rectangle "Backpressure Signal\n(Feedback loop)" as signal <<signal>> {
+    rectangle "Monitor: queue size\nTrigger: 80% threshold\nAction: reduce producer rate" as sigLogic
+}
+
+prod --> mbox: tell(DataMsg)\nAsynchronous send
+mbox --> cons: dequeue(FIFO)\n10 ms per msg
+
+cons --> signal: signal when\nqueue > 800 msgs
+
+signal --> prod: SlowDown(rate=50%)\nTell producer to throttle
+
+note right of prod
+  Producer doesn't know
+  about queue depth.
+  Unaware of consumer speed.
+end note
+
+note right of qData
+  Bounded mailbox prevents
+  unbounded memory growth.
+
+  Without backpressure:
+  Producer sends 100K/s
+  Consumer processes 1K/s
+  → Queue grows 99K/s
+  → OOM in ~10s
+end note
+
+note right of cons
+  Consumer processes at
+  natural speed: 1K/s
+  No awareness of producer.
+
+  Backpressure effect:
+  Producer automatically slows
+  to prevent queue overflow.
+end note
+
+note right of signal
+  Backpressure mechanism:
+
+  Stage 1 (0-50%): Normal
+  └─ tell() = instant
+
+  Stage 2 (50-80%): Caution
+  └─ tell() may queue slightly
+
+  Stage 3 (80%+): Critical
+  └─ Producer receives signal
+  └─ Reduces rate to 50%
+  └─ Consumer catches up
+  └─ Queue drains
+  └─ Rate restored
+end note
+
+@enduml

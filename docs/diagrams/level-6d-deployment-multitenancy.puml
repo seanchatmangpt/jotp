@@ -1,0 +1,79 @@
+@startuml level-6d-deployment-multitenancy
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+title Multi-Tenant Deployment Model
+caption JOTP: Isolated supervision trees per tenant, shared infrastructure
+
+Deployment_Node(host, "Physical Host", "Linux") {
+  Deployment_Node(jvm, "JVM Process", "OpenJDK 26") {
+    
+    Component(root, "RootSupervisor", "ONE_FOR_ALL") {
+      description = "Global fault tolerance"
+    }
+    
+    Deployment_Node(tenant_mgmt, "Tenant Management", "") {
+      Component(tenant_registry, "TenantRegistry", "ProcRegistry") {
+        description = "registry: tenant_id -> supervisor_ref"
+      }
+    }
+    
+    Deployment_Node(tenant1, "Tenant: acme-corp", "") {
+      Component(sup_t1, "TenantSupervisor", "ONE_FOR_ONE") {
+        description = "Isolated to acme-corp"
+      }
+      Component(api_t1, "API Handler", "gen_server") {
+        description = "acme-corp requests"
+      }
+      Component(worker_t1, "Worker", "gen_server") {
+        description = "acme-corp jobs"
+      }
+    }
+    
+    Deployment_Node(tenant2, "Tenant: globex-inc", "") {
+      Component(sup_t2, "TenantSupervisor", "ONE_FOR_ONE") {
+        description = "Isolated to globex-inc"
+      }
+      Component(api_t2, "API Handler", "gen_server") {
+        description = "globex-inc requests"
+      }
+      Component(worker_t2, "Worker", "gen_server") {
+        description = "globex-inc jobs"
+      }
+    }
+    
+    Deployment_Node(tenant3, "Tenant: initech", "") {
+      Component(sup_t3, "TenantSupervisor", "ONE_FOR_ONE") {
+        description = "Isolated to initech"
+      }
+      Component(api_t3, "API Handler", "gen_server") {
+        description = "initech requests"
+      }
+    }
+  }
+}
+
+Deployment_Node(external, "External", "") {
+  Component(db, "PostgreSQL", "Database") {
+    description = "Row-level security by tenant_id"
+  }
+  Component(cache, "Redis", "Cache") {
+    description = "Shared, partitioned by tenant"
+  }
+}
+
+Rel(tenant_registry, sup_t1, "lookup")
+Rel(tenant_registry, sup_t2, "lookup")
+Rel(tenant_registry, sup_t3, "lookup")
+Rel(api_t1, db, "query (acme-corp)")
+Rel(api_t2, db, "query (globex-inc)")
+Rel(api_t3, db, "query (initech)")
+
+note bottom of tenant1, tenant2, tenant3
+  Isolation properties:
+  - Crash in tenant1 does NOT affect tenant2
+  - Resource limits per tenant
+  - Separate logs/metrics per tenant
+  - One tenant's slow queries don't block others
+end note
+
+@enduml

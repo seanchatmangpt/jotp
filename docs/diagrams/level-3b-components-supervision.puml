@@ -1,0 +1,123 @@
+@startuml level-3b-components-supervision
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 3: Supervision Components
+
+Container_Boundary(super, "Supervision System") {
+
+  Component(supervisor, "Supervisor", "Supervision Tree", "Restart strategies (sealed)\nChildren lifecycle mgmt\nSliding restart window\nDynamic child addition")
+
+  Component(strategies, "RestartStrategy", "Strategy Enum", "ONE_FOR_ONE (isolated)\nONE_FOR_ALL (cascade)\nREST_FOR_ONE (ordered)\nSIMPLE_ONE_FOR_ONE (pool)")
+
+  Component(childspec, "ChildSpec<S,M>", "Child Specification", "RestartType sealed:\nPERMANENT/TRANSIENT/TEMPORARY\nShutdown sealed: BrutalKill/Timeout\nChildType: WORKER/SUPERVISOR")
+
+  Component(autoshutdown, "AutoShutdown", "Supervisor Lifecycle", "NEVER: ignore child exit\nANY_SIGNIFICANT: one PERMANENT exit\nALL_SIGNIFICANT: all PERMANENT exit\nControls supervisor termination")
+
+  Component(crashrecovery, "CrashRecovery", "Retry on Crash", "Isolated virtual thread retries\nExponential backoff support\nDead letter queue fallback\nLet-it-crash recovery pattern")
+
+  Component(appcontroller, "ApplicationController", "App Lifecycle", "Top-level supervisor\nStart/stop orchestration\nBoot sequence management\nGraceful shutdown coordination")
+
+  Component(appspec, "ApplicationSpec", "App Configuration", "Initial supervisor tree\nBoot timeout\nInitialization function\nApplication state holder")
+
+  Component(appcallback, "ApplicationCallback", "App Hooks", "onReady callback\nonShutdown callback\nonError handler\nHealthcheck endpoint")
+
+  Component(starttype, "StartType", "Child Start Enum", "Sealed enum\nIMMEDIATE: spawn now\nDELAYED: spawn later\nDEPENDENT: after parents")
+
+  Component(runtype, "RunType", "Child Run Mode", "Sealed enum\nFOREGROUND: normal\nBACKGROUND: detached\nBOOT_ONLY: startup phase")
+
+  Rel(supervisor, childspec, "manages via")
+  Rel(supervisor, strategies, "uses restart")
+  Rel(supervisor, crashrecovery, "applies on crash")
+  Rel(childspec, autoshutdown, "controls via")
+  Rel(childspec, starttype, "defines start")
+  Rel(childspec, runtype, "defines run mode")
+  Rel(appcontroller, supervisor, "creates root")
+  Rel(appcontroller, appspec, "configures with")
+  Rel(appcontroller, appcallback, "invokes hooks")
+
+  note right of supervisor
+    **Supervisor** — OTP supervision tree:
+    Manages children lifecycle (start, stop, restart).
+    Restart window: sliding N failures in M seconds.
+    Dynamic child management: startChild/terminateChild/deleteChild.
+    Nested hierarchies support.
+  end note
+
+  note right of strategies
+    **RestartStrategy** — Sealed enum:
+    ONE_FOR_ONE: restart only failed child (isolated).
+    ONE_FOR_ALL: restart all children (cascade failure).
+    REST_FOR_ONE: restart failed + all started after (ordered).
+    SIMPLE_ONE_FOR_ONE: dynamic homogeneous pools.
+  end note
+
+  note right of childspec
+    **ChildSpec<S,M>** — Child configuration:
+    RestartType sealed: PERMANENT/TRANSIENT/TEMPORARY.
+    Shutdown sealed: BrutalKill/Timeout(secs)/Infinity.
+    ChildType: WORKER/SUPERVISOR.
+    Start timeout, args, id.
+  end note
+
+  note right of autoshutdown
+    **AutoShutdown** — Supervisor lifecycle:
+    NEVER: supervisor ignores all child exits.
+    ANY_SIGNIFICANT: exit if any PERMANENT child dies.
+    ALL_SIGNIFICANT: exit when all PERMANENT children down.
+    Enables cascading supervisor trees.
+  end note
+
+  note right of crashrecovery
+    **CrashRecovery** — "Let it crash" recovery:
+    Isolated virtual thread for retry.
+    Exponential backoff with jitter.
+    Dead letter queue fallback for failed operations.
+    No supervisor restart needed.
+  end note
+
+  note right of appcontroller
+    **ApplicationController** — App lifecycle:
+    Top-level supervisor wrapping entire app.
+    start() creates supervisor tree, blocks until ready.
+    stop() gracefully shuts down all children.
+    Coordinates boot sequence and shutdown.
+  end note
+
+  note right of appspec
+    **ApplicationSpec** — App configuration:
+    Initial supervisor tree structure.
+    Boot timeout, initialization function.
+    Application state holder (config, resources).
+    Passed to ApplicationController.
+  end note
+
+  note right of appcallback
+    **ApplicationCallback** — App hooks:
+    onReady() fires when app fully started.
+    onShutdown() fires before shutdown.
+    onError(error) for global error handling.
+    healthcheck() for k8s liveness probes.
+  end note
+
+  note right of starttype
+    **StartType** — Sealed enum:
+    IMMEDIATE: spawn child now.
+    DELAYED: spawn later via dynamicChild.
+    DEPENDENT: spawn only after parent ready.
+    Enables boot phase coordination.
+  end note
+
+  note right of runtype
+    **RunType** — Sealed enum:
+    FOREGROUND: normal process (counted).
+    BACKGROUND: detached (not counted in restarts).
+    BOOT_ONLY: shutdown after boot phase.
+    Partitions children by lifecycle phase.
+  end note
+
+  note on link : Supervisor.create() factory\nSupplier<ChildSpec<S,M>> for dynamic pools
+}
+
+SHOW_LEGEND()
+@enduml

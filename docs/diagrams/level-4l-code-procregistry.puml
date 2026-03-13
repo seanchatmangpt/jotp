@@ -1,0 +1,147 @@
+@startuml level-4l-code-procregistry
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: ProcRegistry - Global Name Table
+
+Container_Boundary(data_structure, "Data Structure") {
+  Component(registry_map, "static final ConcurrentHashMap<String, Proc<?,?>>", "State", "Global name table\nKey: name (String)\nValue: Proc instance\nThread-safe")
+}
+
+Container_Boundary(public_api, "Public Static API") {
+  Component(register_method, "static void register(\n  String name,\n  Proc<?,?> proc)", "Registration", "1. putIfAbsent(name, proc)\n2. If name exists → throw\n3. Install termination callback\n4. On proc exit → auto-remove")
+
+  Component(whereis_method, "static <S,M> Optional<Proc<S,M>> whereis(\n  String name)", "Lookup", "1. Get proc from map\n2. Check proc.thread().isAlive()\n3. If dead → remove + return empty\n4. Else → return Optional of proc\nO(1) lookup")
+
+  Component(unregister_method, "static void unregister(String name)", "Unregistration", "1. Remove name from map\n2. Idempotent (no error if missing)\n3. Manual cleanup\n4. Does NOT stop the proc")
+
+  Component(registered_method, "static Set<String> registered()", "List All", "1. Copy REGISTRY.keySet()\n2. Return immutable snapshot\n3. Safe from concurrent mods\n4. No lock needed")
+
+  Component(reset_method, "static void reset()", "Test Cleanup", "Clear entire registry\nFor @BeforeEach in tests\nPrevents pollution")
+}
+
+Container_Boundary(auto_deregister_logic, "Auto-Deregister Lifecycle") {
+  Component(register_step, "register(name, proc)", "Step 1", "putIfAbsent(name, proc)")
+
+  Component(callback_install, "proc.addTerminationCallback()", "Step 2", "Install callback:\n(_) → REGISTRY.remove(name, proc)")
+
+  Component(proc_exits, "proc terminates", "Event", "Normal or abnormal exit\nVirtualThread ends")
+
+  Component(callback_fires, "Termination callback fires", "Action", "REGISTRY.remove(name, proc)\nAtomic (ConcurrentHashMap)")
+
+  Component(deregistered, "Entry removed", "Result", "whereis(name) returns empty\nNo stale entry")
+
+  Rel(register_step, callback_install, "then")
+  Rel(callback_install, proc_exits, "waits for")
+  Rel(proc_exits, callback_fires, "triggers")
+  Rel(callback_fires, deregistered, "result")
+}
+
+Container_Boundary(semantic, "Semantics: Location Transparency") {
+  note bottom
+  **Service Discovery Pattern**
+
+  Process A wants to message Service B:
+  1. A calls whereis("service-b")
+  2. Gets Optional<Proc<S,M>>
+  3. If present: a.ask(msg) to B
+  4. If absent: handle error (service down)
+
+  **Mirrors Erlang/OTP**
+  - rpc:call(Node, service_b, ...)
+  - whereis(service_b) local lookup
+  - Global name table available to all
+
+  **Supervisor Integration**
+  - Supervisor registers children by name
+  - Other processes discover via whereis()
+  - B crashes → supervisor restarts
+  - whereis() still finds it (new instance)
+  - Callers don't need to know about restart
+  end note
+}
+
+Container_Boundary(concurrent_behavior, "Concurrent Access Guarantees") {
+  Component(putifabsent, "putIfAbsent(name, proc)", "Atomic", "ConcurrentHashMap\nOnly one thread succeeds\nOthers get exception")
+
+  Component(get, "get(name)", "Non-Blocking", "No lock required\nSafe for all threads\nReads latest value")
+
+  Component(remove, "remove(name, proc)", "Atomic", "Conditional remove\nOnly if value matches\nUsed in auto-deregister")
+
+  Component(snapshot, "keySet() → copy", "Copy Semantics", "No iteration lock\nReturns immutable set\nConcurrent mods OK")
+
+  note right
+  **No Explicit Locking**
+  - ConcurrentHashMap handles all sync
+  - All operations are non-blocking
+  - register() may throw if duplicate
+  - whereis() never blocks (O(1))
+  - safe for high-concurrency scenarios
+  end note
+}
+
+Container_Boundary(use_cases, "Common Use Cases") {
+  note bottom
+  **1. Named Service Discovery**
+  register("auth-service", authProc)
+  later: whereis("auth-service") → locate it
+
+  **2. Supervisor Registration**
+  supervisor.startChild("worker-1")
+  → register child by name
+  → Other processes discover via whereis()
+
+  **3. EventManager Registration**
+  EventManager.start("log-manager")
+  → auto-registers in ProcRegistry
+  → whereis("log-manager") finds it
+
+  **4. Test Isolation**
+  @BeforeEach: ProcRegistry.reset()
+  → Clean registry between tests
+  → No name pollution
+
+  **Avoid ProcRegistry if:**
+  - Don't need global discovery
+  - Use supervisor.whichChildren()
+  - Keep references directly (faster)
+  end note
+}
+
+Rel(data_structure, public_api, "backed by")
+Rel(public_api, auto_deregister_logic, "demonstrates")
+Rel(register_method, callback_install, "installs")
+Rel(whereis_method, concurrent_behavior, "uses")
+
+note bottom
+  **Implementation Key Points**
+
+  1. **Static Global Map**
+     - Single JVM-wide registry
+     - Not per-supervisor
+     - Not per-module
+
+  2. **Auto-Deregister**
+     - Termination callback installed at register time
+     - Guarantees no stale entries
+     - Callback: REGISTRY.remove(name, proc)
+
+  3. **Non-Blocking Lookup**
+     - whereis() never blocks
+     - O(1) get() operation
+     - Live check: proc.thread().isAlive()
+     - If dead: remove + return empty
+
+  4. **Idempotent Unregister**
+     - unregister(name) always succeeds
+     - No error if name not found
+     - Manual cleanup when needed
+
+  5. **Copy Semantics**
+     - registered() returns snapshot
+     - Safe from concurrent modifications
+     - CopyOnWrite not needed (rare operation)
+end note
+
+@enduml

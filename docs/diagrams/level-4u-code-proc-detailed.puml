@@ -1,0 +1,171 @@
+@startuml level-4u-code-proc-detailed
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Proc<S,M> Deep Dive - Internals and Message Flow
+
+Container_Boundary(proccore, "Proc<S,M> Core Implementation") {
+
+  Component(procclass, "public final class Proc<S,M>", "Process Container", "Wraps virtual thread + mailbox\nImmutable after creation\nSealed state transitions\nLinked to supervisor via ProcRef")
+
+  Component(procid, "ProcId (UUID)", "Unique Identity", "Immutable identifier\nGenerated at spawn time\nUsed in crash reporting\nNot reused after termination")
+
+  Component(virtualthread, "Virtual Thread (JEP 425)", "Execution Context", "Lightweight carrier\nParks on mailbox.take()\nYields to other virtuals\nTerminates on handler return")
+
+  Component(mailbox, "LinkedTransferQueue<Envelope<M>>", "Message Queue", "Transfer queue semantics\nConcurrent safe enqueue/dequeue\nBlocking take() when empty\nLinked node allocation (~200 bytes/msg)")
+
+  Component(handler, "StateHandler<S,M>", "Pure Function", "(S, M) -> Transition<S>\nNo side effects internally\nThrows -> crash signal\nMust be idempotent for replay")
+
+  Component(state, "volatile S (GenericAtomicReference)", "Current State", "Latest state after handler\nVolatile semantics for visibility\nSwapped atomically on transition\nPreserved for lastError capture")
+
+  Component(lastError, "volatile ExitSignal", "Crash Evidence", "Non-null if crashed\nContains exception + timestamp\nUsed by monitoring/debugging\nCleared on successful restart")
+
+  Rel(procclass, virtualthread, "owns")
+  Rel(procclass, mailbox, "owns")
+  Rel(procclass, handler, "invokes on messages")
+  Rel(procclass, state, "maintains")
+  Rel(procclass, lastError, "tracks crashes")
+}
+
+Container_Boundary(messaging, "Message Passing Semantics") {
+
+  Component(envelope, "Envelope<M>", "Message Metadata", "payload: M (the actual message)\nsender: Optional<ProcRef> (reply-to)\nreplyId: UUID (for ask)\ndelivery: AtLeastOnce | ExactlyOnce\ntimestamp: Instant")
+
+  Component(tell, "tell(msg: M): void", "Fire-and-Forget", "1. Create Envelope(msg, null)\n2. mailbox.put(envelope)\n3. Return immediately\n4. No delivery guarantee by default")
+
+  Component(ask, "ask(msg: M, timeout: Duration): R", "Sync Request-Reply", "1. Create replyChannel (CompletableFuture)\n2. Create Envelope(msg, replyId)\n3. mailbox.put(envelope)\n4. await reply or timeout\n5. Wrap result in CompletableFuture")
+
+  Component(dequeue, "Receive Loop", "Event Loop", "while (!terminated) {\n  Envelope e = mailbox.take()\n  invoke handler(state, e.payload)\n  update state from Transition\n  if reply expected: send(e.sender, reply)\n}")
+
+  Component(delivery, "Delivery Guarantees", "Quality of Service", "AT_LEAST_ONCE: may replay after crash\nEXACTLY_ONCE: idempotency key + dedup\nNEVER: fire-and-forget (default)\nBEST_EFFORT: no acks")
+
+  Rel(tell, envelope, "creates")
+  Rel(ask, envelope, "creates with replyId")
+  Rel(envelope, mailbox, "enqueued into")
+  Rel(mailbox, dequeue, "messages flow to")
+  Rel(dequeue, delivery, "respects QoS")
+}
+
+Container_Boundary(lifecycle, "State Lifecycle & Error Handling") {
+
+  Component(init, "Initialization", "Boot Phase", "Proc.spawn() called\nVirtual thread starts\nInitial state = supplied\nFirst message dequeued")
+
+  Component(running, "RUNNING State", "Normal Operation", "Handler invokes per message\nState transitions (NextState | KeepState)\nErrors -> ExitSignal thrown")
+
+  Component(transitioning, "State Transition", "Handler Response", "NextState(s': S) -> state := s'\nKeepState() -> state unchanged\nRepeatState() -> replay pending\nStop() -> initiate shutdown")
+
+  Component(errored, "ERROR: Exception Thrown", "Crash Condition", "1. Handler throws checked/unchecked\n2. Catch exception\n3. Wrap in ExitSignal\n4. Set lastError := signal\n5. Return Failure")
+
+  Component(terminating, "TERMINATING State", "Graceful Shutdown", "Process Stop signal received\nFinal handler call (optional)\nFlush pending messages\nClose virtual thread")
+
+  Component(terminated, "TERMINATED State", "Final State", "Virtual thread exits\nMailbox closed\nReferences invalidated\nGC eligible")
+
+  Rel(init, running, "starts with")
+  Rel(running, transitioning, "handler returns")
+  Rel(running, errored, "handler throws")
+  Rel(errored, terminated, "triggers crash")
+  Rel(running, terminating, "stop() called")
+  Rel(terminating, terminated, "completes")
+}
+
+Container_Boundary(sideeffects, "Effects & Side Effects Management") {
+
+  Component(transition, "Transition<S> (Sealed)", "Handler Return Type", "Success(nextState: S)\nFailure(error: ExitSignal)\nStop(finalState: S)\nStopAndReply(finalState, replyValue)")
+
+  Component(replyeffect, "Reply Effect", "Outbound Message", "For ask() calls:\n1. Handler returns with replyValue\n2. Send reply back to sender\n3. Sender unblocks from CompletableFuture\n4. Timeout exception if sender gave up")
+
+  Component(sideeffectdsl, "SideEffect DSL (Future)", "External Actions", "sendAfter(delay, msg)\nmonitor(otherProc)\nlogger.info() (via context)\nmetrics.increment()")
+
+  Component(contextvar, "ContextVar / Scoped Values", "Implicit Context", "Logging context (service, traceId)\nMetrics context (tags)\nSecurity context (userId)\nInherited from supervisor")
+
+  Rel(handler, transition, "returns")
+  Rel(transition, replyeffect, "may trigger")
+  Rel(transition, sideeffectdsl, "may schedule")
+  Rel(sideeffectdsl, contextvar, "uses")
+}
+
+Container_Boundary(linksmonitors, "Links & Monitors") {
+
+  Component(linked, "Process Links", "Bilateral Crash Propagation", "link(pid) called\nBoth directions: A->B, B->A\nIf A crashes, B gets ExitSignal\nIf B crashes, A gets ExitSignal")
+
+  Component(monitored, "Process Monitors", "Unilateral DOWN Notification", "monitor(pid) called\nOnly monitor gets DOWN msg\nMonitored process NOT affected\nDOWN msg when process exits")
+
+  Component(trapexit, "trapExit(true) / trapExit(false)", "Signal Handling", "true: ExitSignal delivered as message\nfalse (default): ExitSignal crashes this proc\nToggle at runtime\nAffects link behavior")
+
+  Component(signalhandler, "ExitSignal Handler", "Exception Handling", "Pattern match on ExitSignal\nif linked: re-crash\nif monitored: log and continue\nif normal: ignore")
+
+  Rel(procclass, linked, "may establish")
+  Rel(procclass, monitored, "may establish")
+  Rel(procclass, trapexit, "controls")
+  Rel(signalhandler, trapexit, "respects")
+}
+
+Container_Boundary(restart, "Supervisor-Driven Restart Sequence") {
+
+  Component(crashdetect, "1. Crash Detected", "Event", "Virtual thread terminates abnormally\nLastError set in Proc\nSupervisor receives ExitSignal")
+
+  Component(decideaction, "2. Restart Decision", "Strategy", "Check sliding window\nCheck RestartType (PERMANENT/TRANSIENT/TEMPORARY)\nMay skip restart on window exceed")
+
+  Component(spawnreplacement, "3. Spawn Replacement", "New Process", "ChildSpec supplier invoked\nNew Proc created\nNew virtual thread + mailbox")
+
+  Component(swapref, "4. Swap ProcRef", "Location Transparency", "Call ref.swap(newProc)\nOld Proc -> lastCrashedProc\nNew Proc -> delegate\nCaller code sees no change")
+
+  Component(requeue, "5. Requeue Pending", "Replay Messages", "Copy pending from old mailbox\nEnqueue to new mailbox\nState machine resumes\nIdempotent handlers survive replay")
+
+  Rel(crashdetect, decideaction, "triggers")
+  Rel(decideaction, spawnreplacement, "permits")
+  Rel(spawnreplacement, swapref, "enables")
+  Rel(swapref, requeue, "begins")
+}
+
+Container_Boundary(visibility, "Memory Visibility & Synchronization") {
+
+  note right
+    **Volatile Field Semantics (Java Memory Model)**
+
+    volatile S state:
+    - All writes visible immediately
+    - Reads always get latest
+    - Enforces visibility between tell/ask and handler
+
+    volatile ExitSignal lastError:
+    - Snapshot of crash info
+    - Safe to read without locks
+    - Cleared on successful restart
+
+    **Synchronization Strategy:**
+    - LinkedTransferQueue handles internal locks
+    - No explicit locks on Proc fields
+    - Volatile reads/writes provide visibility
+    - Virtual thread intrinsic locks avoid deadlock
+
+    **Thread Safety Guarantees:**
+    - tell() safe from any thread
+    - ask() safe from any thread
+    - Multiple senders: no lost messages
+    - Handler runs on single virtual thread (no races within)
+  end note
+}
+
+Container_Boundary(monitoring, "Monitoring & Observability") {
+
+  Component(procsys, "ProcSys (sys module)", "Introspection", "getState(ref) -> S\ngetLastError(ref) -> ExitSignal\nsuspend(ref) / resume(ref)\nstatistics(ref) -> metrics")
+
+  Component(metrics_capture, "Metrics Capture", "Instrumentation", "message_count (per proc)\nstate_transitions (per proc)\nhandler_latency_ms (per proc)\nerror_rate (per supervisor)")
+
+  Component(logging_context, "Logging Context", "Structured Logs", "log.info('msg', service='svc', procId=..., state=...)\nContext inherited from supervisor\nTrace ID propagated to children")
+
+  Rel(procclass, procsys, "supports")
+  Rel(procclass, metrics_capture, "emits")
+  Rel(procclass, logging_context, "participates in")
+}
+
+Rel(proccore, messaging, "implements")
+Rel(messaging, lifecycle, "drives")
+Rel(lifecycle, sideeffects, "manages")
+Rel(sideeffects, linksmonitors, "coordinates with")
+Rel(linksmonitors, restart, "signals to supervisor")
+Rel(restart, visibility, "preserves via")
+Rel(visibility, monitoring, "enables")
+
+@enduml

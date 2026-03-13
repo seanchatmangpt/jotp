@@ -1,0 +1,56 @@
+@startuml level-4k-code-restart-rest-for-one
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Restart Strategy - REST_FOR_ONE
+
+Container_Boundary(rfo, "REST_FOR_ONE Ordered Dependency") {
+
+  Component(supervisor, "Supervisor", "Parent", "Manages 4 children: Config, DB, Cache, API\nRestartStrategy.REST_FOR_ONE\nOrder: 1,2,3,4")
+
+  Component(config, "Config Service", "Child 1", "Loads configuration\nOther children depend")
+
+  Component(db, "DB Connection", "Child 2", "Database driver\nAPI depends")
+
+  Component(cache, "Cache Manager", "Child 3", "Redis client\nAPI depends")
+
+  Component(api, "API Handler", "Child 4", "REST endpoints\nDepends on all above")
+
+  Component(dbcrash, "DB Connection Crashes", "Failure", "Connection lost\nDB exits")
+
+  Component(restartdecision, "Restart Decision", "Check Window", "Is DB.RestartType = PERMANENT?\nWindow < 5 restarts in 15s?\nBoth true: restart DB + REST")
+
+  Component(termdb, "Terminate DB", "Restart Rest", "DB exits (already crashed)")
+
+  Component(termcache, "Terminate Cache", "Restart Rest", "Cache receives exit signal\nCleanup resources")
+
+  Component(termapi, "Terminate API", "Restart Rest", "API receives exit signal\nCleanup resources")
+
+  Component(spawndb, "Spawn New DB", "Ordered Restart", "New DB process\nWait for ready")
+
+  Component(spawncache, "Spawn New Cache", "Ordered Restart", "New Cache after DB\nNew Pid")
+
+  Component(spawnapi, "Spawn New API", "Ordered Restart", "New API after all deps\nNew Pid")
+
+  Component(configintact, "Config Untouched", "No Restart", "Config was before DB\nNo restart needed\nContinues running")
+
+  Rel(supervisor, config, "manages")
+  Rel(supervisor, db, "manages")
+  Rel(supervisor, cache, "manages")
+  Rel(supervisor, api, "manages")
+  Rel(db, dbcrash, "")
+  Rel(dbcrash, restartdecision, "")
+  Rel(restartdecision, termdb, "cascade from")
+  Rel(restartdecision, termcache, "cascade from")
+  Rel(restartdecision, termapi, "cascade from")
+  Rel(termdb, spawndb, "ordered")
+  Rel(spawndb, spawncache, "depends on")
+  Rel(spawncache, spawnapi, "depends on")
+  Rel(configintact, supervisor, "earlier = no restart")
+
+  note on link : REST_FOR_ONE: restart failed + dependents\nOrder matters: children before failed stay\nChildren after failed restart in order\nExample: Config -> DB -> Cache -> API dependency chain
+}
+
+SHOW_LEGEND()
+@enduml

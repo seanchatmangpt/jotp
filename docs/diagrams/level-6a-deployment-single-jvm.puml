@@ -1,0 +1,54 @@
+@startuml level-6a-deployment-single-jvm
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+title Single JVM Deployment
+caption JOTP: Monolithic deployment with supervisor tree
+
+Deployment_Node(host, "Physical Host", "Linux") {
+  Deployment_Node(container, "JVM Process", "OpenJDK 26") {
+    
+    Component(sup1, "RootSupervisor", "ONE_FOR_ALL") {
+      description = "Top-level fault tolerance"
+    }
+    
+    Deployment_Node(sup1_children, "Supervised Children", "") {
+      Component(api, "API Handler", "gen_server") {
+        description = "REST API processes"
+      }
+      Component(db, "DB Pool", "Supervisor") {
+        description = "Connection pool children"
+      }
+      Component(worker, "Background Worker", "gen_server") {
+        description = "Long-running tasks"
+      }
+      Component(events, "EventManager", "gen_event") {
+        description = "Event subscriptions"
+      }
+    }
+    
+    Deployment_Node(monitors, "Monitoring", "") {
+      Component(prom, "Prometheus", "Metrics exporter") {
+        description = "JVM metrics"
+      }
+      Component(logs, "Structured Logs", "Sink") {
+        description = "stdout/stderr"
+      }
+    }
+  }
+}
+
+Deployment_Node(external, "External Services", "") {
+  Component(db_ext, "PostgreSQL", "Database") {
+    description = "Persistent state"
+  }
+  Component(mon_ext, "Prometheus", "Time-series DB") {
+    description = "Metrics collection"
+  }
+}
+
+Rel(api, db, "query/exec")
+Rel(worker, db_ext, "JDBC")
+Rel(prom, mon_ext, "scrape /metrics")
+Rel(logs, logs, "emit")
+
+@enduml

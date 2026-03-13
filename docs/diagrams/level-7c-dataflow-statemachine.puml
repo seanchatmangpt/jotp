@@ -1,0 +1,94 @@
+@startuml level-7c-dataflow-statemachine
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title State Machine Data Flow
+caption JOTP: Event processing and state transitions in gen_statem
+
+System_Boundary(jotp_sm, "StateMachine Data Flow") {
+  
+  System_Ext(api_input, "API Input", "Order request")
+  
+  Container(mailbox, "Process Mailbox", "Virtual thread queue", "Event buffer")
+  
+  Container(event_pool, "Event Pool", "Sealed hierarchy", "Type-safe events")
+  Container_Boundary(event_types, "SMEvent<E>") {
+    Component(user_evt, "User(E)", "SMEvent")
+    Component(timeout_evt, "StateTimeout", "SMEvent")
+    Component(internal_evt, "Internal(E)", "SMEvent")
+  }
+  
+  Container(state_data, "State & Data", "Immutable record", "S + D")
+  
+  Container(transition_fn, "TransitionFn<S,E,D>", "Pure function", "apply(state, event, data)")
+  
+  Container(actions_pool, "Action Pool", "Sealed hierarchy", "Side effects")
+  Container_Boundary(actions_types, "Action<S,E,D>") {
+    Component(reply_action, "Reply(response)", "Action")
+    Component(next_action, "NextEvent(event)", "Action")
+    Component(timeout_action, "SetStateTimeout(ms)", "Action")
+  }
+  
+  Container(action_executor, "Action Executor", "Interpreter", "Executes side effects")
+  
+  System_Ext(response_output, "Client Response", "HTTP reply")
+  System_Ext(state_output, "Observable State", "Metrics/logs")
+}
+
+Rel(api_input, mailbox, "enqueue", "SMEvent.User")
+Rel(mailbox, event_pool, "type dispatch", "match SMEvent")
+Rel(event_pool, transition_fn, "apply", "state, event, data")
+Rel(state_data, transition_fn, "input", "current state")
+Rel(transition_fn, actions_pool, "return", "actions list")
+Rel(actions_pool, action_executor, "execute", "side effect order")
+Rel(action_executor, response_output, "Reply action", "HTTP 200")
+Rel(action_executor, mailbox, "NextEvent action", "enqueue")
+Rel(action_executor, state_output, "state change", "log S2")
+
+note on link api_input, mailbox
+  Data: SMEvent.User(OrderRequest{items=[], total=0})
+  Type: immutable record
+  Priority: normal queue
+end note
+
+note on link mailbox, event_pool
+  Event type dispatch:
+  - Pattern match on SMEvent sealed type
+  - Java 26: exhaustiveness check at compile time
+end note
+
+note on link state_data, transition_fn
+  Data transformation:
+  S1 + SMEvent.User(data) -> (S2, actions, D2)
+  Pure function: no side effects
+end note
+
+note on link transition_fn, actions_pool
+  Action composition:
+  [
+    Reply(OrderCreated{id}),
+    SetStateTimeout(30s),
+    NextEvent(Internal.ProcessPayment)
+  ]
+end note
+
+note on link action_executor, response_output
+  Action 1: Send response to caller
+  Unblocks HTTP handler
+  Returns ~1-5ms
+end note
+
+note on link action_executor, mailbox
+  Action 2: Queue internal event
+  High priority queue
+  Processed in same event loop
+  Prevents stale timeout
+end note
+
+note on link action_executor, state_output
+  Action 3: Observable state change
+  Metrics: s1_to_s2_count++
+  Logs: transition(s1 -> s2)
+  Does not block transitions
+end note
+
+@enduml

@@ -1,0 +1,83 @@
+@startuml level-5f-sequence-statemachine-event
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title StateMachine Event Processing Sequence
+caption JOTP: From User Event to State Transition in gen_statem
+
+actor Client
+participant "Proc<SM>" as Proc
+participant "StateMachine" as SM
+participant "TransitionFn" as Handler
+queue "Event Queue" as Queue
+participant "Action Engine" as Actions
+
+autonumber
+Client -> Proc: sendMessage(SMEvent.User(data))
+activate Proc
+
+Proc -> Queue: enqueue(event)
+activate Queue
+
+Queue -> SM: process()
+activate SM
+
+note over SM
+  Engine state:
+  currentState = S1
+  data = D1
+  postponedEvents = []
+end note
+
+SM -> Handler: transitionFn.apply(S1,\nSMEvent.User(data), D1)
+activate Handler
+
+Handler -> Handler: pattern match\nevent type
+note over Handler
+  S1 + User(data) ->
+  Transition.NextState(S2)
+end note
+
+Handler --> SM: Transition<S2> +\nactions [Reply, Timeout]
+deactivate Handler
+
+SM -> Actions: execute(actions, S1 -> S2)
+activate Actions
+
+Actions -> Client: reply(response)
+note over Actions
+  Action 1: Reply
+end note
+
+Actions -> SM: registerStateTimeout(500ms)
+note over Actions
+  Action 2: SetStateTimeout
+end note
+
+Actions -> Queue: insertEvent(Internal)
+note over Actions
+  Action 3: NextEvent(priority=high)
+end note
+
+deactivate Actions
+
+SM -> SM: currentState := S2
+
+note over SM
+  State transition complete
+  S1 -> S2
+  Data preserved: D1
+  Timeout active: 500ms
+end note
+
+alt StateTimeout fires
+  SM -> Handler: transitionFn.apply(S2,\nSMEvent.StateTimeout, D1)
+  activate Handler
+  Handler --> SM: Transition<S3>
+  deactivate Handler
+end
+
+deactivate SM
+deactivate Queue
+deactivate Proc
+
+@enduml

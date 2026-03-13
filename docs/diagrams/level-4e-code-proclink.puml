@@ -1,0 +1,89 @@
+@startuml level-4e-code-proclink
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title JOTP Code Level: ProcLink - Bilateral Linking Mechanism
+
+HIDE_STEREOTYPE()
+
+Container_Boundary(api, "ProcLink Static Utility API") {
+  Component(link_method, "static void link(Proc a, Proc b)", "Core Method", "Install bidirectional link\nbetween two processes")
+
+  Component(spawn_link_method, "static <S,M> Proc spawnLink(...)", "Factory", "Atomic spawn + link\nNo window between creation and link")
+}
+
+Container_Boundary(implementation, "Implementation (Static Utility)") {
+  Component(link_impl, "link(a, b) implementation", "Logic", "1. a.addCrashCallback(→ deliverExit b)\n2. b.addCrashCallback(→ deliverExit a)")
+
+  Component(spawn_impl, "spawnLink(parent, init, handler)", "Logic", "1. Create child Proc\n2. Call link(parent, child)\n3. Return child")
+}
+
+Container_Boundary(link_flow, "Bilateral Link Flow") {
+  Component(step1_a, "Step 1: A.addCrashCallback()", "Action", "When A crashes, call:\n→ b.deliverExitSignal(a.lastError())")
+
+  Component(step1_b, "Step 1: B.addCrashCallback()", "Action", "When B crashes, call:\n→ a.deliverExitSignal(b.lastError())")
+
+  Component(crash_a, "A crashes", "Event", "Unhandled exception\nA's crash callback fires")
+
+  Component(signal_to_b, "deliverExitSignal(reason)", "Action", "Interrupt B\nPass A's exit reason")
+
+  Component(b_interrupted, "B receives interrupt", "Result", "B's virtual thread\nreceives ExitSignal")
+
+  Component(crash_b, "B crashes (if not trapExits)", "Cascade", "B's exception\nB's callback fires")
+
+  Component(signal_to_a, "deliverExitSignal(reason)", "Cascade", "Kill A with same reason")
+
+  Rel(step1_a, crash_a, "installs")
+  Rel(step1_b, crash_b, "installs")
+  Rel(crash_a, signal_to_b, "fires")
+  Rel(signal_to_b, b_interrupted, "interrupts")
+  Rel(crash_b, signal_to_a, "fires")
+}
+
+Container_Boundary(atomicity, "Atomic Spawn+Link") {
+  Component(spawn_step, "spawnLink creates Proc", "Step 1", "Child virtual thread starts\nNo messages processed yet")
+
+  Component(link_step, "link(parent, child)", "Step 2", "Install callbacks\nBefore child processes any msg")
+
+  Component(guarantee, "No window", "Guarantee", "Child cannot crash\nbetween spawn and link")
+
+  Rel(spawn_step, link_step, "then")
+  Rel(link_step, guarantee, "ensures")
+}
+
+Container_Boundary(semantics, "Semantics vs OTP") {
+  note right
+  **OTP link(Pid1, Pid2)**
+  - Symmetric bidirectional
+  - Both processes stored in links table
+  - Either dies → other dies
+
+  **JOTP ProcLink.link(a, b)**
+  - Uses crash callbacks (no global table)
+  - Install pair of callbacks:
+    - a's callback → calls b.deliverExitSignal()
+    - b's callback → calls a.deliverExitSignal()
+  - Result is behaviorally identical
+  - More flexible (composable with monitors)
+
+  **Normal Exit (Proc.stop())**
+  - Does NOT trigger crash callbacks
+  - Does NOT cause linked process to exit
+  - Mirrors OTP graceful shutdown
+  end note
+}
+
+Rel(api, implementation, "defines")
+Rel(link_method, link_impl, "implements")
+Rel(spawn_link_method, spawn_impl, "implements")
+Rel(link_impl, link_flow, "describes")
+Rel(spawn_impl, atomicity, "describes")
+
+note bottom of api
+  **ProcLink is a utility class, not a data structure**
+  - No fields, all static methods
+  - link() and spawnLink() add callbacks to Proc
+  - Callbacks are stored in Proc.crashCallbacks list
+  - Safe to compose with Supervisor, Monitor, Registry
+end note
+
+@enduml

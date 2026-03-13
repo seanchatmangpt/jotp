@@ -1,0 +1,107 @@
+@startuml level-2e-containers-build
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 2: Build & Tooling Ecosystem
+
+Person(engineer, "Build Engineer", "Configures CI/CD")
+
+System_Boundary(buildtool, "JOTP Build Ecosystem") {
+
+  Container(mvnd, "Maven Daemon (mvnd)", "Build Tool", "mvnd 2.0.0-rc-3 with Maven 4\nPersistent JVM daemon\nIncremental classpath caching\nParallel compilation -T1C")
+
+  Container(spotless, "Spotless Formatter", "Code Quality", "Google Java Format (AOSP style)\nPost-tool-use hook automation\nCompile-phase enforcement")
+
+  Container(surefire, "Maven Surefire", "Unit Testing", "*Test.java files\nParallel execution (JUnit 5 dynamic)\nJVM failure isolation")
+
+  Container(failsafe, "Maven Failsafe", "Integration Testing", "*IT.java files\nVerify phase execution\nFull container lifecycle testing")
+
+  Container(spotbugs, "SpotBugs", "Static Analysis", "Bug detection\nSealed type pattern validation\nVirtual thread safety checks")
+
+  Container(archunit, "ArchUnit", "Architecture Tests", "Module boundary enforcement\nCyclic dependency detection\nSealed package encapsulation")
+
+  Container(jgen, "jgen Code Generator", "Templates", "72 Tera templates\nGoF patterns, concurrency, API\nModernization refactoring engine")
+
+  Container(guards, "Guard System", "Enforcement", "H_TODO detection\nH_MOCK prevention\nH_STUB validation")
+
+  Rel(engineer, mvnd, "runs builds via")
+  Rel(engineer, jgen, "generates boilerplate")
+  Rel(engineer, spotless, "enforces formatting")
+
+  Rel(mvnd, spotless, "executes at compile")
+  Rel(mvnd, surefire, "runs unit tests")
+  Rel(mvnd, failsafe, "runs integration tests")
+  Rel(mvnd, spotbugs, "analyzes code")
+  Rel(mvnd, archunit, "validates architecture")
+  Rel(mvnd, guards, "enforces patterns")
+
+  Rel(jgen, spotless, "output formatted by")
+
+  note right of mvnd
+    **Maven Daemon (mvnd):**
+    High-performance build daemon;
+    eliminates 30-40% JVM startup overhead;
+    persistent classpath cache with
+    incremental compilation via -T1C
+  end note
+
+  note right of spotless
+    **Spotless + Google Java Format:**
+    Enforced at compile phase.
+    PostToolUse hook auto-applies after
+    every Java file edit (prevents build failure)
+  end note
+
+  note right of surefire
+    **Unit Testing (Surefire):**
+    Parallel execution via JUnit 5 dynamic strategy.
+    *Test.java files executed during test phase.
+    Sandbox isolation per JVM instance.
+  end note
+
+  note right of failsafe
+    **Integration Testing (Failsafe):**
+    *IT.java files executed during verify phase.
+    Full container lifecycle: setup, teardown.
+    Testcontainers, embedded databases.
+  end note
+
+  note right of spotbugs
+    **Static Analysis (SpotBugs):**
+    Detects null dereferences, resource leaks,
+    sealed type exhaustiveness violations,
+    virtual thread safety issues.
+  end note
+
+  note right of archunit
+    **Architecture Validation (ArchUnit):**
+    Enforces module-info boundaries.
+    Detects circular dependencies.
+    Validates sealed package encapsulation.
+  end note
+
+  note right of jgen
+    **Code Generator (jgen/Tera):**
+    72 templates across 9 categories
+    (core, concurrency, patterns, API, modules,
+    testing, error-handling, build, security).
+    Produces compilable, testable Java 26 code.
+  end note
+
+  note right of guards
+    **Guard System (Enforcement):**
+    H_TODO: forbids TODO/FIXME markers
+    H_MOCK: prevents mock/stub implementations
+    H_STUB: enforces non-empty returns
+    Runs via PostToolUse hook.
+  end note
+}
+
+System_Ext(ci, "CI/CD Pipeline", "GitHub Actions, Jenkins, GitLab CI")
+Rel(buildtool, ci, "integrates into")
+
+System_Ext(maven, "Apache Maven", "Central Repository, Plugins")
+Rel(mvnd, maven, "delegates to Maven 4")
+
+SHOW_LEGEND()
+@enduml

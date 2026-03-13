@@ -1,0 +1,113 @@
+@startuml level-4b-code-procref
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title JOTP Code Level: ProcRef<S,M> - Stable Opaque Handle
+
+HIDE_STEREOTYPE()
+
+Container_Boundary(api, "ProcRef<S,M> API Design") {
+  Component(class_def, "public final class ProcRef<S,M>", "Core", "Stable opaque handle\nto supervised Proc")
+
+  Component(delegate_field, "volatile Proc<S,M> delegate", "Field", "Live process instance\nSwapped by Supervisor on restart")
+
+  Component(crashed_field, "volatile Proc<S,M> lastCrashedProc", "Field", "Snapshot of pre-restart process\nPreserves crash evidence")
+}
+
+Container_Boundary(public_api, "Public Interface") {
+  Component(tell_method, "tell(M msg)", "Method", "Fire-and-forget send\nDelegate to current process")
+
+  Component(ask_method, "ask(M msg)", "Method", "Request-reply sync send\nReturns CompletableFuture<S>")
+
+  Component(stop_method, "stop()", "Method", "Graceful shutdown\nDoes NOT notify supervisor")
+
+  Component(proc_method, "proc() - Crash Detection", "Method", "Returns live or crashed proc\nFor monitoring infrastructure")
+}
+
+Container_Boundary(internal, "Internal (Supervisor Only)") {
+  Component(swap_method, "void swap(Proc<S,M> next)", "Atomic Update", "Called by Supervisor on restart:\n1. Save current to lastCrashedProc\n2. Update delegate = next\n3. Volatile write guarantees visibility")
+}
+
+Container_Boundary(restart_sequence, "Supervisor Restart Sequence") {
+  Component(step1, "1. Child crashes", "Event", "Proc throws unhandled exception\nSupervisor detects crash")
+
+  Component(step2, "2. Create new Proc", "Action", "New instance spawned\nFresh virtual thread")
+
+  Component(step3, "3. Call ref.swap(newProc)", "Atomic", "Snapshot old → lastCrashedProc\nUpdate delegate = newProc")
+
+  Component(step4, "4. Return updated ProcRef", "Result", "Same handle transparently routes\nto new process (location transparency)")
+
+  Rel(step1, step2, "triggers")
+  Rel(step2, step3, "enables")
+  Rel(step3, step4, "completes")
+}
+
+Container_Boundary(memory, "Memory Model & Visibility") {
+  note right
+  **Volatile Field Semantics**
+
+  delegate (volatile):
+  - All writes visible to all threads immediately
+  - Reads always get latest value
+  - No lost updates between tell/ask and swap
+
+  lastCrashedProc (volatile):
+  - Frozen snapshot captured before swap
+  - Allows external crash detection
+  - Safe to read without locks
+
+  **No Explicit Locking**
+  - Volatile semantics sufficient
+  - tell() and ask() never block
+  - swap() is a pair of volatile writes
+  end note
+}
+
+Container_Boundary(crash_detection, "Crash Detection for Monitoring") {
+  note bottom
+  **proc() Method Semantics:**
+
+  1. Read lastCrashedProc (volatile)
+  2. If lastCrashedProc != null && lastCrashedProc.lastError() != null
+     → Return the crashed process (observer sees crash)
+  3. Else
+     → Return current delegate (live process)
+
+  **Use Case: Awaitility Monitoring**
+  await().until(() -> ref.proc().lastError() != null)
+  Detects crash even after restart
+  end note
+}
+
+Rel(class_def, delegate_field, "owns")
+Rel(class_def, crashed_field, "owns")
+Rel(class_def, tell_method, "provides")
+Rel(class_def, ask_method, "provides")
+Rel(class_def, stop_method, "provides")
+Rel(class_def, proc_method, "provides")
+Rel(class_def, swap_method, "internal")
+Rel(swap_method, crashed_field, "updates")
+Rel(swap_method, delegate_field, "updates")
+
+note bottom of api
+  **Joe Armstrong's Principle:**
+  Process identifiers must be opaque
+  Callers never know if process restarted
+  tell() and ask() transparently route to current process
+end note
+
+note bottom of public_api
+  **Three Communication Patterns:**
+
+  tell(msg) - Asynchronous
+  └─ Fire-and-forget, no blocking
+
+  ask(msg) - Synchronous Request-Reply
+  └─ Returns CompletableFuture<S>
+  └─ May timeout during restart
+
+  proc() - Monitoring Only
+  └─ For infrastructure, not normal messaging
+  └─ Enables crash detection
+end note
+
+@enduml

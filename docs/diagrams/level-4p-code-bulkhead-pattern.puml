@@ -1,0 +1,70 @@
+@startuml level-4p-code-bulkhead-pattern
+!define DIRECTION top to bottom
+skinparam {
+    backgroundColor #F5F5F5
+    defaultFontSize 11
+}
+skinparam rectangle {
+    BackgroundColor<<critical>> #FFCDD2
+    BackgroundColor<<secondary>> #FFE0B2
+    BackgroundColor<<batch>> #C8E6C9
+    BackgroundColor<<router>> #E3F2FD
+    BorderColor #C62828
+}
+
+title Level 4: Bulkhead Isolation Pattern (Resource Containment)
+
+rectangle "APIGateway\nRequest Router" as router <<router>> {
+    rectangle "Route by service type\nCheck circuit state\nEnforce priority" as routeLogic
+}
+
+rectangle "Bulkhead 1: CRITICAL\n(User-facing operations)" as bh1 <<critical>> {
+    rectangle "Supervisor\nSTRATEGY: ONE_FOR_ONE\nMax Restarts: 10/60s\nChild Type: WORKER" as sup1
+    rectangle "Worker Pool\nConcurrency: 50\nTimeout: 5s\nHandler: UserRequestHandler" as pool1
+}
+
+rectangle "Bulkhead 2: SECONDARY\n(Background processing)" as bh2 <<secondary>> {
+    rectangle "Supervisor\nSTRATEGY: ONE_FOR_ONE\nMax Restarts: 5/60s\nChild Type: WORKER" as sup2
+    rectangle "Worker Pool\nConcurrency: 20\nTimeout: 30s\nHandler: BackgroundHandler" as pool2
+}
+
+rectangle "Bulkhead 3: BATCH\n(Long-running jobs)" as bh3 <<batch>> {
+    rectangle "Supervisor\nSTRATEGY: ONE_FOR_ONE\nMax Restarts: 2/60s\nChild Type: WORKER" as sup3
+    rectangle "Worker Pool\nConcurrency: 5\nTimeout: 5min\nHandler: BatchJobHandler" as pool3
+}
+
+router --> sup1: /api/users\n(high priority)
+router --> sup2: /api/background\n(medium priority)
+router --> sup3: /batch/import\n(low priority)
+
+sup1 --> pool1
+sup2 --> pool2
+sup3 --> pool3
+
+note right of bh1
+  Guarantee: If bh1 crashes,
+  bh2 and bh3 UNAFFECTED
+  ONE_FOR_ONE isolation
+  Critical users keep service
+end note
+
+note right of bh2
+  Independent lifecycle
+  Own queue, own timeout
+  Backlog doesn't block critical
+end note
+
+note right of pool1
+  Resource bounds prevent
+  cascade to other bulkheads
+  50 workers = max memory use
+  Request queue for excess
+end note
+
+note right of pool3
+  Batch jobs isolated
+  Long timeout doesn't
+  starve other paths
+end note
+
+@enduml

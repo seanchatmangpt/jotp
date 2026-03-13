@@ -1,0 +1,127 @@
+@startuml level-4f-code-procmonitor
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title JOTP Code Level: ProcMonitor - Unilateral Monitoring
+
+HIDE_STEREOTYPE()
+
+Container_Boundary(api, "ProcMonitor Static Utility API") {
+  Component(monitor_method, "static <S,M> MonitorRef<S,M> monitor(\n  Proc<S,M> target,\n  Consumer<Throwable> downHandler)", "Core Method", "Start unilateral monitoring\nWhen target terminates, invoke handler")
+
+  Component(demonitor_method, "static void demonitor(MonitorRef ref)", "Method", "Stop monitoring\nHandler will not be invoked")
+
+  Component(monitor_ref_record, "record MonitorRef<S,M>(\n  Proc<S,M> target,\n  Consumer<Throwable> callback)", "Handle", "Opaque monitor reference\nPassed to demonitor()")
+}
+
+Container_Boundary(implementation, "Implementation") {
+  note right
+  **monitor(target, handler) flow:**
+
+  1. target.addTerminationCallback(handler)
+  2. Return new MonitorRef(target, handler)
+
+  Callbacks stored in target.terminationCallbacks list
+
+  **demonitor(ref) flow:**
+
+  1. ref.target().removeTerminationCallback(ref.callback())
+  2. Removes handler from list
+  end note
+}
+
+Container_Boundary(termination_flow, "Termination Callback Delivery") {
+  Component(step1, "Target process terminates", "Event", "Normal or abnormal exit")
+
+  Component(step2, "For each Watcher in terminationCallbacks", "Loop", "Iterate all monitoring callbacks")
+
+  Component(step3, "Invoke handler(reason)", "Action", "reason = null (normal)\nor lastError (crash)")
+
+  Component(step4, "Continue loop", "Next", "All handlers get notified\nEven if one throws")
+
+  Rel(step1, step2, "triggers")
+  Rel(step2, step3, "invokes")
+  Rel(step3, step4, "next")
+}
+
+Container_Boundary(vs_link, "Contrast: Monitor vs Link") {
+  note bottom
+  **ProcLink (Bilateral)**
+  - A.link(B) ← Both add crash callbacks
+  - A crashes → B gets exit signal
+  - B crashes → A gets exit signal
+  - Both processes die (if not trapExits)
+
+  **ProcMonitor (Unilateral)**
+  - ProcMonitor.monitor(target, handler)
+  - target terminates → handler invoked
+  - Monitor never dies when target dies
+  - No signal delivery to target
+
+  **Use Cases**
+
+  Links: Dependency between peers
+  - A worker + a logger both linked
+  - Either crashes → both die
+
+  Monitor: Observation without coupling
+  - Watcher monitors target's health
+  - Target never learns about monitor
+  - Multiple monitors per target OK
+  end note
+}
+
+Container_Boundary(semantics, "Semantics: Handler Invocation") {
+  Component(normal_exit, "Normal exit (Proc.stop())", "Outcome", "handler(null)\nProcessed successfully")
+
+  Component(abnormal_exit, "Abnormal exit (crash)", "Outcome", "handler(lastError)\nUnhandled exception")
+
+  note right
+  **Handler Argument**
+
+  null = target stopped gracefully
+  non-null = the exception that crashed target
+
+  Target's thread has already exited
+  Handler runs on target's virtual thread context
+  Handler must NOT block (used for short cleanup)
+  end note
+}
+
+Container_Boundary(composition, "Composability") {
+  note bottom
+  ProcMonitor is fully composable with:
+
+  **Supervisor**
+  - Child can be monitored independently
+  - Supervisor restarts child
+  - Monitor fires on each crash+restart
+
+  **ProcRegistry**
+  - Monitor registered process
+  - Monitor survives registry lookup
+
+  **ProcLink**
+  - Monitor and link orthogonal
+  - Same process can be monitored + linked
+
+  **EventManager**
+  - Monitor can publish events
+  - Decouple crash detection from handlers
+  end note
+}
+
+Rel(api, implementation, "defines")
+Rel(monitor_method, termination_flow, "implements")
+Rel(demonitor_method, termination_flow, "stops")
+Rel(vs_link, semantics, "contrasts")
+
+note bottom of api
+  **ProcMonitor is a utility class**
+  - Static methods only
+  - No global registry (unlike ProcRegistry)
+  - Each monitor callback stored in Proc.terminationCallbacks
+  - Safe to install multiple monitors on same target
+  - Handler must be side-effect free (called during Proc shutdown)
+end note
+
+@enduml

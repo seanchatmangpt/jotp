@@ -1,0 +1,86 @@
+@startuml level-5g-sequence-eventmanager
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title EventManager Event Dispatch Sequence
+caption JOTP: gen_event publish-subscribe pattern with handler isolation
+
+actor Publisher
+participant "EventManager<E>" as EM
+participant "Handler Registry" as Registry
+participant "Handler 1" as H1
+participant "Handler 2" as H2
+participant "Handler 3" as H3
+
+autonumber
+Publisher -> EM: notify(event)
+activate EM
+
+EM -> Registry: getHandlers()
+activate Registry
+Registry --> EM: [H1, H2, H3]
+deactivate Registry
+
+note over EM
+  Fan-out dispatch to all handlers
+  Each handler in isolated virtual thread
+end note
+
+par Handler 1 (isolated)
+  EM -> H1: handle(event)
+  activate H1
+  note over H1
+    Handler 1 processes event
+    May throw exception
+  end note
+  H1 --> EM: (void)
+  deactivate H1
+end
+
+par Handler 2 (isolated)
+  EM -> H2: handle(event)
+  activate H2
+  note over H2
+    Handler 2 processes event
+    May crash independently
+  end note
+  H2 --> EM: (void)
+  deactivate H2
+end
+
+par Handler 3 (isolated)
+  EM -> H3: handle(event)
+  activate H3
+  note over H3
+    Handler 3 processes event
+    Failure does not affect H1, H2
+  end note
+  H3 --> EM: (void)
+  deactivate H3
+end
+
+note over EM
+  Key property: One handler crash
+  does NOT crash EventManager
+  or other handlers
+end note
+
+alt If Handler 2 crashes
+  note over H2
+    Exception caught
+    Handler 2 terminated
+    Logged, not propagated
+  end note
+  EM -> Registry: removeHandler(H2)
+  Registry --> EM: (success)
+end
+
+EM --> Publisher: (dispatch complete)
+deactivate EM
+
+note over Publisher, H3
+  Publisher receives completion
+  All successfully handling handlers
+  received the event
+end note
+
+@enduml

@@ -1,0 +1,169 @@
+@startuml level-3e-components-enterprise
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Level 3E: Enterprise Patterns & Fault Tolerance
+
+LAYOUT_WITH_LEGEND()
+
+package "Supervision & Crash Recovery" as SUPER_PKG #FFE4E1 {
+    component "Supervisor" as SUPERVISOR [
+        Supervision tree
+        ----
+        Strategies:
+        - ONE_FOR_ONE
+        - ONE_FOR_ALL
+        - REST_FOR_ONE
+        - SIMPLE_ONE_FOR_ONE (pools)
+        
+        Sliding restart window
+        Child lifecycle control
+    ]
+
+    component "ChildSpec<S,M>" as CHILDSPEC [
+        Child specification
+        ----
+        RestartType:
+        - PERMANENT/TRANSIENT
+        - TEMPORARY
+        
+        Shutdown behavior
+        Type (WORKER/SUPERVISOR)
+    ]
+
+    component "CrashRecovery" as CRASH_RECOVERY [
+        "Let it crash" pattern
+        ----
+        Supervised retry via
+        isolated virtual threads
+        
+        Escalation to supervisor
+        Error accumulation
+    ]
+
+    component "AutoShutdown" as AUTOSHUTDOWN [
+        Lifecycle control
+        ----
+        NEVER / ANY_SIGNIFICANT
+        ALL_SIGNIFICANT
+        
+        Controls supervisor death
+        on child exit
+    ]
+}
+
+package "Health & Observability" as HEALTH_PKG #E6F3FF {
+    component "HealthCheck" as HEALTHCHECK [
+        Process health monitoring
+        ----
+        Status probes
+        Metrics collection
+        Liveness/readiness
+    ]
+
+    component "Backpressure" as BACKPRESSURE [
+        Flow control primitive
+        ----
+        Mailbox queue depth
+        Adaptive rate limiting
+        Overflow handling
+    ]
+
+    component "EventBus" as EVENTBUS [
+        Process event distribution
+        ----
+        Type-safe events
+        Fan-out semantics
+        Dead letter handling
+    ]
+
+    component "ProcessMetrics" as METRICS [
+        Per-process metrics
+        ----
+        Message count
+        Latency histograms
+        Queue depth
+    ]
+}
+
+package "Distributed Patterns" as DIST_PKG #F0FFF0 {
+    component "Saga" as SAGA [
+        Distributed transaction
+        ----
+        Coordinated multi-service
+        Compensating actions
+        State machine driven
+    ]
+
+    component "CircuitBreaker" as CIRCUITBREAKER [
+        Fault isolation
+        ----
+        States: Closed/Open/Half-open
+        Failure threshold
+        Timeout-based recovery
+    ]
+
+    component "Bulkhead" as BULKHEAD [
+        Resource isolation
+        ----
+        Thread pool limits
+        Timeout enforcement
+        Failure containment
+    ]
+
+    component "Multitenancy" as MULTITENANCY [
+        Isolation SLA
+        ----
+        Per-tenant process trees
+        Resource quotas
+        Cross-tenant failure prevention
+    ]
+}
+
+'Supervision relationships
+SUPERVISOR --> CHILDSPEC : "manages"
+SUPERVISOR --> CRASH_RECOVERY : "escalates to"
+SUPERVISOR --> AUTOSHUTDOWN : "configured with"
+CHILDSPEC -.-> CRASH_RECOVERY : "defines behavior"
+
+'Health relationships
+HEALTHCHECK --> METRICS : "collects into"
+BACKPRESSURE --> HEALTHCHECK : "feeds"
+EVENTBUS --> HEALTHCHECK : "signals changes"
+METRICS -.-> BACKPRESSURE : "triggers throttling"
+
+'Distributed relationships
+SAGA --> SUPERVISOR : "coordinates"
+CIRCUITBREAKER --> SAGA : "protects"
+BULKHEAD --> SUPERVISOR : "resource limits"
+MULTITENANCY --> SUPERVISOR : "isolates via"
+
+'Cross-package relationships
+SUPERVISOR --> EVENTBUS : "publishes lifecycle"
+CRASH_RECOVERY --> METRICS : "updates on retry"
+CIRCUITBREAKER -.-> BACKPRESSURE : "may trigger"
+
+note on right of SUPER_PKG
+  Erlang/OTP supervision model:
+  - ONE_FOR_ONE: Restart only failed child
+  - ONE_FOR_ALL: Restart all children on failure
+  - REST_FOR_ONE: Restart all later-born siblings
+  - SIMPLE_ONE_FOR_ONE: Dynamic pool of identical workers
+end note
+
+note on right of HEALTH_PKG
+  Observable fault tolerance.
+  Process state is queried via
+  HealthCheck without interrupting
+  execution. Backpressure prevents
+  cascade failures through flow control.
+end note
+
+note on right of DIST_PKG
+  Eight enterprise patterns for
+  99.95%+ SLA. CircuitBreaker +
+  Bulkhead = fault isolation.
+  Saga = coordinated failures.
+  Multitenancy = resource fairness.
+end note
+
+@enduml

@@ -1,0 +1,179 @@
+@startuml level-4m-code-proctimer
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: ProcTimer - Timed Message Delivery
+
+Container_Boundary(scheduler_infrastructure, "Scheduler Infrastructure") {
+  Component(scheduled_executor, "private static final ScheduledExecutorService SCHEDULER", "Shared Singleton", "Single daemon platform thread\nTimer wheel backend\nHandles all timers")
+
+  Component(thread_factory, "Custom ThreadFactory", "Daemon Setup", "Creates thread: 'proc-timer'\nsets daemon=true\nCleans up on JVM exit")
+}
+
+Container_Boundary(public_api, "Public Static API") {
+  Component(send_after_method, "static <M> TimerRef sendAfter(\n  long delayMs,\n  Proc<?,M> target,\n  M msg)", "One-Shot Delay", "1. SCHEDULER.schedule(...)\n2. After delayMs: target.tell(msg)\n3. Return TimerRef with ScheduledFuture")
+
+  Component(send_after_duration, "static <M> TimerRef sendAfter(\n  Duration delay,\n  Proc<?,M> target,\n  M msg)", "Convenience Overload", "1. Convert delay.toMillis()\n2. Call long version\n3. Return TimerRef")
+
+  Component(send_interval_method, "static <M> TimerRef sendInterval(\n  long periodMs,\n  Proc<?,M> target,\n  M msg)", "Repeating Interval", "1. SCHEDULER.scheduleAtFixedRate(...)\n2. First delivery: after periodMs\n3. Then every periodMs\n4. Return TimerRef (keep to cancel)")
+
+  Component(send_interval_duration, "static <M> TimerRef sendInterval(\n  Duration interval,\n  Proc<?,M> target,\n  M msg)", "Convenience Overload", "1. Convert interval.toMillis()\n2. Call long version\n3. Return TimerRef")
+
+  Component(cancel_method, "static boolean cancel(TimerRef ref)", "Cancel Timer", "1. ref.future.cancel(false)\n2. Return true if cancelled\n3. Return false if already fired")
+}
+
+Container_Boundary(timer_ref, "TimerRef Record") {
+  Component(timer_ref_record, "record TimerRef(\n  ScheduledFuture<?> future)", "Opaque Handle", "Wraps ScheduledFuture\nPass to cancel()")
+
+  Component(timer_ref_cancel, "boolean cancel()", "Instance Method", "Alias for future.cancel(false)\nReturn true if pending")
+}
+
+Container_Boundary(execution_flow, "Message Delivery Flow") {
+  Component(call_send_after, "sendAfter(100ms, proc, msg)", "Client Call", "Client requests delayed send")
+
+  Component(schedule_task, "SCHEDULER.schedule(() → ...", "Schedule", "Register with ScheduledExecutorService\nTimer wheel tracks deadline")
+
+  Component(wait_deadline, "Wait 100ms", "Time Passes", "Timer wheel counting down\nDaemon thread monitoring")
+
+  Component(deadline_reaches, "Deadline reached", "Event", "Scheduler wakes up\nTime to fire callback")
+
+  Component(call_tell, "target.tell(msg)", "Callback", "Non-blocking enqueue\nAdd to target's mailbox")
+
+  Component(target_receives, "Handler dequeues msg", "Recipient", "Next iteration of receive loop\nHandler processes msg")
+
+  Rel(call_send_after, schedule_task, "submits")
+  Rel(schedule_task, wait_deadline, "then")
+  Rel(wait_deadline, deadline_reaches, "until")
+  Rel(deadline_reaches, call_tell, "fires")
+  Rel(call_tell, target_receives, "enqueues")
+}
+
+Container_Boundary(design_rationale, "Why Single Platform Thread?") {
+  note bottom
+  **Timer Management is CPU-Bound Work**
+
+  Timer wheels require:
+  - Precise timing (microsecond-level)
+  - Lock-free data structures
+  - Interrupt handling
+  - Kernel-level scheduling
+
+  **Virtual threads are for I/O-bound work**
+  - Network, file, database
+  - Thousands of virtual threads per platform thread
+  - Each virtual thread has small overhead
+
+  **Timer scheduling is different**
+  - Pure CPU work: tick counting
+  - Single shared timer wheel efficient
+  - newVirtualThreadPerTaskExecutor() adds overhead
+  - Would violate "virtual threads for I/O" principle
+
+  **Current design: One daemon platform thread**
+  - All timers managed by single thread
+  - Fair scheduling: no starvation
+  - Low latency: no thread creation per timer
+  - Scalable: 1000s of active timers on 1 thread
+  - Message delivery: non-blocking tell() (fast)
+  end note
+}
+
+Container_Boundary(use_cases, "Common Use Cases") {
+  note bottom
+  **1. Request Timeouts**
+  ref = sendAfter(5s, proc, TimeoutMsg)
+  Later, if no response:
+  handler receives TimeoutMsg
+  Can retry or fail
+
+  **2. Periodic Health Checks**
+  sendInterval(30s, proc, HealthCheck)
+  Every 30 seconds, check process health
+  Detect failures early
+
+  **3. Delayed Retries**
+  Failed operation?
+  sendAfter(1s, self, Retry)
+  Then after 1 second: try again
+
+  **4. Polling Mechanism**
+  sendInterval(100ms, proc, Poll)
+  Regular updates from external system
+  Process reacts to changes
+
+  **5. Circuit Breaker Reset**
+  sendAfter(2m, proc, ResetCircuit)
+  After failure, wait 2 min
+  Then try service again
+
+  **6. Session Expiry**
+  sendAfter(30m, proc, SessionExpired)
+  Automatic cleanup
+  No manual timeout tracking
+  end note
+}
+
+Container_Boundary(contrast_erlang, "Contrast: OTP timer Module") {
+  note bottom
+  **Erlang timer:send_after(Ms, Pid, Msg)**
+  - Send message after Ms milliseconds
+  - timer:cancel(TRef) to stop
+  - Messages in normal receive queue
+  - Kernel timer wheel manages all
+
+  **JOTP ProcTimer.sendAfter()**
+  - Same semantics, Java API
+  - ScheduledExecutorService backend
+  - Messages in LinkedTransferQueue
+  - Single daemon platform thread
+
+  **Behavioral Equivalence**
+  - Both send to mailbox (not direct call)
+  - Both provide TimerRef for cancellation
+  - Both don't block on message delivery
+  - Both support repeating (interval)
+  - Can compose with other OTP primitives
+  end note
+}
+
+Rel(scheduler_infrastructure, public_api, "backs")
+Rel(public_api, timer_ref, "returns")
+Rel(public_api, execution_flow, "demonstrates")
+Rel(send_after_method, execution_flow, "flows through")
+Rel(timer_ref_cancel, cancel_method, "implements")
+
+note bottom
+  **Implementation Key Points**
+
+  1. **Single Shared Scheduler**
+     - Static final ScheduledExecutorService
+     - One daemon platform thread
+     - Initialized on class load
+     - Never shutdown (JVM lifetime)
+
+  2. **Non-Blocking Delivery**
+     - Timer callback: target.tell(msg)
+     - tell() is non-blocking enqueue
+     - Callback completes in microseconds
+     - Timer thread never blocks
+
+  3. **TimerRef Wrapper**
+     - Wraps ScheduledFuture<?>
+     - Opaque handle for clients
+     - cancel() method: future.cancel(false)
+     - Safe to call multiple times
+
+  4. **Interval Handling**
+     - scheduleAtFixedRate() used
+     - First delay: full interval
+     - Subsequent: every interval
+     - Continues until cancel()
+
+  5. **Daemon Semantics**
+     - Daemon thread → JVM can exit
+     - No pending timers block shutdown
+     - Safe for production (doesn't prevent exit)
+  end note
+
+@enduml

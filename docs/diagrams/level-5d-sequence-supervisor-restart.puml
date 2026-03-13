@@ -1,0 +1,92 @@
+@startuml level-5d-sequence-supervisor-restart
+!define DIRECTION top to bottom
+title Level 5: Dynamic Sequence - Supervisor Restart on Child Crash
+
+participant "Child Process" as child
+participant "Virtual Thread\n(child)" as vt
+participant "Supervisor" as sup
+participant "Restart Policy\n(max 5 crashes/60s)" as policy
+participant "Restart Handler" as init
+
+child -> vt: processing messages
+note right of child
+  Child running normally
+  Handler processing messages
+end note
+activate child
+activate vt
+
+vt -> vt: process message
+note right of vt
+  State: processing = true
+  Handler throws Exception
+end note
+
+vt --> vt: exception caught
+deactivate vt
+deactivate child
+
+note right of vt
+  Crash detected!
+  Child process terminates
+  Virtual thread exits
+end note
+
+sup --> sup: detect child exit
+activate sup
+note right of sup
+  Supervisor monitors all children
+  Child no longer responding
+end note
+
+sup -> policy: record crash(timestamp)
+activate policy
+note right of policy
+  Restart window: 60 seconds
+  Current crashes: 1/5
+  Within limit - proceed with restart
+end note
+
+alt Too many restarts (5/60s)
+  policy --> sup: FAIL_FAST
+  sup --> sup: terminate supervisor
+  note right of sup
+    CRITICAL: Restart limit exceeded
+    Prevents crash loop
+    Fail-fast alerts ops
+  end note
+else Within limits (< 5/60s)
+  policy --> sup: OK - restart
+  deactivate policy
+
+  sup -> init: spawn new instance
+  activate init
+  note right of init
+    NEW virtual thread
+    NEW mailbox
+    SAME initial state
+    SAME handler
+  end note
+
+  init -> vt: create virtual thread
+  activate vt
+
+  vt -> init: handler.init(state)
+  activate init
+
+  init --> vt: ready
+  deactivate init
+
+  sup --> sup: register new child
+  deactivate sup
+  deactivate vt
+
+  note right of sup
+    Restart successful
+    New Proc<S,M> ref available
+    Old ref invalid (dead)
+    Callers must check if valid
+  end note
+end
+
+@enduml

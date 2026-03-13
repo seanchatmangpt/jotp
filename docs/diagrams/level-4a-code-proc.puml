@@ -1,0 +1,36 @@
+@startuml level-4a-code-proc
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Proc<S,M> Implementation Details
+
+Container_Boundary(procimpl, "Proc<S,M> Internal Structure") {
+
+  Component(virtualthread, "Virtual Thread", "Runtime", "Lightweight JEP 425\nStructuredTaskScope lifecycle\nCan yield at checkpoints\nMillions concurrent")
+
+  Component(mailbox, "LinkedTransferQueue<Envelope>", "Message Queue", "Transfer queue semantics\nConcurrent enqueue/dequeue\nLinked node allocation\nBlocking take/put operations")
+
+  Component(statehandler, "StateHandler<S,M>", "Handler Function", "Pure function: (S,M) -> (S, effects)\nSealed effect return\nNo side effects directly\nTransforms state via event")
+
+  Component(envelope, "Envelope<M>", "Message Wrapper", "Contains M message\nOptional sender: ProcRef\nTimestamp: Instant\nDeliveryGuarantee: AT_LEAST_ONCE/EXACTLY_ONCE")
+
+  Component(tell, "tell(msg: M): void", "Async Send", "Enqueue Envelope into mailbox\nNon-blocking (try-send on full)\nOptional timeout\nFire-and-forget pattern")
+
+  Component(ask, "ask<R>(msg: M, timeout: Duration): R", "Sync Request-Reply", "Create reply channel\nEnqueue with channel id\nBlock on reply future\nTimeout exception on exceed")
+
+  Component(receive, "Dequeue Loop", "Event Loop", "take() from mailbox\nInvoke handler(state, envelope.msg)\nContinue until Terminate\nHandle exit signals if trapped")
+
+  Component(lifecycle, "Lifecycle", "State Machine", "Running -> Terminating -> Terminated\nExit signal handling\nCleanup on terminate\nProcRef invalidation")
+
+  Rel(virtualthread, mailbox, "drives")
+  Rel(mailbox, envelope, "holds")
+  Rel(tell, mailbox, "enqueues to")
+  Rel(ask, tell, "extends with reply")
+  Rel(receive, statehandler, "invokes handler")
+  Rel(receive, lifecycle, "transitions")
+
+  note on link : Proc.spawn(init, handler, args) creates new Proc + returns ProcRef\nhandler executes on virtual thread\ntell = fire-and-forget, ask = request-reply\nexit signal trapped = ExitSignal message in mailbox
+}
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,70 @@
+@startuml level-5e-sequence-monitor-link
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title Process Monitor and Link Sequence
+
+participant "Monitoring Process" as MON
+participant "Link Source" as SRC
+participant "Link Target" as TGT
+participant "Monitor Sink" as SINK
+participant "Process Registry" as REG
+
+note over MON,SINK: Bidirectional Link vs Unilateral Monitor
+
+MON -> REG: whereis(name: atom)
+activate REG
+REG -> MON: Pid<State, Message>
+deactivate REG
+
+MON -> SRC: link(targetPid)
+activate SRC
+note over SRC: Establish bilateral link\nBoth processes will crash if either fails
+
+MON -> SINK: monitor(sourcePid)
+activate SINK
+note over SINK: Establish unilateral monitor\nReceive DOWN signal without crashing
+
+alt Source Process Crashes
+  SRC -> SRC: unhandled exception
+  activate SRC
+  note over SRC: Crash in source handler
+  SRC -> MON: ExitSignal(source, reason)
+  deactivate SRC
+
+  alt Link active
+    MON -> MON: receive ExitSignal
+    activate MON
+    note over MON: Link: bilateral crash\nMonitor also dies
+    MON -> TGT: ExitSignal (crash propagates)
+    deactivate MON
+  else Monitor only
+    SINK -> SINK: receive DownMessage
+    activate SINK
+    note over SINK: Monitor: unilateral\nSINK continues running
+    SINK -> SINK: handle down (cleanup only)
+    deactivate SINK
+  end
+end
+
+alt Target Process Crashes
+  TGT -> TGT: unhandled exception
+  activate TGT
+  note over TGT: Crash in target handler
+  TGT -> SRC: ExitSignal(target, reason)
+  deactivate TGT
+
+  alt Link active
+    SRC -> SRC: receive ExitSignal from link
+    activate SRC
+    note over SRC: Link: bilateral crash\nSource also dies
+    SRC -> MON: ExitSignal (crash propagates)
+    deactivate SRC
+  else Monitor only
+    SINK -> SINK: no notification from target
+    activate SINK
+    note over SINK: Monitor doesn't affect source\nContinues independent
+    deactivate SINK
+  end
+end
+
+@enduml

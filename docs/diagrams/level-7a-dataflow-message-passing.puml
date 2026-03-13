@@ -1,0 +1,88 @@
+@startuml level-7a-dataflow-message-passing
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Message Passing Data Flow
+caption JOTP: Async message routing through supervisor trees
+
+System_Boundary(jotp_system, "JOTP System") {
+  
+  System_Ext(client, "Client", "REST API")
+  
+  Container(api_proc, "APIHandler Process", "gen_server", "Receives HTTP requests")
+  
+  Container_Boundary(request_queue, "Message Queue") {
+    Component(mq1, "User Event", "SMEvent")
+    Component(mq2, "System Event", "SMEvent")
+  }
+  
+  Container(sm_proc, "StateMachine Process", "gen_statem", "State transitions")
+  
+  Container(db_proc, "DatabaseWorker Process", "gen_server", "DB operations")
+  
+  Container(monitor, "Monitor Process", "monitor/1", "Observes state")
+  
+  Container(reply_channel, "Reply Channel", "Mailbox", "Response delivery")
+  
+  System_Ext(response, "Client Response", "HTTP 200/500")
+  System_Ext(database, "PostgreSQL", "Persistent state")
+  System_Ext(logs, "Structured Logs", "stdout")
+}
+
+Rel(client, api_proc, "POST /order", "HTTP")
+Rel(api_proc, mq1, "enqueue User(OrderData)", "message")
+Rel(mq1, sm_proc, "deliver", "mailbox")
+Rel(sm_proc, db_proc, "ask(SaveOrder)", "sync call")
+Rel(db_proc, database, "INSERT", "JDBC")
+Rel(db_proc, reply_channel, "reply(Success)", "direct")
+Rel(reply_channel, api_proc, "return value", "mailbox")
+Rel(sm_proc, monitor, "send", "notification")
+Rel(monitor, logs, "log(OrderCreated)", "emit")
+Rel(api_proc, response, "respond 200", "HTTP")
+
+note on link client, api_proc
+  1. Client sends HTTP request
+  Request contains order data
+end note
+
+note on link api_proc, mq1
+  2. API handler converts HTTP
+  to SMEvent message
+  Enqueues in process mailbox
+end note
+
+note on link mq1, sm_proc
+  3. Virtual thread mailbox
+  delivers message to gen_statem
+  Non-blocking receive
+end note
+
+note on link sm_proc, db_proc
+  4. StateMachine asks DB process
+  Blocks until reply received
+  (timeout 5s)
+end note
+
+note on link db_proc, database
+  5. Database worker executes
+  JDBC INSERT
+  Synchronous to DB
+end note
+
+note on link db_proc, reply_channel
+  6. DB worker sends reply
+  Back through mailbox to SM
+end note
+
+note on link sm_proc, monitor
+  7. SM notifies all monitors
+  Asynchronous notification
+  Does not block SM
+end note
+
+note on link api_proc, response
+  8. API handler sends HTTP 200
+  To waiting HTTP client
+  Complete roundtrip in ~50ms
+end note
+
+@enduml

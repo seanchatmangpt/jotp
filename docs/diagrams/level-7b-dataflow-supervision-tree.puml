@@ -1,0 +1,76 @@
+@startuml level-7b-dataflow-supervision-tree
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Supervision Tree Data Flow
+caption JOTP: Fault propagation and recovery through tree hierarchy
+
+System_Boundary(jotp, "JOTP Supervision Tree") {
+  
+  Container(root_sup, "RootSupervisor", "ONE_FOR_ONE", "Top-level fault isolation")
+  
+  Container_Boundary(children1, "API Children (WORKER)") {
+    Container(api1, "APIHandler-1", "gen_server", "HTTP listener")
+    Container(api2, "APIHandler-2", "gen_server", "HTTP listener")
+  }
+  
+  Container_Boundary(children2, "Database Children (SUPERVISOR)") {
+    Container(db_sup, "DBSupervisor", "ONE_FOR_ONE", "Manages connections")
+    
+    Container_Boundary(db_children, "Pool") {
+      Container(conn1, "Conn-1", "gen_server", "Idle")
+      Container(conn2, "Conn-2", "gen_server", "Active query")
+      Container(conn3, "Conn-3", "gen_server", "Idle")
+    }
+  }
+  
+  Container_Boundary(children3, "Worker Children (WORKER)") {
+    Container(worker, "BackgroundWorker", "gen_server", "Job processor")
+  }
+  
+  System_Ext(external_db, "PostgreSQL", "External database")
+}
+
+Rel(root_sup, api1, "supervises", "link")
+Rel(root_sup, api2, "supervises", "link")
+Rel(root_sup, db_sup, "supervises", "link")
+Rel(root_sup, worker, "supervises", "link")
+
+Rel(db_sup, conn1, "supervises", "link")
+Rel(db_sup, conn2, "supervises", "link")
+Rel(db_sup, conn3, "supervises", "link")
+
+Rel(api1, external_db, "query", "JDBC")
+Rel(api2, external_db, "query", "JDBC")
+Rel(conn2, external_db, "query", "JDBC")
+
+note on link root_sup, api1
+  If API-1 crashes:
+  RootSupervisor restart only API-1
+  Strategy: ONE_FOR_ONE
+  Other children unaffected
+end note
+
+note on link db_sup, conn2
+  If Conn-2 crashes:
+  DBSupervisor restart only Conn-2
+  Pool continues operating
+  Other connections stay active
+end note
+
+note on link root_sup, db_sup
+  If DBSupervisor crashes:
+  All children (Conn-1,2,3) exit
+  RootSupervisor restarts DBSupervisor
+  Children restarted in order
+  Strategy: ONE_FOR_ALL per subtree
+end note
+
+note on link api1, external_db
+  Data flow: Async query execution
+  - Query sent (1ms)
+  - Process waits (mailbox receive)
+  - Response delivered (5-50ms)
+  - No blocking of other processes
+end note
+
+@enduml

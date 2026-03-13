@@ -1,0 +1,56 @@
+@startuml level-5a-sequence-process-spawn
+!define DIRECTION top to bottom
+title Level 5: Dynamic Sequence - Process Spawning
+
+actor Main as main
+participant "Supervisor" as sup
+participant "Virtual Thread" as vt
+participant "Mailbox" as mb
+participant "StateHandler" as handler
+
+main -> sup: supervise("service",\ninitState, handler)
+activate sup
+
+sup -> vt: spawn new virtual thread
+note right of vt
+  JEP 425: Virtual Threads
+  Lightweight, ~1KB memory
+  JVM schedules via scheduler
+end note
+activate vt
+
+vt -> mb: create mailbox
+note right of mb
+  Bounded queue: 1000 messages
+  FIFO delivery guarantee
+end note
+activate mb
+
+vt -> handler: handler.init(initState)
+note right of handler
+  Pure function:
+  (state, msg) -> new state
+  No side effects
+end note
+activate handler
+
+handler --> vt: returns ready
+deactivate handler
+
+vt -> sup: ready signal
+deactivate vt
+
+sup --> main: Proc<S, M> reference
+deactivate sup
+note right of main
+  Main now holds:
+  • pid: process identity
+  • mailbox: async queue
+  • Virtual thread: running loop
+
+  Ready to receive messages:
+  • tell(msg): async
+  • ask(msg, timeout): sync
+end note
+
+@enduml

@@ -1,0 +1,55 @@
+@startuml level-1a-system-context-main
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+HIDE_STEREOTYPE()
+title System Context: JOTP Framework - Core View
+
+Person(devs, "Java Developers", "Building enterprise\napplications")
+
+System_Boundary(jotp_system, "JOTP Framework") {
+    System(jotp, "JOTP", "OTP-equivalent primitives\nin pure Java 26")
+}
+
+System(java_app, "Java Application", "Spring Boot, Quarkus,\nor custom app")
+
+System(jvm, "Java Virtual Machine\n(Java 26)", "OpenJDK 26\nwith preview features")
+
+System(os, "Operating System", "Linux, macOS, Windows\n(process management)")
+
+System(kafka, "Apache Kafka", "Message broker for\ninter-service communication")
+
+System(db, "Database", "PostgreSQL, MySQL,\nMongoDB, etc.")
+
+System(external_apis, "External APIs", "REST, gRPC, HTTP services")
+
+System(monitoring, "Monitoring Stack", "Prometheus, Grafana, ELK\nJFR, async-profiler")
+
+Rel(devs, java_app, "Writes code for")
+Rel(java_app, jotp, "Uses")
+Rel(jotp, jvm, "Runs on")
+Rel(jvm, os, "Executes on")
+
+Rel(java_app, kafka, "Publishes/subscribes\nvia JOTP processes")
+Rel(java_app, db, "Persists state to")
+Rel(java_app, external_apis, "Calls via async handlers")
+
+Rel(java_app, monitoring, "Exports metrics &\nlogs to")
+
+note right of jotp
+  **Boundary of JOTP Framework:**
+  - 15 OTP primitives (Proc, Supervisor, etc.)
+  - Enterprise patterns (Circuit Breaker, Saga, etc.)
+  - Reactive messaging adapters
+  - All in pure Java 26, Java 21 compatible
+end note
+
+note bottom of java_app
+  **Application integrates:**
+  - JOTP for fault tolerance
+  - External services for business logic
+  - Databases for persistence
+  - Message brokers for integration
+end note
+
+SHOW_LEGEND()
+@enduml

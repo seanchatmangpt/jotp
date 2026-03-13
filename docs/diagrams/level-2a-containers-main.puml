@@ -1,0 +1,73 @@
+@startuml level-2a-containers-main
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+HIDE_STEREOTYPE()
+title Container Diagram: JOTP Framework - Main View
+
+Person(devs, "Java Developers", "Enterprise developers")
+
+System_Boundary(jotp_framework, "JOTP Framework (Java 26 Library)") {
+    Container(core_otp, "Core OTP Primitives", "Java 26 + Virtual Threads", "15 sealed-type primitives:\nProc, Supervisor, StateMachine,\nProcLink, ProcMonitor,\nProcRegistry, ProcTimer,\nEventManager, Result, etc.")
+
+    Container(enterprise_patterns, "Enterprise Patterns", "Production-ready implementations", "Patterns:\n- Circuit Breaker\n- Bulkhead/Isolation\n- Backpressure\n- Health monitoring\n- Saga coordination\n- Crash recovery")
+
+    Container(reactive_messaging, "Reactive Messaging", "Publisher/Subscriber patterns", "Message routing,\ntransformation,\naggregation,\nchannels,\nintegration patterns")
+
+    Container(dogfood, "Dogfood Examples", "Template-generated reference code", "GoF patterns,\ncore patterns,\nconcurrency patterns,\nsecurity patterns,\napi patterns")
+
+    Container(testing_utils, "Testing Utilities", "JUnit 5, jqwik, AssertJ", "Test data generation,\nproperty-based testing,\nasync assertions,\narchitecture rules")
+}
+
+System_Boundary(jvm_runtime, "Java Runtime") {
+    Container(java_app, "Java Application Code", "Spring Boot, Quarkus, custom", "Handlers, supervisors,\nstate machines,\nintegration code")
+
+    Container(jvm_core, "JVM Core", "Java 26 Virtual Machine", "Virtual threads,\nStructuredTaskScope,\nscoped values,\npattern matching")
+
+    Container(stdlib, "Java Standard Library", "java.*, javax.*", "Collections, Time API,\nHTTP client, NIO.2")
+}
+
+Rel(devs, java_app, "Writes handlers using")
+
+Rel(java_app, core_otp, "Uses OTP primitives")
+Rel(java_app, enterprise_patterns, "Implements patterns from")
+Rel(java_app, reactive_messaging, "Publishes/subscribes via")
+Rel(java_app, dogfood, "References example code from")
+Rel(java_app, testing_utils, "Tests with")
+
+Rel(core_otp, jvm_core, "Runs on")
+Rel(enterprise_patterns, core_otp, "Builds on")
+Rel(reactive_messaging, core_otp, "Builds on")
+Rel(testing_utils, core_otp, "Tests with")
+
+Rel(jvm_core, stdlib, "Uses")
+
+note right of core_otp
+  **15 OTP Primitives:**
+  Proc<S,M>, ProcRef<S,M>,
+  Supervisor, CrashRecovery,
+  StateMachine<S,E,D>,
+  ProcLink, ProcMonitor,
+  ProcRegistry, ProcTimer,
+  ProcSys, ProcLib,
+  EventManager<E>, Parallel,
+  Result<T,E>, ExitSignal
+end note
+
+note right of enterprise_patterns
+  **7 Production Patterns:**
+  Built on OTP primitives
+  for reliability, isolation,
+  recovery, coordination
+end note
+
+note right of jvm_core
+  **Key Java 26 Features:**
+  - Virtual Threads (millions)
+  - Structured Concurrency
+  - Sealed Types (exhaustiveness)
+  - Pattern Matching (binding)
+  - Scoped Values (modern ThreadLocal)
+end note
+
+SHOW_LEGEND()
+@enduml

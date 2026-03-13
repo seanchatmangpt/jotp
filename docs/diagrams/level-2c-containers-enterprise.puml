@@ -1,0 +1,219 @@
+@startuml level-2c-containers-enterprise
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+HIDE_STEREOTYPE()
+
+' ==========================================
+' JOTP Enterprise Pattern Containers (Level 2C)
+' ==========================================
+'
+' This container diagram illustrates the eight
+' enterprise-grade pattern containers that form
+' the architectural foundation of JOTP. Each
+' container represents a cohesive, deployable unit
+' within the io.github.seanchatmangpt.jotp module.
+'
+' Container Taxonomy:
+' 1. Core OTP Primitives (11 foundational classes)
+' 2. Supervision & Restart Strategies (3 classes)
+' 3. State Machine Engine (7 classes)
+' 4. Process Communication (5 classes)
+' 5. Fault Tolerance & Recovery (4 classes)
+' 6. Observability & Introspection (3 classes)
+' 7. Global Services (3 classes)
+' 8. Integration & Adapters (6 classes)
+
+System_Boundary("c1", "JOTP Enterprise Patterns") {
+
+    ' Container 1: Core OTP Primitives
+    Container(core_primitives, "Core OTP Primitives", "Java Sealed Types",
+              "11 lightweight virtual-thread mailbox processes:\n\n" +
+              "- Proc<S,M>: stateful message handler\n" +
+              "- ProcRef<S,M>: stable process identity\n" +
+              "- ProcessId: opaque process handle\n" +
+              "- Mailbox<M>: FIFO message queue\n" +
+              "- ProcessState<S>: sealed state wrapper\n" +
+              "- Result<T,E>: railway-oriented success/failure\n" +
+              "- StartResult: start-link handshake outcomes\n" +
+              "- ProcessConfig: runtime tuning parameters\n" +
+              "- MessageHandler<S,M>: pure message-to-state function\n" +
+              "- ProcessBuilder: fluent initialization API\n" +
+              "- ProcessShutdown: graceful termination")
+
+    ' Container 2: Supervision & Restart Strategies
+    Container(supervision, "Supervision & Restart", "Fault-Tolerance Engine",
+              "Hierarchical process supervision with restart windows:\n\n" +
+              "- Supervisor: tree root with ONE_FOR_ONE,\n" +
+              "  ONE_FOR_ALL, REST_FOR_ONE, SIMPLE_ONE_FOR_ONE\n" +
+              "- ChildSpec<S,M>: per-child restart policy\n" +
+              "- RestartType: PERMANENT/TRANSIENT/TEMPORARY\n" +
+              "- Shutdown: timeout, infinity, brutal-kill\n" +
+              "- ChildType: WORKER vs SUPERVISOR\n" +
+              "- AutoShutdown: cascade termination rules\n" +
+              "- RestartWindow: sliding exponential backoff")
+
+    ' Container 3: State Machine Engine
+    Container(state_machine, "State Machine Engine", "gen_statem Implementation",
+              "Full Erlang gen_statem parity in Java 26:\n\n" +
+              "- StateMachine<S,E,D>: sealed state hierarchy\n" +
+              "- SMEvent<E>: User/StateTimeout/EventTimeout/\n" +
+              "  GenericTimeout/Internal/Enter events\n" +
+              "- Action: Postpone/NextEvent/Set/Cancel timeouts\n" +
+              "  /Reply sealed hierarchy\n" +
+              "- Transition: NextState/KeepState/RepeatState/\n" +
+              "  Stop/StopAndReply with action lists\n" +
+              "- TransitionFn<S,E,D>: pure state function\n" +
+              "- StateMachineBuilder: fluent construction\n" +
+              "- StateEnter: on-entry action handler")
+
+    ' Container 4: Process Communication
+    Container(communication, "Process Communication", "Messaging Patterns",
+              "Typed synchronous and asynchronous messaging:\n\n" +
+              "- ask(Msg, timeout): gen_server:call equivalent\n" +
+              "- tell(Msg): async fire-and-forget\n" +
+              "- cast(Msg): gen_server:cast equivalent\n" +
+              "- ReplyTo<R>: callback for async replies\n" +
+              "- Timeout: millisecond-precision delivery SLA\n" +
+              "- MessageOrderGuarantee: FIFO semantics proof\n" +
+              "- RequestId: correlation for response matching\n" +
+              "- DeadLetterQueue: undelivered message capture")
+
+    ' Container 5: Fault Tolerance & Recovery
+    Container(fault_tolerance, "Fault Tolerance & Recovery", "Resilience Patterns",
+              "Supervised crash recovery with metrics:\n\n" +
+              "- CrashRecovery: isolated retry with backoff\n" +
+              "- ExitSignal: abnormal/normal termination signals\n" +
+              "- trapExits(boolean): exit signal trapping\n" +
+              "- link(Pid): bilateral crash propagation\n" +
+              "- demonitor(Ref): unilateral observer mode\n" +
+              "- CircuitBreaker: cascading fault isolation\n" +
+              "- RetryPolicy: exponential backoff + jitter\n" +
+              "- FailureMetrics: recovery attempt tracking")
+
+    ' Container 6: Observability & Introspection
+    Container(observability, "Observability & Introspection", "sys Module Parity",
+              "Process inspection without stopping:\n\n" +
+              "- ProcSys.getState(pid): extract handler state\n" +
+              "- ProcSys.suspend(pid): pause message delivery\n" +
+              "- ProcSys.resume(pid): resume from suspension\n" +
+              "- ProcSys.statistics(pid): mailbox size, message count\n" +
+              "- ProcessMetrics: heap usage, GC pressure\n" +
+              "- MailboxStats: queue depth, latency percentiles\n" +
+              "- DebugTrace: message flow logging\n" +
+              "- HeapSnapshot: off-heap memory analysis")
+
+    ' Container 7: Global Services
+    Container(global_services, "Global Services", "Named Registries & Timers",
+              "Cluster-aware naming and scheduled delivery:\n\n" +
+              "- ProcRegistry.register(name, pid): global lookup\n" +
+              "- ProcRegistry.whereis(name): name-to-pid resolution\n" +
+              "- ProcRegistry.registered(): active name list\n" +
+              "- ProcTimer.sendAfter(delay, msg): scheduled delivery\n" +
+              "- ProcTimer.sendInterval(interval, msg): recurring\n" +
+              "- ProcTimer.cancel(ref): timer cancellation\n" +
+              "- ClusterRegistry: distributed name replication\n" +
+              "- TimerWheel: low-latency scheduler")
+
+    ' Container 8: Integration & Adapters
+    Container(integration, "Integration & Adapters", "Ecosystem Bridges",
+              "Spring/Quarkus/GraalVM integration points:\n\n" +
+              "- ProcLib.startLink(init, handler): OTP handshake\n" +
+              "- Parallel: structured fan-out (StructuredTaskScope)\n" +
+              "- EventManager<E>: gen_event typed manager\n" +
+              "- CompletableFutureAdapter: bridge to async/await\n" +
+              "- ReactiveStreamsBridge: RxJava/Project Reactor\n" +
+              "- GraalVMNativeImage: reflection-free metadata\n" +
+              "- SpringBootIntegration: @EnableJOTP annotation\n" +
+              "- KubernetesOperator: health checks & readiness")
+
+}
+
+' ==========================================
+' Inter-Container Relationships
+' ==========================================
+
+Rel(core_primitives, supervision, "spawned as children")
+Rel(supervision, core_primitives, "supervises & restarts")
+
+Rel(core_primitives, state_machine, "driver for stateful processes")
+Rel(state_machine, core_primitives, "encapsulates process state")
+
+Rel(core_primitives, communication, "uses for message delivery")
+Rel(communication, core_primitives, "targets process mailbox")
+
+Rel(supervision, fault_tolerance, "triggers recovery policies")
+Rel(fault_tolerance, supervision, "reports restart exhaustion")
+
+Rel(core_primitives, observability, "subject of introspection")
+Rel(observability, core_primitives, "inspects without stopping")
+
+Rel(core_primitives, global_services, "registered with names/timers")
+Rel(global_services, core_primitives, "delivers scheduled messages")
+
+Rel(core_primitives, integration, "exposed via adapters")
+Rel(integration, core_primitives, "bridges Java ecosystem")
+
+Rel(state_machine, communication, "internal event dispatch")
+
+Rel(supervision, global_services, "uses for child registration")
+
+Rel(fault_tolerance, observability, "monitors recovery metrics")
+
+' ==========================================
+' Architecture Notes
+' ==========================================
+'
+' DESIGN PRINCIPLES:
+'
+' 1. Virtual Threads: All process containers use Java 21+ virtual
+'    threads (lightweight, millions per JVM, no async/await boilerplate).
+'    Preview API: --enable-preview required at compile & runtime.
+'
+' 2. Sealed Types: Every container uses sealed types for exhaustiveness
+'    checking in switch expressions (compile-time safety).
+'
+' 3. Pure Functions: Message handlers are referentially transparent
+'    (Proc<S,M> enforces immutability of state transitions).
+'
+' 4. Supervision Tree: Process hierarchy enables fault isolation
+'    and automatic restart (let it crash philosophy).
+'
+' 5. OTP Fidelity: 15 primitives provide Erlang/OTP feature parity:
+'    spawn, link, monitor, supervisor, gen_server, gen_statem, etc.
+'    Feature matrix documented in .claude/ARCHITECTURE.md.
+'
+' 6. Java 26 Language Features:
+'    - Pattern matching (sealed type + switch expressions)
+'    - Record patterns (destructuring nested data)
+'    - Virtual threads (StructuredTaskScope for Parallel)
+'    - Scoped values (ThreadLocal replacement)
+'
+' DEPLOYMENT TOPOLOGY:
+'
+' Development:  Single JVM with 10K-100K processes per supervisor
+' Staging:      Multi-JVM with Kubernetes DNS + leader election
+' Production:   Multi-region with distributed registry + WAL
+'
+' SLA TARGETS:
+'
+' - Availability: 99.95%+ (four nines plus)
+' - Latency: <50ms p99 for ask(msg, timeout)
+' - Recovery: <1s restart window for transient faults
+' - Throughput: 100K+ msg/sec per Proc<S,M>
+'
+' CONTAINER DEPENDENCIES (Compilation Order):
+'
+' 1. core_primitives      (foundational, no deps)
+' 2. communication        (extends core_primitives)
+' 3. state_machine        (extends core_primitives)
+' 4. fault_tolerance      (extends core_primitives, communication)
+' 5. observability        (extends core_primitives)
+' 6. supervision          (extends core_primitives, fault_tolerance)
+' 7. global_services      (extends core_primitives)
+' 8. integration          (extends all others, external bridges)
+'
+
+SHOW_LEGEND()
+
+@enduml

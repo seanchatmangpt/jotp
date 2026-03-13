@@ -1,0 +1,95 @@
+@startuml level-4r-code-application-lifecycle
+!define DIRECTION top to bottom
+skinparam {
+    backgroundColor #F5F5F5
+    defaultFontSize 11
+}
+skinparam rectangle {
+    BackgroundColor<<startup>> #C8E6C9
+    BackgroundColor<<running>> #BBDEFB
+    BackgroundColor<<shutdown>> #FFCDD2
+    BorderColor #1B5E20
+}
+
+title Level 4: Application Lifecycle - Startup, Running, Shutdown
+
+rectangle "STARTUP PHASE" as startup <<startup>> {
+    rectangle "1. Process Main Entry\n(public static void main)" as s1
+    rectangle "2. Initialize Config\n(read env, properties)" as s2
+    rectangle "3. Create RootSupervisor\nSTRATEGY: ONE_FOR_ALL\nRestart window: 60s\nMax restarts: 10" as s3
+    rectangle "4. Start Core Services\n(via supervisor.supervise())" as s4
+    rectangle "5. ProcLib.initAck()\nWait for all children ready" as s5
+    rectangle "6. Application READY\n(health check: OK)" as s6
+}
+
+rectangle "RUNNING PHASE" as running <<running>> {
+    rectangle "Processing loop:\n• tell() messages to services\n• ask() for request-reply\n• Supervision handles crashes\n• Metrics collected" as r1
+}
+
+rectangle "SHUTDOWN PHASE" as shutdown <<shutdown>> {
+    rectangle "1. Receive SIGTERM\n(kill -15 pid)" as sh1
+    rectangle "2. Graceful shutdown signal\n→ RootSupervisor.stop()" as sh2
+    rectangle "3. Terminate all children\n(in reverse order)\nTimeout: 10s per child" as sh3
+    rectangle "4. Final cleanup\n(flush metrics, close DB)" as sh4
+    rectangle "5. Exit process\n(clean: all resources released)" as sh5
+}
+
+s1 --> s2
+s2 --> s3
+s3 --> s4
+s4 --> s5
+s5 --> s6
+
+s6 --> r1: ✓ Ready state
+
+r1 --> sh1: SIGTERM signal
+
+sh1 --> sh2
+sh2 --> sh3
+sh3 --> sh4
+sh4 --> sh5
+
+note right of s3
+  Supervisor configuration:
+  RootSupervisor(
+    strategy: ONE_FOR_ALL,
+    maxRestarts: 10,
+    within: 60s
+  )
+end note
+
+note right of s5
+  ProcLib.initAck() ensures
+  all children started cleanly.
+  If any child fails during init,
+  exception propagates to main.
+  Prevents "phantom" startup.
+end note
+
+note right of r1
+  Main application runs.
+  Services process independently.
+  Supervision detects crashes:
+  • Child crashes → restart
+  • Too many restarts → fail-fast
+  • Parent sees failure → handle
+end note
+
+note right of sh3
+  Graceful shutdown order:
+  1. Leaf services first
+  2. Data services next
+  3. Root supervisor last
+
+  Each child gets timeout
+  to flush buffers/close connections
+  After timeout: brutal kill
+end note
+
+note right of sh5
+  SUCCESS: All resources freed
+  FAILURE: Some thread still running
+           (investigate leaks)
+end note
+
+@enduml

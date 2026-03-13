@@ -1,0 +1,116 @@
+@startuml level-3a-components-process-mgmt
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+HIDE_STEREOTYPE()
+
+title JOTP Level 3: Process Management Components
+
+Container_Boundary(procmgmt, "Process Management") {
+
+  Component(proc, "Proc<S,M>", "Core Process", "Virtual thread wrapper\nLinkedTransferQueue mailbox\nStateHandler<S,M> callback\nSealed type for exhaustiveness")
+
+  Component(procref, "ProcRef<S,M>", "Process Reference", "Stable Pid handle\nOpaque generation counter\nSurvives supervisor restart\nEquality/hashCode impl")
+
+  Component(proclink, "ProcLink", "Bilateral Link", "spawn_link equivalent\nBilateral crash propagation\nBoth die if one fails\nLink registry per process")
+
+  Component(procmonitor, "ProcMonitor", "Unilateral Monitor", "monitor(process, Pid) pattern\nUnilateral DOWN notifications\nDoes NOT kill watcher\nDemons via demonitor()")
+
+  Component(procregistry, "ProcRegistry", "Name Table", "Global process registry\nregister/whereis/unregister\nAuto-deregister on exit\nThread-safe ConcurrentHashMap")
+
+  Component(proctimer, "ProcTimer", "Message Scheduler", "sendAfter(delay, msg)\nScheduled ScheduledExecutorService\nCancel support\nTimer reference tracking")
+
+  Component(procsys, "ProcSys", "Process Introspection", "get_state/suspend/resume\nStatistics collection\nRunnable state inspection\nNo-stop debugging")
+
+  Component(proclib, "ProcLib", "Startup Handshake", "start_link blocking\nInitAck() synchronization\nStartResult<Ok|Err> sealed\nTwo-phase startup")
+
+  Component(exitsignal, "ExitSignal", "Exit Message", "Delivered when trapExits=true\nContains Pid + reason\nReason sealed: Normal/Kill/Other\nMailbox message record")
+
+  Component(envelope, "Envelope<M>", "Message Wrapper", "Encapsulates message type\nSender information (optional)\nTimestamp metadata\nDelivery guarantee info")
+
+  Rel(proc, procref, "returns on spawn")
+  Rel(proc, envelope, "receives via tell()")
+  Rel(procref, proc, "references stable")
+  Rel(proclink, proc, "bilateral crash")
+  Rel(procmonitor, proc, "monitors unilaterally")
+  Rel(procregistry, procref, "registers/looks up")
+  Rel(proctimer, proc, "sends delayed msg")
+  Rel(procsys, proc, "inspects/controls")
+  Rel(proclib, proc, "handshakes during init")
+  Rel(exitsignal, proc, "sent when trapped")
+
+  note right of proc
+    **Proc<S,M>** — OTP's spawn/3:
+    Virtual-thread mailbox using LinkedTransferQueue.
+    State handler interface: StateHandler<S,M>.
+    Receive pattern: enqueue -> dequeue -> handle.
+    Sealed type for exhaustiveness.
+  end note
+
+  note right of procref
+    **ProcRef<S,M>** — Stable process identity:
+    Opaque generation counter survives supervisor restarts.
+    Equality based on generation, not thread identity.
+    Enables process reference equality across lifecycle.
+  end note
+
+  note right of proclink
+    **ProcLink** — Bilateral crash propagation:
+    spawn_link/3 semantics: both die if one crashes.
+    Link registry per process (multiple links allowed).
+    Unlinks on normal termination.
+  end note
+
+  note right of procmonitor
+    **ProcMonitor** — Unilateral monitoring:
+    monitor(process, Pid) returns Pid + DOWN message on crash.
+    Does NOT kill the monitoring process.
+    demonitor(ref) cancels; stale DOWN discarded.
+  end note
+
+  note right of procregistry
+    **ProcRegistry** — Global name table:
+    register(name, pid) / whereis(name) / unregister(name).
+    Auto-deregisters when process exits normally/abnormally.
+    Thread-safe ConcurrentHashMap backend.
+  end note
+
+  note right of proctimer
+    **ProcTimer** — Timed message delivery:
+    sendAfter(delay, msg) -> ScheduledExecutorService.
+    sendInterval(period, msg) for recurring.
+    cancel(ref) stops; stale messages discarded.
+  end note
+
+  note right of procsys
+    **ProcSys** — Process introspection:
+    get_state() retrieves current State without stopping.
+    suspend() / resume() pauses/unpauses mailbox delivery.
+    statistics() for profiling: message count, run time.
+  end note
+
+  note right of proclib
+    **ProcLib** — Startup handshake:
+    start_link blocks caller until child calls initAck().
+    StartResult<Ok<T> | Err<E>> sealed return type.
+    Enables ordering: parent waits for child initialization.
+  end note
+
+  note right of exitsignal
+    **ExitSignal** — Crash notification:
+    Delivered as mailbox message when trapExits=true.
+    Contains Pid + reason (sealed: Normal/Kill/Other).
+    Enables "let it crash" retry logic in handler.
+  end note
+
+  note right of envelope
+    **Envelope<M>** — Message metadata:
+    Wraps message with optional sender pid.
+    Timestamp and delivery guarantee info.
+    Enables correlation IDs, causality tracking.
+  end note
+
+  note on link : Tell pattern: sender -> tell(msg) -> enqueue(Envelope) -> dequeue -> handler -> state update
+  note on link : Ask pattern: caller -> ask(msg, timeout) -> reply channel -> unblock caller
+}
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,64 @@
+@startuml level-6c-deployment-containerized
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+title Containerized Deployment
+caption JOTP: Docker/Kubernetes pod orchestration with sidecar patterns
+
+Deployment_Node(k8s, "Kubernetes Cluster", "") {
+  
+  Deployment_Node(pod1, "Pod: jotp-api", "") {
+    Deployment_Node(cont1, "Container: jotp-app", "Docker") {
+      Component(jvm_app, "JVM Process", "OpenJDK 26") {
+        description = "JOTP application"
+      }
+      Component(sup, "RootSupervisor", "ONE_FOR_ALL") {
+        description = "App supervision tree"
+      }
+    }
+    
+    Deployment_Node(cont_sidecar, "Container: telemetry-sidecar", "Docker") {
+      Component(collector, "OpenTelemetry", "Collector") {
+        description = "Trace/metric collection"
+      }
+    }
+  }
+  
+  Deployment_Node(pod2, "Pod: jotp-worker", "") {
+    Deployment_Node(cont2, "Container: jotp-app", "Docker") {
+      Component(jvm_worker, "JVM Process", "OpenJDK 26") {
+        description = "Background workers"
+      }
+    }
+  }
+  
+  Deployment_Node(svc, "Services", "") {
+    Component(svc_api, "Service: api", "Load Balancer") {
+      description = "Routes to api pods"
+    }
+    Component(svc_worker, "Service: worker", "Headless") {
+      description = "Worker discovery"
+    }
+  }
+  
+  Deployment_Node(storage, "Persistent Storage", "") {
+    Component(pvc, "PersistentVolume", "NFS") {
+      description = "State/cache"
+    }
+  }
+}
+
+Deployment_Node(external, "External", "") {
+  Component(prometheus, "Prometheus", "Monitoring") {
+    description = "Scrape metrics"
+  }
+  Component(jaeger, "Jaeger", "Tracing") {
+    description = "Distributed traces"
+  }
+}
+
+Rel(jvm_app, collector, "emit telemetry")
+Rel(collector, prometheus, "push metrics")
+Rel(collector, jaeger, "push traces")
+Rel(svc_api, jvm_app, "route traffic")
+
+@enduml

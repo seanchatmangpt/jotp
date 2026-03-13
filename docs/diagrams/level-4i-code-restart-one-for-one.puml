@@ -1,0 +1,173 @@
+@startuml level-4i-code-restart-one-for-one
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+HIDE_STEREOTYPE()
+
+title JOTP Level 4: Restart Strategy - ONE_FOR_ONE
+
+Container_Boundary(strategy_def, "ONE_FOR_ONE Semantics") {
+  note right
+  **Rule: Only restart the crashed child**
+
+  Supervisor has children: [A, B, C, D]
+
+  If B crashes:
+  ✓ B is restarted (new instance)
+  ✗ A, C, D unaffected
+  ✗ No cascade
+
+  Ideal for:
+  - Independent workers (HTTP handlers, db connections)
+  - Fault isolation
+  - Stateless pools
+  end note
+}
+
+Container_Boundary(code_structure, "Implementation Structure") {
+  Component(child_spec_list, "List<ChildSpec<S,M>>", "State", "Ordered list of child specs\nMaintains startup order")
+
+  Component(proc_map, "Map<String, ProcRef<S,M>>", "State", "childId → live process ref\nUpdated on restart")
+
+  Component(restart_window, "MaxRestarts, Window Duration", "Config", "Sliding window (e.g., 3 restarts / 30 sec)\nPrevents infinite loops")
+
+  Component(crash_history, "Deque<Instant> crashTimes", "State", "Crash timestamps\nUsed to check window")
+}
+
+Container_Boundary(crash_handler, "ONE_FOR_ONE Crash Handler") {
+  Component(step1, "1. Child crashes (exception)", "Event", "Supervisor detects exit")
+
+  Component(step2, "2. Get child's ChildSpec", "Lookup", "By id from child_spec_list")
+
+  Component(step3, "3. Check restart intensity", "Decision", "Count crashes in window\nExceeds maxRestarts → give up")
+
+  Component(step4a, "4a. Give up (cascade exit)", "Failure", "Supervisor exits\nAll children terminated")
+
+  Component(step4b, "4b. Restart the child", "Restart", "Call stateFactory()\nCreate new Proc\nUpdate proc_map[id]")
+
+  Component(step5, "5. Return to event loop", "Continue", "Monitor remaining children")
+
+  Rel(step1, step2, "lookup")
+  Rel(step2, step3, "check")
+  Rel(step3, step4a, "if max exceeded")
+  Rel(step3, step4b, "if within limit")
+  Rel(step4b, step5, "restart done")
+}
+
+Container_Boundary(restart_detail, "Detailed Restart (ONE_FOR_ONE)") {
+  Component(old_proc, "Old Proc (crashed)", "State Before", "lastError set\nVirtual thread exited")
+
+  Component(remove_crash, "1. Record crash", "Action", "Add Instant.now() to crashTimes\nDeque.add(crashTime)")
+
+  Component(check_intensity, "2. Check intensity", "Action", "While (crashTimes.front < now - window)\n  crashTimes.removeFirst()\nIf size >= maxRestarts: GIVE_UP")
+
+  Component(new_proc, "3. Create new Proc", "Action", "S state = spec.stateFactory()\nProc<S,M> proc = new Proc<>(state, handler)")
+
+  Component(update_ref, "4. Update ProcRef", "Action", "procMap[childId] = newProcRef\nOld reference swapped internally")
+
+  Component(no_affect_others, "5. Other children: NO CHANGE", "Effect", "A, C, D continue running\nNo kill, no restart")
+
+  Rel(old_proc, remove_crash, "triggers")
+  Rel(remove_crash, check_intensity, "then")
+  Rel(check_intensity, new_proc, "then")
+  Rel(new_proc, update_ref, "then")
+  Rel(update_ref, no_affect_others, "result")
+}
+
+Container_Boundary(timing_diagram, "Timing Diagram: ONE_FOR_ONE") {
+  note bottom
+  **Time Axis (Supervisor Loop)**
+
+  t=0: [A:OK] [B:OK] [C:OK] [D:OK]
+  t=5: [A:OK] [B:CRASH] [C:OK] [D:OK]
+        Detect crash in supervisor
+  t=6: [A:OK] [B:RESTART] [C:OK] [D:OK]
+        New B spawned, old B ref updated
+  t=10: [A:OK] [B:OK] [C:OK] [D:OK]
+        All running again
+        (A, C, D never stopped)
+
+  **Compared to ONE_FOR_ALL**
+
+  ONE_FOR_ALL same scenario:
+  t=5: [A:KILL] [B:CRASH] [C:KILL] [D:KILL]
+        ALL children killed
+  t=6: [A:RESTART] [B:RESTART] [C:RESTART] [D:RESTART]
+        ALL children restarted
+  t=10: [A:OK] [B:OK] [C:OK] [D:OK]
+  end note
+}
+
+Container_Boundary(use_cases, "When to Use ONE_FOR_ONE") {
+  note bottom
+  **Good Use Cases:**
+
+  1. HTTP request handler pool
+     - Each handler stateless
+     - One handler crashes → restart only it
+     - Other handlers serve requests normally
+
+  2. Database connection pool
+     - 10 connections
+     - One connection drops → restart it
+     - Other 9 handle queries
+
+  3. Microservice parallel workers
+     - 5 worker processes
+     - One worker fails → restart it
+     - Others continue
+
+  4. Decoupled subsystems
+     - Logger crashes → restart logger only
+     - Payment system crashes → restart payment
+     - Web server unaffected
+
+  **Avoid ONE_FOR_ONE if:**
+  - Children depend on each other
+  - Shared state across children
+  - Restart order matters
+  - Need atomic all-or-nothing
+  end note
+}
+
+Container_Boundary(comparison, "ONE_FOR_ONE vs Others") {
+  note bottom
+  **ONE_FOR_ONE**
+  - Restart: only crashed child
+  - Other children: unaffected
+  - Use: independent workers
+
+  **ONE_FOR_ALL**
+  - Restart: all children
+  - Other children: also restarted
+  - Use: coordinated group
+
+  **REST_FOR_ONE**
+  - Restart: crashed + all started after
+  - Other children: earlier ones unaffected
+  - Use: dependency chains
+  end note
+}
+
+Rel(strategy_def, code_structure, "defines")
+Rel(code_structure, crash_handler, "used by")
+Rel(crash_handler, restart_detail, "detail")
+Rel(restart_detail, timing_diagram, "visualizes")
+
+note bottom
+  **Implementation: Map Lookup**
+
+  Supervisor.ONE_FOR_ONE restart algorithm:
+  1. Detect crash (VirtualThread exception)
+  2. procMap.get(childId) → find spec
+  3. Validate restart intensity (sliding window)
+  4. Create new Proc from spec.stateFactory
+  5. Update procMap[childId] with new instance
+  6. Continue event loop
+
+  Other entries in procMap unchanged
+  Other VirtualThreads continue execution
+  No message pass between children
+  Truly independent restart
+end note
+
+@enduml
