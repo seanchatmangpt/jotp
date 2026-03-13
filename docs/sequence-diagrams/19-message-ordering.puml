@@ -1,0 +1,128 @@
+@startuml 19-message-ordering
+title JOTP: Message Ordering Guarantees (FIFO Mailbox Semantics)
+skinparam backgroundColor #f0f0f0
+skinparam sequence {
+    BoxBackgroundColor LightBlue
+    LifeLineBorderColor DimGray
+    LifeLineBackgroundColor White
+}
+
+participant Client
+participant "Mailbox\n(LinkedTransferQueue)"
+participant "Proc<S,M>\n(message loop)"
+participant Logger
+
+autonumber
+
+note over Client, Logger
+  FIFO Mailbox Semantics:
+  - All messages from ANY sender
+    are ordered in arrival sequence
+  - Messages NOT delivered out-of-order
+  - State handler sees deterministic sequence
+end note
+
+note over Client, Logger
+  SCENARIO: Three clients send messages
+  in rapid sequence. Proc must see
+  all three in order.
+end note
+
+Client ->> "Mailbox\n(LinkedTransferQueue)": offer(Msg-A)
+note right of "Mailbox\n(LinkedTransferQueue)"
+  T=0µs: Msg-A enqueued
+end note
+
+Client ->> "Mailbox\n(LinkedTransferQueue)": offer(Msg-B)
+note right of "Mailbox\n(LinkedTransferQueue)"
+  T=1µs: Msg-B enqueued
+end note
+
+Client ->> "Mailbox\n(LinkedTransferQueue)": offer(Msg-C)
+note right of "Mailbox\n(LinkedTransferQueue)"
+  T=2µs: Msg-C enqueued
+  Queue: [A, B, C]
+end note
+
+"Proc<S,M>" ->> "Mailbox\n(LinkedTransferQueue)": poll()
+activate "Proc<S,M>"
+
+"Mailbox\n(LinkedTransferQueue)" ->> "Proc<S,M>": return Msg-A
+note right of "Proc<S,M>"
+  T=100µs: Message loop
+  begins processing
+end note
+
+"Proc<S,M>" ->> Logger: log("Processing Msg-A")
+"Proc<S,M>" ->> "Proc<S,M>": handle(state, Msg-A)
+
+note right of "Proc<S,M>"
+  State updates based on A
+  state = applyMsg-A(state)
+end note
+
+"Proc<S,M>" ->> "Mailbox\n(LinkedTransferQueue)": poll()
+"Mailbox\n(LinkedTransferQueue)" ->> "Proc<S,M>": return Msg-B
+
+"Proc<S,M>" ->> Logger: log("Processing Msg-B")
+"Proc<S,M>" ->> "Proc<S,M>": handle(state, Msg-B)
+
+note right of "Proc<S,M>"
+  State depends on prior state from A
+  state = applyMsg-B(state)
+  Ordering is CRITICAL for correctness
+end note
+
+"Proc<S,M>" ->> "Mailbox\n(LinkedTransferQueue)": poll()
+"Mailbox\n(LinkedTransferQueue)" ->> "Proc<S,M>": return Msg-C
+
+"Proc<S,M>" ->> Logger: log("Processing Msg-C")
+"Proc<S,M>" ->> "Proc<S,M>": handle(state, Msg-C)
+
+note right of "Proc<S,M>"
+  Final state depends on
+  A → B → C sequence
+  Not A → C → B (would be wrong)
+end note
+
+deactivate "Proc<S,M>"
+
+---
+
+note over Client, Logger
+  ADVANCED: Causal Ordering in State Machines
+
+  State machine transitions create causal chains:
+  Event-A → EventTimeout-A → User-Reply-A
+
+  Mailbox preserves this causality:
+  - StateTimeout actions insert events
+  - Those events queued AFTER user events sent first
+  - Ensures causality not violated
+end note
+
+participant StateMachine
+
+StateMachine ->> "Mailbox\n(LinkedTransferQueue)": offer(UserEvent-X)
+note right of "Mailbox\n(LinkedTransferQueue)"
+  User event arrives
+end note
+
+StateMachine ->> StateMachine: state transition\n→ action(SetStateTimeout)
+StateMachine ->> "Mailbox\n(LinkedTransferQueue)": insertEventAfterTimeout(StateTimeout-X)
+
+note right of "Mailbox\n(LinkedTransferQueue)"
+  Timeout inserted
+  Queue: [UserEvent-X, StateTimeout-X]
+  (timeout will fire ~100ms later)
+end note
+
+note over Client, Logger
+  GUARANTEE: Causal ordering is preserved
+  - User events arrive first
+  - Timeouts fire only after delay
+  - No message reordering violates causality
+  - State machine logic remains deterministic
+end note
+
+@enduml

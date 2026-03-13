@@ -1,0 +1,149 @@
+@startuml 16-process-introspection
+title JOTP: Process Introspection (ProcSys Pattern)
+skinparam backgroundColor #f0f0f0
+skinparam sequence {
+    BoxBackgroundColor LightBlue
+    LifeLineBorderColor DimGray
+    LifeLineBackgroundColor White
+}
+
+participant Operator as "Operations\nTeam"
+participant ProcSys as "ProcSys\n(introspection)"
+participant "Proc<S,M>\n(running)"
+participant "Supervisor\n(monitoring)"
+
+autonumber
+
+note over Operator, "Proc<S,M>\n(running)"
+  ProcSys enables live runtime introspection
+  WITHOUT stopping or restarting the process
+  (Unlike debugging which typically stops execution)
+end note
+
+Operator ->> ProcSys: getState(procRef)
+activate ProcSys
+
+ProcSys ->> "Proc<S,M>": inspect()
+activate "Proc<S,M>"
+
+note right of "Proc<S,M>"
+  Capture current state
+  without blocking
+  message loop
+end note
+
+"Proc<S,M>" ->> ProcSys: return S (state object)
+deactivate "Proc<S,M>"
+
+ProcSys ->> Operator: State { value: 42, mode: ACTIVE }
+deactivate ProcSys
+
+note right of Operator
+  Can examine state
+  in production
+  without downtime
+end note
+
+---
+
+Operator ->> ProcSys: suspend(procRef)
+activate ProcSys
+
+ProcSys ->> "Proc<S,M>": pauseMailboxLoop()
+activate "Proc<S,M>"
+
+note right of "Proc<S,M>"
+  Pause message handling
+  but keep process alive
+  (messages queue up)
+end note
+
+"Proc<S,M>" ->> ProcSys: suspended
+deactivate "Proc<S,M>"
+
+ProcSys ->> Operator: ok
+deactivate ProcSys
+
+note right of Operator
+  Process suspended
+  Messages accumulate
+  in mailbox
+end note
+
+---
+
+Operator ->> ProcSys: statistics(procRef)
+activate ProcSys
+
+ProcSys ->> "Proc<S,M>": captureStats()
+activate "Proc<S,M>"
+
+note right of "Proc<S,M>"
+  Collect metrics:
+  - message queue depth
+  - uptime
+  - memory usage
+  - message count
+end note
+
+"Proc<S,M>" ->> ProcSys: Stats { queueDepth: 5, uptime: 3600s }
+deactivate "Proc<S,M>"
+
+ProcSys ->> Operator: Statistics object
+deactivate ProcSys
+
+note right of Operator
+  Use stats for alerting:
+  - queue building up?
+  - process leaking memory?
+  - message throughput OK?
+end note
+
+---
+
+Operator ->> ProcSys: resume(procRef)
+activate ProcSys
+
+ProcSys ->> "Proc<S,M>": resumeMailboxLoop()
+activate "Proc<S,M>"
+
+note right of "Proc<S,M>"
+  Resume message handling
+  Process accumulated
+  messages in order
+end note
+
+"Proc<S,M>" ->> ProcSys: resumed
+deactivate "Proc<S,M>"
+
+ProcSys ->> Operator: ok
+deactivate ProcSys
+
+note right of Operator
+  Process back to normal
+  Message ordering
+  preserved (FIFO)
+end note
+
+---
+
+note over Operator, "Supervisor\n(monitoring)"
+  INTEGRATION: Supervisor uses ProcSys
+  to diagnose why children are failing
+  before deciding restart strategy
+end note
+
+"Supervisor\n(monitoring)" ->> ProcSys: getState(failedChild)
+"Supervisor\n(monitoring)" ->> ProcSys: statistics(failedChild)
+
+note right of "Supervisor\n(monitoring)"
+  Decision logic:
+  - if queue depth = max?
+    → child is bottleneck, restart
+  - if uptime < 1s?
+    → rapid failures, delay restart
+  - if error count high?
+    → strategy-dependent recovery
+end note
+
+@enduml
