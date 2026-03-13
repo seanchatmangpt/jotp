@@ -7,8 +7,6 @@
 #   make it-single T=MyIT       # run a single integration test
 #   make benchmark FORKS=2      # override JMH fork count
 #   make deploy-release GPG_KEY=<key-id>
-#   make gen ARGS="-t core/record -n Person -p com.example"
-#   make gen-templates CAT=patterns
 
 # ---------------------------------------------------------------------------
 # Variables
@@ -17,7 +15,7 @@
 MVND      := mvnd
 MVNW      := ./mvnw
 # Auto-detect mvnd; fall back to Maven Wrapper
-BUILD     := $(shell command -v $(MVND) 2>/dev/null && echo $(MVND) || echo $(MVNW))
+BUILD     := $(shell if command -v $(MVND) >/dev/null 2>&1; then echo $(MVND); else echo $(MVNW); fi)
 THREADS   ?= 1C
 
 # Single-test override: make test T=MyTest
@@ -28,10 +26,6 @@ FORKS     ?= 1
 WARMUP    ?= 3
 ITERS     ?= 5
 BENCH_RESULTS := target/benchmark-results.json
-
-# Code generation
-ARGS      ?=
-CAT       ?=
 
 # Maven Central release
 GPG_KEY   ?=
@@ -143,11 +137,11 @@ benchmark-view: ## Print last benchmark results (target/benchmark-results.json)
 
 .PHONY: package
 package: ## Package the library JAR (no fat JAR)
-	$(BUILD) package -DskipTests
+	$(BUILD) package -Dmaven.test.skip=true
 
 .PHONY: shade
 shade: ## Build fat/uber JAR (shade profile) — output: target/jotp-*-shaded.jar
-	$(BUILD) package -Dshade -DskipTests
+	$(BUILD) package -Dshade -Dmaven.test.skip=true
 
 .PHONY: dist-clean
 dist-clean: ## Remove the entire target/ directory
@@ -179,59 +173,6 @@ release-prepare: ## Run maven-release-plugin prepare phase (tags + bumps version
 .PHONY: release-perform
 release-perform: ## Run maven-release-plugin perform phase (deploys tagged release)
 	$(BUILD) release:perform
-
-# ---------------------------------------------------------------------------
-##@ Dogfood (Template Validation)
-# ---------------------------------------------------------------------------
-
-.PHONY: dogfood
-dogfood: ## Full dogfood pipeline: generate + compile + test + report
-	bin/dogfood verify
-
-.PHONY: dogfood-generate
-dogfood-generate: ## Check all dogfood source files exist (from templates)
-	bin/dogfood generate
-
-.PHONY: dogfood-report
-dogfood-report: ## Show template coverage report by category
-	bin/dogfood report
-
-.PHONY: dogfood-maven
-dogfood-maven: ## Run dogfood via Maven profile (mvnd verify -Ddogfood)
-	$(BUILD) verify -Ddogfood
-
-# ---------------------------------------------------------------------------
-##@ Code Generation (jgen)
-# ---------------------------------------------------------------------------
-
-.PHONY: gen
-gen: ## Generate code from a template (ARGS="-t core/record -n Foo -p com.example")
-ifndef ARGS
-	@echo "Usage: make gen ARGS=\"-t <template> -n <Name> -p <package>\""
-	@echo "       make gen-list      # list all templates"
-else
-	bin/jgen generate $(ARGS)
-endif
-
-.PHONY: gen-list
-gen-list: ## List all 72 available jgen templates
-	bin/jgen list
-
-.PHONY: gen-templates
-gen-templates: ## List templates by category (CAT=patterns|core|concurrency|...)
-ifdef CAT
-	bin/jgen list --category $(CAT)
-else
-	bin/jgen list
-endif
-
-.PHONY: gen-migrate
-gen-migrate: ## Detect legacy patterns in source (ARGS="--source ./legacy")
-	bin/jgen migrate $(ARGS)
-
-.PHONY: gen-refactor
-gen-refactor: ## Full refactor analysis: score + ranked commands (ARGS="--source ./legacy")
-	bin/jgen refactor $(ARGS)
 
 # ---------------------------------------------------------------------------
 ##@ Guard System (Rust)
