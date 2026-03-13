@@ -164,8 +164,7 @@ class GenServerTest {
         server.cast(new StateMsg.Append("third"));
 
         // Verify ordering
-        var result =
-                server.<List<String>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
+        var result = server.<List<String>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         assertThat(result).containsExactly("first", "second", "third");
 
         server.stop();
@@ -464,8 +463,7 @@ class GenServerTest {
             server.cast(new StateMsg.Append("unused"));
         }
 
-        var result =
-                server.<List<Integer>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
+        var result = server.<List<Integer>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         // List should have exactly 5 elements (1, 2, 3, 4, 5)
         assertThat(result).hasSize(5).containsExactly(1, 2, 3, 4, 5);
 

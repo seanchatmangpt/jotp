@@ -5,7 +5,6 @@ import static org.awaitility.Awaitility.await;
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcLink;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;

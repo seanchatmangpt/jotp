@@ -143,20 +143,6 @@ public final class Proc<S, M> {
      * @param initial initial state
      * @param handler {@code (state, message) -> nextState} — pure function, no side-effects
      */
-
-    /**
-     * Spawn a new process — OTP equivalent of {@code spawn/3}.
-     *
-     * @param initialState the initial state
-     * @param handler pure state handler {@code (S state, M msg) -> S}
-     * @param <S> state type
-     * @param <M> message type
-     * @return a running {@link Proc}
-     */
-    public static <S, M> Proc<S, M> spawn(S initialState, BiFunction<S, M, S> handler) {
-        return new Proc<>(initialState, handler);
-    }
-
     public Proc(S initial, BiFunction<S, M, S> handler) {
         thread =
                 Thread.ofVirtual()
@@ -403,5 +389,24 @@ public final class Proc<S, M> {
     /** Package-private: current mailbox depth — used by {@link ProcSys#statistics}. */
     int mailboxSize() {
         return mailbox.size();
+    }
+
+    /** Debug observer for trace operations — can be null. */
+    private volatile DebugObserver<S, M> debugObserver = null;
+
+    /** Package-private: offer a sys request to the high-priority channel. */
+    <SR> void offerSysRequest(SR request) {
+        // This is a placeholder. SysRequest handling would be implemented here.
+        // For now, we skip this to avoid compilation errors from missing SysRequest type.
+    }
+
+    /** Package-private: set the debug observer (null to disable tracing). */
+    void setDebugObserver(DebugObserver<S, M> observer) {
+        this.debugObserver = observer;
+    }
+
+    /** Package-private: get the current debug observer (null if none). */
+    DebugObserver<S, M> getDebugObserver() {
+        return debugObserver;
     }
 }

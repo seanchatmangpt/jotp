@@ -62,10 +62,16 @@ public final class SqlRaceSession {
         var key = SqlRaceSessionKey.newKey(identifier);
         var initial = SqlRaceSessionData.empty(key, identifier);
         var machine =
-                new StateMachine<>(
+                StateMachine.<SqlRaceSessionState, SqlRaceSessionEvent, SqlRaceSessionData>of(
                         new SqlRaceSessionState.Initializing(),
                         initial,
-                        SqlRaceSession::transition);
+                        (state, event, data) -> {
+                            if (event instanceof StateMachine.SMEvent.User<?> user) {
+                                var sessionEvent = (SqlRaceSessionEvent) user.event();
+                                return transition(state, sessionEvent, data);
+                            }
+                            return Transition.keepState(data);
+                        });
         return new SqlRaceSession(machine);
     }
 

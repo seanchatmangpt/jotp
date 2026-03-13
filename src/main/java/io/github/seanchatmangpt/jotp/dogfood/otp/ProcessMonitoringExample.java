@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;
+import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import java.time.Duration;
 import java.util.*;
@@ -65,14 +66,15 @@ public final class ProcessMonitoringExample {
         return switch (msg) {
             case DashboardMessage.MonitorWorker(var worker, var name, var dashProc) -> {
                 // Install a monitor on the worker — fires DOWN notification into this process
+                Proc<WorkerState, WorkerMessage> workerProc = worker.proc();
                 ProcMonitor.monitor(
-                        worker.proc(),
+                        workerProc,
                         reason -> {
                             String reasonStr = reason == null ? "normal" : reason.getMessage();
-                            dashProc.tell(new DashboardMessage.WorkerDown(worker.proc(), reasonStr));
+                            dashProc.tell(new DashboardMessage.WorkerDown(workerProc, reasonStr));
                         });
                 var newWorkers = new HashMap<>(state.workers());
-                newWorkers.put(worker.proc(), name);
+                newWorkers.put(workerProc, name);
                 yield new DashboardState(
                         newWorkers, state.downNotifications(), state.statsCollected());
             }
@@ -88,7 +90,7 @@ public final class ProcessMonitoringExample {
                 var statsList = new ArrayList<>(state.statsCollected());
                 for (var worker : state.workers().keySet()) {
                     try {
-                        var stats = ProcSys.statistics(worker.proc());
+                        var stats = ProcSys.statistics(worker);
                         statsList.add("Worker " + state.workers().get(worker) + ": " + stats);
                     } catch (Exception e) {
                         // Worker may have terminated
