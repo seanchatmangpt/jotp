@@ -1,0 +1,95 @@
+# Act Configuration for JOTP
+# ============================
+# Configuration for GitHub Actions workflow testing with Act
+
+# Default GitHub event to run the workflow
+event_name: push
+event_data:
+  ref: refs/heads/main
+
+# Secrets configuration
+secrets:
+  GPG_PRIVATE_KEY: |
+    -----BEGIN PGP PRIVATE KEY BLOCK-----
+    GPG_PRIVATE_KEY_CONTENT_HERE
+    -----END PGP PRIVATE KEY BLOCK-----
+  GPG_PASSPHRASE: test-passphrase
+  GPG_KEY_ID: test-key-id
+  CENTRAL_TOKEN: test-token
+  CENTRAL_USERNAME: test-username
+  GITHUB_TOKEN: test-github-token
+
+# Environment variables
+env:
+  JAVA_VERSION: "26"
+  MAVEN_OPTS: "-Xmx2g -Xms1g -Dmaven.repo.local=${{ github.workspace }}/.m2/repository"
+
+# Workflow configurations
+workflow_runs:
+  - workflow: .github/workflows/publish.yml
+    # Skip some steps for faster local testing
+    skip_steps:
+      - "Deploy to Maven Central"
+      - "Generate release notes"
+      - "Create release"
+
+# Container image configurations
+container:
+  image: node:16-buster
+  options: "--privileged -v /var/run/docker.sock:/var/run/docker.sock"
+
+# Network configuration
+network:
+  # Use custom network for container
+  name: act-jotp
+  # Create container network
+  create: true
+
+# Platform specific configurations
+platforms:
+  linux:
+    image: catthehacker/ubuntu:act-latest
+    options: "--privileged"
+
+# Docker specific configurations
+docker:
+  # Use Docker-in-Docker for better compatibility
+  use_docker_in_docker: true
+
+# Temporary directory configuration
+tmpfs:
+  - /tmp
+  - /var/tmp
+
+# Act version and configuration
+version: 0.2.47
+
+# Additional Docker options for act
+docker_opts:
+  - "--add-host=host.docker.internal:host-gateway"
+
+# Debugging configuration
+debug: false
+verbose: false
+dryrun: true
+list: false
+
+# Custom commands to run before and after workflow
+pre_command: >
+  echo "Starting Act testing for JOTP..."
+  chmod +x ./mvndw
+  chmod +x ./bin/*
+
+post_command: >
+  echo "Act testing completed for JOTP"
+  echo "Check the output above for any issues"
+
+# Artifact configuration
+artifact_server:
+  host: 127.0.0.1
+  port: 8080
+
+# GitHub Enterprise Server configuration
+github_enterprise:
+  # Set if using GitHub Enterprise
+  # url: https://github.example.com

@@ -1,0 +1,117 @@
+# Universal Act Configuration for Maven Projects
+# =============================================
+# This is a template that works with ANY Maven project
+# Edit the sections marked with "EDIT FOR YOUR PROJECT"
+
+# Event configuration - change as needed
+event_name: push
+event_data:
+  ref: refs/heads/main
+  sha: abc1234567890abcdef
+
+# IMPORTANT: Edit these variables for your project
+# =================================================
+workflow: .github/workflows/ci.yml          # EDIT: Your workflow file path
+skip_steps:                                 # EDIT: Steps to skip for testing
+  - "Deploy to Production"
+  - "Release to Maven Central"
+  - "Create GitHub Release"
+
+# Secrets configuration - DO NOT COMMIT
+secrets:
+  # These will be loaded from .secrets file or environment variables
+  MAVEN_USERNAME: "${MAVEN_USERNAME}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD}"
+  GPG_PRIVATE_KEY: "${GPG_PRIVATE_KEY}"
+  GPG_PASSPHRASE: "${GPG_PASSPHRASE}"
+  GPG_KEY_ID: "${GPG_KEY_ID}"
+  NEXUS_USERNAME: "${NEXUS_USERNAME}"
+  NEXUS_PASSWORD: "${NEXUS_PASSWORD}"
+  GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+# Universal environment variables
+env:
+  # Java configuration (auto-detected from pom.xml)
+  JAVA_VERSION: "17"                       # EDIT: Your Java version
+  JAVA_OPTS: "-Xmx2g -Xms1g"               # EDIT: Adjust based on project size
+
+  # Maven configuration
+  MAVEN_OPTS: "-Xmx2g -Xms1g -Dmaven.repo.local=${{ github.workspace }}/.m2/repository"
+  MAVEN_USERNAME: "${MAVEN_USERNAME:-mvn-user}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD:-mvn-pass}"
+
+  # Build configuration
+  SKIP_DEPLOY: "true"
+  DRY_RUN: "true"
+  BUILD_PARALLEL: "-T1C"                    # EDIT: Adjust parallel threads
+
+  # Testing configuration
+  TEST_PROFILES: "test,integration"         # EDIT: Your test profiles
+  TEST_JAVA_OPTS: "--enable-preview"        # EDIT: Java options for tests
+
+# Universal container configuration
+container:
+  image: catthehacker/ubuntu:act-latest
+  options: |
+    --privileged
+    -v /var/run/docker.sock:/var/run/docker.sock
+    -v /tmp:/tmp
+    -e GITHUB_ACTIONS=true
+    -e CI=true
+
+# Universal platform configuration
+platforms:
+  # Primary platform for most projects
+  ubuntu-latest:
+    image: catthehacker/ubuntu:act-latest
+    options: "--privileged -v /var/run/docker.sock:/var/run/docker.sock"
+
+  # Alternative platforms
+  windows-latest:
+    image: node:16-buster
+    options: ""
+
+  macos-latest:
+    image: macos-13:latest
+    options: ""
+
+# Workflow configuration - automatically adapts to your project
+workflow_runs:
+  - workflow: "${workflow}"                # Uses variable from above
+    skip_steps: "${skip_steps}"              # Uses variable from above
+
+    # Event-specific configurations
+    event_data:
+      ref: refs/heads/main
+      inputs:
+        environment: test
+
+    # Platform matrix testing
+    platforms:
+      - ubuntu-latest
+      - windows-latest
+
+# Logging and debugging
+debug: false
+verbose: false
+dryrun: false
+trace: false
+
+# Performance optimizations
+tmpfs:
+  - /tmp
+  - /var/tmp
+
+# Network configuration
+network:
+  name: act-universal
+  create: true
+
+# Volume configuration
+volumes:
+  # Maven cache
+  - ~/.m2/repository:/root/.m2/repository
+  # Docker cache
+  - ~/.docker:/root/.docker
+  # Act cache
+  - ~/.act:/root/.act

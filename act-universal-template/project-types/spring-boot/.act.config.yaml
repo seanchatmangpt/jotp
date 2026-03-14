@@ -1,0 +1,96 @@
+# Spring Boot Specific Act Configuration
+# ====================================
+# Optimized for Spring Boot Maven projects
+
+# Event configuration
+event_name: push
+event_data:
+  ref: refs/heads/main
+
+# Workflow file (edit this for your project)
+workflow: .github/workflows/ci.yml
+
+# Secrets configuration
+secrets:
+  MAVEN_USERNAME: "${MAVEN_USERNAME}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD}"
+  GPG_PRIVATE_KEY: "${GPG_PRIVATE_KEY}"
+  GPG_PASSPHRASE: "${GPG_PASSPHRASE}"
+  GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+# Spring Boot specific environment variables
+env:
+  # Java configuration
+  JAVA_VERSION: "17"
+  JAVA_OPTS: "-Xmx3g -Xms1g -Dspring.profiles.active=test -Djava.security.egd=file:/dev/./urandom"
+
+  # Maven configuration
+  MAVEN_OPTS: "-Xmx3g -Xms1g -Dmaven.repo.local=${{ github.workspace }}/.m2/repository"
+  MAVEN_USERNAME: "${MAVEN_USERNAME:-mvn-user}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD:-mvn-pass}"
+
+  # Spring Boot specific
+  SPRING_PROFILES_ACTIVE: "test"
+  SPRING_BOOT_JAR_FILE: "target/*.jar"
+  ACTUATOR_ENDPOINTS: "health,info,metrics"
+
+  # Build configuration
+  SKIP_DEPLOY: "true"
+  DRY_RUN: "true"
+  BUILD_PARALLEL: "-T2C"
+
+# Spring Boot optimized container
+container:
+  image: catthehacker/ubuntu:act-latest
+  options: |
+    --privileged
+    -v /var/run/docker.sock:/var/run/docker.sock
+    -e SPRING_PROFILES_ACTIVE=test
+    -e JAVA_TOOL_OPTIONS="-Xmx2g"
+
+# Platform configuration with Spring Boot support
+platforms:
+  # Primary platform
+  ubuntu-latest:
+    image: catthehacker/ubuntu:act-latest
+    options: "--privileged -v /var/run/docker.sock:/var/run/docker.sock"
+
+  # Windows for Spring Boot
+  windows-latest:
+    image: mcr.microsoft.com/dotnet/sdk:6.0
+    options: ""
+
+  # Spring Boot specific
+  spring-boot-test:
+    image: springprojectsio/spring-boot-app:latest
+    options: "--env SPRING_PROFILES_ACTIVE=test"
+
+# Workflow configuration
+workflow_runs:
+  - workflow: "${workflow}"
+    skip_steps:
+      - "Deploy to Production"
+      - "Release to Maven Central"
+
+    # Spring Boot specific event data
+    event_data:
+      ref: refs/heads/main
+      inputs:
+        profile: test
+        environment: dev
+
+# Logging and debugging
+debug: false
+verbose: false
+dryrun: false
+
+# Performance optimizations
+tmpfs:
+  - /tmp
+  - /var/tmp
+
+# Volume configuration
+volumes:
+  - ~/.m2/repository:/root/.m2/repository
+  - ~/.docker:/root/.docker
+  - ~/.act:/root/.act
