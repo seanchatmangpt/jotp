@@ -5,6 +5,10 @@ Handles both:
   - HTTPS CONNECT tunneling (for https://repo.maven.apache.org etc.)
   - Plain HTTP GET/HEAD/POST (for http:// artifact repos)
 
+CRITICAL IMPROVEMENT: Connection pooling + auth serialization to prevent auth storms.
+Problem: Parallel Maven requests hit upstream proxy auth limit (3 attempts).
+Solution: Serialize CONNECT attempts + cache successful tunnels + reuse connections.
+
 Usage:
   python3 maven-proxy-v2.py &
   # Maven is auto-configured via .mvn/jvm.config proxy settings
@@ -20,11 +24,19 @@ import os
 import base64
 import select
 import sys
+import time
 from urllib.parse import urlparse
 
 LOCAL_PORT = 3128
 UPSTREAM = os.environ.get('https_proxy') or os.environ.get('HTTPS_PROXY') \
         or os.environ.get('http_proxy') or os.environ.get('HTTP_PROXY')
+
+# Global lock to serialize CONNECT attempts (prevent auth storms)
+connect_lock = threading.Lock()
+
+# Cache for successful CONNECT tunnels: {(host, port): socket}
+tunnel_cache = {}
+tunnel_cache_lock = threading.Lock()
 
 
 def log(msg):
@@ -73,43 +85,125 @@ def pipe(a, b, timeout=300):
                 return
 
 
+def is_socket_alive(sock):
+    """Check if socket is still connected (non-blocking check)."""
+    try:
+        sock.setblocking(False)
+        # Try to peek at socket without consuming data
+        data = sock.recv(0)
+        return True
+    except BlockingIOError:
+        # No data available (good, socket is live)
+        return True
+    except Exception:
+        # Socket is dead
+        return False
+
+
 def handle_connect(client, host, port, req_head):
-    """HTTPS CONNECT tunnel: forward to upstream proxy with auth."""
+    """HTTPS CONNECT tunnel: forward to upstream proxy with auth.
+
+    CRITICAL: Use global lock to serialize CONNECT attempts.
+    This prevents concurrent auth attempts that trigger the 3-attempt limit.
+    """
     proxy_host, proxy_port, user, pwd = get_upstream()
     auth = base64.b64encode(f"{user}:{pwd}".encode()).decode()
 
-    log(f"CONNECT {host}:{port} -> upstream {proxy_host}:{proxy_port}")
-    upstream = socket.socket()
-    upstream.settimeout(15)
-    try:
-        upstream.connect((proxy_host, proxy_port))
-        connect_req = (
-            f"CONNECT {host}:{port} HTTP/1.1\r\n"
-            f"Host: {host}:{port}\r\n"
-            f"Proxy-Authorization: Basic {auth}\r\n"
-            f"\r\n"
-        )
-        upstream.sendall(connect_req.encode())
+    cache_key = (host, port)
 
-        resp = b''
-        while b'\r\n\r\n' not in resp and len(resp) < 4096:
-            resp += upstream.recv(4096)
+    # Check tunnel cache first (avoid redundant CONNECT)
+    with tunnel_cache_lock:
+        if cache_key in tunnel_cache:
+            cached_socket = tunnel_cache[cache_key]
+            if is_socket_alive(cached_socket):
+                log(f"CONNECT {host}:{port} (cached tunnel)")
+                try:
+                    client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+                    pipe(client, cached_socket)
+                    return
+                except Exception as e:
+                    log(f"Cached tunnel failed: {e}, will reconnect")
+                    del tunnel_cache[cache_key]
+            else:
+                # Tunnel is dead, remove from cache
+                del tunnel_cache[cache_key]
 
-        first_line = resp.split(b'\r\n')[0]
-        if b'200' in first_line:
-            client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
-            pipe(client, upstream)
-        else:
-            log(f"CONNECT failed: {first_line}")
-            client.sendall(b'HTTP/1.1 502 Bad Gateway\r\n\r\n')
-    except Exception as e:
-        log(f"CONNECT error: {e}")
-        try:
-            client.sendall(b'HTTP/1.1 502 Bad Gateway\r\n\r\n')
-        except Exception:
-            pass
-    finally:
-        upstream.close()
+    # Serialize CONNECT attempts with global lock (critical for preventing auth storms)
+    log(f"CONNECT {host}:{port} -> upstream {proxy_host}:{proxy_port} (acquiring lock)")
+
+    with connect_lock:
+        # Double-check cache after acquiring lock (another thread may have filled it)
+        with tunnel_cache_lock:
+            if cache_key in tunnel_cache:
+                cached_socket = tunnel_cache[cache_key]
+                if is_socket_alive(cached_socket):
+                    log(f"CONNECT {host}:{port} (cache hit after lock)")
+                    try:
+                        client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+                        pipe(client, cached_socket)
+                        return
+                    except Exception as e:
+                        log(f"Cached tunnel failed: {e}")
+                        del tunnel_cache[cache_key]
+
+        # Actually perform CONNECT with retry backoff
+        upstream = None
+        for retry in range(3):
+            try:
+                upstream = socket.socket()
+                upstream.settimeout(15)
+                upstream.connect((proxy_host, proxy_port))
+                connect_req = (
+                    f"CONNECT {host}:{port} HTTP/1.1\r\n"
+                    f"Host: {host}:{port}\r\n"
+                    f"Proxy-Authorization: Basic {auth}\r\n"
+                    f"\r\n"
+                )
+                upstream.sendall(connect_req.encode())
+
+                resp = b''
+                while b'\r\n\r\n' not in resp and len(resp) < 4096:
+                    resp += upstream.recv(4096)
+
+                first_line = resp.split(b'\r\n')[0]
+                if b'200' in first_line:
+                    log(f"CONNECT {host}:{port} succeeded (attempt {retry + 1})")
+
+                    # Cache successful tunnel for reuse
+                    with tunnel_cache_lock:
+                        tunnel_cache[cache_key] = upstream
+
+                    client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+                    pipe(client, upstream)
+                    return
+                elif b'407' in first_line or b'401' in first_line:
+                    # Auth failure - exponential backoff before retry
+                    if retry < 2:
+                        delay = min(2 ** retry * 0.1, 1.0)
+                        log(f"CONNECT {host}:{port} auth failed (407/401), retry after {delay}s")
+                        upstream.close()
+                        time.sleep(delay)
+                    else:
+                        log(f"CONNECT {host}:{port} auth failed (407/401), giving up after 3 attempts")
+                        client.sendall(b'HTTP/1.1 407 Proxy Authentication Required\r\n\r\n')
+                        return
+                else:
+                    log(f"CONNECT {host}:{port} failed: {first_line}")
+                    client.sendall(b'HTTP/1.1 502 Bad Gateway\r\n\r\n')
+                    return
+            except Exception as e:
+                log(f"CONNECT {host}:{port} error (attempt {retry + 1}): {e}")
+                if upstream:
+                    upstream.close()
+                if retry < 2:
+                    delay = min(2 ** retry * 0.1, 1.0)
+                    time.sleep(delay)
+                else:
+                    try:
+                        client.sendall(b'HTTP/1.1 502 Bad Gateway\r\n\r\n')
+                    except Exception:
+                        pass
+                    return
 
 
 def handle_http(client, req_head):
@@ -190,6 +284,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     log(f"Starting on 127.0.0.1:{LOCAL_PORT} -> upstream: {UPSTREAM}")
+    log("AUTH STORM PROTECTION: Serialized CONNECT + tunnel caching + exponential backoff")
     log("Handles: HTTPS CONNECT tunneling + plain HTTP GET/HEAD/POST")
 
     srv = socket.socket()
