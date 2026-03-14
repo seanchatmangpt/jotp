@@ -48,6 +48,7 @@ import java.util.*;
  * </pre>
  *
  * <p>Problems:
+ *
  * <ul>
  *   <li>Synchronous request-response
  *   <li>Shared mutable state (database)
@@ -87,6 +88,7 @@ import java.util.*;
  * </pre>
  *
  * <p>Benefits:
+ *
  * <ul>
  *   <li>Each order is independent (no shared state)
  *   <li>Asynchronous processing (external services send responses via messages)
@@ -98,8 +100,8 @@ import java.util.*;
  * <p><strong>Migration Path (6-Month Timeline):</strong>
  *
  * <ul>
- *   <li><strong>Week 0-2 (Phase 0):</strong> Analyze codebase, identify order processing as
- *       pilot service
+ *   <li><strong>Week 0-2 (Phase 0):</strong> Analyze codebase, identify order processing as pilot
+ *       service
  *   <li><strong>Week 2-4 (Phase 1):</strong> Implement order state machine in JOTP, run tests
  *   <li><strong>Week 4-6 (Phase 2):</strong> Deploy side-by-side with Spring Boot
  *       <ul>
@@ -126,400 +128,420 @@ import java.util.*;
  */
 public class SpringBootIntegration {
 
-  // ============================================================================
-  // PHASE 1: DEFINE JOTP STATE & EVENTS
-  // ============================================================================
+    // ============================================================================
+    // PHASE 1: DEFINE JOTP STATE & EVENTS
+    // ============================================================================
 
-  /** Order domain model */
-  record OrderRequest(
-      String orderId,
-      String customerId,
-      String paymentId,
-      List<String> items,
-      double totalAmount) {}
+    /** Order domain model */
+    record OrderRequest(
+            String orderId,
+            String customerId,
+            String paymentId,
+            List<String> items,
+            double totalAmount) {}
 
-  record OrderResponse(boolean success, String message, Optional<OrderData> data) {}
+    record OrderResponse(boolean success, String message, Optional<OrderData> data) {}
 
-  record OrderData(
-      String orderId,
-      OrderState state,
-      Optional<String> paymentTransactionId,
-      Optional<String> inventoryReservationId) {}
+    record OrderData(
+            String orderId,
+            OrderState state,
+            Optional<String> paymentTransactionId,
+            Optional<String> inventoryReservationId) {}
 
-  /** Order state machine states */
-  sealed interface OrderState {
-    record Pending() implements OrderState {}
+    /** Order state machine states */
+    sealed interface OrderState {
+        record Pending() implements OrderState {}
 
-    record ValidatingOrder() implements OrderState {}
+        record ValidatingOrder() implements OrderState {}
 
-    record ProcessingPayment() implements OrderState {}
+        record ProcessingPayment() implements OrderState {}
 
-    record ReservingInventory() implements OrderState {}
+        record ReservingInventory() implements OrderState {}
 
-    record Confirmed() implements OrderState {}
+        record Confirmed() implements OrderState {}
 
-    record Failed(String reason) implements OrderState {}
-  }
-
-  /** Order state machine events */
-  sealed interface OrderEvent {
-    record InitiateOrder(OrderRequest req) implements OrderEvent {}
-
-    record ValidationComplete() implements OrderEvent {}
-
-    record PaymentApproved(String transactionId) implements OrderEvent {}
-
-    record PaymentFailed(String reason) implements OrderEvent {}
-
-    record InventoryReserved(String reservationId) implements OrderEvent {}
-
-    record InventoryUnavailable(String reason) implements OrderEvent {}
-
-    record ConfirmationSent() implements OrderEvent {}
-
-    record Timeout() implements OrderEvent {}
-  }
-
-  /** Order context (mutable state within state machine) */
-  static class OrderContext {
-    OrderRequest request;
-    Optional<String> paymentTransactionId = Optional.empty();
-    Optional<String> inventoryReservationId = Optional.empty();
-    long createdAt = System.currentTimeMillis();
-  }
-
-  // ============================================================================
-  // PHASE 1: CREATE JOTP STATE MACHINE
-  // ============================================================================
-
-  /**
-   * Creates a state machine for a single order. This replaces the synchronous Spring Boot
-   * endpoint.
-   */
-  static class OrderStateMachine {
-    static StateMachine<OrderState, OrderEvent, OrderContext> create(String orderId) {
-      return StateMachine.<OrderState, OrderEvent, OrderContext>create()
-          .withInitialState(new OrderState.Pending())
-
-          // Transition: Pending → ValidatingOrder
-          .withTransition(
-              OrderState.Pending.class,
-              OrderEvent.InitiateOrder.class,
-              (state, event, ctx) -> {
-                ctx.request = event.request();
-                System.out.printf(
-                    "[Order %s] Initiated: %s items, $%.2f%n",
-                    orderId, ctx.request.items().size(), ctx.request.totalAmount());
-
-                // Simulate calling external validation service
-                // In real system, this would be async message to validator agent
-                simulateValidation(ctx);
-
-                return new StateMachine.Transition.NextState(
-                    new OrderState.ValidatingOrder(),
-                    List.of(
-                        new StateMachine.Action.Set(
-                            () ->
-                                Duration.ofSeconds(5)
-                                    .toMillis()) // validation timeout
-                        ));
-              })
-
-          // Transition: ValidatingOrder → ProcessingPayment
-          .withTransition(
-              OrderState.ValidatingOrder.class,
-              OrderEvent.ValidationComplete.class,
-              (state, event, ctx) -> {
-                System.out.printf("[Order %s] Validation passed, processing payment%n", orderId);
-
-                // Simulate calling external payment service
-                simulatePayment(ctx);
-
-                return new StateMachine.Transition.NextState(
-                    new OrderState.ProcessingPayment(),
-                    List.of(
-                        new StateMachine.Action.Set(
-                            () ->
-                                Duration.ofSeconds(10)
-                                    .toMillis()) // payment timeout
-                        ));
-              })
-
-          // Transition: ProcessingPayment → ReservingInventory (on success)
-          .withTransition(
-              OrderState.ProcessingPayment.class,
-              OrderEvent.PaymentApproved.class,
-              (state, event, ctx) -> {
-                ctx.paymentTransactionId = Optional.of(event.transactionId());
-                System.out.printf(
-                    "[Order %s] Payment approved (txn: %s), reserving inventory%n",
-                    orderId, event.transactionId());
-
-                simulateInventoryReservation(ctx);
-
-                return new StateMachine.Transition.NextState(
-                    new OrderState.ReservingInventory(),
-                    List.of(
-                        new StateMachine.Action.Set(
-                            () ->
-                                Duration.ofSeconds(5)
-                                    .toMillis()) // inventory timeout
-                        ));
-              })
-
-          // Transition: ProcessingPayment → Failed (on payment failure)
-          .withTransition(
-              OrderState.ProcessingPayment.class,
-              OrderEvent.PaymentFailed.class,
-              (state, event, ctx) -> {
-                System.out.printf(
-                    "[Order %s] Payment failed: %s, aborting order%n", orderId,
-                    event.reason());
-
-                return new StateMachine.Transition.Stop(
-                    new OrderState.Failed(event.reason()), List.of());
-              })
-
-          // Transition: ReservingInventory → Confirmed (on success)
-          .withTransition(
-              OrderState.ReservingInventory.class,
-              OrderEvent.InventoryReserved.class,
-              (state, event, ctx) -> {
-                ctx.inventoryReservationId = Optional.of(event.reservationId());
-                System.out.printf(
-                    "[Order %s] Inventory reserved (reservation: %s), order confirmed%n",
-                    orderId, event.reservationId());
-
-                // Send confirmation notification
-                simulateSendConfirmation(ctx);
-
-                return new StateMachine.Transition.NextState(
-                    new OrderState.Confirmed(), List.of());
-              })
-
-          // Transition: ReservingInventory → Failed (on unavailable)
-          .withTransition(
-              OrderState.ReservingInventory.class,
-              OrderEvent.InventoryUnavailable.class,
-              (state, event, ctx) -> {
-                System.out.printf(
-                    "[Order %s] Inventory unavailable: %s%n", orderId, event.reason());
-                // In real system, would refund payment here
-                return new StateMachine.Transition.Stop(
-                    new OrderState.Failed(event.reason()), List.of());
-              })
-
-          .build();
+        record Failed(String reason) implements OrderState {}
     }
 
-    private static void simulateValidation(OrderContext ctx) {
-      // Async: validation service would respond with ValidationComplete event
-      new Thread(
-              () -> {
-                try {
-                  Thread.sleep(100);
-                  System.out.printf("  → Validation service: order OK%n");
-                } catch (InterruptedException e) {
-                  Thread.currentThread().interrupt();
-                }
-              })
-          .start();
+    /** Order state machine events */
+    sealed interface OrderEvent {
+        record InitiateOrder(OrderRequest req) implements OrderEvent {}
+
+        record ValidationComplete() implements OrderEvent {}
+
+        record PaymentApproved(String transactionId) implements OrderEvent {}
+
+        record PaymentFailed(String reason) implements OrderEvent {}
+
+        record InventoryReserved(String reservationId) implements OrderEvent {}
+
+        record InventoryUnavailable(String reason) implements OrderEvent {}
+
+        record ConfirmationSent() implements OrderEvent {}
+
+        record Timeout() implements OrderEvent {}
     }
 
-    private static void simulatePayment(OrderContext ctx) {
-      new Thread(
-              () -> {
-                try {
-                  Thread.sleep(200);
-                  System.out.printf("  → Payment processor: approved (txn-12345)%n");
-                } catch (InterruptedException e) {
-                  Thread.currentThread().interrupt();
-                }
-              })
-          .start();
+    /** Order context (mutable state within state machine) */
+    static class OrderContext {
+        OrderRequest request;
+        Optional<String> paymentTransactionId = Optional.empty();
+        Optional<String> inventoryReservationId = Optional.empty();
+        long createdAt = System.currentTimeMillis();
     }
 
-    private static void simulateInventoryReservation(OrderContext ctx) {
-      new Thread(
-              () -> {
-                try {
-                  Thread.sleep(150);
-                  System.out.printf("  → Inventory service: reserved%n");
-                } catch (InterruptedException e) {
-                  Thread.currentThread().interrupt();
-                }
-              })
-          .start();
-    }
-
-    private static void simulateSendConfirmation(OrderContext ctx) {
-      new Thread(
-              () -> {
-                try {
-                  Thread.sleep(50);
-                  System.out.printf("  → Notification: confirmation sent to %s%n",
-                      ctx.request.customerId());
-                } catch (InterruptedException e) {
-                  Thread.currentThread().interrupt();
-                }
-              })
-          .start();
-    }
-  }
-
-  // ============================================================================
-  // PHASE 2: WRAP IN SUPERVISOR (PRODUCTION SAFETY)
-  // ============================================================================
-
-  /** Production-grade order processing supervisor */
-  static class OrderProcessingSystem {
-    private final Supervisor supervisor;
-
-    public OrderProcessingSystem() {
-      this.supervisor =
-          Supervisor.create()
-              .withStrategy(RestartStrategy.ONE_FOR_ONE)
-              .withMaxRestarts(3)
-              .withWindowSeconds(30)
-              .onChildExit(
-                  (childId, exitReason) -> {
-                    System.out.printf("  [Supervisor] Child exited: %s%n", childId);
-                  })
-              .build();
-    }
+    // ============================================================================
+    // PHASE 1: CREATE JOTP STATE MACHINE
+    // ============================================================================
 
     /**
-     * Starts processing an order. Returns immediately; processing happens asynchronously.
-     *
-     * <p>In real system, this would return a ProcRef that can be monitored/queried.
+     * Creates a state machine for a single order. This replaces the synchronous Spring Boot
+     * endpoint.
      */
-    public void processOrder(OrderRequest request) {
-      String childId = "order-" + request.orderId();
+    static class OrderStateMachine {
+        static StateMachine<OrderState, OrderEvent, OrderContext> create(String orderId) {
+            return StateMachine.<OrderState, OrderEvent, OrderContext>create()
+                    .withInitialState(new OrderState.Pending())
 
-      supervisor.addChild(
-          ChildSpec.of(
-              childId,
-              () ->
-                  Proc.spawn(
-                      OrderContext::new,
-                      (ctx, event) -> {
-                        // Handle order events in state machine
-                        System.out.printf(
-                            "[Order %s] Event: %s%n", request.orderId(),
-                            event.getClass().getSimpleName());
-                        return new Proc.StateResult<>(ctx, null);
-                      },
-                      null),
-              RestartType.TEMPORARY // Remove after order completes
-              ));
+                    // Transition: Pending → ValidatingOrder
+                    .withTransition(
+                            OrderState.Pending.class,
+                            OrderEvent.InitiateOrder.class,
+                            (state, event, ctx) -> {
+                                ctx.request = event.request();
+                                System.out.printf(
+                                        "[Order %s] Initiated: %s items, $%.2f%n",
+                                        orderId,
+                                        ctx.request.items().size(),
+                                        ctx.request.totalAmount());
 
-      System.out.printf("Order %s submitted for processing%n", request.orderId());
+                                // Simulate calling external validation service
+                                // In real system, this would be async message to validator agent
+                                simulateValidation(ctx);
+
+                                return new StateMachine.Transition.NextState(
+                                        new OrderState.ValidatingOrder(),
+                                        List.of(
+                                                new StateMachine.Action.Set(
+                                                        () ->
+                                                                Duration.ofSeconds(5)
+                                                                        .toMillis()) // validation
+                                                // timeout
+                                                ));
+                            })
+
+                    // Transition: ValidatingOrder → ProcessingPayment
+                    .withTransition(
+                            OrderState.ValidatingOrder.class,
+                            OrderEvent.ValidationComplete.class,
+                            (state, event, ctx) -> {
+                                System.out.printf(
+                                        "[Order %s] Validation passed, processing payment%n",
+                                        orderId);
+
+                                // Simulate calling external payment service
+                                simulatePayment(ctx);
+
+                                return new StateMachine.Transition.NextState(
+                                        new OrderState.ProcessingPayment(),
+                                        List.of(
+                                                new StateMachine.Action.Set(
+                                                        () ->
+                                                                Duration.ofSeconds(10)
+                                                                        .toMillis()) // payment
+                                                // timeout
+                                                ));
+                            })
+
+                    // Transition: ProcessingPayment → ReservingInventory (on success)
+                    .withTransition(
+                            OrderState.ProcessingPayment.class,
+                            OrderEvent.PaymentApproved.class,
+                            (state, event, ctx) -> {
+                                ctx.paymentTransactionId = Optional.of(event.transactionId());
+                                System.out.printf(
+                                        "[Order %s] Payment approved (txn: %s), reserving inventory%n",
+                                        orderId, event.transactionId());
+
+                                simulateInventoryReservation(ctx);
+
+                                return new StateMachine.Transition.NextState(
+                                        new OrderState.ReservingInventory(),
+                                        List.of(
+                                                new StateMachine.Action.Set(
+                                                        () ->
+                                                                Duration.ofSeconds(5)
+                                                                        .toMillis()) // inventory
+                                                // timeout
+                                                ));
+                            })
+
+                    // Transition: ProcessingPayment → Failed (on payment failure)
+                    .withTransition(
+                            OrderState.ProcessingPayment.class,
+                            OrderEvent.PaymentFailed.class,
+                            (state, event, ctx) -> {
+                                System.out.printf(
+                                        "[Order %s] Payment failed: %s, aborting order%n",
+                                        orderId, event.reason());
+
+                                return new StateMachine.Transition.Stop(
+                                        new OrderState.Failed(event.reason()), List.of());
+                            })
+
+                    // Transition: ReservingInventory → Confirmed (on success)
+                    .withTransition(
+                            OrderState.ReservingInventory.class,
+                            OrderEvent.InventoryReserved.class,
+                            (state, event, ctx) -> {
+                                ctx.inventoryReservationId = Optional.of(event.reservationId());
+                                System.out.printf(
+                                        "[Order %s] Inventory reserved (reservation: %s), order confirmed%n",
+                                        orderId, event.reservationId());
+
+                                // Send confirmation notification
+                                simulateSendConfirmation(ctx);
+
+                                return new StateMachine.Transition.NextState(
+                                        new OrderState.Confirmed(), List.of());
+                            })
+
+                    // Transition: ReservingInventory → Failed (on unavailable)
+                    .withTransition(
+                            OrderState.ReservingInventory.class,
+                            OrderEvent.InventoryUnavailable.class,
+                            (state, event, ctx) -> {
+                                System.out.printf(
+                                        "[Order %s] Inventory unavailable: %s%n",
+                                        orderId, event.reason());
+                                // In real system, would refund payment here
+                                return new StateMachine.Transition.Stop(
+                                        new OrderState.Failed(event.reason()), List.of());
+                            })
+                    .build();
+        }
+
+        private static void simulateValidation(OrderContext ctx) {
+            // Async: validation service would respond with ValidationComplete event
+            new Thread(
+                            () -> {
+                                try {
+                                    Thread.sleep(100);
+                                    System.out.printf("  → Validation service: order OK%n");
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            })
+                    .start();
+        }
+
+        private static void simulatePayment(OrderContext ctx) {
+            new Thread(
+                            () -> {
+                                try {
+                                    Thread.sleep(200);
+                                    System.out.printf(
+                                            "  → Payment processor: approved (txn-12345)%n");
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            })
+                    .start();
+        }
+
+        private static void simulateInventoryReservation(OrderContext ctx) {
+            new Thread(
+                            () -> {
+                                try {
+                                    Thread.sleep(150);
+                                    System.out.printf("  → Inventory service: reserved%n");
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            })
+                    .start();
+        }
+
+        private static void simulateSendConfirmation(OrderContext ctx) {
+            new Thread(
+                            () -> {
+                                try {
+                                    Thread.sleep(50);
+                                    System.out.printf(
+                                            "  → Notification: confirmation sent to %s%n",
+                                            ctx.request.customerId());
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            })
+                    .start();
+        }
     }
 
-    public void shutdown() {
-      supervisor.terminate();
-    }
-  }
+    // ============================================================================
+    // PHASE 2: WRAP IN SUPERVISOR (PRODUCTION SAFETY)
+    // ============================================================================
 
-  // ============================================================================
-  // PHASE 3: SPRING BOOT INTEGRATION (REST ENDPOINT)
-  // ============================================================================
+    /** Production-grade order processing supervisor */
+    static class OrderProcessingSystem {
+        private final Supervisor supervisor;
 
-  /**
-   * Example Spring Boot REST controller that uses JOTP for backend processing.
-   *
-   * <p>This is the bridge that allows gradual migration from sync to async.
-   *
-   * <p><strong>Before Migration:</strong> @PostMapping("/orders") → synchronous processing
-   *
-   * <p><strong>After Migration:</strong> @PostMapping("/orders") → JOTP agent → async response
-   *
-   * <p><strong>Dual-Write Phase:</strong> Both sync and async run in parallel for A/B testing.
-   */
-  // Note: This is pseudo-code, not runnable Spring Boot (requires Spring framework)
-  static class OrderRestController {
-    private final OrderProcessingSystem jotpOrderSystem = new OrderProcessingSystem();
+        public OrderProcessingSystem() {
+            this.supervisor =
+                    Supervisor.create()
+                            .withStrategy(RestartStrategy.ONE_FOR_ONE)
+                            .withMaxRestarts(3)
+                            .withWindowSeconds(30)
+                            .onChildExit(
+                                    (childId, exitReason) -> {
+                                        System.out.printf(
+                                                "  [Supervisor] Child exited: %s%n", childId);
+                                    })
+                            .build();
+        }
 
-    // Simulating: POST /orders
-    public OrderResponse createOrder(OrderRequest request) {
-      try {
-        // PHASE 3: Route to JOTP system
-        jotpOrderSystem.processOrder(request);
+        /**
+         * Starts processing an order. Returns immediately; processing happens asynchronously.
+         *
+         * <p>In real system, this would return a ProcRef that can be monitored/queried.
+         */
+        public void processOrder(OrderRequest request) {
+            String childId = "order-" + request.orderId();
 
-        // Return immediately (async processing)
-        return new OrderResponse(
-            true,
-            "Order submitted for processing",
-            Optional.of(
-                new OrderData(
-                    request.orderId(),
-                    new OrderState.Pending(),
-                    Optional.empty(),
-                    Optional.empty())));
+            supervisor.addChild(
+                    ChildSpec.of(
+                            childId,
+                            () ->
+                                    Proc.spawn(
+                                            OrderContext::new,
+                                            (ctx, event) -> {
+                                                // Handle order events in state machine
+                                                System.out.printf(
+                                                        "[Order %s] Event: %s%n",
+                                                        request.orderId(),
+                                                        event.getClass().getSimpleName());
+                                                return new Proc.StateResult<>(ctx, null);
+                                            },
+                                            null),
+                            RestartType.TEMPORARY // Remove after order completes
+                            ));
 
-      } catch (Exception e) {
-        return new OrderResponse(false, "Error: " + e.getMessage(), Optional.empty());
-      }
-    }
+            System.out.printf("Order %s submitted for processing%n", request.orderId());
+        }
 
-    // Simulating: GET /orders/{orderId}
-    public OrderResponse getOrderStatus(String orderId) {
-      // In real system, would query order agent via ProcRef
-      return new OrderResponse(
-          true,
-          "Order status retrieved",
-          Optional.of(
-              new OrderData(
-                  orderId,
-                  new OrderState.Confirmed(),
-                  Optional.of("txn-12345"),
-                  Optional.of("inv-67890"))));
-    }
-  }
-
-  // ============================================================================
-  // MAIN: DEMO
-  // ============================================================================
-
-  public static void main(String[] args) throws Exception {
-    System.out.println();
-    System.out.println("╔════════════════════════════════════════════╗");
-    System.out.println("║ SPRING BOOT → JOTP MIGRATION EXAMPLE       ║");
-    System.out.println("║ Order Processing State Machine             ║");
-    System.out.println("╚════════════════════════════════════════════╝");
-    System.out.println();
-
-    // Create production system
-    var system = new OrderProcessingSystem();
-
-    // Simulate incoming orders
-    var orders =
-        List.of(
-            new OrderRequest("order-001", "cust-001", "pay-001", List.of("SKU-A", "SKU-B"), 99.99),
-            new OrderRequest("order-002", "cust-002", "pay-002", List.of("SKU-C"), 49.99),
-            new OrderRequest(
-                "order-003", "cust-003", "pay-003", List.of("SKU-A", "SKU-C", "SKU-D"),
-                199.97));
-
-    // Process orders
-    System.out.println("Processing orders...");
-    System.out.println();
-    for (var order : orders) {
-      system.processOrder(order);
-      Thread.sleep(500); // Stagger submissions
+        public void shutdown() {
+            supervisor.terminate();
+        }
     }
 
-    System.out.println();
-    System.out.println("Waiting for processing to complete...");
-    Thread.sleep(5000);
+    // ============================================================================
+    // PHASE 3: SPRING BOOT INTEGRATION (REST ENDPOINT)
+    // ============================================================================
 
-    System.out.println();
-    System.out.println("✓ All orders processed");
-    System.out.println("✓ Each order is an autonomous agent with its own state");
-    System.out.println("✓ If any order crashes, supervisor restarts it");
-    System.out.println("✓ External service failures are handled asynchronously");
-    System.out.println();
+    /**
+     * Example Spring Boot REST controller that uses JOTP for backend processing.
+     *
+     * <p>This is the bridge that allows gradual migration from sync to async.
+     *
+     * <p><strong>Before Migration:</strong> @PostMapping("/orders") → synchronous processing
+     *
+     * <p><strong>After Migration:</strong> @PostMapping("/orders") → JOTP agent → async response
+     *
+     * <p><strong>Dual-Write Phase:</strong> Both sync and async run in parallel for A/B testing.
+     */
+    // Note: This is pseudo-code, not runnable Spring Boot (requires Spring framework)
+    static class OrderRestController {
+        private final OrderProcessingSystem jotpOrderSystem = new OrderProcessingSystem();
 
-    system.shutdown();
-  }
+        // Simulating: POST /orders
+        public OrderResponse createOrder(OrderRequest request) {
+            try {
+                // PHASE 3: Route to JOTP system
+                jotpOrderSystem.processOrder(request);
+
+                // Return immediately (async processing)
+                return new OrderResponse(
+                        true,
+                        "Order submitted for processing",
+                        Optional.of(
+                                new OrderData(
+                                        request.orderId(),
+                                        new OrderState.Pending(),
+                                        Optional.empty(),
+                                        Optional.empty())));
+
+            } catch (Exception e) {
+                return new OrderResponse(false, "Error: " + e.getMessage(), Optional.empty());
+            }
+        }
+
+        // Simulating: GET /orders/{orderId}
+        public OrderResponse getOrderStatus(String orderId) {
+            // In real system, would query order agent via ProcRef
+            return new OrderResponse(
+                    true,
+                    "Order status retrieved",
+                    Optional.of(
+                            new OrderData(
+                                    orderId,
+                                    new OrderState.Confirmed(),
+                                    Optional.of("txn-12345"),
+                                    Optional.of("inv-67890"))));
+        }
+    }
+
+    // ============================================================================
+    // MAIN: DEMO
+    // ============================================================================
+
+    public static void main(String[] args) throws Exception {
+        System.out.println();
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║ SPRING BOOT → JOTP MIGRATION EXAMPLE       ║");
+        System.out.println("║ Order Processing State Machine             ║");
+        System.out.println("╚════════════════════════════════════════════╝");
+        System.out.println();
+
+        // Create production system
+        var system = new OrderProcessingSystem();
+
+        // Simulate incoming orders
+        var orders =
+                List.of(
+                        new OrderRequest(
+                                "order-001",
+                                "cust-001",
+                                "pay-001",
+                                List.of("SKU-A", "SKU-B"),
+                                99.99),
+                        new OrderRequest(
+                                "order-002", "cust-002", "pay-002", List.of("SKU-C"), 49.99),
+                        new OrderRequest(
+                                "order-003",
+                                "cust-003",
+                                "pay-003",
+                                List.of("SKU-A", "SKU-C", "SKU-D"),
+                                199.97));
+
+        // Process orders
+        System.out.println("Processing orders...");
+        System.out.println();
+        for (var order : orders) {
+            system.processOrder(order);
+            Thread.sleep(500); // Stagger submissions
+        }
+
+        System.out.println();
+        System.out.println("Waiting for processing to complete...");
+        Thread.sleep(5000);
+
+        System.out.println();
+        System.out.println("✓ All orders processed");
+        System.out.println("✓ Each order is an autonomous agent with its own state");
+        System.out.println("✓ If any order crashes, supervisor restarts it");
+        System.out.println("✓ External service failures are handled asynchronously");
+        System.out.println();
+
+        system.shutdown();
+    }
 }
