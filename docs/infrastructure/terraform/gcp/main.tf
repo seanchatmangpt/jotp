@@ -1,4 +1,4 @@
-# Java Maven Template - GCP Terraform Configuration
+# JOTP - GCP Terraform Configuration
 # Requires: Terraform >= 1.6.0, GCP credentials
 
 terraform {
@@ -14,7 +14,7 @@ terraform {
   # Backend configuration (uncomment for remote state)
   # backend "gcs" {
   #   bucket = "terraform-state-bucket"
-  #   prefix = "java-maven-template"
+  #   prefix = "jotp"
   # }
 }
 

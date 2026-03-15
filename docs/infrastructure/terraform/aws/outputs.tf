@@ -1,4 +1,4 @@
-# Java Maven Template - AWS Outputs
+# JOTP - AWS Outputs
 
 output "vpc_id" {
   description = "VPC ID"

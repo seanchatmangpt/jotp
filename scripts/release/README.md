@@ -451,7 +451,7 @@ MAJOR.MINOR.PATCH-PRERELEASE
 ### Documentation
 
 - [Main README](../../README.md)
-- [RELEASE_NOTES.md](../../RELEASE_NOTES.md)
+- [RELEASE_NOTES.md](../../docs/release/RELEASE_NOTES.md)
 - [Maven Central Publishing Guide](https://central.sonatype.org/publish/)
 
 ### Issues

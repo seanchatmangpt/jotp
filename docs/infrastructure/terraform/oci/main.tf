@@ -1,4 +1,4 @@
-# Java Maven Template - OCI Terraform Configuration
+# JOTP - OCI Terraform Configuration
 # Requires: Terraform >= 1.6.0, OCI API credentials
 
 terraform {
@@ -33,7 +33,7 @@ resource "oci_core_vcn" "main" {
   cidr_block     = var.vcn_cidr
 
   freeform_tags = {
-    Project     = "java-maven-template"
+    Project     = "jotp"
     Environment = var.environment
   }
 }
@@ -45,7 +45,7 @@ resource "oci_core_internet_gateway" "main" {
   display_name   = "${var.app_name}-igw"
 
   freeform_tags = {
-    Project = "java-maven-template"
+    Project = "jotp"
   }
 }
 
@@ -131,7 +131,7 @@ resource "oci_core_instance" "app" {
   }
 
   freeform_tags = {
-    Project     = "java-maven-template"
+    Project     = "jotp"
     Environment = var.environment
   }
 }

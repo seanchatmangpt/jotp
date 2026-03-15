@@ -1,4 +1,4 @@
-# Java Maven Template - Development Containerfile
+# JOTP - Development Containerfile
 # Includes Maven 4 + Java 25 + mvnd for fast local development
 
 FROM maven:4.0.0-rc-5-eclipse-temurin-25

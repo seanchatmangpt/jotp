@@ -1,4 +1,4 @@
-# Java Maven Template - OCI Variables
+# JOTP - OCI Variables
 
 variable "tenancy_ocid" {
   type        = string
@@ -34,7 +34,7 @@ variable "compartment_ocid" {
 
 variable "app_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Application name"
 }
 

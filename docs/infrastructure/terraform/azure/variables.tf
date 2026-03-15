@@ -1,4 +1,4 @@
-# Java Maven Template - Azure Variables
+# JOTP - Azure Variables
 
 variable "subscription_id" {
   type        = string
@@ -33,13 +33,13 @@ variable "location" {
 
 variable "resource_group_name" {
   type        = string
-  default     = "java-maven-rg"
+  default     = "jotp-rg"
   description = "Resource group name"
 }
 
 variable "app_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Application name"
 }
 

@@ -148,7 +148,7 @@ supervisor.shutdown();
 - **[LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md)** — Execution plan, proof points, success metrics
 
 **For Architects:**
-- **[Building Autonomous Systems with JOTP](docs/how-to/building-autonomous-systems.md)** (20 min) — Deep dive into core concepts, real examples (distributed cache, payment processing), migration path
+- **[Building Autonomous Systems with JOTP](docs/user-guide/how-to/building-autonomous-systems.md)** (20 min) — Deep dive into core concepts, real examples (distributed cache, payment processing), migration path
 
 **For Developers:**
 - **[Chaos Demo](src/main/java/io/github/seanchatmangpt/jotp/examples/ChaosDemo.java)** (5 min) — Watch JOTP self-heal: 30s of random process kills, 100% uptime
@@ -231,44 +231,75 @@ bin/mvndw verify   # Same as mvnd verify, auto-downloads mvnd if needed
 
 ---
 
+## Cloud Deployment
+
+JOTP supports deployment to multiple cloud platforms with comprehensive infrastructure as code:
+
+**✅ Production Ready:**
+- **[Amazon Web Services](docs/archive/cloud-deployment/cloud/how-to/deploy-to-aws.md)** - Full AWS deployment with Packer + Terraform
+- **[Google Cloud Platform](docs/archive/cloud-deployment/cloud/how-to/deploy-to-gcp.md)** - Complete GCP deployment guide
+
+**⚠️ Beta:**
+- **[Microsoft Azure](docs/archive/cloud-deployment/cloud/how-to/deploy-to-azure.md)** - Azure deployment (in beta)
+- **[Oracle Cloud Infrastructure](docs/archive/cloud-deployment/cloud/how-to/deploy-to-oci.md)** - OCI deployment (in beta)
+
+**📋 See [Cloud Deployment Status](docs/archive/cloud-deployment/cloud/status.md)** for implementation roadmap and platform status.
+
+> **Note:** Cloud deployment documentation has been archived. See [docs/archive/cloud-deployment/](docs/archive/cloud-deployment/) for historical reference.
+
+---
+
 ## Documentation
 
+### Books (Comprehensive Learning Paths)
+
+📚 **[JOTP Books](books/)** — Two complementary books for different audiences:
+
+- **[JOTPOps: Engineering Java Applications](books/jotpops/)** — DevOps, production deployment, CI/CD, AWS, Docker Swarm, monitoring
+- **[Designing Java Systems with JOTP](books/jotp-patterns/)** — Design patterns, architectural patterns, concurrency patterns
+
 ### For Decision Makers (CTOs, Architects)
-- **[Architecture Guide](.claude/ARCHITECTURE.md)** — Executive summary, competitive analysis, 7 enterprise fault-tolerance patterns
-- **[SLA Patterns](.claude/SLA-PATTERNS.md)** — Meeting 99.95%+ SLA with supervisor trees
-- **[Integration Patterns](.claude/INTEGRATION-PATTERNS.md)** — Phased brownfield adoption strategy
+- **[Architecture Guide](docs/architecture/)** — Executive summary, competitive analysis, 7 enterprise fault-tolerance patterns
+- **[Innovations](docs/innovations/)** — Advanced patterns: OTP-JDBC, LLM Supervisor, Actor HTTP, Distributed OTP, Event Sourcing
 
 ### For Developers
 - **[Tutorials](docs/tutorials/)** — Step-by-step learning path
-  - [01: Getting Started](docs/tutorials/01-getting-started.md)
-  - [02: Your First Process](docs/tutorials/02-first-process.md)
+  - [01: Getting Started](docs/tutorials/beginner/getting-started.md)
+  - [02: Your First Process](docs/tutorials/beginner/first-process.md)
   - [03: Virtual Threads](docs/tutorials/03-virtual-threads.md)
   - [04: Supervision Basics](docs/tutorials/04-supervision-basics.md)
-- **[How-to Guides](docs/how-to/)** — Solve specific problems
-  - [Creating Processes](docs/how-to/create-lightweight-processes.md)
-  - [Handling Crashes](docs/how-to/handling-process-crashes.md)
-  - [Build Supervision Trees](docs/how-to/build-supervision-trees.md)
-  - [State Machines](docs/how-to/state-machine-workflow.md)
-  - [Concurrent Pipelines](docs/how-to/concurrent-pipelines.md)
-  - [Migrate from Erlang](docs/how-to/migrate-from-erlang.md)
-- **[Explanations](docs/explanations/)** — Understand the design
-  - [Concurrency Model](docs/explanations/concurrency-model.md)
-  - [Design Decisions](docs/explanations/design-decisions.md)
-  - [OTP Equivalence](docs/explanations/otp-equivalence.md)
-  - [Erlang-Java Mapping](docs/explanations/erlang-java-mapping.md)
+- **[How-to Guides](docs/user-guide/how-to/)** — Solve specific problems
+  - [Creating Processes](docs/user-guide/how-to/create-lightweight-processes.md)
+  - [Handling Crashes](docs/user-guide/how-to/handling-process-crashes.md)
+  - [Build Supervision Trees](docs/user-guide/how-to/build-supervision-trees.md)
+  - [State Machines](docs/user-guide/how-to/state-machine-workflow.md)
+  - [Concurrent Pipelines](docs/user-guide/how-to/concurrent-pipelines.md)
+  - [Migrate from Erlang](docs/user-guide/how-to/migrate-from-erlang.md)
+- **[Explanations](docs/user-guide/explanations/)** — Understand the design
+  - [Concurrency Model](docs/user-guide/explanations/concurrency-model.md)
+  - [Design Decisions](docs/user-guide/explanations/design-decisions.md)
+  - [OTP Equivalence](docs/user-guide/explanations/otp-equivalence.md)
+  - [Erlang-Java Mapping](docs/user-guide/explanations/erlang-java-mapping.md)
 - **[Reference](docs/reference/)** — API documentation
-  - [Proc API](docs/reference/api-proc.md)
-  - [Supervisor API](docs/reference/api-supervisor.md)
+  - [Proc API](docs/reference/api/proc.md)
+  - [Supervisor API](docs/reference/api/supervisor.md)
   - [Configuration](docs/reference/configuration.md)
   - [Glossary](docs/reference/glossary.md)
-- **[PhD Thesis](docs/phd-thesis-otp-java26.md)** — Formal OTP ↔ Java 26 equivalence proofs
+- **[PhD Thesis](docs/research/phd-thesis/)** — Formal OTP ↔ Java 26 equivalence proofs
+
+### Project History & Roadmap
+- **[Project History](docs/project-history/)** — Complete historical record of JOTP evolution
+  - [March 2026 Refactoring](docs/archive/refactoring-2026-03-12/) — Comprehensive code quality and documentation cleanup
+  - [Migration Legacy](docs/project-history/migration-legacy/) — Historical migration efforts and transitions
+- **[Roadmap](docs/roadmap/)** — Current status and future direction
+  - [Vernon Patterns Status](docs/roadmap/VERNON_PATTERNS.md) — Enterprise integration patterns progress
 
 ---
 
 ## Getting Help
 
-- **Learning:** Start with [Tutorial 01: Getting Started](docs/tutorials/01-getting-started.md)
-- **Patterns:** Browse [How-To Guides](docs/how-to/)
+- **Learning:** Start with [Tutorial 01: Getting Started](docs/tutorials/beginner/getting-started.md)
+- **Patterns:** Browse [How-To Guides](docs/user-guide/how-to/)
 - **Reference:** See [API Overview](docs/reference/api.md)
 - **Issues:** [GitHub Issues](https://github.com/seanchatmangpt/jotp/issues)
 

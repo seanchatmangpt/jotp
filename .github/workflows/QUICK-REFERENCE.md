@@ -244,8 +244,8 @@ git push origin v1.0.1
 ## 📚 Documentation Links
 
 - **Complete Guide**: [WORKFLOWS-GUIDE.md](./WORKFLOWS-GUIDE.md)
-- **Project Architecture**: [.claude/ARCHITECTURE.md](../.claude/ARCHITECTURE.md)
-- **Maven Publishing**: [../docs/MAVEN-CENTRAL-PUBLISHING.md](../docs/MAVEN-CENTRAL-PUBLISHING.md)
+- **Project Architecture**: [docs/architecture/README.md](../../docs/architecture/README.md)
+- **Maven Publishing**: [docs/release/](../../docs/release/)
 - **GitHub Actions Docs**: https://docs.github.com/actions
 - **Maven Central**: https://central.sonatype.com
 

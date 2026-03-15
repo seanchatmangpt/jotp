@@ -1,0 +1,699 @@
+# Migrating from Vert.x to JOTP
+
+A comprehensive guide for Vert.x developers moving to JOTP (Java 26 implementation of OTP primitives).
+
+## Overview
+
+JOTP brings Erlang/OTP's battle-tested concurrency patterns to the JVM using Java 26's virtual threads. While Vert.x focuses on event-driven non-blocking I/O, JOTP emphasizes message-passing concurrency and fault tolerance.
+
+**Key Differences:**
+- **Message Passing:** Explicit messaging vs event bus
+- **Fault Tolerance:** Supervision trees vs exception handlers
+- **Concurrency:** Virtual threads vs event loop threads
+- **State:** Immutable records vs shared state
+- **Deployment:** No verticle deployment model
+
+---
+
+## Concept Mapping
+
+### Core Concepts
+
+| Vert.x | JOTP | Notes |
+|--------|------|-------|
+| `Verticle` | `Proc<S,M>` | Processes instead of verticles |
+| `EventBus` | Process messaging | Direct messaging vs bus |
+| `Message<T>` | Sealed message types | Type-safe messages |
+| `Future<T>` | `CompletableFuture<S>` | Standard Java async |
+| `Vertx.currentContext()` | No equivalent | No context concept |
+| `deployVerticle()` | `Proc.spawn()` | Direct creation |
+| `undeploy()` | `proc.stop()` | Direct lifecycle |
+
+### Event Bus Patterns
+
+| Vert.x | JOTP | Notes |
+|--------|------|-------|
+| `eventBus.send()` | `proc.tell()` | Point-to-point |
+| `eventBus.publish()` | `EventManager.notify()` | Broadcast |
+| `eventBus.request()` | `proc.ask()` | Request-reply |
+| `eventBus.consumer()` | Process handler | Message handler |
+
+### Async Patterns
+
+| Vert.x | JOTP | Notes |
+|--------|------|-------|
+| `Future<T>` | `CompletableFuture<T>` | Standard Java |
+| `Promise<T>` | `CompletableFuture<T>` | Same concept |
+| `asyncResult()` | `complete()`/`completeExceptionally()` | Completion |
+| `compose()` | `thenApply()`/`thenCompose()` | Composition |
+
+---
+
+## Verticle Migration
+
+### Basic Verticle
+
+**Vert.x:**
+```java
+public class OrderVerticle extends AbstractVerticle {
+    private OrderService orderService;
+
+    @Override
+    public void start(Promise<Void> startPromise) {
+        orderService = new OrderService(vertx);
+
+        var consumer = vertx.eventBus().consumer("orders.create");
+        consumer.handler(message -> {
+            var request = (OrderRequest) message.body();
+            orderService.createOrder(request)
+                .onSuccess(order -> message.reply(order))
+                .onFailure(err -> message.fail(500, err.getMessage()));
+        });
+
+        startPromise.complete();
+    }
+
+    @Override
+    public void stop() {
+        // Cleanup
+    }
+}
+
+// Deployment
+vertx.deployVerticle(new OrderVerticle());
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface OrderMsg permits CreateOrder, GetOrder {}
+record CreateOrder(OrderRequest request, CompletableFuture<Order> replyTo) implements OrderMsg {}
+record GetOrder(String id, CompletableFuture<Order> replyTo) implements OrderMsg {}
+
+// State
+record OrderState(OrderService orderService) {}
+
+// Process creation
+var orderProcess = Proc.spawn(
+    new OrderState(new OrderService()),
+    (state, msg) -> switch (msg) {
+        case CreateOrder(var req, var reply) -> {
+            var order = state.orderService().createOrder(req);
+            reply.complete(order);
+            yield state;
+        }
+        case GetOrder(var id, var reply) -> {
+            try {
+                var order = state.orderService().getOrder(id);
+                reply.complete(order);
+            } catch (Exception e) {
+                reply.completeExceptionally(e);
+            }
+            yield state;
+        }
+    }
+);
+
+// Register for lookup
+ProcRegistry.register("orders.create", orderProcess);
+```
+
+**Key Differences:**
+1. **No deployment:** Direct process creation
+2. **No event bus:** Direct process references
+3. **Type-safe messages:** Sealed interfaces
+4. **Explicit replies:** CompletableFuture
+
+### Worker Verticle
+
+**Vert.x:**
+```java
+public class DatabaseVerticle extends AbstractVerticle {
+    private JDBCClient client;
+
+    @Override
+    public void start(Promise<Void> startPromise) {
+        client = JDBCClient.createShared(vertx, config);
+
+        vertx.eventBus().consumer("database.query")
+            .handler(message -> {
+                var query = (String) message.body();
+                client.query(query)
+                    .onSuccess(rows -> message.reply(rows))
+                    .onFailure(err -> message.fail(500, err.getMessage()));
+            });
+
+        startPromise.complete();
+    }
+}
+
+// Deploy as worker verticle
+vertx.deployVerticle(
+    new DatabaseVerticle(),
+    new DeploymentOptions().setWorker(true)
+);
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface DatabaseMsg permits Query {}
+record Query(String sql, CompletableFuture<ResultSet> replyTo) implements DatabaseMsg {}
+
+// State
+record DatabaseState(DataSource dataSource) {}
+
+// Process with blocking executor
+var blockingExecutor = Executors.newFixedThreadPool(4);
+
+var databaseProcess = Proc.spawn(
+    new DatabaseState(dataSource),
+    (state, msg) -> switch (msg) {
+        case Query(var sql, var reply) -> {
+            // Offload blocking work
+            CompletableFuture.supplyAsync(
+                () -> {
+                    try (var conn = state.dataSource().getConnection();
+                         var stmt = conn.createStatement();
+                         var rs = stmt.executeQuery(sql)) {
+                        return convertToResultSet(rs);
+                    }
+                },
+                blockingExecutor
+            ).thenAccept(reply::complete);
+            yield state;
+        }
+    }
+);
+```
+
+**Key Differences:**
+1. **No worker pool:** Use executor for blocking work
+2. **Explicit blocking:** Clear when blocking occurs
+3. **No deployment options:** Direct process creation
+4. **Simpler lifecycle:** No start/stop promises
+
+---
+
+## Event Bus Migration
+
+### Point-to-Point Messaging
+
+**Vert.x:**
+```java
+// Sender
+vertx.eventBus().send("orders.create", orderRequest);
+
+// Receiver
+vertx.eventBus().consumer("orders.create", message -> {
+    var request = (OrderRequest) message.body();
+    // Handle request
+});
+```
+
+**JOTP:**
+```java
+// Sender
+var orderProcess = ProcRegistry.whereis("orders.create");
+orderProcess.tell(new CreateOrder(request, null));
+
+// Receiver (process handler)
+(state, msg) -> switch (msg) {
+    case CreateOrder(var req, var reply) -> {
+        // Handle request
+        yield state;
+    }
+};
+```
+
+**Key Differences:**
+1. **Direct reference:** No string-based addressing
+2. **Type-safe:** No casting needed
+3. **No intermediate bus:** Direct communication
+4. **Compile-time checking:** Message types verified
+
+### Request-Reply
+
+**Vert.x:**
+```java
+vertx.eventBus().request("orders.get", orderId)
+    .onSuccess(message -> {
+        var order = (Order) message.body();
+        // Handle order
+    })
+    .onFailure(err -> {
+        // Handle error
+    });
+```
+
+**JOTP:**
+```java
+var orderProcess = ProcRegistry.whereis("orders.get");
+orderProcess.ask(new GetOrder(orderId, null))
+    .thenAccept(order -> {
+        // Handle order
+    })
+    .exceptionally(err -> {
+        // Handle error
+        return null;
+    });
+```
+
+**Key Differences:**
+1. **No reply handler:** Standard CompletableFuture
+2. **Type-safe:** No casting required
+3. **Standard API:** No Vert.x-specific types
+4. **Composable:** Can chain with other futures
+
+### Broadcast Messaging
+
+**Vert.x:**
+```java
+// Publisher
+vertx.eventBus().publish("price.updates", priceUpdate);
+
+// Subscriber
+vertx.eventBus().consumer("price.updates", message -> {
+    var update = (PriceUpdate) message.body();
+    // Handle update
+});
+```
+
+**JOTP:**
+```java
+// Event manager
+var eventManager = EventManager.start("price.updates");
+
+// Publisher
+eventManager.notify(new PriceUpdate("BTC", 50000.0));
+
+// Subscriber
+eventManager.addHandler(new EventManager.Handler<PriceEvent>() {
+    @Override
+    public void handleEvent(PriceEvent event) {
+        switch (event) {
+            case PriceUpdate(var symbol, var price) ->
+                System.out.println(symbol + ": " + price);
+        }
+    }
+});
+```
+
+**Key Differences:**
+1. **Typed events:** Sealed interfaces
+2. **Handler interface:** Explicit implementation
+3. **Fault isolation:** Handler crashes don't stop manager
+4. **Process-based:** EventManager is a process
+
+---
+
+## Async Composition
+
+### Future Composition
+
+**Vert.x:**
+```java
+database.query("SELECT * FROM users")
+    .compose(users -> {
+        return cache.put("users", users)
+            .map(v -> users);
+    })
+    .compose(users -> {
+        return transformUsers(users);
+    })
+    .onSuccess(transformed -> {
+        // Handle result
+    })
+    .onFailure(err -> {
+        // Handle error
+    });
+```
+
+**JOTP:**
+```java
+database.ask(new Query("SELECT * FROM users", null))
+    .thenCompose(users -> {
+        return cache.ask(new Put("users", users, null))
+            .thenApply(v -> users);
+    })
+    .thenCompose(users -> {
+        return CompletableFuture.supplyAsync(() -> transformUsers(users));
+    })
+    .thenAccept(transformed -> {
+        // Handle result
+    })
+    .exceptionally(err -> {
+        // Handle error
+        return null;
+    });
+```
+
+**Key Differences:**
+1. **Standard API:** No Vert.x-specific types
+2. **Explicit composition:** Clear data flow
+3. **Type-safe:** Generic parameters enforce types
+4. **Composable:** Works with any CompletableFuture
+
+### Parallel Execution
+
+**Vert.x:**
+```java
+CompositeFuture.all(
+    database.query("SELECT * FROM users"),
+    database.query("SELECT * FROM orders"),
+    database.query("SELECT * FROM products")
+)
+.onSuccess(result -> {
+    var users = result.resultAt(0);
+    var orders = result.resultAt(1);
+    var products = result.resultAt(2);
+    // Handle all results
+});
+```
+
+**JOTP:**
+```java
+CompletableFuture.allOf(
+    database.ask(new Query("SELECT * FROM users", null)),
+    database.ask(new Query("SELECT * FROM orders", null)),
+    database.ask(new Query("SELECT * FROM products", null))
+)
+.thenApply(v -> {
+    // All queries completed
+    return null;
+});
+```
+
+**Key Differences:**
+1. **Standard API:** CompletableFuture.allOf
+2. **No result wrapper:** Individual futures track results
+3. **Type-safe:** Each future has specific type
+4. **Simpler:** Less boilerplate
+
+---
+
+## Error Handling
+
+### Async Error Handling
+
+**Vert.x:**
+```java
+database.query(query)
+    .onSuccess(rows -> {
+        // Handle success
+    })
+    .onFailure(err -> {
+        if (err instanceof SQLException) {
+            // Handle SQL error
+        } else {
+            // Handle other errors
+        }
+    });
+```
+
+**JOTP:**
+```java
+database.ask(new Query(query, null))
+    .thenAccept(rows -> {
+        // Handle success
+    })
+    .exceptionally(err -> {
+        if (err.getCause() instanceof SQLException) {
+            // Handle SQL error
+        } else {
+            // Handle other errors
+        }
+        return null;
+    });
+```
+
+**Key Differences:**
+1. **Single chain:** thenAccept/exceptionally vs onSuccess/onFailure
+2. **Exception cause:** Need to unwrap cause
+3. **Standard API:** No Vert.x-specific types
+4. **Composable:** Can chain with other futures
+
+### Retry with Backoff
+
+**Vert.x:**
+```java
+public Future<Result> executeWithRetry(String query) {
+    return retryStrategy.execute(() -> {
+        return database.query(query);
+    });
+}
+```
+
+**JOTP:**
+```java
+// Use supervisor for automatic retry
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    3,
+    Duration.ofSeconds(10)
+);
+
+var databaseProc = supervisor.supervise(
+    "database",
+    new DatabaseState(dataSource),
+    (state, msg) -> switch (msg) {
+        case Query(var sql, var reply) -> {
+            try (var conn = state.dataSource().getConnection();
+                 var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery(sql)) {
+                reply.complete(convertToResultSet(rs));
+            } catch (Exception e) {
+                throw e;  // Supervisor will retry
+            }
+            yield state;
+        }
+    }
+);
+```
+
+**Key Differences:**
+1. **System-level retry:** Supervisor handles retries
+2. **No retry strategy:** Automatic restart
+3. **Crash-based:** Exceptions trigger restart
+4. **State reset:** Fresh state on retry
+
+---
+
+## Scheduled Operations
+
+### Periodic Tasks
+
+**Vert.x:**
+```java
+vertx.setPeriodic(5000, id -> {
+    // Execute every 5 seconds
+    System.out.println("Tick: " + Instant.now());
+});
+
+vertx.setTimer(5000, id -> {
+    // Execute once after 5 seconds
+    System.out.println("One-time task");
+});
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface TimerMsg permits Tick, OneTime {}
+record Tick() implements TimerMsg {}
+record OneTime() implements TimerMsg {}
+
+// Process creation
+var timerProc = Proc.spawn(
+    new TimerState(),
+    (state, msg) -> switch (msg) {
+        case Tick _ -> {
+            System.out.println("Tick: " + Instant.now());
+            yield state;
+        }
+        case OneTime _ -> {
+            System.out.println("One-time task");
+            yield state;
+        }
+    }
+);
+
+// Periodic
+var periodicTimer = ProcTimer.sendInterval(
+    Duration.ofSeconds(5),
+    timerProc,
+    new Tick()
+);
+
+// One-time
+var oneTimeTimer = ProcTimer.sendAfter(
+    Duration.ofSeconds(5),
+    timerProc,
+    new OneTime()
+);
+```
+
+**Key Differences:**
+1. **Process-based:** Messages instead of callbacks
+2. **Explicit timers:** Timer objects for cancellation
+3. **Type-safe:** Message types
+4. **Cancelable:** Can cancel timers
+
+---
+
+## Migration Checklist
+
+### Phase 1: Core Concepts (Week 1-2)
+- [ ] Understand message passing vs event bus
+- [ ] Learn virtual threads vs event loops
+- [ ] Practice CompletableFuture patterns
+- [ ] Understand supervision vs error handlers
+
+### Phase 2: Verticle Migration (Week 3-4)
+- [ ] Convert verticles to Proc<S,M>
+- [ ] Implement message protocols
+- [ ] Remove event bus dependencies
+- [ ] Set up process registry
+
+### Phase 3: Event Bus (Week 5-6)
+- [ ] Convert send/publish to direct messaging
+- [ ] Implement request-reply patterns
+- [ ] Replace consumer with process handlers
+- [ ] Set up EventManager for broadcast
+
+### Phase 4: Async Patterns (Week 7-8)
+- [ ] Convert Future<T> to CompletableFuture<T>
+- [ ] Implement async composition
+- [ ] Replace CompositeFuture with CompletableFuture.allOf
+- [ ] Set up parallel execution
+
+### Phase 5: Advanced Features (Week 9-10)
+- [ ] Remove Vert.x deployment
+- [ ] Implement scheduled tasks with ProcTimer
+- [ ] Set up error handling with supervisors
+- [ ] Performance testing and optimization
+
+---
+
+## Common Gotchas
+
+### 1. Event Loop Threading Model
+
+**Problem:** Vert.x event loop vs JOTP virtual threads.
+
+**Solution:** Understand the threading model differences.
+
+```java
+// Vert.x - single event loop thread
+vertx.runOnContext(event -> {
+    // Runs on event loop thread
+});
+
+// JOTP - virtual threads (many)
+var proc = Proc.spawn(state, handler);
+// Each process has its own virtual thread
+```
+
+### 2. Blocking Operations
+
+**Problem:** Blocking in event loop blocks everything.
+
+**Solution:** Offload blocking work to dedicated pool.
+
+```java
+// Vert.x - executeBlocking
+vertx.executeBlocking(promise -> {
+    var result = blockingOperation();
+    promise.complete(result);
+});
+
+// JOTP - use executor
+var future = CompletableFuture.supplyAsync(
+    () -> blockingOperation(),
+    blockingExecutor
+);
+```
+
+### 3. Message Addressing
+
+**Problem:** String-based addressing vs direct references.
+
+**Solution:** Use ProcRegistry for lookup.
+
+```java
+// Vert.x - string address
+vertx.eventBus().send("address", message);
+
+// JOTP - registry lookup
+var proc = ProcRegistry.whereis("address");
+proc.tell(message);
+```
+
+---
+
+## Best Practices for Migration
+
+### 1. Start with Simple Verticles
+Migrate standard verticles first (not worker verticles).
+
+### 2. Use Sealed Types
+Leverage the compiler for message safety.
+
+```java
+sealed interface Message permits A, B, C {}
+record A() implements Message {}
+record B() implements Message {}
+record C() implements Message {}
+```
+
+### 3. Embrace Immutability
+All state should be immutable.
+
+```java
+public record UserState(
+    String id,
+    String name,
+    List<String> roles
+) {}
+```
+
+### 4. Test Supervision
+Verify crash recovery works.
+
+```java
+@Test
+void testSupervisorRestarts() {
+    var sup = Supervisor.create(ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+    var child = sup.supervise("test", state, handler);
+
+    child.proc().thread().interrupt();
+    assertTrue(child.proc().isRunning());
+}
+```
+
+---
+
+## Performance Considerations
+
+### Virtual Thread Advantages
+- **Scalability:** Millions of processes
+- **Memory:** ~1 KB per process
+- **Latency:** Sub-millisecond context switching
+
+### When to Use Vert.x
+- Event-driven non-blocking I/O
+- Existing Vert.x ecosystem
+- Polyglot language support
+
+---
+
+## Further Reading
+
+- [JOTP Architecture Overview](../explanations/architecture-overview.md)
+- [How-To: Build Supervision Trees](../how-to/build-supervision-trees.md)
+- [How-To: Process Communication](../how-to/process-communication.md)
+- [Examples: Spring Boot Integration](../examples/spring-boot-integration.md)
+
+---
+
+**Conclusion:** JOTP provides a fundamentally different approach to concurrency than Vert.x. While Vert.x focuses on event-driven non-blocking I/O and the event bus, JOTP emphasizes message passing and supervision. The migration requires rethinking application architecture, but the benefits in fault tolerance and scalability are significant.

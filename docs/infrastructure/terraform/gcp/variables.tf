@@ -1,4 +1,4 @@
-# Java Maven Template - GCP Variables
+# JOTP - GCP Variables
 
 variable "project_id" {
   type        = string
@@ -19,7 +19,7 @@ variable "zone" {
 
 variable "app_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Application name"
 }
 

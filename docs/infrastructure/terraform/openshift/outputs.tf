@@ -1,4 +1,4 @@
-# Java Maven Template - OpenShift Outputs
+# JOTP - OpenShift Outputs
 
 output "namespace" {
   description = "Namespace name"

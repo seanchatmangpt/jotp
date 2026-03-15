@@ -1,0 +1,872 @@
+# Migrating from Spring Framework to JOTP
+
+A comprehensive guide for Spring developers moving to JOTP (Java 26 implementation of OTP primitives).
+
+## Overview
+
+JOTP brings Erlang/OTP's battle-tested concurrency patterns to the JVM using Java 26's virtual threads. While Spring focuses on dependency injection and enterprise patterns, JOTP emphasizes message-passing concurrency and fault tolerance.
+
+**Key Differences:**
+- **Message Passing:** Async messaging vs synchronous method calls
+- **Fault Tolerance:** "Let It Crash" vs exception handling
+- **Concurrency:** Virtual threads vs thread pools
+- **State:** Immutable records vs mutable beans
+- **Lifecycle:** Supervision trees vs container management
+
+---
+
+## Concept Mapping
+
+### Core Concepts
+
+| Spring | JOTP | Notes |
+|--------|------|-------|
+| `@Service` / `@Component` | `Proc<S,M>` | Processes instead of beans |
+| `@Autowired` | Constructor arguments | Explicit dependencies |
+| `@Async` | `tell()` | Fire-and-forget messaging |
+| `@Transactional` | `StateMachine<S,E,D>` | State machines for workflows |
+| `@Retryable` | `Supervisor` restart | Automatic crash recovery |
+| `@Scheduled` | `ProcTimer` | Periodic messages |
+| `@EventListener` | `EventManager<E>` | Event broadcasting |
+| `ApplicationContext` | No equivalent | No central container |
+
+### Concurrency
+
+| Spring | JOTP | Notes |
+|--------|------|-------|
+| `@Async` + `ExecutorService` | `Proc<S,M>` virtual threads | Message-driven vs task-driven |
+| `@Retryable` | Supervisor restart | System-level retry |
+| `@CircuitBreaker` | `CircuitBreaker` process | Explicit state machine |
+| `@Transactional` | State machine workflows | Saga pattern |
+| `ThreadPoolTaskExecutor` | Virtual threads | JVM-managed scheduling |
+
+### Messaging
+
+| Spring | JOTP | Notes |
+|--------|------|-------|
+| `@JmsListener` / `@KafkaListener` | Process handler | Message-driven process |
+| `JmsTemplate` / `KafkaTemplate` | `tell()` / `ask()` | Direct messaging |
+| `@EventListener` | `EventManager<E>` | Broadcast pattern |
+| `MessageChannel` | `Proc<S,M>` | Process mailbox |
+| `@Payload` | Sealed message types | Type safety |
+
+---
+
+## Service Migration
+
+### Basic Service
+
+**Spring:**
+```java
+@Service
+public class OrderService {
+    private final OrderRepository repository;
+    private final PaymentService paymentService;
+
+    @Autowired
+    public OrderService(OrderRepository repository, PaymentService paymentService) {
+        this.repository = repository;
+        this.paymentService = paymentService;
+    }
+
+    @Transactional
+    public Order createOrder(OrderRequest request) {
+        var order = new Order(request);
+        order = repository.save(order);
+
+        var payment = paymentService.processPayment(order);
+        order.setPayment(payment);
+
+        return repository.save(order);
+    }
+
+    public Order getOrder(String id) {
+        return repository.findById(id).orElseThrow();
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface OrderMsg permits CreateOrder, GetOrder, PaymentCompleted {}
+record CreateOrder(OrderRequest request, CompletableFuture<Order> replyTo) implements OrderMsg {}
+record GetOrder(String id, CompletableFuture<Order> replyTo) implements OrderMsg {}
+record PaymentCompleted(Order order) implements OrderMsg {}
+
+// State
+record OrderState(Map<String, Order> orders, Map<String, PaymentService> paymentServices) {}
+
+// Process creation
+var orderProcess = Proc.spawn(
+    new OrderState(Map.of(), Map.of()),
+    (state, msg) -> switch (msg) {
+        case CreateOrder(var req, var reply) -> {
+            var order = new Order(req);
+            var updatedOrders = merge(state.orders(), Map.of(order.id(), order));
+
+            // Send payment request
+            var paymentService = state.paymentServices().get("default");
+            paymentService.tell(new ProcessPayment(order));
+
+            reply.complete(order);
+            yield new OrderState(updatedOrders, state.paymentServices());
+        }
+        case GetOrder(var id, var reply) -> {
+            var order = state.orders().get(id);
+            if (order != null) {
+                reply.complete(order);
+            } else {
+                reply.completeExceptionally(new IllegalArgumentException("Order not found"));
+            }
+            yield state;
+        }
+        case PaymentCompleted(var order) -> {
+            var updatedOrder = order.withPayment(order.payment());
+            var updatedOrders = merge(state.orders(), Map.of(order.id(), updatedOrder));
+            yield new OrderState(updatedOrders, state.paymentServices());
+        }
+    }
+);
+```
+
+**Key Differences:**
+1. **Message-driven:** All operations via messages
+2. **Explicit state:** No database state, in-memory state
+3. **Async by default:** Reply via CompletableFuture
+4. **No transactions:** Use sagas instead
+
+### Async Service
+
+**Spring:**
+```java
+@Service
+public class EmailService {
+    @Async("emailExecutor")
+    public CompletableFuture<Void> sendEmail(Email email) {
+        // Send email
+        mailSender.send(email);
+        return CompletableFuture.completedFuture(null);
+    }
+}
+
+@Configuration
+@EnableAsync
+public class AsyncConfig {
+    @Bean("emailExecutor")
+    public Executor emailExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(50);
+        executor.setQueueCapacity(100);
+        executor.initialize();
+        return executor;
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface EmailMsg permits SendEmail {}
+record SendEmail(Email email) implements EmailMsg {}
+
+// State
+record EmailState(MailSender mailSender) {}
+
+// Process creation
+var emailProcess = Proc.spawn(
+    new EmailState(mailSender),
+    (state, msg) -> switch (msg) {
+        case SendEmail(var email) -> {
+            state.mailSender().send(email);
+            yield state;  // Fire-and-forget
+        }
+    }
+);
+
+// Usage
+emailProcess.tell(new SendEmail(email));
+```
+
+**Key Differences:**
+1. **No executor configuration:** Virtual threads handle everything
+2. **Fire-and-forget:** `tell()` instead of `@Async`
+3. **Simpler:** No separate configuration class
+
+### Retry Logic
+
+**Spring:**
+```java
+@Service
+public class PaymentService {
+    @Retryable(
+        value = {PaymentException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000)
+    )
+    public Payment processPayment(Order order) {
+        return paymentGateway.charge(order);
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface PaymentMsg permits ProcessPayment, Retry {}
+record ProcessPayment(Order order) implements PaymentMsg {}
+record Retry(Order order, int attempt) implements PaymentMsg {}
+
+// State
+record PaymentState(PaymentGateway gateway) {}
+
+// Process with supervisor
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    3,  // max attempts
+    Duration.ofSeconds(10)
+);
+
+var paymentRef = supervisor.supervise(
+    "payment",
+    new PaymentState(gateway),
+    (state, msg) -> switch (msg) {
+        case ProcessPayment(var order) -> {
+            try {
+                var payment = state.gateway().charge(order);
+                yield state;
+            } catch (PaymentException e) {
+                throw e;  // Supervisor will retry
+            }
+        }
+    }
+);
+```
+
+**Key Differences:**
+1. **System-level retry:** Supervisor handles retries
+2. **No annotations:** Pure Java code
+3. **Automatic restart:** Process restarted on crash
+
+---
+
+## Dependency Injection
+
+### Spring Beans
+
+**Spring:**
+```java
+@Configuration
+public class AppConfig {
+    @Bean
+    public OrderService orderService(OrderRepository repository, PaymentService paymentService) {
+        return new OrderService(repository, paymentService);
+    }
+
+    @Bean
+    public OrderRepository orderRepository(DataSource dataSource) {
+        return new JdbcOrderRepository(dataSource);
+    }
+
+    @Bean
+    public PaymentService paymentService(PaymentGateway gateway) {
+        return new PaymentService(gateway);
+    }
+}
+
+@Service
+public class OrderService {
+    private final OrderRepository repository;
+    private final PaymentService paymentService;
+
+    @Autowired
+    public OrderService(OrderRepository repository, PaymentService paymentService) {
+        this.repository = repository;
+        this.paymentService = paymentService;
+    }
+}
+```
+
+**JOTP:**
+```java
+// Manual wiring in main class
+public class Application {
+    public static void main(String[] args) {
+        // Create processes directly
+        var repository = Proc.spawn(
+            new RepositoryState(dataSource),
+            repositoryHandler
+        );
+
+        var paymentGateway = new PaymentGateway();
+
+        var paymentService = Proc.spawn(
+            new PaymentState(paymentGateway),
+            paymentHandler
+        );
+
+        var orderService = Proc.spawn(
+            new OrderServiceState(
+                new ProcRef<>(repository),
+                new ProcRef<>(paymentService)
+            ),
+            orderServiceHandler
+        );
+
+        // Register for lookup
+        ProcRegistry.register("order-service", orderService);
+        ProcRegistry.register("payment-service", paymentService);
+        ProcRegistry.register("repository", repository);
+    }
+}
+
+// State holds dependencies
+record OrderServiceState(ProcRef<RepositoryState, RepositoryMsg> repository,
+                        ProcRef<PaymentState, PaymentMsg> paymentService) {}
+```
+
+**Key Differences:**
+1. **Manual wiring:** Explicit constructor calls
+2. **ProcRef for dependencies:** Typed references
+3. **Registry for lookup:** Find processes by name
+4. **No proxy magic:** Direct process references
+
+---
+
+## Transaction Management
+
+### Spring Transactions
+
+**Spring:**
+```java
+@Service
+public class OrderService {
+    @Transactional
+    public void placeOrder(Order order) {
+        orderRepository.save(order);
+        inventoryService.reserveItems(order.getItems());
+        paymentService.charge(order);
+        shippingService.scheduleShipment(order);
+    }
+}
+```
+
+**JOTP (Saga Pattern):**
+```java
+// Saga state machine
+sealed interface SagaState permits Started, OrderSaved, ItemsReserved, PaymentCharged, Completed, Failed {}
+record Started() implements SagaState {}
+record OrderSaved(Order order) implements SagaState {}
+record ItemsReserved(Order order) implements SagaState {}
+record PaymentCharged(Order order) implements SagaState {}
+record Completed(Order order) implements SagaState {}
+record Failed(Order order, String reason) implements SagaState {}
+
+// Saga events
+sealed interface SagaEvent permits SaveOrder, ReserveItems, ChargePayment, ScheduleShipment, Rollback {}
+record SaveOrder(Order order) implements SagaEvent {}
+record ReserveItems(Order order) implements SagaEvent {}
+record ChargePayment(Order order) implements SagaEvent {}
+record ScheduleShipment(Order order) implements SagaEvent {}
+record Rollback(String step) implements SagaEvent {}
+
+var saga = StateMachine.of(
+    new Started(),
+    null,
+    (state, event, data) -> switch (state) {
+        case Started _ -> switch (event) {
+            case SMEvent.User(SaveOrder(var order)) -> {
+                orderRepository.tell(new Save(order));
+                yield Transition.nextState(new OrderSaved(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case OrderSaved(var order) -> switch (event) {
+            case SMEvent.User(ReserveItems _) -> {
+                inventoryService.tell(new Reserve(order.getItems()));
+                yield Transition.nextState(new ItemsReserved(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case ItemsReserved(var order) -> switch (event) {
+            case SMEvent.User(ChargePayment _) -> {
+                paymentService.tell(new Charge(order));
+                yield Transition.nextState(new PaymentCharged(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case PaymentCharged(var order) -> switch (event) {
+            case SMEvent.User(ScheduleShipment _) -> {
+                shippingService.tell(new Schedule(order));
+                yield Transition.nextState(new Completed(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case Completed _ -> Transition.stop("Order completed");
+        case Failed(var order, var reason) -> {
+            // Execute compensating transactions
+            orderRepository.tell(new Delete(order.id()));
+            inventoryService.tell(new Release(order.getItems()));
+            paymentService.tell(new Refund(order.payment()));
+            yield Transition.stop("Saga failed: " + reason);
+        };
+    }
+);
+```
+
+**Key Differences:**
+1. **Explicit compensation:** No automatic rollback
+2. **State machine:** Workflow visibility
+3. **Async coordination:** Message-based orchestration
+4. **Better resilience:** Each step is supervised
+
+---
+
+## Event Handling
+
+### Spring Events
+
+**Spring:**
+```java
+@Component
+public class OrderCreatedListener {
+    @EventListener
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        // Send confirmation email
+        emailService.sendConfirmation(event.getOrder());
+    }
+}
+
+@Service
+public class OrderService {
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    public Order createOrder(OrderRequest request) {
+        var order = new Order(request);
+        order = repository.save(order);
+        eventPublisher.publishEvent(new OrderCreatedEvent(order));
+        return order;
+    }
+}
+```
+
+**JOTP EventManager:**
+```java
+// Event types
+sealed interface OrderEvent permits OrderCreated, OrderCancelled {}
+record OrderCreated(Order order) implements OrderEvent {}
+record OrderCancelled(String orderId, String reason) implements OrderEvent {}
+
+// Event manager
+var eventManager = EventManager.start("order-events");
+
+// Event handler
+var emailHandler = new EventManager.Handler<OrderEvent>() {
+    @Override
+    public void handleEvent(OrderEvent event) {
+        switch (event) {
+            case OrderCreated(var order) ->
+                emailService.sendConfirmation(order);
+            case OrderCancelled(var orderId, var reason) ->
+                emailService.sendCancellation(orderId, reason);
+        }
+    }
+};
+
+eventManager.addHandler(emailHandler);
+
+// Publish event
+eventManager.notify(new OrderCreated(order));
+```
+
+**Key Differences:**
+1. **Typed events:** Sealed interfaces
+2. **Handler interface:** Explicit implementation
+3. **Process-based:** EventManager is a process
+4. **Fault isolation:** Handler crashes don't stop manager
+
+---
+
+## Scheduled Tasks
+
+### Spring Scheduling
+
+**Spring:**
+```java
+@Component
+public class ScheduledTasks {
+    @Scheduled(fixedRate = 5000)
+    public void reportCurrentTime() {
+        System.out.println("Current time: " + Instant.now());
+    }
+
+    @Scheduled(cron = "0 0 12 * * ?")
+    public void performDailyTask() {
+        // Daily task at noon
+    }
+}
+```
+
+**JOTP ProcTimer:**
+```java
+// Message protocol
+sealed interface TimerMsg permits Tick, DailyTask {}
+record Tick() implements TimerMsg {}
+record DailyTask() implements TimerMsg {}
+
+// Process creation
+var timerProc = Proc.spawn(
+    new TimerState(),
+    (state, msg) -> switch (msg) {
+        case Tick _ -> {
+            System.out.println("Current time: " + Instant.now());
+            yield state;
+        }
+        case DailyTask _ -> {
+            // Perform daily task
+            yield state;
+        }
+    }
+);
+
+// Fixed rate timer
+var tickTimer = ProcTimer.sendInterval(
+    Duration.ofSeconds(5),
+    timerProc,
+    new Tick()
+);
+
+// Cron-style timer (usingScheduledExecutorService)
+var scheduler = Executors.newScheduledThreadPool(1);
+var cronTrigger = scheduler.scheduleAtFixedRate(
+    () -> {
+        var now = LocalTime.now();
+        if (now.getHour() == 12 && now.getMinute() == 0) {
+            timerProc.tell(new DailyTask());
+        }
+    },
+    0,
+    1,
+    TimeUnit.MINUTES
+);
+```
+
+**Key Differences:**
+1. **Process-based:** Messages instead of method calls
+2. **Explicit timers:** Timer objects for cancellation
+3. **No cron expression:** Use ScheduledExecutorService
+4. **More control:** Can dynamically adjust timers
+
+---
+
+## Configuration Migration
+
+### Spring Properties
+
+**application.properties:**
+```properties
+app.name=MyApp
+app.queue-size=100
+app.timeout=5000
+
+database.url=jdbc:postgresql://localhost/db
+database.username=user
+database.password=pass
+
+payment.gateway.url=https://api.payment.com
+payment.gateway.timeout=30000
+```
+
+**Java Configuration:**
+```java
+public class Config {
+    private static final Properties props = loadProperties();
+
+    public record AppConfig(
+        String name,
+        int queueSize,
+        Duration timeout
+    ) {}
+
+    public record DatabaseConfig(
+        String url,
+        String username,
+        String password
+    ) {}
+
+    public record PaymentGatewayConfig(
+        String url,
+        Duration timeout
+    ) {}
+
+    public static AppConfig appConfig() {
+        return new AppConfig(
+            props.getProperty("app.name"),
+            Integer.parseInt(props.getProperty("app.queue-size")),
+            Duration.ofMillis(Long.parseLong(props.getProperty("app.timeout")))
+        );
+    }
+
+    public static DatabaseConfig databaseConfig() {
+        return new DatabaseConfig(
+            props.getProperty("database.url"),
+            props.getProperty("database.username"),
+            props.getProperty("database.password")
+        );
+    }
+
+    public static PaymentGatewayConfig paymentGatewayConfig() {
+        return new PaymentGatewayConfig(
+            props.getProperty("payment.gateway.url"),
+            Duration.ofMillis(Long.parseLong(props.getProperty("payment.gateway.timeout")))
+        );
+    }
+}
+```
+
+**Key Differences:**
+1. **No @Value:** Manual property loading
+2. **Type-safe records:** Compile-time checking
+3. **Explicit conversion:** Manual type conversion
+4. **More control:** Custom configuration logic
+
+---
+
+## Testing Migration
+
+### Spring Boot Test
+
+**Spring:**
+```java
+@SpringBootTest
+class OrderServiceTest {
+    @Autowired
+    private OrderService orderService;
+
+    @MockBean
+    private PaymentService paymentService;
+
+    @Test
+    void testCreateOrder() {
+        var request = new OrderRequest("product-1", 2);
+        when(paymentService.processPayment(any())).thenReturn(new Payment("ok"));
+
+        var order = orderService.createOrder(request);
+
+        assertNotNull(order);
+        assertEquals("product-1", order.getProductId());
+        verify(paymentService).processPayment(any());
+    }
+}
+```
+
+**JOTP:**
+```java
+class OrderServiceTest {
+    @Test
+    void testCreateOrder() {
+        // Create real processes
+        var paymentService = Proc.spawn(
+            new PaymentState(new PaymentGateway()),
+            paymentHandler
+        );
+
+        var orderService = Proc.spawn(
+            new OrderServiceState(new ProcRef<>(paymentService)),
+            orderHandler
+        );
+
+        // Create order
+        var request = new OrderRequest("product-1", 2);
+        var future = orderService.ask(new CreateOrder(request));
+
+        // Wait for response
+        var order = future.join();
+        assertNotNull(order);
+        assertEquals("product-1", order.productId());
+    }
+}
+```
+
+**Key Differences:**
+1. **No @SpringBootTest:** Direct process creation
+2. **No mocks:** Real processes with fast execution
+3. **Async assertions:** CompletableFuture-based
+4. **Faster tests:** No container startup
+
+---
+
+## Migration Checklist
+
+### Phase 1: Core Concepts (Week 1-2)
+- [ ] Understand message-passing vs method calls
+- [ ] Learn virtual threads vs thread pools
+- [ ] Practice immutable state with records
+- [ ] Understand supervision vs exception handling
+
+### Phase 2: Service Migration (Week 3-4)
+- [ ] Convert @Service components to Proc<S,M>
+- [ ] Implement message protocols
+- [ ] Remove @Autowired dependencies
+- [ ] Set up process registry
+
+### Phase 3: Concurrency (Week 5-6)
+- [ ] Convert @Async to tell() pattern
+- [ ] Implement supervisors for retry logic
+- [ ] Replace @Transactional with sagas
+- [ ] Set up state machines for workflows
+
+### Phase 4: Events and Scheduling (Week 7-8)
+- [ ] Convert @EventListener to EventManager
+- [ ] Replace @Scheduled with ProcTimer
+- [ ] Implement event broadcasting
+- [ ] Set up periodic tasks
+
+### Phase 5: Advanced Features (Week 9-10)
+- [ ] Remove Spring configuration
+- [ ] Implement manual dependency injection
+- [ ] Set up distributed communication
+- [ ] Performance testing and optimization
+
+---
+
+## Common Gotchas
+
+### 1. Blocking Operations
+
+**Problem:** Blocking in virtual threads can cascade.
+
+**Solution:** Offload blocking work to dedicated pool.
+
+```java
+// WRONG
+case DatabaseQuery _ -> {
+    var result = repository.query();  // Blocks
+    yield state;
+}
+
+// CORRECT
+case DatabaseQuery _ -> {
+    var future = CompletableFuture.supplyAsync(
+        () -> repository.query(),
+        blockingExecutor
+    );
+    // Handle async result
+    yield state;
+}
+```
+
+### 2. Mutable State
+
+**Problem:** Sharing mutable state breaks isolation.
+
+**Solution:** Always use immutable records.
+
+```java
+// WRONG
+record BadState(List<String> items) {}  // Mutable list
+
+// CORRECT
+record GoodState(List<String> items) {
+    public GoodState {
+        items = List.copyOf(items);
+    }
+}
+```
+
+### 3. Exception Handling
+
+**Problem:** Overusing try-catch defeats supervision.
+
+**Solution:** Let supervisors handle failures.
+
+```java
+// WRONG
+case ProcessMsg _ -> {
+    try {
+        riskyOperation();
+    } catch (Exception e) {
+        // Swallowing exceptions
+    }
+}
+
+// CORRECT
+case ProcessMsg _ -> riskyOperation();  // Supervisor will retry
+```
+
+### 4. Transaction Boundaries
+
+**Problem:** Looking for @Transactional.
+
+**Solution:** Use saga pattern for distributed transactions.
+
+```java
+// NOT AVAILABLE IN JOTP
+@Transactional
+public void processOrder() { ... }
+
+// USE SAGA INSTEAD
+var saga = StateMachine.of(...);
+saga.call(new StartSaga(order));
+```
+
+---
+
+## Best Practices for Migration
+
+### 1. Start with Stateless Services
+Migrate simple services first to learn message passing.
+
+### 2. Use Sealed Types
+Leverage the compiler for message safety.
+
+```java
+sealed interface Message permits A, B, C {}
+record A() implements Message {}
+record B() implements Message {}
+record C() implements Message {}
+```
+
+### 3. Embrace Immutability
+All state should be immutable.
+
+```java
+public record UserState(
+    String id,
+    String name,
+    List<String> roles
+) {}
+```
+
+### 4. Test Supervision
+Verify crash recovery works.
+
+```java
+@Test
+void testSupervisorRestarts() {
+    var sup = Supervisor.create(ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+    var child = sup.supervise("test", state, handler);
+
+    child.proc().thread().interrupt();
+    assertTrue(child.proc().isRunning());
+}
+```
+
+---
+
+## Further Reading
+
+- [JOTP Architecture Overview](../explanations/architecture-overview.md)
+- [How-To: Build Supervision Trees](../how-to/build-supervision-trees.md)
+- [How-To: State Machine Workflows](../how-to/state-machine-workflow.md)
+- [Examples: Spring Boot Integration](../examples/spring-boot-integration.md)
+
+---
+
+**Conclusion:** JOTP provides a fundamentally different approach to concurrency than Spring. While Spring focuses on synchronous method calls and containers, JOTP emphasizes message passing and supervision. The migration requires rethinking application architecture, but the benefits in fault tolerance and scalability are significant.

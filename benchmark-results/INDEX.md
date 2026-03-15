@@ -254,7 +254,7 @@ This is a **BLOCKING ISSUE** for production deployment.
 **Maintainer:** JOTP Core Team
 **GitHub:** https://github.com/seanchatmangpt/jotp
 **Discussions:** https://github.com/seanchatmangpt/jotp/discussions
-**Documentation:** See `.claude/ARCHITECTURE.md` for framework overview
+**Documentation:** See `docs/architecture/README.md` for framework overview
 
 ---
 
