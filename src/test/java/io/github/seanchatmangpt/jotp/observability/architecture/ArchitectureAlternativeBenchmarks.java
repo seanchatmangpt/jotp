@@ -21,7 +21,6 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
@@ -56,8 +55,8 @@ public class ArchitectureAlternativeBenchmarks {
     // ── Test Event ─────────────────────────────────────────────────────────────
 
     /**
-     * Test event representing ProcessCreated (most frequent framework event).
-     * Record for minimal allocation overhead.
+     * Test event representing ProcessCreated (most frequent framework event). Record for minimal
+     * allocation overhead.
      */
     record TestEvent(long timestamp, String processId, String processType) {
         static TestEvent create() {
@@ -88,6 +87,7 @@ public class ArchitectureAlternativeBenchmarks {
      * Compile-time elimination using two separate implementations selected at build time.
      *
      * <p><strong>Strategy:</strong> Generate two classes:
+     *
      * <ul>
      *   <li>EnabledEventBus - full implementation
      *   <li>NoOpEventBus - empty methods (JIT elides call entirely)
@@ -96,8 +96,7 @@ public class ArchitectureAlternativeBenchmarks {
      * <p><strong>Benefit:</strong> No runtime branch, JIT can inline and eliminate entirely
      */
     static final class CompileTimeEliminationEventBus {
-        private static final boolean ENABLED =
-                Boolean.getBoolean("jotp.observability.enabled");
+        private static final boolean ENABLED = Boolean.getBoolean("jotp.observability.enabled");
 
         private static final EventBusDelegate DELEGATE =
                 ENABLED ? new EnabledEventBus() : new NoOpEventBus();
@@ -137,8 +136,8 @@ public class ArchitectureAlternativeBenchmarks {
     /**
      * MethodHandle indirection with mutable target switching.
      *
-     * <p><strong>Strategy:</strong> Use MethodHandle to switch between implementations
-     * at runtime without branch checks.
+     * <p><strong>Strategy:</strong> Use MethodHandle to switch between implementations at runtime
+     * without branch checks.
      *
      * <p><strong>Benefit:</strong> Direct invocation via invokeExact, no conditional branching
      */
@@ -154,12 +153,9 @@ public class ArchitectureAlternativeBenchmarks {
                 boolean enabled = Boolean.getBoolean("jotp.observability.enabled");
                 if (enabled) {
                     publishHandle =
-                            LOOKUP.findStatic(
-                                    EnabledPublisher.class, "publish", PUBLISH_TYPE);
+                            LOOKUP.findStatic(EnabledPublisher.class, "publish", PUBLISH_TYPE);
                 } else {
-                    publishHandle =
-                            LOOKUP.findStatic(
-                                    NoOpPublisher.class, "publish", PUBLISH_TYPE);
+                    publishHandle = LOOKUP.findStatic(NoOpPublisher.class, "publish", PUBLISH_TYPE);
                 }
             } catch (ReflectiveOperationException e) {
                 throw new ExceptionInInitializerError(e);
@@ -198,8 +194,8 @@ public class ArchitectureAlternativeBenchmarks {
     /**
      * Static final delegation with interface-based constant resolution.
      *
-     * <p><strong>Strategy:</strong> Use static final field with interface type,
-     * resolved at class initialization time.
+     * <p><strong>Strategy:</strong> Use static final field with interface type, resolved at class
+     * initialization time.
      *
      * <p><strong>Benefit:</strong> JVM can inline interface calls when target is constant
      */
@@ -212,8 +208,10 @@ public class ArchitectureAlternativeBenchmarks {
 
         static {
             boolean enabled = Boolean.getBoolean("jotp.observability.enabled");
-            PUBLISHER = enabled ? StaticFinalDelegationEventBus::publishEnabled
-                                : StaticFinalDelegationEventBus::publishNoOp;
+            PUBLISHER =
+                    enabled
+                            ? StaticFinalDelegationEventBus::publishEnabled
+                            : StaticFinalDelegationEventBus::publishNoOp;
         }
 
         private static void publishEnabled(TestEvent event) {
@@ -253,8 +251,7 @@ public class ArchitectureAlternativeBenchmarks {
 
         static {
             try {
-                Field unsafeField =
-                        sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+                Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
                 unsafeField.setAccessible(true);
                 UNSAFE = (sun.misc.Unsafe) unsafeField.get(null);
                 ENABLED = Boolean.getBoolean("jotp.observability.enabled");
@@ -268,8 +265,8 @@ public class ArchitectureAlternativeBenchmarks {
         static void publish(TestEvent event) {
             if (ENABLED) {
                 // Direct atomic increment without safety checks
-                UNSAFE.getAndAddLong(UnsafeEventBus.class,
-                        UNSAFE.objectFieldOffset(eventCountField()), 1L);
+                UNSAFE.getAndAddLong(
+                        UnsafeEventBus.class, UNSAFE.objectFieldOffset(eventCountField()), 1L);
             }
         }
 
@@ -291,8 +288,8 @@ public class ArchitectureAlternativeBenchmarks {
     // ── Control: No Overhead Baseline ────────────────────────────────────────
 
     /**
-     * Pure baseline with zero overhead - just creates event and discards it.
-     * This represents the theoretical minimum overhead.
+     * Pure baseline with zero overhead - just creates event and discards it. This represents the
+     * theoretical minimum overhead.
      */
     @Benchmark
     public void control_noOverhead(Blackhole bh) {
@@ -303,8 +300,8 @@ public class ArchitectureAlternativeBenchmarks {
     // ── Control: Branch Prediction Test ──────────────────────────────────────
 
     /**
-     * Test branch prediction impact with always-false condition.
-     * Simulates the worst-case scenario for branch misprediction.
+     * Test branch prediction impact with always-false condition. Simulates the worst-case scenario
+     * for branch misprediction.
      */
     @Benchmark
     public void control_branchPrediction(Blackhole bh) {

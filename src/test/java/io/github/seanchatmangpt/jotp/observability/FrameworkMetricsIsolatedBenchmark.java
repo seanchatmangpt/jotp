@@ -22,8 +22,8 @@ import org.openjdk.jmh.annotations.*;
 /**
  * Isolated microbenchmark for FrameworkMetrics.accept() overhead.
  *
- * <p>This benchmark uses @Setup and @TearDown to isolate ONLY the accept() call,
- * eliminating overhead from object allocation, blackhole consumption, and cleanup.
+ * <p>This benchmark uses @Setup and @TearDown to isolate ONLY the accept() call, eliminating
+ * overhead from object allocation, blackhole consumption, and cleanup.
  *
  * <p><strong>Key Improvements over Original Benchmark:</strong>
  *
@@ -64,8 +64,7 @@ public class FrameworkMetricsIsolatedBenchmark {
             System.clearProperty("jotp.observability.enabled");
 
             metrics = FrameworkMetrics.create();
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                    "test-pid", "Proc", 0);
+            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
         }
 
         @TearDown(Level.Trial)
@@ -85,8 +84,7 @@ public class FrameworkMetricsIsolatedBenchmark {
             System.setProperty("jotp.observability.enabled", "true");
 
             metrics = FrameworkMetrics.create();
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                    "test-pid", "Proc", 0);
+            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
         }
 
         @TearDown(Level.Trial)
@@ -105,8 +103,7 @@ public class FrameworkMetricsIsolatedBenchmark {
         public void setup() {
             System.clearProperty("jotp.observability.enabled");
             eventBus = FrameworkEventBus.create();
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                    "test-pid", "Proc", 0);
+            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
         }
 
         @TearDown(Level.Trial)
@@ -128,8 +125,7 @@ public class FrameworkMetricsIsolatedBenchmark {
             eventBus = FrameworkEventBus.create();
             metrics = FrameworkMetrics.create();
 
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                    "test-pid", "Proc", 0);
+            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
         }
 
         @TearDown(Level.Trial)
@@ -152,8 +148,7 @@ public class FrameworkMetricsIsolatedBenchmark {
             eventBus = FrameworkEventBus.create();
             metrics = FrameworkMetrics.create();
 
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                    "test-pid", "Proc", 0);
+            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
         }
 
         @TearDown(Level.Trial)
@@ -169,8 +164,8 @@ public class FrameworkMetricsIsolatedBenchmark {
     /**
      * Baseline: Direct call to FrameworkMetrics.accept() when disabled.
      *
-     * <p>Expected: <10ns. This is the pure overhead of the disabled path:
-     * static final read + branch + return.
+     * <p>Expected: <10ns. This is the pure overhead of the disabled path: static final read +
+     * branch + return.
      */
     @Benchmark
     public void accept_disabled_direct(DisabledMetricsState state) {
@@ -202,8 +197,8 @@ public class FrameworkMetricsIsolatedBenchmark {
     /**
      * Event bus publish with disabled FrameworkMetrics subscriber.
      *
-     * <p>Expected: ~400-500ns. The executor.submit() overhead even though the
-     * subscriber's accept() method returns immediately.
+     * <p>Expected: ~400-500ns. The executor.submit() overhead even though the subscriber's accept()
+     * method returns immediately.
      */
     @Benchmark
     public void publish_disabledSubscriber(EventBusDisabledSubscriberState state) {
@@ -279,15 +274,14 @@ public class FrameworkMetricsIsolatedBenchmark {
     /**
      * Original benchmark pattern (including allocation).
      *
-     * <p>This should measure ~456ns like the original B16 benchmark.
-     * Use this to verify our hypothesis about the benchmark design flaw.
+     * <p>This should measure ~456ns like the original B16 benchmark. Use this to verify our
+     * hypothesis about the benchmark design flaw.
      */
     @Benchmark
     public void accept_originalPattern() {
         FrameworkMetrics metrics = FrameworkMetrics.create();
         FrameworkEventBus.FrameworkEvent event =
-                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                        "test-pid", "Proc", 0);
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
 
         metrics.accept(event);
 
