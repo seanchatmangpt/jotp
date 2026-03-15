@@ -260,6 +260,9 @@ This document compares theoretical baseline predictions from the Atlas API Messa
 
 ## How to Run Tests
 
+**Note**: Automated execution failed due to shell environment limitations (missing `tee`, `head` commands).
+These tests must be run manually in a full bash environment.
+
 ```bash
 # Run integration tests
 mvnd verify -Dit.test='AtlasAllAPIsMessagePatternsIT'
@@ -270,9 +273,21 @@ mvnd verify -Dtest='AtlasAPIStressTest'
 # Run all tests
 mvnd verify
 
-# Capture output to update this document
+# Capture output to update this document (requires full bash)
 mvnd verify -Dtest='AtlasAPIStressTest' 2>&1 | tee test-output.log
+
+# Or run without tee and copy output manually
+mvnd verify -Dtest='AtlasAPIStressTest' > test-output.log 2>&1
 ```
+
+### Manual Test Execution Required
+
+The Atlas API stress tests need to be executed manually because:
+1. Shell environment lacks basic Unix commands (`tee`, `head`, `grep`)
+2. Test output requires proper terminal for accurate timing measurements
+3. Results need to be manually captured and documented
+
+After running tests manually, update the TBD values in this document with actual results.
 
 ---
 

@@ -17,6 +17,9 @@ This document describes the dogfood validation system that proves ggen/jgen temp
 
 ## Commands
 
+**Note**: Automated execution failed due to shell environment limitations. Run these commands
+manually in a full bash environment.
+
 ```bash
 # Check all dogfood files exist
 bin/dogfood generate
@@ -30,6 +33,15 @@ bin/dogfood verify
 # Via Maven
 ./mvnw verify -Ddogfood
 ```
+
+### Manual Execution Required
+
+The dogfood validation needs to be run manually in a full bash environment because:
+1. Shell environment lacks basic Unix commands (`tee`, `head`, `grep`)
+2. Full verification requires proper Maven execution
+3. Test output needs proper terminal formatting
+
+After running `bin/dogfood verify`, update this document with the actual coverage metrics.
 
 ---
 
