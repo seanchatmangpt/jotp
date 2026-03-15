@@ -1,0 +1,75 @@
+# Raw JSON Output from Capacity Planning Tests
+# Java 26 - OpenJDK 26.ea.13-graal
+# Date: 2026-03-14
+
+## Small Instance (1K msg/sec)
+{
+  "instance_type": "small",
+  "target_throughput": 1000,
+  "actual_throughput": "Infinity",
+  "process_count": 10,
+  "messages_processed": 1000,
+  "cpu_overhead_percent": 15.79,
+  "cpu_target_percent": 1.00,
+  "avg_latency_ms": 0.170,
+  "p99_latency_ms": 1.190,
+  "p99_target_ms": 1.00,
+  "memory_overhead_per_1k_bytes": 20073160,
+  "sla_compliant": false,
+  "violations": ["CPU 15.79% exceeds target 1.00%", "P99 latency 1.19ms exceeds target 1.00ms"],
+  "test_duration_ms": 19
+}
+
+## Medium Instance (10K msg/sec)
+{
+  "instance_type": "medium",
+  "target_throughput": 10000,
+  "actual_throughput": "Infinity",
+  "process_count": 100,
+  "messages_processed": 10000,
+  "cpu_overhead_percent": 6.98,
+  "cpu_target_percent": 3.00,
+  "avg_latency_ms": 0.412,
+  "p99_latency_ms": 1.104,
+  "p99_target_ms": 2.00,
+  "memory_overhead_per_1k_bytes": 2208648,
+  "sla_compliant": false,
+  "violations": ["CPU 6.98% exceeds target 3.00%"],
+  "test_duration_ms": 43
+}
+
+## Large Instance (100K msg/sec) ✅ PASSED
+{
+  "instance_type": "large",
+  "target_throughput": 100000,
+  "actual_throughput": "Infinity",
+  "process_count": 1000,
+  "messages_processed": 100000,
+  "cpu_overhead_percent": 2.42,
+  "cpu_target_percent": 5.00,
+  "avg_latency_ms": 1.209,
+  "p99_latency_ms": 3.348,
+  "p99_target_ms": 5.00,
+  "memory_overhead_per_1k_bytes": 221527,
+  "sla_compliant": true,
+  "violations": [],
+  "test_duration_ms": 124
+}
+
+## Enterprise Instance (1M msg/sec)
+{
+  "instance_type": "enterprise",
+  "target_throughput": 1000000,
+  "actual_throughput": "Infinity",
+  "process_count": 10000,
+  "messages_processed": 1000000,
+  "cpu_overhead_percent": 0.47,
+  "cpu_target_percent": 10.00,
+  "avg_latency_ms": 6.204,
+  "p99_latency_ms": 30.887,
+  "p99_target_ms": 10.00,
+  "memory_overhead_per_1k_bytes": 345460,
+  "sla_compliant": false,
+  "violations": ["P99 latency 30.89ms exceeds target 10.00ms"],
+  "test_duration_ms": 637
+}

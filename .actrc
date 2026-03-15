@@ -1,0 +1,29 @@
+# Act configuration file
+# Best practices for JOTP testing
+
+# Default event
+--default-event=push
+
+# Use Docker in Docker for better compatibility
+--use-docker-in-docker
+
+# Don't remove containers after use (faster subsequent runs)
+--rm=false
+
+# Enable parallel execution
+--parallel
+
+# Secret file location
+--secret-file=.secrets
+
+# Environment file
+--env-file=.env
+
+# Pull images before running
+--pull=always
+
+# Quiet mode for cleaner output
+--quiet
+
+# Skip platform auto-detection for consistency
+--platform=ubuntu-latest=catthehacker/ubuntu:act-latest

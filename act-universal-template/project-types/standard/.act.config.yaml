@@ -1,0 +1,86 @@
+# Standard Maven Project Act Configuration
+# =======================================
+# Universal configuration for any standard Maven project
+
+# Event configuration
+event_name: push
+event_data:
+  ref: refs/heads/main
+
+# Workflow file (edit this for your project)
+workflow: .github/workflows/ci.yml
+
+# Secrets configuration
+secrets:
+  MAVEN_USERNAME: "${MAVEN_USERNAME}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD}"
+  GPG_PRIVATE_KEY: "${GPG_PRIVATE_KEY}"
+  GPG_PASSPHRASE: "${GPG_PASSPHRASE}"
+  GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+# Standard Maven environment variables
+env:
+  # Java configuration
+  JAVA_VERSION: "17"
+  JAVA_OPTS: "-Xmx3g -Xms1g -Djava.security.egd=file:/dev/./urandom"
+
+  # Maven configuration
+  MAVEN_OPTS: "-Xmx3g -Xms1g -Dmaven.repo.local=${{ github.workspace }}/.m2/repository"
+  MAVEN_USERNAME: "${MAVEN_USERNAME:-mvn-user}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD:-mvn-pass}"
+
+  # Build configuration
+  SKIP_TESTS: "false"
+  SKIP_DEPLOY: "true"
+  DRY_RUN: "true"
+  BUILD_PARALLEL: "-T2C"
+
+# Universal container
+container:
+  image: catthehacker/ubuntu:act-latest
+  options: |
+    --privileged
+    -v /var/run/docker.sock:/var/run/docker.sock
+    -e JAVA_TOOL_OPTIONS="-Xmx2g"
+
+# Platform configuration
+platforms:
+  # Primary platform
+  ubuntu-latest:
+    image: catthehacker/ubuntu:act-latest
+    options: "--privileged -v /var/run/docker.sock:/var/run/docker.sock"
+
+  # Windows
+  windows-latest:
+    image: mcr.microsoft.com/dotnet/sdk:6.0
+    options: ""
+
+# Workflow configuration
+workflow_runs:
+  - workflow: "${workflow}"
+    skip_steps:
+      - "Deploy to Production"
+      - "Release to Maven Central"
+
+    # Standard Maven event data
+    event_data:
+      ref: refs/heads/main
+      inputs:
+        profile: test
+        environment: dev
+
+# Logging and debugging
+debug: false
+verbose: false
+dryrun: false
+
+# Performance optimizations
+tmpfs:
+  - /tmp
+  - /var/tmp
+
+# Volume configuration
+volumes:
+  - ~/.m2/repository:/root/.m2/repository
+  - ~/.docker:/root/.docker
+  - ~/.act:/root/.act

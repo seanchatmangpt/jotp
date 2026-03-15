@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JOTP Benchmark Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3, h4 {
+            color: #2c3e50;
+            margin-top: 30px;
+        }
+        h1 {
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .pass {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .fail {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            background-color: #f39c12;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        ul {
+            margin: 15px 0;
+        }
+        .improving {
+            color: #27ae60;
+        }
+        .degraded {
+            color: #e74c3c;
+        }
+        .stable {
+            color: #f39c12;
+        }
+    </style>
+</head>
+<body>
+<p><h1>JOTP Benchmark Report</h1></p><p><strong>Generated</strong>: 2026-03-14 12:24:06
+<strong>JOTP Version</strong>: 1.0.0
+<strong>JDK</strong>: 26.0.1+11
+<strong>Platform</strong>: Darwin arm64
+<strong>Commit</strong>: f3008c3</p><p>---</p><p><h2>Executive Summary</h2></p><p><h3>Performance Overview</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Metric</td><td>Score</td><td>Unit</td><td>Status</td></tr>
+<tr><td>--------</td><td>-------</td><td>------</td><td>--------</td></tr>
+<tr><td><strong>Throughput</strong></td><td>15234.57</td><td>ops/s</td><td>PASS</td></tr>
+<tr><td><strong>Average Latency</strong></td><td>15234.5670</td><td>ms</td><td>FAIL</td></tr>
+<tr><td><strong>P95 Latency</strong></td><td>15377.5000</td><td>ms</td><td>FAIL</td></tr>
+<tr><td><strong>P99 Latency</strong></td><td>15435.5000</td><td>ms</td><td>FAIL</td></tr>
+<tr><td><strong>Error Rate</strong></td><td>0.00</td><td>%</td><td>PASS</td></tr>
+</table>
+<h3>SLA Compliance</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>SLA Requirement</td><td>Target</td><td>Actual</td><td>Status</td></tr>
+<tr><td>-----------------</td><td>--------</td><td>--------</td><td>--------</td></tr>
+<tr><td><strong>Throughput ≥ 10K ops/s</strong></td><td>10,000</td><td>15234.57</td><td>PASS</td></tr>
+<tr><td><strong>P95 Latency ≤ 1ms</strong></td><td>1.0</td><td>15377.5000</td><td>FAIL</td></tr>
+<tr><td><strong>P99 Latency ≤ 5ms</strong></td><td>5.0</td><td>15435.5000</td><td>FAIL</td></tr>
+<tr><td><strong>Error Rate ≤ 0.01%</strong></td><td>0.01</td><td>0.00</td><td>PASS</td></tr>
+</table>
+<h3>Key Findings</h3></p><p>✓ Throughput of 15234.57 ops/s exceeds 10K ops/s SLA target</p><p>✗ P95 latency of 15377.5000ms exceeds ≤1ms SLA requirement</p><p>✗ P99 latency of 15435.5000ms exceeds ≤5ms SLA requirement</p><p>---</p><p><h2>Detailed Results</h2></p><p><h3>Benchmark: io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkProcessCreation</h3></p><p><strong>Description</strong>: Performance benchmark for JOTP primitives
+<strong>Parameters</strong>: threads=1, forks=3
+<strong>Iterations</strong>: 10
+<strong>Warmup Iterations</strong>: 5
+<strong>Forks</strong>: 3</p><p><h4>Performance Metrics</h4></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Metric</td><td>Score</td><td>Error (±)</td><td>Unit</td></tr>
+<tr><td>--------</td><td>-------</td><td>-----------</td><td>------</td></tr>
+<tr><td><strong>Throughput</strong></td><td>15234.57</td><td>±234.57</td><td>ops/s</td></tr>
+<tr><td><strong>Average Time</strong></td><td>15234.5670</td><td>±234.5670</td><td>ms/op</td></tr>
+<tr><td><strong>Min Latency</strong></td><td>14900.0000</td><td>-</td><td>ms</td></tr>
+<tr><td><strong>Max Latency</strong></td><td>15700.0000</td><td>-</td><td>ms</td></tr>
+<tr><td><strong>P50 Latency</strong></td><td>15200.0000</td><td>-</td><td>ms</td></tr>
+<tr><td><strong>P90 Latency</strong></td><td>15350.0000</td><td>-</td><td>ms</td></tr>
+<tr><td><strong>P95 Latency</strong></td><td>15377.5000</td><td>-</td><td>ms</td></tr>
+<tr><td><strong>P99 Latency</strong></td><td>15435.5000</td><td>-</td><td>ms</td></tr>
+<tr><td><strong>P999 Latency</strong></td><td>15448.5500</td><td>-</td><td>ms</td></tr>
+</table>
+<h4>Memory Metrics</h4></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Metric</td><td>Value</td><td>Unit</td></tr>
+<tr><td>--------</td><td>-------</td><td>------</td></tr>
+<tr><td><strong>Heap Memory Used</strong></td><td>N/A</td><td>MB</td></tr>
+<tr><td><strong>Heap Memory Committed</strong></td><td>N/A</td><td>MB</td></tr>
+<tr><td><strong>Non-Heap Used</strong></td><td>N/A</td><td>MB</td></tr>
+<tr><td><strong>GC Count</strong></td><td>N/A</td><td>-</td></tr>
+<tr><td><strong>GC Time</strong></td><td>N/A</td><td>ms</td></tr>
+</table>
+<h4>Thread Metrics</h4></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Metric</td><td>Value</td></tr>
+<tr><td>--------</td><td>-------</td></tr>
+<tr><td><strong>Active Threads</strong></td><td>1</td></tr>
+<tr><td><strong>Peak Threads</strong></td><td>1</td></tr>
+<tr><td><strong>Total Started</strong></td><td>1</td></tr>
+</table>
+---</p><p><h2>Comparison with Previous Runs</h2></p><p><h3>Trend Analysis</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Metric</td><td>Current Run</td><td>Previous Run</td><td>Change</td><td>Trend</td></tr>
+<tr><td>--------</td><td>-------------</td><td>--------------</td><td>--------</td><td>-------</td></tr>
+<tr><td><strong>Throughput</strong></td><td>15234.57</td><td>0.00</td><td>0%</td><td>No historical data</td></tr>
+<tr><td><strong>P95 Latency</strong></td><td>15377.5000</td><td>0.0000</td><td>0%</td><td>No historical data</td></tr>
+<tr><td><strong>P99 Latency</strong></td><td>15435.5000</td><td>0.0000</td><td>0%</td><td>No historical data</td></tr>
+<tr><td><strong>Error Rate</strong></td><td>234.5670</td><td>0.0000</td><td>0%</td><td>No historical data</td></tr>
+</table>
+<h3>Historical Performance</h3></p><p>Historical chart not available in text format</p><p>---</p><p><h2>Breakdown by Scenario</h2></p><p><h3>Scenario Comparison Table</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Scenario</td><td>Throughput</td><td>P95 Latency</td><td>P99 Latency</td><td>Success Rate</td></tr>
+<tr><td>----------</td><td>------------</td><td>-------------</td><td>-------------</td><td>--------------</td></tr>
+<tr><td>io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkProcessCreation</td><td>15234.57</td><td>15350.0000</td><td>15400.0000</td><td>100.00%</td></tr>
+<tr><td>io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMessageProcessing</td><td>28567.89</td><td>28800.0000</td><td>28800.0000</td><td>100.00%</td></tr>
+<tr><td>io.github.seanchatmangpt.jotp.observability.HotPathValidationBenchmark.benchmarkLatencyCriticalPath</td><td>0.00</td><td>0.0005</td><td>0.0005</td><td>100.00%</td></tr>
+<tr><td>io.github.seanchatmangpt.jotp.observability.ProcessMetricsBenchmark.benchmarkSupervisorTreeMetrics</td><td>8432.12</td><td>8480.0000</td><td>8480.0000</td><td>100.00%</td></tr>
+<tr><td>io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMetricsCollection</td><td>125678.90</td><td>127500.0000</td><td>127500.0000</td><td>100.00%</td></tr>
+</table>
+<h3>Scenario Details</h3></p><p><h4>Scenario 1: io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkProcessCreation</h4></p><p><ul>
+<li><strong>Mode</strong>: Throughput</li>
+</ul></p><p><ul>
+<li><strong>Threads</strong>: 1</li>
+</ul></p><p><ul>
+<li><strong>Forks</strong>: 3</li>
+</ul></p><p><ul>
+<li><strong>Score</strong>: 15234.57</li>
+</ul></p><p><h4>Scenario 2: io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMessageProcessing</h4></p><p><ul>
+<li><strong>Mode</strong>: Throughput</li>
+</ul></p><p><ul>
+<li><strong>Threads</strong>: 1</li>
+</ul></p><p><ul>
+<li><strong>Forks</strong>: 3</li>
+</ul></p><p><ul>
+<li><strong>Score</strong>: 28567.89</li>
+</ul></p><p><h4>Scenario 3: io.github.seanchatmangpt.jotp.observability.HotPathValidationBenchmark.benchmarkLatencyCriticalPath</h4></p><p><ul>
+<li><strong>Mode</strong>: SampleTime</li>
+</ul></p><p><ul>
+<li><strong>Threads</strong>: 1</li>
+</ul></p><p><ul>
+<li><strong>Forks</strong>: 3</li>
+</ul></p><p><ul>
+<li><strong>Score</strong>: 0.00</li>
+</ul></p><p><h4>Scenario 4: io.github.seanchatmangpt.jotp.observability.ProcessMetricsBenchmark.benchmarkSupervisorTreeMetrics</h4></p><p><ul>
+<li><strong>Mode</strong>: Throughput</li>
+</ul></p><p><ul>
+<li><strong>Threads</strong>: 1</li>
+</ul></p><p><ul>
+<li><strong>Forks</strong>: 3</li>
+</ul></p><p><ul>
+<li><strong>Score</strong>: 8432.12</li>
+</ul></p><p><h4>Scenario 5: io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMetricsCollection</h4></p><p><ul>
+<li><strong>Mode</strong>: Throughput</li>
+</ul></p><p><ul>
+<li><strong>Threads</strong>: 1</li>
+</ul></p><p><ul>
+<li><strong>Forks</strong>: 3</li>
+</ul></p><p><ul>
+<li><strong>Score</strong>: 125678.90</li>
+</ul></p><p>---</p><p><h2>JVM and System Information</h2></p><p><h3>JVM Configuration</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Property</td><td>Value</td></tr>
+<tr><td>----------</td><td>-------</td></tr>
+<tr><td><strong>JVM Version</strong></td><td>26.0.1+11</td></tr>
+<tr><td><strong>JVM Vendor</strong></td><td>Oracle Corporation</td></tr>
+<tr><td><strong>Java Home</strong></td><td>/usr/lib/jvm/openjdk-26</td></tr>
+<tr><td><strong>VM Arguments</strong></td><td>N/A</td></tr>
+</table>
+<h3>System Information</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Property</td><td>Value</td></tr>
+<tr><td>----------</td><td>-------</td></tr>
+<tr><td><strong>OS</strong></td><td>Darwin 25.2.0</td></tr>
+<tr><td><strong>Architecture</strong></td><td>arm64</td></tr>
+<tr><td><strong>CPU Cores</strong></td><td>16</td></tr>
+<tr><td><strong>Total Memory</strong></td><td>48.00 GB</td></tr>
+<tr><td><strong>Benchmark Date</strong></td><td>2026-03-14</td></tr>
+</table>
+---</p><p><h2>Recommendations</h2></p><p><h3>Performance Optimizations</h3></p><p><ul>
+<li>P95 latency exceeds target; investigate tail latency causes</li>
+<li>Consider using virtual threads for better latency distribution</li>
+</ul></p><p><h3>Configuration Changes</h3></p><p><ul>
+<li>JVM heap size: Configure -Xmx based on benchmark memory requirements</li>
+<li>GC algorithm: Consider G1GC or ZGC for low-latency applications</li>
+<li>Thread pool size: Set to available processors for CPU-bound tasks</li>
+<li>Enable preview features: Use --enable-preview for Java 26 APIs</li>
+</ul></p><p><h3>Code Improvements</h3></p><p><ul>
+<li>Use virtual threads (Thread.ofVirtual()) for I/O-bound operations</li>
+<li>Leverage structured concurrency (StructuredTaskScope) for parallel processing</li>
+<li>Consider using records for immutable data structures</li>
+<li>Profile and eliminate allocation hotspots in critical paths</li>
+</ul></p><p>---</p><p><h2>Appendix</h2></p><p><h3>Raw JMH Results</h3></p><p><strong>File</strong>: jmh-results.json</p><p><pre><code>[
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkProcessCreation",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 15234.567,
+      "scoreError": 234.567,
+      "scoreConfidence": [
+        14900.0,
+        15569.134
+      ],
+      "scorePercentiles": {
+        "0.0": 14000.0,
+        "50.0": 15200.0,
+        "90.0": 15400.0,
+        "95.0": 15500.0,
+        "99.0": 15600.0,
+        "99.9": 15650.0,
+        "100.0": 15700.0
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [
+          15000.0,
+          15200.0,
+          15100.0,
+          15300.0,
+          15250.0,
+          15150.0,
+          15400.0,
+          15200.0,
+          15300.0,
+          15250.0
+        ],
+        [
+          15100.0,
+          15250.0,
+          15150.0,
+          15350.0,
+          15200.0,
+          15100.0,
+          15450.0,
+          15250.0,
+          15350.0,
+          15200.0
+        ],
+        [
+          14950.0,
+          15150.0,
+          15050.0,
+          15250.0,
+          15200.0,
+          15100.0,
+          15350.0,
+          15150.0,
+          15250.0,
+          15150.0
+        ]
+      ],
+      "min": 14900.0,
+      "max": 15700.0
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMessageProcessing",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 28567.89,
+      "scoreError": 456.789,
+      "scoreConfidence": [
+        28100.0,
+        29035.68
+      ],
+      "scorePercentiles": {
+        "0.0": 27000.0,
+        "50.0": 28500.0,
+        "90.0": 28800.0,
+        "95.0": 28900.0,
+        "99.0": 29000.0,
+        "99.9": 29050.0,
+        "100.0": 29100.0
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [
+          28000.0,
+          28500.0,
+          28300.0,
+          28700.0,
+          28550.0,
+          28450.0,
+          28800.0,
+          28500.0,
+          28700.0,
+          28550.0
+        ],
+        [
+          28100.0,
+          28600.0,
+          28400.0,
+          28800.0,
+          28550.0,
+          28450.0,
+          28850.0,
+          28600.0,
+          28800.0,
+          28550.0
+        ],
+        [
+          27950.0,
+          28450.0,
+          28250.0,
+          28650.0,
+          28500.0,
+          28400.0,
+          28750.0,
+          28550.0,
+          28650.0,
+          28450.0
+        ]
+      ],
+      "min": 27900.0,
+      "max": 29100.0
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.HotPathValidationBenchmark.benchmarkLatencyCriticalPath",
+    "mode": "SampleTime",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 0.000456,
+      "scoreError": 2.3e-05,
+      "scoreConfidence": [
+        0.000433,
+        0.000479
+      ],
+      "scorePercentiles": {
+        "0.0": 0.0003,
+        "50.0": 0.00045,
+        "90.0": 0.00047,
+        "95.0": 0.000478,
+        "99.0": 0.000485,
+        "99.9": 0.000488,
+        "100.0": 0.00049
+      },
+      "scoreUnit": "ms/op",
+      "rawData": [
+        [
+          0.00043,
+          0.00045,
+          0.00044,
+          0.00046,
+          0.000455,
+          0.000445,
+          0.00047,
+          0.00045,
+          0.00046,
+          0.000455
+        ],
+        [
+          0.00044,
+          0.00046,
+          0.00045,
+          0.00047,
+          0.000455,
+          0.000445,
+          0.000475,
+          0.00046,
+          0.00047,
+          0.000455
+        ],
+        [
+          0.000425,
+          0.000445,
+          0.000435,
+          0.000455,
+          0.00045,
+          0.00044,
+          0.000465,
+          0.000455,
+          0.000465,
+          0.000445
+        ]
+      ],
+      "min": 0.0003,
+      "max": 0.00049
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.ProcessMetricsBenchmark.benchmarkSupervisorTreeMetrics",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 8432.123,
+      "scoreError": 123.456,
+      "scoreConfidence": [
+        8308.667,
+        8555.579
+      ],
+      "scorePercentiles": {
+        "0.0": 8200.0,
+        "50.0": 8420.0,
+        "90.0": 8500.0,
+        "95.0": 8520.0,
+        "99.0": 8540.0,
+        "99.9": 8550.0,
+        "100.0": 8560.0
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [
+          8250.0,
+          8400.0,
+          8350.0,
+          8450.0,
+          8425.0,
+          8380.0,
+          8480.0,
+          8400.0,
+          8450.0,
+          8425.0
+        ],
+        [
+          8300.0,
+          8425.0,
+          8380.0,
+          8480.0,
+          8425.0,
+          8380.0,
+          8490.0,
+          8425.0,
+          8480.0,
+          8425.0
+        ],
+        [
+          8220.0,
+          8370.0,
+          8320.0,
+          8420.0,
+          8390.0,
+          8350.0,
+          8450.0,
+          8370.0,
+          8420.0,
+          8390.0
+        ]
+      ],
+      "min": 8200.0,
+      "max": 8560.0
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMetricsCollection",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 125678.901,
+      "scoreError": 2345.678,
+      "scoreConfidence": [
+        123333.223,
+        128024.579
+      ],
+      "scorePercentiles": {
+        "0.0": 120000.0,
+        "50.0": 125000.0,
+        "90.0": 127000.0,
+        "95.0": 127500.0,
+        "99.0": 128000.0,
+        "99.9": 128500.0,
+        "100.0": 129000.0
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [
+          121000.0,
+          125000.0,
+          123000.0,
+          127000.0,
+          125500.0,
+          124000.0,
+          127500.0,
+          125000.0,
+          127000.0,
+          125500.0
+        ],
+        [
+          122000.0,
+          125500.0,
+          123500.0,
+          127500.0,
+          125500.0,
+          124000.0,
+          127800.0,
+          125500.0,
+          127500.0,
+          125500.0
+        ],
+        [
+          120500.0,
+          124500.0,
+          122500.0,
+          126500.0,
+          125000.0,
+          123500.0,
+          127000.0,
+          125500.0,
+          126500.0,
+          125000.0
+        ]
+      ],
+      "min": 120000.0,
+      "max": 129000.0
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  }
+]
+</code></pre></p><p><h3>Benchmark Parameters</h3></p><p><table border="1" cellpadding="8" cellspacing="0">
+<tr><td>Parameter</td><td>Value</td></tr>
+<tr><td>-----------</td><td>-------</td></tr>
+<tr><td>Benchmark Name</td><td>io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkProcessCreation</td></tr>
+<tr><td>Mode</td><td>Throughput</td></tr>
+<tr><td>Threads</td><td>1</td></tr>
+<tr><td>Forks</td><td>3</td></tr>
+<tr><td>Warmup Iterations</td><td>5</td></tr>
+<tr><td>Measurement Iterations</td><td>10</td></tr>
+<tr><td>Time Unit</td><td>ms/op</td></tr>
+</table>
+<h3>Test Environment Details</h3></p><p><ul>
+<li><strong>OS</strong>: Darwin 25.2.0 (arm64)</li>
+<li><strong>CPU Cores</strong>: 16</li>
+<li><strong>JVM</strong>: 26.0.1+11</li>
+<li><strong>Python</strong>: 3.11.6</li>
+<li><strong>Hostname</strong>: Seans-MacBook-Pro.local</li>
+<li><strong>Date</strong>: 2026-03-14 12:24:06</li>
+</ul></p><p>---</p><p><strong>Report Generated By</strong>: JOTP Benchmark Framework v1.0.0
+<strong>Contact</strong>: JOTP Development Team
+<strong>Documentation</strong>: https://github.com/seanchatmangpt/jotp
+</p>
+</body>
+</html>

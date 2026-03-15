@@ -1,0 +1,101 @@
+# Act Configuration for JOTP
+# Best Practices Configuration
+
+# Event configuration - push to main branch
+event_name: push
+event_data:
+  ref: refs/heads/main
+  sha: abc1234567890abcdef
+
+# Secrets configuration - DO NOT COMMIT THIS FILE
+secrets:
+  # These should be set in .secrets file
+  GPG_PRIVATE_KEY: "${GPG_PRIVATE_KEY}"
+  GPG_PASSPHRASE: "${GPG_PASSPHRASE}"
+  GPG_KEY_ID: "${GPG_KEY_ID}"
+  CENTRAL_TOKEN: "${CENTRAL_TOKEN}"
+  CENTRAL_USERNAME: "${CENTRAL_USERNAME}"
+  GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+# Environment variables
+env:
+  # Java configuration
+  JAVA_VERSION: "26"
+  JAVA_OPTS: "-Xmx2g -Xms1g --enable-preview"
+
+  # Maven configuration
+  MAVEN_OPTS: "-Xmx2g -Xms1g -Dmaven.repo.local=${{ github.workspace }}/.m2/repository"
+  MAVEN_USERNAME: "${MAVEN_USERNAME:-test-user}"
+  MAVEN_PASSWORD: "${MAVEN_PASSWORD:-test-password}"
+
+  # Build configuration
+  SKIP_DEPLOY: "true"  # Skip actual deployment in Act
+  DRY_RUN: "true"
+
+# Container configuration for optimal performance
+container:
+  image: catthehacker/ubuntu:act-latest
+  options: |
+    --privileged
+    -v /var/run/docker.sock:/var/run/docker.sock
+    -v /tmp:/tmp
+    -e GITHUB_ACTIONS=true
+    -e CI=true
+
+# Platform configuration
+platforms:
+  # Primary platform for testing
+  ubuntu-latest:
+    image: catthehacker/ubuntu:act-latest
+    options: "--privileged -v /var/run/docker.sock:/var/run/docker.sock"
+
+  # Secondary platform for matrix testing
+  windows-latest:
+    image: node:16-buster
+    options: ""
+
+# Workflow configurations
+workflow_runs:
+  # Main deployment workflow
+  - workflow: .github/workflows/publish.yml
+    skip_steps:
+      # Skip these steps for testing
+      - "Create release"
+      - "Deploy to Maven Central"
+      - "Generate release notes"
+
+    # Event-specific configurations
+    event_data:
+      ref: refs/heads/main
+      inputs:
+        release_type: snapshot
+
+    # Platform matrix
+    platforms:
+      - ubuntu-latest
+      - windows-latest
+
+# Logging and debugging
+debug: false
+verbose: false
+dryrun: false
+trace: false
+
+# Performance optimizations
+tmpfs:
+  - /tmp
+  - /var/tmp
+
+# Network configuration
+network:
+  name: act-jotp
+  create: true
+
+# Volume configuration
+volumes:
+  # Cache Maven dependencies
+  - ~/.m2/repository:/root/.m2/repository
+  # Cache Docker layers
+  - ~/.docker:/root/.docker
+  # Cache Act runs
+  - ~/.act:/root/.act

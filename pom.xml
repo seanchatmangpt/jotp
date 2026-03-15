@@ -53,6 +53,10 @@
         <tagNameFormat>v@{project.version}</tagNameFormat>
         <preparationGoals>clean compile test-compile</preparationGoals>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Default values for GPG signing (override in settings.xml for actual releases) -->
+        <gpg.keyname></gpg.keyname>
+        <gpg.passphrase></gpg.passphrase>
+        <central.token></central.token>
     </properties>
 
     <dependencies>

@@ -1,0 +1,32 @@
+# Universal Act Configuration File
+# ================================
+# Settings that work with any Maven project
+
+# General settings
+--default-event=push
+--use-docker-in-docker
+--parallel
+--rm=false
+--pull=policy
+--quiet
+
+# Performance settings
+--bind=false
+--no-prune
+--env-file=.env
+--secret-file=.secrets
+
+# Platform settings
+--platform=ubuntu-latest=catthehacker/ubuntu:act-latest
+--platform=windows-latest=node:16-buster
+
+# Debugging (uncomment to enable)
+# --debug
+# --trace
+# --verbose
+
+# Apple Silicon support (uncomment for M1/M2)
+# --container-architecture linux/amd64
+
+# Default container options
+--container-options=--privileged -v /var/run/docker.sock:/var/run/docker.sock
