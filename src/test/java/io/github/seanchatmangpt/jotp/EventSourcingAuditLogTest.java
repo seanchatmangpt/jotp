@@ -598,7 +598,8 @@ class EventSourcingAuditLogTest implements WithAssertions {
                                 switch (state) {
                                     case LockState.Locked() ->
                                             switch (event) {
-                                                case LockEvent.PushButton(var b) -> {
+                                                case StateMachine.SMEvent.User(
+                                                                LockEvent.PushButton(var b)) -> {
                                                     var entered = data.entered() + b;
                                                     yield entered.equals(data.code())
                                                             ? StateMachine.Transition.nextState(
@@ -611,7 +612,7 @@ class EventSourcingAuditLogTest implements WithAssertions {
                                             };
                                     case LockState.Open() ->
                                             switch (event) {
-                                                case LockEvent.Lock() ->
+                                                case StateMachine.SMEvent.User(LockEvent.Lock()) ->
                                                         StateMachine.Transition
                                                                 .<LockState, LockData>nextState(
                                                                         new LockState.Locked(),

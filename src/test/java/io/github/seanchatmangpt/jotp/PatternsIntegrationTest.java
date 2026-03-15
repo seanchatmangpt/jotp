@@ -31,7 +31,7 @@ class PatternsIntegrationTest {
     private EcommerceOrderService.PaymentService paymentService;
     private EcommerceOrderService.InventoryService inventoryService;
     private EcommerceOrderService.ShippingService shippingService;
-    private Proc<Void, EcommerceOrderService.OrderEvent> auditLog;
+    private List<Object> auditLog;
 
     @BeforeEach
     void setUp() {
@@ -39,7 +39,7 @@ class PatternsIntegrationTest {
                 new EcommerceOrderService.PaymentService("payment", 5, Duration.ofSeconds(60));
         inventoryService = new EcommerceOrderService.InventoryService("inventory", 5, 100);
         shippingService = new EcommerceOrderService.ShippingService();
-        auditLog = Proc.spawn(null, (state, event) -> state);
+        auditLog = new java.util.ArrayList<>();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -151,10 +151,6 @@ class PatternsIntegrationTest {
                                             EcommerceOrderService.SagaOutcome,
                                             EcommerceOrderService.SagaError>(var e) ->
                                     e;
-                            case Result.Failure<
-                                            EcommerceOrderService.SagaOutcome,
-                                            EcommerceOrderService.SagaError>(var e) ->
-                                    e;
                             default -> throw new IllegalStateException("unexpected result");
                         };
                 assertThat(error.message()).isNotEmpty();
@@ -198,10 +194,6 @@ class PatternsIntegrationTest {
                                     EcommerceOrderService.SagaOutcome,
                                     EcommerceOrderService.SagaError>(var e) ->
                             e;
-                    case Result.Failure<
-                                    EcommerceOrderService.SagaOutcome,
-                                    EcommerceOrderService.SagaError>(var e) ->
-                            e;
                     default -> throw new IllegalStateException("unexpected result");
                 };
         assertThat(error.message()).contains("Payment");
@@ -239,10 +231,6 @@ class PatternsIntegrationTest {
                 var error =
                         switch (result) {
                             case Result.Err<
-                                            EcommerceOrderService.SagaOutcome,
-                                            EcommerceOrderService.SagaError>(var e) ->
-                                    e;
-                            case Result.Failure<
                                             EcommerceOrderService.SagaOutcome,
                                             EcommerceOrderService.SagaError>(var e) ->
                                     e;

@@ -1,6 +1,7 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.*;
 
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;

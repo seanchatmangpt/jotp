@@ -160,7 +160,7 @@ public class EcommerceOrderService {
             return breaker.getState();
         }
 
-        void setSimulateFailure(boolean fail) {
+        public void setSimulateFailure(boolean fail) {
             simulateFailure = fail;
         }
     }
