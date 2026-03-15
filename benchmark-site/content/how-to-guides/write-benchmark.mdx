@@ -1,0 +1,327 @@
+---
+title: Writing Benchmark Tests
+description: Step-by-step guide to creating effective benchmarks
+type: how-to
+difficulty: intermediate
+duration: "30 min"
+lastUpdated: 2024-01-15
+prerequisites: ["getting-started"]
+tags: ["performance", "testing", "optimization"]
+seo:
+  title: JOTP How-To: Write Benchmark Tests
+  description: Step-by-step guide to creating effective benchmarks
+---
+
+# Writing Benchmark Tests
+
+This guide shows you how to write effective JOTP benchmarks that provide meaningful performance insights and help optimize your applications.
+
+## Benchmark Structure
+
+A well-structured JOTP benchmark consists of:
+
+1. **Test Setup** - Initialize processes and configuration
+2. **Warmup Phase** - Allow JIT compilation and cache warmup
+3. **Measurement Phase** - Collect actual performance data
+4. **Analysis** - Calculate metrics and present results
+
+## Step-by-Step Implementation
+
+### 1. Define Your Benchmark Class
+
+Create a class that implements your specific test scenario:
+
+```java
+import io.github.seanchatmangpt.jotp.benchmark.Benchmark;
+import io.github.seanchatmangpt.jotp.benchmark.BenchmarkConfig;
+import io.github.seanchatmangpt.jotp.benchmark.BenchmarkResult;
+import java.time.Duration;
+
+public class ThroughputBenchmark implements Benchmark {
+    private ProcRef<TestState, Request> testProcess;
+
+    @Override
+    public void setup() {
+        // Initialize the process before benchmarking
+        testProcess = Proc.spawn(
+            new TestState(),
+            new TestHandler(),
+            null
+        );
+    }
+
+    @Override
+    public BenchmarkResult run(BenchmarkConfig config) {
+        // Implementation in next step
+    }
+}
+```
+
+### 2. Implement Benchmark Logic
+
+```java
+@Override
+public BenchmarkResult run(BenchmarkConfig config) {
+    // Warmup phase
+    warmup(config.getWarmupIterations());
+
+    // Measurement phase
+    long startTime = System.nanoTime();
+    int operations = 0;
+
+    for (int i = 0; i < config.getMeasurementIterations(); i++) {
+        // Execute test operation
+        testProcess.send(new Request("test-" + i));
+        operations++;
+    }
+
+    long duration = System.nanoTime() - startTime;
+
+    // Calculate metrics
+    double throughput = (double) operations / (duration / 1e9);
+    double avgLatency = (double) duration / operations / 1e6; // milliseconds
+
+    return new BenchmarkResult.Builder()
+        .throughput(throughput)
+        .avgLatency(avgLatency)
+        .totalDuration(duration, TimeUnit.NANOSECONDS)
+        .operations(operations)
+        .build();
+}
+
+private void warmup(int iterations) {
+    for (int i = 0; i < iterations; i++) {
+        testProcess.send(new Request("warmup-" + i));
+    }
+}
+```
+
+### 3. Configure and Run
+
+```java
+// Configuration
+BenchmarkConfig config = new BenchmarkConfig.Builder()
+    .name("Throughput Test")
+    .description("Measure message processing throughput")
+    .warmupIterations(1000)
+    .measurementIterations(10000)
+    .timeUnit(TimeUnit.SECONDS)
+    .build();
+
+// Create and run benchmark
+BenchmarkRunner runner = new BenchmarkRunner(config);
+BenchmarkResult result = runner.run(new ThroughputBenchmark());
+
+// Output results
+System.out.println("Throughput: " + result.throughput() + " ops/sec");
+System.out.println("Avg Latency: " + result.avgLatency() + " ms");
+```
+
+## Advanced Techniques
+
+### Multi-threaded Benchmarks
+
+```java
+import java.util.concurrent.*;
+
+public class ConcurrentBenchmark implements Benchmark {
+    private final int threadCount;
+    private final int operationsPerThread;
+
+    public ConcurrentBenchmark(int threads, int opsPerThread) {
+        this.threadCount = threads;
+        this.operationsPerThread = opsPerThread;
+    }
+
+    @Override
+    public BenchmarkResult run(BenchmarkConfig config) {
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+        AtomicLong totalOps = new AtomicLong();
+
+        // Start threads
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                int ops = 0;
+                while (ops < operationsPerThread) {
+                    testProcess.send(new Request("concurrent-" + ops));
+                    ops++;
+                }
+                totalOps.addAndGet(ops);
+                latch.countDown();
+            });
+        }
+
+        // Wait for completion
+        latch.await();
+        executor.shutdown();
+
+        // Calculate throughput
+        double duration = (System.nanoTime() - startTime) / 1e9;
+        double throughput = totalOps.get() / duration;
+
+        return new BenchmarkResult.Builder()
+            .throughput(throughput)
+            .operations(totalOps.get())
+            .build();
+    }
+}
+```
+
+### Supervision Integration
+
+```java
+public class SupervisedBenchmark implements Benchmark {
+    private Supervisor supervisor;
+
+    @Override
+    public void setup() {
+        // Create supervisor with restart strategy
+        supervisor = Supervisor.create(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            List.of(
+                ChildSpec.builder(Proc::class)
+                    .name("benchmark-worker")
+                    .restartType(RestartType.PERMANENT)
+                    .shutdownTimeout(Duration.ofSeconds(5))
+                    .build()
+            )
+        );
+
+        // Start worker processes
+        for (int i = 0; i < 10; i++) {
+            supervisor.startChild(ChildSpec.builder(WorkerProcess::class)
+                .name("worker-" + i)
+                .build());
+        }
+    }
+
+    @Override
+    public BenchmarkResult run(BenchmarkConfig config) {
+        // Benchmark with supervised processes
+        // Supervisor will automatically restart failed workers
+    }
+}
+```
+
+## Best Practices
+
+### 1. Proper Warmup
+
+Always include a warmup period:
+
+```java
+// Allow JIT compilation
+for (int i = 0; i < 1000; i++) {
+    testProcess.send(new Request("warmup"));
+}
+```
+
+### 2. State Isolation
+
+Ensure tests don't interfere with each other:
+
+```java
+@BeforeEach
+public void setup() {
+    // Fresh process for each test
+    testProcess = Proc.spawn(new State(), new Handler(), null);
+}
+```
+
+### 3. Resource Management
+
+Clean up resources:
+
+```java
+@AfterEach
+public void cleanup() {
+    if (testProcess != null) {
+        testProcess.stop();
+    }
+}
+```
+
+### 4. Statistical Significance
+
+Run multiple iterations:
+
+```java
+List<Double> results = new ArrayList<>();
+for (int i = 0; i < 10; i++) {
+    results.add(runSingleBenchmark());
+}
+
+// Calculate statistics
+double mean = results.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+double stdDev = calculateStandardDeviation(results);
+```
+
+## Common Pitfalls to Avoid
+
+### 1. Ignoring Warmup
+
+**Problem**: Results include JIT compilation overhead
+
+**Solution**: Always include warmup phase
+
+### 2. Shared State
+
+**Problem**: Threads interfere with each other
+
+**Solution**: Use fresh instances per test
+
+### 3. Garbage Collection
+
+**Problem**: GC pauses skew results
+
+**Solution**: Use `-XX:+DisableExplicitGC` and monitor GC
+
+### 4. Insufficient Samples
+
+**Problem**: Not enough iterations for statistical significance
+
+**Solution**: Run multiple iterations and calculate confidence intervals
+
+## Example: Complete Benchmark Suite
+
+```java
+public class JOTPBenchmarkSuite {
+    public static void main(String[] args) {
+        // Configure tests
+        List<BenchmarkConfig> configs = Arrays.asList(
+            createThroughputTest(),
+            createLatencyTest(),
+            createStressTest()
+        );
+
+        // Run all benchmarks
+        BenchmarkRunner runner = new BenchmarkRunner();
+        for (BenchmarkConfig config : configs) {
+            System.out.println("\nRunning " + config.name() + "...");
+            BenchmarkResult result = runner.run(config);
+            System.out.println("Results: " + result);
+        }
+    }
+
+    private static BenchmarkConfig createThroughputTest() {
+        return new BenchmarkConfig.Builder()
+            .name("Throughput Test")
+            .warmupIterations(1000)
+            .measurementIterations(10000)
+            .build();
+    }
+}
+```
+
+## Next Steps
+
+- **[Analyzing Results](/docs/how-to-guides/analyze-results)** - Learn to interpret benchmark data
+- **[Supervision Trees](/docs/explanation/supervision-trees)** - Add fault tolerance to your benchmarks
+- **[Proc API Reference](/docs/reference/proc-api)** - Explore advanced process features
+
+---
+
+<HowToTip>
+Always validate your benchmarks with real-world data. Synthetic tests may not reflect actual performance characteristics.
+</HowToTip>

@@ -1,0 +1,138 @@
+---
+title: Getting Started with JOTP
+description: Learn the fundamentals of JOTP and set up your first benchmark
+type: tutorial
+difficulty: beginner
+duration: "15 min"
+lastUpdated: 2024-01-15
+seo:
+  title: JOTP Tutorial: Getting Started
+  description: Learn the fundamentals of JOTP and set up your first benchmark
+---
+
+# Getting Started with JOTP
+
+Welcome to JOTP, the fault-tolerant Java 26 framework that brings Erlang/OTP patterns to Java.
+
+## What is JOTP?
+
+JOTP (Java OTP) is a modern Java 26 framework that implements Erlang/OTP design patterns with full type safety and Java ecosystem integration.
+
+### Key Features
+
+- 🎯 **Type Safety**: Full compile-time type checking with Java 26 sealed types
+- ⚡ **Performance**: Millions of lightweight processes using virtual threads
+- 🛡️ **Fault Tolerance**: Built-in supervision and recovery mechanisms
+- 🔌 **Ecosystem**: Seamless integration with Java libraries and Spring
+- 📚 **Documentation**: Comprehensive guides and API reference
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- Java 26 with `--enable-preview` support
+- Maven (mvnd recommended for faster builds)
+- Basic understanding of Java concurrency
+- IDE (IntelliJ IDEA, Eclipse, or VS Code with Java support)
+
+## Installation
+
+Add JOTP to your project:
+
+```xml
+<dependency>
+  <groupId>io.github.seanchatmangpt.jotp</groupId>
+  <artifactId>jotp</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
+
+For Gradle:
+
+```groovy
+implementation 'io.github.seanchatmangpt.jotp:jotp:1.0.0'
+```
+
+## Your First Process
+
+Let's create your first JOTP process. A process is the fundamental building block in JOTP:
+
+```java
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.ProcRef;
+
+public class SimpleProcess {
+    public static void main(String[] args) {
+        // Create a counter process
+        ProcRef<Integer, String> counter = Proc.spawn(
+            0, // initial state
+            (state, msg) -> {
+                // Message handler: increments state and returns response
+                int newState = state + 1;
+                return Pair.of(newState, "Count: " + newState);
+            },
+            null // no additional args
+        );
+
+        // Send messages to the process
+        String response1 = counter.ask("Increment"); // "Count: 1"
+        String response2 = counter.ask("Increment"); // "Count: 2"
+
+        System.out.println(response1);
+        System.out.println(response2);
+    }
+}
+```
+
+### Running the Example
+
+```bash
+mvn compile exec:java -Dexec.mainClass="SimpleProcess"
+```
+
+## Understanding Processes
+
+In JOTP, processes are:
+
+- **Lightweight**: Millions of processes can run concurrently
+- **Isolated**: Each has its own state and mailbox
+- **Fault-tolerant**: Can be supervised and restarted
+- **Communicative**: Exchange messages through typed APIs
+
+### Process States
+
+Processes maintain state that persists across messages:
+
+```java
+// Process with state
+ProcRef<String, String> logger = Proc.spawn(
+    "initialized", // initial state
+    (state, msg) -> {
+        String newState = "[" + System.currentTimeMillis() + "] " + msg;
+        System.out.println(newState);
+        return Pair.of(newState, "Logged: " + msg);
+    },
+    null
+);
+```
+
+## Next Steps
+
+Now that you understand the basics, continue with:
+
+1. **[First Benchmark Example](/docs/tutorials/first-benchmark)** - Learn to create actual benchmarks
+2. **[Supervision Trees](/docs/explanation/supervision-trees)** - Understand fault tolerance
+3. **[API Reference](/docs/reference/proc-api)** - Explore all available APIs
+
+## Quick Tips
+
+- Always use sealed types for exhaustiveness checking
+- Process state should be immutable where possible
+- Use timeouts for all synchronous operations
+- Supervise critical processes for reliability
+
+---
+
+<TutorialHint>
+Remember to enable Java 26 previews with `--enable-preview` flag when running your applications.
+</TutorialHint>

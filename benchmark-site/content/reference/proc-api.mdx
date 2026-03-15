@@ -1,0 +1,457 @@
+---
+title: Proc API Reference
+description: Complete API documentation for the Process primitive
+type: reference
+difficulty: advanced
+lastUpdated: 2024-01-15
+seo:
+  title: JOTP Proc API Reference
+  description: Complete API documentation for the Process primitive
+---
+
+# Proc API Reference
+
+The `Proc` primitive is the core component of JOTP, providing Erlang-style process management with full type safety and modern Java features.
+
+## Overview
+
+```java
+public final class Proc<S, M> {
+    // Static factory methods
+    public static <S, M> ProcRef<S, M> spawn(S initialState, BiFunction<S, M, Pair<S, M>> handler, Object[] args);
+    public static <S, M> ProcRef<S, M> spawnLink(S initialState, BiFunction<S, M, Pair<S, M>> handler, Object[] args);
+
+    // Process control
+    public void stop();
+    public void stop(Duration timeout);
+
+    // Message sending
+    public void send(M message);
+    public <R> R ask(M message, Duration timeout) throws TimeoutException;
+
+    // Link management
+    public void link(ProcRef<?, ?> other);
+    public void unlink(ProcRef<?, ?> other);
+
+    // Monitoring
+    public ProcMonitor monitor(ProcRef<?, ?> other);
+}
+```
+
+## Creating Processes
+
+### Basic Spawn
+
+```java
+// Simple counter process
+ProcRef<Integer, String> counter = Proc.spawn(
+    0, // initial state
+    (state, msg) -> {
+        int newState = state + 1;
+        return Pair.of(newState, "New count: " + newState);
+    },
+    null // arguments
+);
+```
+
+### Process with Complex State
+
+```java
+// Process maintaining complex state
+record GameState(int score, String playerName, List<String> items) {}
+
+ProcRef<GameState, PlayerAction> gameProc = Proc.spawn(
+    new GameState(0, "Player1", new ArrayList<>()),
+    (state, action) -> {
+        GameState newState = state;
+
+        switch (action.getType()) {
+            case MOVE:
+                newState = new GameState(
+                    state.score(),
+                    state.playerName(),
+                    state.items()
+                );
+                break;
+            case COLLECT_ITEM:
+                List<String> newItems = new ArrayList<>(state.items());
+                newItems.add(action.getItem());
+                newState = new GameState(
+                    state.score() + 10,
+                    state.playerName(),
+                    newItems
+                );
+                break;
+        }
+
+        return Pair.of(newState, "Action processed");
+    },
+    null
+);
+```
+
+### Using Typed Messages
+
+```java
+// Define sealed message types
+sealed interface GameMessage permits MoveMessage, AttackMessage, QuitMessage {
+    String getType();
+}
+
+record MoveMessage(Direction direction) implements GameMessage {
+    public String getType() { return "MOVE"; }
+}
+
+record AttackMessage(String target) implements GameMessage {
+    public String getType() { return "ATTACK"; }
+}
+
+// Process with typed messages
+ProcRef<PlayerState, GameMessage> playerProc = Proc.spawn(
+    new PlayerState("Hero", 100),
+    (state, msg) -> {
+        PlayerState newState = state;
+
+        if (msg instanceof MoveMessage m) {
+            newState = state.move(m.direction());
+        } else if (msg instanceof AttackMessage a) {
+            newState = state.attack(a.target());
+        }
+
+        return Pair.of(newState, "Action completed");
+    },
+    null
+);
+```
+
+## Message Handling
+
+### Asynchronous Messages
+
+```java
+// Send message without waiting for response
+counter.send("Increment");
+counter.send("Increment");
+
+// Messages are queued and processed in order
+```
+
+### Synchronous Messages
+
+```java
+// Send message and wait for response
+try {
+    String response = counter.ask("GetCount", Duration.ofSeconds(5));
+    System.out.println(response); // "New count: 2"
+} catch (TimeoutException e) {
+    System.err.println("Timeout occurred");
+}
+```
+
+### Batch Messages
+
+```java
+// Send multiple messages efficiently
+List<String> responses = new ArrayList<>();
+for (int i = 0; i < 10; i++) {
+    responses.add(counter.ask("Increment", Duration.ofSeconds(1)));
+}
+```
+
+## Process Control
+
+### Stopping Processes
+
+```java
+// Stop immediately
+counter.stop();
+
+// Stop with timeout
+counter.stop(Duration.ofSeconds(5));
+```
+
+### Graceful Shutdown
+
+```java
+// Process can handle shutdown signal
+ProcRef<WorkerState, String> worker = Proc.spawn(
+    new WorkerState(),
+    (state, msg) -> {
+        if ("SHUTDOWN".equals(msg)) {
+            // Clean up resources
+            cleanup();
+            return Pair.of(state, "Shutting down");
+        }
+        // ... normal processing
+    },
+    null
+);
+
+// Send shutdown signal
+worker.send("SHUTDOWN");
+```
+
+## Process Linking
+
+### Linked Processes
+
+```java
+// Create linked processes (both die if one crashes)
+ProcRef<LogState, String> logger = Proc.spawnLink(
+    new LogState(),
+    (state, msg) -> {
+        System.out.println("LOG: " + msg);
+        return Pair.of(state, "Logged");
+    },
+    null
+);
+
+// Now if either process crashes, both will terminate
+```
+
+### Custom Link Behavior
+
+```java
+// Process that traps exits
+ProcRef<SupervisorState, ExitSignal> supervisor = Proc.spawn(
+    new SupervisorState(),
+    (state, signal) -> {
+        if (signal instanceof ExitSignal) {
+            // Handle process exit
+            return Pair.of(state.handleExit(signal), "Exit handled");
+        }
+        return Pair.of(state, "OK");
+    },
+    null
+);
+```
+
+## Monitoring
+
+### Process Monitoring
+
+```java
+// Monitor another process
+ProcRef<MonitorState, String> monitor = Proc.spawn(
+    new MonitorState(),
+    (state, msg) -> {
+        if (msg instanceof ProcMonitor.DownSignal) {
+            System.err.println("Process died!");
+            return Pair.of(state, "Notified");
+        }
+        return Pair.of(state, "OK");
+    },
+    null
+);
+
+// Monitor a process
+ProcMonitor mon = monitor.monitor(targetProc);
+
+// When targetProc dies, monitor receives down signal
+```
+
+### Multiple Monitors
+
+```java
+// Monitor multiple processes
+List<ProcRef<?, ?>> processes = List.of(proc1, proc2, proc3);
+for (ProcRef<?, ?> proc : processes) {
+    monitor.monitor(proc);
+}
+```
+
+## Advanced Features
+
+### Process Registry
+
+```java
+// Register process with global name
+ProcRegistry.register("main-counter", counter);
+
+// Look up by name
+ProcRef<Integer, String> found = ProcRegistry.whereis("main-counter");
+
+// Unregister
+ProcRegistry.unregister("main-counter");
+```
+
+### Process Timers
+
+```java
+// Send message after delay
+ProcTimer.sendAfter(Duration.ofSeconds(5), "timeout-message");
+
+// Send message repeatedly
+ProcTimer.sendInterval(Duration.ofSeconds(1), "tick");
+
+// Cancel timer
+ProcTimer.cancel(timerId);
+```
+
+### Process Statistics
+
+```java
+// Get process info
+ProcInfo info = Proc.getStatistics(counter);
+
+System.out.println("Messages processed: " + info.messageCount());
+System.out.println("Memory usage: " + info.memoryUsage());
+System.out.println("Last activity: " + info.lastActivity());
+```
+
+## Error Handling
+
+### Handling Crashes
+
+```java
+// Process that can crash
+ProcRef<State, String> crashingProc = Proc.spawn(
+    new State(),
+    (state, msg) -> {
+        if ("crash".equals(msg)) {
+            throw new RuntimeException("Intentional crash");
+        }
+        return Pair.of(state, "OK");
+    },
+    null
+);
+
+// Will restart if supervised
+crashingProc.send("crash"); // Process crashes, gets restarted
+```
+
+### Supervisor Integration
+
+```java
+// Create supervisor
+Supervisor supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    List.of(
+        ChildSpec.builder(CrashyProcess::class)
+            .name("crashy-worker")
+            .restartType(RestartType.PERMANENT)
+            .build()
+    )
+);
+
+// Workers will be automatically restarted on crash
+```
+
+## Performance Considerations
+
+### Process Pool
+
+```java
+// Create process pool for high throughput
+List<ProcRef<Task, Result>> pool = new ArrayList<>();
+for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
+    ProcRef<Task, Result> worker = Proc.spawn(
+        new WorkerState(),
+        (state, task) -> processTask(task),
+        null
+    );
+    pool.add(worker);
+}
+
+// Distribute work across pool
+```
+
+### Batching Messages
+
+```java
+// Batch messages to reduce overhead
+List<String> batch = IntStream.range(0, 1000)
+    .mapToObj(i -> "message-" + i)
+    .toList();
+
+for (String msg : batch) {
+    counter.send(msg);
+}
+```
+
+## Complete Example
+
+```java
+// Complete process example
+public class ChatServer {
+    private ProcRef<ServerState, ClientMessage> server;
+
+    public void start() {
+        server = Proc.spawn(
+            new ServerState(),
+            this::handleMessage,
+            null
+        );
+    }
+
+    private Pair<ServerState, String> handleMessage(ServerState state, ClientMessage msg) {
+        return switch (msg) {
+            case JoinMessage j -> handleJoin(state, j);
+            case SendMessage m -> handleSend(state, m);
+            case LeaveMessage l -> handleLeave(state, l);
+        };
+    }
+
+    private Pair<ServerState, String> handleJoin(ServerState state, JoinMessage msg) {
+        // Add client to room
+        ServerState newState = state.addClient(msg.clientId());
+        return Pair.of(newState, "Joined " + msg.room());
+    }
+
+    // Other handlers...
+}
+```
+
+## API Reference
+
+### ProcRef
+
+```java
+public final class ProcRef<S, M> {
+    // Send message
+    public void send(M message);
+
+    // Send message and wait for response
+    public <R> R ask(M message, Duration timeout) throws TimeoutException;
+
+    // Stop process
+    public void stop();
+    public void stop(Duration timeout);
+
+    // Process info
+    public ProcRefInfo getInfo();
+
+    // Link management
+    public void link(ProcRef<?, ?> other);
+    public void unlink(ProcRef<?, ?> other);
+
+    // Monitoring
+    public ProcMonitor monitor(ProcRef<?, ?> other);
+}
+```
+
+### ExitSignal
+
+```java
+public record ExitSignal(
+    ProcRef<?, ?> pid,
+    String reason,
+    boolean normal
+) {}
+```
+
+### ProcTimer
+
+```java
+public final class ProcTimer {
+    public static ProcTimerRef sendAfter(Duration delay, Object message);
+    public static ProcTimerRef sendInterval(Duration interval, Object message);
+    public static void cancel(ProcTimerRef timer);
+}
+```
+
+---
+
+<ReferenceNote>
+The Proc API provides Erlang-style concurrency with Java's type system. Always use sealed types for message types to ensure exhaustiveness.
+</ReferenceNote>

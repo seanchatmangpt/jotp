@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * JOTP Theme with Radix UI Themes
+ *
+ * This file integrates Radix UI Themes with Tailwind CSS.
+ * Dark mode is the default (via ThemeProvider).
+ */
+
+@layer base {
+  /* Ensure Radix Theme styles work with Tailwind */
+  body {
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Smooth transitions for theme changes */
+  * {
+    transition-property: color, background-color, border-color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+  }
+
+  /* Selection styling */
+  ::selection {
+    background-color: hsl(var(--primary-foreground) / 0.3);
+  }
+}
+
+@layer utilities {
+  /* JOTP category colors */
+  .bg-jotp-core {
+    background-color: rgb(59 130 246);
+  }
+  .bg-jotp-lifecycle {
+    background-color: rgb(139 92 246);
+  }
+  .bg-jotp-enterprise {
+    background-color: rgb(34 197 94);
+  }
+  .bg-jotp-messaging {
+    background-color: rgb(249 115 22);
+  }
+  .bg-jotp-observability {
+    background-color: rgb(245 158 11);
+  }
+
+  .text-jotp-core {
+    color: rgb(37 99 235);
+  }
+  .text-jotp-lifecycle {
+    color: rgb(107 33 168);
+  }
+  .text-jotp-enterprise {
+    color: rgb(21 128 61);
+  }
+  .text-jotp-messaging {
+    color: rgb(194 65 12);
+  }
+  .text-jotp-observability {
+    color: rgb(180 83 9);
+  }
+
+  /* Gradients */
+  .jotp-gradient {
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #22c55e 100%);
+  }
+
+  .jotp-gradient-subtle {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  }
+
+  .jotp-card-gradient {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+  }
+
+  /* Custom scrollbar that works with dark mode */
+  .jotp-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .jotp-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .jotp-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .jotp-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+  }
+
+  .jotp-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* ReactFlow specific dark mode styles */
+.react-flow {
+  background-color: hsl(var(--card));
+}
+
+.react-flow__edge-path {
+  stroke: hsl(var(--border));
+}
+
+.react-flow__node {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+/* Chart.js and Recharts dark mode overrides */
+.chart-container text {
+  fill: hsl(var(--foreground)) !important;
+}
+
+.chart-container .recharts-cartesian-axis-line,
+.chart-container .recharts-cartesian-grid-line {
+  stroke: hsl(var(--border)) !important;
+}
+
+.chart-container .recharts-tooltip-wrapper {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+}
+
+.chart-container .recharts-tooltip-content {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+}
+
+/* Animation for spin */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Animation for pulse */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
