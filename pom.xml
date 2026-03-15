@@ -147,7 +147,11 @@
                         <arg>--enable-preview</arg>
                     </compilerArgs>
                     <excludes>
-                        <!-- All production source code now included (refactored via test archive) -->
+                        <!-- Messaging system - experimental package under development -->
+                        <!-- TODO: Remove exclusions after implementing messaging classes in src/main/java -->
+                        <!-- Issue: dogfood/messaging examples reference classes not yet implemented -->
+                        <exclude>**/messaging/**</exclude>
+                        <exclude>**/dogfood/messaging/**</exclude>
                     </excludes>
                     <testExcludes>
                         <!-- All test exclusions removed. Tests organized via src/test-archive with Maven profiles -->

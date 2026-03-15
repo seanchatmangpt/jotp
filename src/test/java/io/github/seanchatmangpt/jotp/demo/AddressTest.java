@@ -1,9 +1,10 @@
 package io.github.seanchatmangpt.jotp.demo;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 /**
  * JUnit 5 test suite for Address.
  *
@@ -11,31 +12,23 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("Address")
 class AddressTest implements WithAssertions {
-
     // ── Construction ─────────────────────────────────────────────────────────
-
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
     @Test
     @DisplayName("should be constructed successfully")
     void shouldConstruct() {
         // TODO: instantiate Address and assert non-null
         assertThat(true).isTrue(); // placeholder
-    }
-
     // ── Equality & hash code ─────────────────────────────────────────────────
-
-    @Test
     @DisplayName("equal instances should have equal hash codes")
     void equalInstancesHaveEqualHashCodes() {
         // TODO: create two equal Address instances and verify equals/hashCode
-        assertThat(true).isTrue(); // placeholder
-    }
-
     // ── toString ─────────────────────────────────────────────────────────────
-
-    @Test
     @DisplayName("toString should include type name")
     void toStringShouldIncludeTypeName() {
         // TODO: verify toString output contains "Address"
         assertThat("Address").contains("Address");
-    }
 }

@@ -78,7 +78,7 @@ public final class AcquisitionSupervisor implements AutoCloseable {
      */
     public static AcquisitionSupervisor start(List<ParamChannelPair> pairs) {
         var sv =
-                new Supervisor(
+                Supervisor.create(
                         "AcquisitionSupervisor",
                         Strategy.ONE_FOR_ONE,
                         MAX_RESTARTS,

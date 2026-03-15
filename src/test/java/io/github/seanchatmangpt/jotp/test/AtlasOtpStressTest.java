@@ -1,7 +1,7 @@
 package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
-
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -34,13 +34,13 @@ import java.util.stream.Gatherers;
 import java.util.stream.IntStream;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.Timeout;
-
 /**
  * McLaren Atlas F1 telemetry — OTP stress tests at 1 million virtual threads.
  *
@@ -48,9 +48,7 @@ import org.junit.jupiter.api.Timeout;
  * Executors.newVirtualThreadPerTaskExecutor()}. A {@link Semaphore} parks all but {@code
  * CONCURRENCY} threads cheaply (~1 KB stack each) while the active slice drives real McLaren Atlas
  * OTP work against production domain types.
- *
  * <p>OTP primitives and Atlas domain types under stress:
- *
  * <ol>
  *   <li>{@link AcquisitionSupervisor} — 1 K ONE_FOR_ONE supervised {@code ParameterDataAccess}
  *       processes; 1 M live ECU samples pushed via {@link AcquisitionSupervisor#addSamples}
@@ -63,7 +61,6 @@ import org.junit.jupiter.api.Timeout;
  *   <li>{@link Supervisor} crash storm — 1 K supervised procs; 1 M mixed-load {@link
  *       PdaMsg.AddSamples} (10 % poison → crash); ONE_FOR_ONE restarts all; root stays alive
  * </ol>
- *
  * <p>Java 25 {@link Gatherers} ({@code fold} and {@code windowFixed}) aggregate and validate every
  * result using the finalized {@code Stream.gather} API.
  */
@@ -71,44 +68,34 @@ import org.junit.jupiter.api.Timeout;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @Timeout(value = 300, unit = TimeUnit.SECONDS)
 class AtlasOtpStressTest implements WithAssertions {
-
     // ── Concurrency constants ────────────────────────────────────────────────
-
     /** Total virtual threads spawned per test. */
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
     private static final int N = 1_000_000;
-
     /** VTs active simultaneously; the remaining 980 K park on the {@link Semaphore}. */
     private static final int CONCURRENCY = 20_000;
-
     /** Number of supervised {@code ParameterDataAccess} procs / registered sensors per test. */
     private static final int PARAM_COUNT = 1_000;
-
     /** Number of {@link SqlRaceSession} state machines used in Test 3. */
     private static final int SESSION_COUNT = 1_000;
-
     // ── Shared channel / parameter fixture ──────────────────────────────────
-
     /**
      * 200 Hz signed-16 channel for car speed — used to configure sessions in Test 3. Real ATLAS:
      * {@code new Channel(1L, "vCar", 5_000_000L, DataType.Signed16Bit, Periodic)}.
      */
     private static final SqlRaceChannel SHARED_CHANNEL =
             SqlRaceChannel.periodic(1L, "vCar", 200.0, FrequencyUnit.Hz, DataType.Signed16Bit);
-
-    /**
      * Car-speed parameter bound to the shared channel. Identifier follows the McLaren convention:
      * {@code "vCar:Chassis"}.
-     */
     private static final SqlRaceParameter SHARED_PARAM =
             SqlRaceParameter.of("vCar", "Chassis", 1L, 0.0, 400.0, "kph");
-
     /** Identity conversion: raw ADC value equals engineering value. */
     private static final RationalConversion SHARED_CONV =
             RationalConversion.identity("CONV_vCar:Chassis", "kph");
-
     // ── Virtual-thread harness ───────────────────────────────────────────────
-
-    /**
      * Spawns exactly {@value #N} virtual threads. Each parks on {@code gate} until a semaphore
      * permit is available, executes {@code task(idx)}, then releases the permit and counts down.
      * Blocks until all threads finish or {@code timeout} expires.
@@ -118,7 +105,6 @@ class AtlasOtpStressTest implements WithAssertions {
      * @param successes incremented on each successful task invocation
      * @param errors incremented on each exception thrown by task
      * @param timeout maximum wall-clock budget for the entire run
-     */
     private static void runMillion(
             int semaphorePermits,
             IntConsumer task,
@@ -147,25 +133,16 @@ class AtlasOtpStressTest implements WithAssertions {
             }
             done.await(timeout.toSeconds(), TimeUnit.SECONDS);
         }
-    }
-
     /** Checked-exception–friendly {@code IntConsumer} used by {@link #runMillion}. */
     @FunctionalInterface
     interface IntConsumer {
         void accept(int idx) throws Exception;
-    }
-
     // ── Per-test cleanup ─────────────────────────────────────────────────────
-
     @AfterEach
     void resetRegistry() {
         ProcRegistry.reset();
-    }
-
     // ════════════════════════════════════════════════════════════════════════
     // Test 1 — AcquisitionSupervisor: 1 M addSamples() across 1 K PDA procs
-    // ════════════════════════════════════════════════════════════════════════
-
     @Test
     @Order(1)
     @DisplayName(
@@ -183,12 +160,9 @@ class AtlasOtpStressTest implements WithAssertions {
             channels.add(ch);
             params.add(p);
             paramIds[i] = p.identifier(); // e.g. "p0:Chassis"
-        }
-
         try (var acq = AcquisitionSupervisor.start(params, channels)) {
             var successes = new AtomicLong(0);
             var errors = new AtomicLong(0);
-
             // 1 M VTs — each fires one live ECU sample at a PDA proc (round-robin across params)
             runMillion(
                     CONCURRENCY,
@@ -200,10 +174,8 @@ class AtlasOtpStressTest implements WithAssertions {
                     successes,
                     errors,
                     Duration.ofSeconds(180));
-
             assertThat(errors.get()).as("no addSamples() should throw").isZero();
             assertThat(successes.get()).as("all 1 M VTs must complete").isEqualTo(N);
-
             // Parallel drain via PdaMsg.GetStats — FIFO mailbox guarantees every AddSamples
             // is processed before GetStats for each individual PDA proc.
             // var captures ProcRef<ParameterDataAccess.State, PdaMsg> via type inference;
@@ -214,8 +186,6 @@ class AtlasOtpStressTest implements WithAssertions {
                 var statFuture = new CompletableFuture<PdaStats>();
                 ref.tell(new PdaMsg.GetStats(statFuture));
                 drainFutures.add(statFuture.thenApply(s -> (long) s.totalSamples()));
-            }
-
             // Java 25 Gatherers.fold — sum totalSamples() across all 1 K PDA procs
             long totalSamples =
                     drainFutures.stream()
@@ -223,22 +193,14 @@ class AtlasOtpStressTest implements WithAssertions {
                             .gather(Gatherers.fold(() -> 0L, Long::sum))
                             .findFirst()
                             .orElse(0L);
-
             assertThat(totalSamples)
                     .as("every ECU sample must be recorded — no loss across 1 M VTs and 1 K procs")
                     .isEqualTo(N);
             assertThat(acq.isRunning())
                     .as("AcquisitionSupervisor must still be running after 1 M samples")
                     .isTrue();
-        }
         // AutoCloseable.close() calls supervisor.shutdown() — all PDA procs stopped cleanly
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
     // Test 2 — ProcRegistry: 1 M concurrent lookups, 1 K PdaMsg-typed procs
-    // ════════════════════════════════════════════════════════════════════════
-
-    @Test
     @Order(2)
     @DisplayName("1 M ProcRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
     @SuppressWarnings("unchecked")
@@ -246,7 +208,6 @@ class AtlasOtpStressTest implements WithAssertions {
         // 1 K Proc<AtomicLong, PdaMsg>: counts AddSamples; silently ignores other PdaMsg variants.
         // AtomicLong state avoids exposing the package-private ParameterDataAccess.State.
         Proc<AtomicLong, PdaMsg>[] procs = new Proc[PARAM_COUNT];
-        for (int i = 0; i < PARAM_COUNT; i++) {
             procs[i] =
                     new Proc<>(
                             new AtomicLong(0),
@@ -257,12 +218,9 @@ class AtlasOtpStressTest implements WithAssertions {
                                 return count;
                             });
             ProcRegistry.register("pda-" + i, procs[i]);
-        }
-
         var successes = new AtomicLong(0);
         var errors = new AtomicLong(0);
         var empties = new AtomicLong(0);
-
         // 1 M VTs — each looks up a proc by McLaren SQL Race identifier and fires AddSamples
         runMillion(
                 CONCURRENCY,
@@ -278,19 +236,16 @@ class AtlasOtpStressTest implements WithAssertions {
                 successes,
                 errors,
                 Duration.ofSeconds(120));
-
         assertThat(errors.get()).as("no lookup should throw").isZero();
         assertThat(empties.get())
                 .as("every PDA proc must be found — ProcRegistry must return no stale entries")
                 .isZero();
-
         // Drain: ask(Clear) enqueued AFTER all AddSamples — FIFO guarantees exact count.
         // ask() completes with the proc's current AtomicLong state after Clear is processed.
         List<CompletableFuture<AtomicLong>> drains =
                 IntStream.range(0, PARAM_COUNT)
                         .mapToObj(i -> procs[i].ask(new PdaMsg.Clear()))
                         .toList();
-
         // Java 25 Gatherers.fold — sum AtomicLong.get() across all 1 K procs
         long totalDelivered =
                 drains.stream()
@@ -298,21 +253,12 @@ class AtlasOtpStressTest implements WithAssertions {
                         .gather(Gatherers.fold(() -> 0L, (acc, al) -> acc + al.get()))
                         .findFirst()
                         .orElse(0L);
-
         assertThat(totalDelivered)
                 .as("ProcRegistry must route all 1 M PdaMsg.AddSamples to live procs")
                 .isEqualTo(N);
-
         for (var p : procs) p.stop();
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
     // Test 3 — SqlRaceSession: 1 K live sessions, 1 M concurrent AddLap events
-    // ════════════════════════════════════════════════════════════════════════
-
-    @Test
     @Order(3)
-    @DisplayName(
             "1 M AddLap events across 1 K SqlRaceSession state machines — all laps recorded, total == 1 M")
     void millionAddLap_sqlRaceSessions_allLapsRecorded() throws Exception {
         // Shared Configure event — SqlRaceSessionData.withConfiguration() calls List.copyOf(),
@@ -320,7 +266,6 @@ class AtlasOtpStressTest implements WithAssertions {
         var configure =
                 new SqlRaceSessionEvent.Configure(
                         List.of(SHARED_PARAM), List.of(SHARED_CHANNEL), List.of(SHARED_CONV));
-
         // Create 1 K sessions and send Configure to transition each Initializing → Live
         List<SqlRaceSession> sessions =
                 IntStream.range(0, SESSION_COUNT)
@@ -330,8 +275,6 @@ class AtlasOtpStressTest implements WithAssertions {
                                     s.send(configure);
                                     return s;
                                 })
-                        .toList();
-
         // Wait for every session to reach Live before firing lap events
         await().atMost(Duration.ofSeconds(30))
                 .until(
@@ -342,14 +285,8 @@ class AtlasOtpStressTest implements WithAssertions {
                                                         s.state()
                                                                 instanceof
                                                                 SqlRaceSessionState.Live));
-
-        var successes = new AtomicLong(0);
-        var errors = new AtomicLong(0);
-
         // 1 M VTs — each sends one AddLap to a session (round-robin).
         // flyingLap(ts, num ≥ 1) is validated by SqlRaceLap's compact constructor.
-        runMillion(
-                CONCURRENCY,
                 idx ->
                         sessions.get(idx % SESSION_COUNT)
                                 .send(
@@ -357,12 +294,8 @@ class AtlasOtpStressTest implements WithAssertions {
                                                 SqlRaceLap.flyingLap(
                                                         System.nanoTime(),
                                                         (idx / SESSION_COUNT) + 1))),
-                successes,
-                errors,
                 Duration.ofSeconds(180));
-
         assertThat(errors.get()).as("no send() should throw").isZero();
-
         // Drain: call(SessionSaved) is FIFO — all prior AddLap events are processed first,
         // then the session transitions Live → Closing and returns final SqlRaceSessionData.
         // Fan out across all 1 K sessions in parallel on virtual threads.
@@ -378,118 +311,63 @@ class AtlasOtpStressTest implements WithAssertions {
                                                                             .SessionSaved()),
                                                     drainExec))
                             .toList();
-
             // Java 25 Gatherers.fold — sum laps.size() across all 1 K sessions
             long totalLaps =
                     drains.stream()
-                            .map(CompletableFuture::join)
                             .gather(
                                     Gatherers.fold(
                                             () -> 0L, (acc, data) -> acc + data.laps().size()))
-                            .findFirst()
-                            .orElse(0L);
-
             assertThat(totalLaps)
                     .as("every AddLap must be recorded — 1 M events across 1 K sessions")
-                    .isEqualTo(N);
-        }
-
         for (var s : sessions) s.stop();
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
     // Test 4 — SessionEventBus: 1 M notify(AddLap), all 10 handlers receive every event
-    // ════════════════════════════════════════════════════════════════════════
-
-    @Test
     @Order(4)
-    @DisplayName(
             "1 M SessionEventBus.notify(AddLap) — all 10 gen_event handlers receive every lap alert")
     void millionLapAlerts_sessionEventBus_allHandlersReceiveAll() throws Exception {
         int handlerCount = 10;
         var bus = SessionEventBus.start();
         var handlerCounters = new AtomicLong[handlerCount];
-
         // Register 10 handlers — each counts AddLap events received.
         // A crashing handler would be removed without affecting the bus (gen_event isolation).
         for (int i = 0; i < handlerCount; i++) {
             final var counter = handlerCounters[i] = new AtomicLong(0);
             bus.addHandler(event -> counter.incrementAndGet());
-        }
-
-        var successes = new AtomicLong(0);
-        var errors = new AtomicLong(0);
-
         // 1 M VTs — each fires one async AddLap notification into the SessionEventBus mailbox
-        runMillion(
-                CONCURRENCY,
-                idx ->
                         bus.notify(
                                 new SqlRaceSessionEvent.AddLap(
                                         SqlRaceLap.flyingLap(System.nanoTime(), 1))),
-                successes,
-                errors,
-                Duration.ofSeconds(120));
-
         assertThat(errors.get()).as("no notify() should throw").isZero();
-
         // Awaitility drain — EventManager processes events on a single virtual thread.
         // 10 handlers × 1 M events at ~10 ns/call → ~100 ms total; 120 s is extremely generous.
         await().atMost(Duration.ofSeconds(120))
                 .untilAsserted(
-                        () -> {
                             for (var counter : handlerCounters) {
                                 assertThat(counter.get())
                                         .as("each handler must receive all 1 M lap alerts")
                                         .isGreaterThanOrEqualTo(N);
-                            }
-                        });
-
         // Java 25 Gatherers.fold — compute minimum across all 10 handler counters (slowest wins)
         long minHandled =
                 Arrays.stream(handlerCounters)
                         .map(AtomicLong::get)
                         .gather(Gatherers.fold(() -> Long.MAX_VALUE, Math::min))
-                        .findFirst()
-                        .orElse(0L);
-
         assertThat(minHandled)
                 .as("the slowest handler must have processed every lap alert")
                 .isGreaterThanOrEqualTo(N);
-
         bus.stop();
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
     // Test 5 — Supervisor storm: 1 M mixed PdaMsg.AddSamples, 10 % poison crashes
-    // ════════════════════════════════════════════════════════════════════════
-
-    @Test
     @Order(5)
-    @DisplayName(
             "1 M PdaMsg.AddSamples (10 % poison) → ONE_FOR_ONE restarts all, root supervisor stays alive")
-    @SuppressWarnings("unchecked")
     void supervisorStorm_millionPoisonSamples_rootStaysAlive() throws Exception {
         // maxRestarts = 10 K per proc (>> ~100 expected crashes each); window = 1 h (no expiry)
         var supervisor =
                 new Supervisor("atlas-storm", Strategy.ONE_FOR_ONE, 10_000, Duration.ofHours(1));
-
         // 1 K supervised procs — each counts valid AddSamples; crashes on negative values
         ProcRef<AtomicLong, PdaMsg>[] refs = new ProcRef[PARAM_COUNT];
-        for (int i = 0; i < PARAM_COUNT; i++) {
             refs[i] =
                     supervisor.supervise(
                             "storm-pda-" + i, new AtomicLong(0), AtlasOtpStressTest::stormHandler);
-        }
-
-        var successes = new AtomicLong(0);
-        var errors = new AtomicLong(0);
-
         // 1 M VTs — idx % 10 == 0 → poison AddSamples (negative g-force, 10 %);
         //            otherwise → valid AddSamples (positive g-force, 90 %)
-        runMillion(
-                CONCURRENCY,
-                idx -> {
                     int target = idx % PARAM_COUNT;
                     if (idx % 10 == 0) {
                         // Poison: negative value → stormHandler throws → proc crashes →
@@ -498,27 +376,17 @@ class AtlasOtpStressTest implements WithAssertions {
                                 new PdaMsg.AddSamples(new long[] {idx}, new double[] {-1.0}));
                     } else {
                         // Normal: valid accelerometer reading → counter incremented
-                        refs[target].tell(
                                 new PdaMsg.AddSamples(new long[] {idx}, new double[] {1.0}));
-                    }
-                },
-                successes,
-                errors,
-                Duration.ofSeconds(180));
-
         assertThat(errors.get()).as("no tell() should throw under storm load").isZero();
-
         // Wait for the supervisor to quiesce — all pending crash/restart cycles complete
         await().atMost(Duration.ofSeconds(60))
                 .until(() -> supervisor.isRunning() && supervisor.fatalError() == null);
-
         assertThat(supervisor.isRunning())
                 .as("atlas-storm supervisor must survive ~100 K simulated ECU faults")
                 .isTrue();
         assertThat(supervisor.fatalError())
                 .as("restart budget (10 K per proc) must not have been exceeded")
                 .isNull();
-
         // Java 25 Gatherers.windowFixed — batch-validate all 1 K refs still accept messages
         var aliveRefs = new ArrayList<>(Arrays.asList(refs));
         aliveRefs.stream()
@@ -540,21 +408,13 @@ class AtlasOtpStressTest implements WithAssertions {
                                                                                                 [] {
                                                                                             1.0
                                                                                         })))));
-
         supervisor.shutdown();
-    }
-
     // ── Storm proc handler — OTP "let it crash" for negative ECU sensor values ──────────────────
-
-    /**
      * Message handler for Test 5 supervisor storm procs.
-     *
      * <p>Simulates a real McLaren Atlas fault condition: a corrupt or out-of-range ECU reading
      * (negative g-force) causes the process to crash. The ONE_FOR_ONE supervisor restarts it within
      * milliseconds with fresh state — exactly OTP's "let it crash" contract.
-     *
      * <p>Valid readings ({@code values[0] ≥ 0}) increment the sample counter.
-     */
     private static AtomicLong stormHandler(AtomicLong count, PdaMsg msg) {
         return switch (msg) {
             case PdaMsg.AddSamples s when s.values().length > 0 && s.values()[0] < 0 ->
@@ -564,8 +424,6 @@ class AtlasOtpStressTest implements WithAssertions {
             case PdaMsg.AddSamples s -> {
                 count.incrementAndGet();
                 yield count;
-            }
             default -> count;
         };
-    }
 }

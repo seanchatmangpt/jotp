@@ -117,8 +117,8 @@ public class HotPathValidationBenchmarkFixed {
     /** ── CRITICAL PATH VALIDATION (CORRECTED) ─────────────────────────────────── */
 
     /**
-     * CRITICAL FIX: Original benchmark used {@code Mode.SampleTime} (wrong) and no Blackhole
-     * (dead code elimination risk).
+     * CRITICAL FIX: Original benchmark used {@code Mode.SampleTime} (wrong) and no Blackhole (dead
+     * code elimination risk).
      *
      * <p><strong>Corrected:</strong>
      *

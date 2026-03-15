@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.messaging;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messagepatterns.transformation.ContentFilter;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,11 @@ class ContentFilterFactoryTest {
     record LeanCustomer(String id, String name) {}
 
     @org.junit.jupiter.api.Test
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
+
     void testContentFilterFactory() throws InterruptedException {
         // Given
         List<LeanCustomer> results = new ArrayList<>();

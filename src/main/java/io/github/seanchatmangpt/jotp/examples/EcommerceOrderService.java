@@ -394,7 +394,7 @@ public class EcommerceOrderService {
 
         System.out.println("\n--- Saga Execution Result ---");
         switch (result) {
-            case Result.Success<SagaOutcome, SagaError>(var outcome) -> {
+            case Result.Ok<SagaOutcome, SagaError>(var outcome) -> {
                 System.out.println("Order creation SUCCEEDED");
                 System.out.println("   Message: " + outcome.message());
                 System.out.println("   Steps:");
@@ -409,20 +409,13 @@ public class EcommerceOrderService {
                                     + "]");
                 }
             }
-            case Result.Ok<SagaOutcome, SagaError>(var outcome) -> {
-                System.out.println("Order creation SUCCEEDED");
-                System.out.println("   Message: " + outcome.message());
-            }
-            case Result.Failure<SagaOutcome, SagaError>(var error) -> {
+            case Result.Err<SagaOutcome, SagaError>(var error) -> {
                 System.out.println("Order creation FAILED");
                 System.out.println("   Reason: " + error.message());
                 System.out.println("   Compensations applied:");
                 for (var comp : error.compensations()) {
                     System.out.println("     - " + comp);
                 }
-            }
-            case Result.Err<SagaOutcome, SagaError>(var error) -> {
-                System.out.println("Order creation FAILED: " + error.message());
             }
         }
 

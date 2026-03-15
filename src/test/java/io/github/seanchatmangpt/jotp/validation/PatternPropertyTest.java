@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Result;
 import io.github.seanchatmangpt.jotp.dogfood.api.JavaTimePatterns;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.ScopedValuePatterns;
@@ -44,6 +45,11 @@ class PatternPropertyTest {
     // =========================================================================
 
     @Property(tries = 1000)
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
+
     void resultMapIdentity(@ForAll int value) {
         Result<Integer, Exception> r = Result.success(value);
         assertThat(r.map(x -> x)).isEqualTo(r);

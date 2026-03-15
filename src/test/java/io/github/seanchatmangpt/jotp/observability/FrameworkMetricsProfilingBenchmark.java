@@ -23,10 +23,9 @@ import org.openjdk.jmh.infra.Blackhole;
 /**
  * Comprehensive microbenchmark profiling FrameworkMetrics overhead components.
  *
- * <p>This benchmark isolates each potential source of overhead in the disabled path to
- * identify exactly where the 456ns is being spent. Each benchmark measures a single
- * component in isolation using JMH's @CompilerControl to prevent inlining and ensure
- * accurate measurements.
+ * <p>This benchmark isolates each potential source of overhead in the disabled path to identify
+ * exactly where the 456ns is being spent. Each benchmark measures a single component in isolation
+ * using JMH's @CompilerControl to prevent inlining and ensure accurate measurements.
  *
  * <p><strong>Components Profiled:</strong>
  *
@@ -95,8 +94,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Baseline: volatile boolean read.
      *
-     * <p>Expected: 2-5ns on modern CPUs. Volatile reads prevent CPU reordering and
-     * require memory barrier synchronization.
+     * <p>Expected: 2-5ns on modern CPUs. Volatile reads prevent CPU reordering and require memory
+     * barrier synchronization.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -110,8 +109,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Baseline: static boolean field read (non-volatile).
      *
-     * <p>Expected: 0.5-1ns (CPU cache hit). Much faster than volatile since no memory
-     * barrier required.
+     * <p>Expected: 0.5-1ns (CPU cache hit). Much faster than volatile since no memory barrier
+     * required.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -125,8 +124,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * System property check on every call (uncached).
      *
-     * <p>Expected: 50-150ns. This is the WORST case - reading system properties requires
-     * traversing a ConcurrentHashMap and has significant overhead.
+     * <p>Expected: 50-150ns. This is the WORST case - reading system properties requires traversing
+     * a ConcurrentHashMap and has significant overhead.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -140,8 +139,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * System property check cached in static final field.
      *
-     * <p>Expected: 1-2ns. This is the BEST case - property is read once at class
-     * initialization, then cached. This is what FrameworkMetrics actually does.
+     * <p>Expected: 1-2ns. This is the BEST case - property is read once at class initialization,
+     * then cached. This is what FrameworkMetrics actually does.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -154,8 +153,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Branch prediction miss (condition is always false).
      *
-     * <p>Expected: 10-20ns. CPU mispredicts the branch, causing pipeline flush.
-     * This simulates the disabled path where the branch is never taken.
+     * <p>Expected: 10-20ns. CPU mispredicts the branch, causing pipeline flush. This simulates the
+     * disabled path where the branch is never taken.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -173,8 +172,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Branch prediction hit (condition is always true).
      *
-     * <p>Expected: <1ns. CPU correctly predicts the branch, no pipeline flush.
-     * This is the best case for branch prediction.
+     * <p>Expected: <1ns. CPU correctly predicts the branch, no pipeline flush. This is the best
+     * case for branch prediction.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -223,8 +222,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Static method call overhead.
      *
-     * <p>Expected: 1-3ns. Static calls are faster than interface calls since no virtual
-     * dispatch required.
+     * <p>Expected: 1-3ns. Static calls are faster than interface calls since no virtual dispatch
+     * required.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -242,8 +241,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Full disabled path: volatile read + branch + return.
      *
-     * <p>This is what FrameworkMetrics.accept() does when disabled. Expected: 5-10ns.
-     * If this is significantly higher (>100ns), there's a problem with the implementation.
+     * <p>This is what FrameworkMetrics.accept() does when disabled. Expected: 5-10ns. If this is
+     * significantly higher (>100ns), there's a problem with the implementation.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -283,18 +282,19 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Pattern matching switch on sealed type.
      *
-     * <p>Expected: 3-5ns. Pattern matching has additional overhead for type checking
-     * but compiler can optimize for sealed hierarchies.
+     * <p>Expected: 3-5ns. Pattern matching has additional overhead for type checking but compiler
+     * can optimize for sealed hierarchies.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void B12_switchPatternMatching(Blackhole bh) {
         Object obj = "test";
-        String result = switch (obj) {
-            case String s -> "string: " + s;
-            case Integer i -> "integer: " + i;
-            default -> "unknown";
-        };
+        String result =
+                switch (obj) {
+                    case String s -> "string: " + s;
+                    case Integer i -> "integer: " + i;
+                    default -> "unknown";
+                };
         bh.consume(result);
     }
 
@@ -320,8 +320,7 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Combined: static field read + branch + static method call.
      *
-     * <p>Expected: 3-7ns. This is the optimized version using static final instead of
-     * volatile.
+     * <p>Expected: 3-7ns. This is the optimized version using static final instead of volatile.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -355,16 +354,15 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Actual FrameworkMetrics.accept() disabled path.
      *
-     * <p>This creates a real FrameworkMetrics instance and calls accept() with it
-     * disabled. Expected: <50ns if implementation is correct.
+     * <p>This creates a real FrameworkMetrics instance and calls accept() with it disabled.
+     * Expected: <50ns if implementation is correct.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void B16_realFrameworkMetricsDisabled(Blackhole bh) {
         FrameworkMetrics metrics = FrameworkMetrics.create();
         FrameworkEventBus.FrameworkEvent event =
-                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                        "test-pid", "Proc", 0);
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
 
         metrics.accept(event);
         bh.consume(true);
@@ -377,8 +375,8 @@ public class FrameworkMetricsProfilingBenchmark {
     /**
      * Actual FrameworkMetrics.accept() enabled path.
      *
-     * <p>This enables observability and measures the full path. Expected: 500-2000ns
-     * depending on which event type is handled.
+     * <p>This enables observability and measures the full path. Expected: 500-2000ns depending on
+     * which event type is handled.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -387,8 +385,7 @@ public class FrameworkMetricsProfilingBenchmark {
         // Otherwise it will measure the disabled path
         FrameworkMetrics metrics = FrameworkMetrics.create();
         FrameworkEventBus.FrameworkEvent event =
-                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                        "test-pid", "Proc", 0);
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
 
         metrics.accept(event);
         bh.consume(true);

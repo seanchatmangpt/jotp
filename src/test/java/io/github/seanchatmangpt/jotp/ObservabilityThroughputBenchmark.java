@@ -186,12 +186,15 @@ public class ObservabilityThroughputBenchmark {
         // Send crash message to trigger supervisor crash handling
         crashChild.tell("crash");
 
-        // Wait for restart to complete before next crash
-        // This prevents rapid crashes from exceeding max restarts
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // Wait for restart using spin-wait for benchmark consistency
+        // Supervisor restarts are fast (<10ms typically), so short busy-wait is acceptable
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(100);
+        while (System.nanoTime() < deadline) {
+            // Busy wait ensures consistent timing for benchmark
+            if (Thread.interrupted()) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 
@@ -260,9 +263,10 @@ public class ObservabilityThroughputBenchmark {
      */
     @Benchmark
     public void eventBusThroughput_synchronousNotification() {
-        List<FrameworkEventBus.Consumer<FrameworkEventBus.FrameworkEvent>> subs = new ArrayList<>();
+        List<java.util.function.Consumer<FrameworkEventBus.FrameworkEvent>> subs =
+                new ArrayList<>();
         for (int i = 0; i < 10; i++) {
-            subs.subscribe(event -> {});
+            subs.add(event -> {});
         }
 
         for (var sub : subs) {
@@ -271,6 +275,33 @@ public class ObservabilityThroughputBenchmark {
             } catch (Throwable t) {
                 // Swallow exceptions like FrameworkEventBus does
             }
+        }
+    }
+
+    /**
+     * Restart latency after child crash.
+     *
+     * <p>Measures time from crash to successful restart completion.
+     */
+    @Benchmark
+    @BenchmarkMode(Mode.AverageTime)
+    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    public void supervisorRestartLatency() throws Exception {
+        crashChild.tell("crash");
+
+        // Use Awaitility pattern instead of Thread.sleep()
+        long startTime = System.nanoTime();
+        await().atMost(java.time.Duration.ofSeconds(5))
+                .until(
+                        () -> {
+                            var ref = supervisor.lookup("crash-child");
+                            return ref.isPresent() && ref.get().isAlive();
+                        });
+        long endTime = System.nanoTime();
+
+        // Prevent optimizer from removing the measurement
+        if (endTime - startTime < 0) {
+            throw new IllegalStateException("Negative duration");
         }
     }
 }

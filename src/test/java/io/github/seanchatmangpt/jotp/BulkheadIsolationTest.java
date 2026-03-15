@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,11 @@ class BulkheadIsolationTest {
     }
 
     private static final Duration AWAIT_TIMEOUT = Duration.ofSeconds(5);
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ============================================================================
     // BULKHEAD CREATION AND BASIC MESSAGING

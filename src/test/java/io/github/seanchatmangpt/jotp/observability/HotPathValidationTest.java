@@ -1,10 +1,10 @@
 package io.github.seanchatmangpt.jotp.observability;
 
 import static org.junit.jupiter.api.Assertions.*;
-
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 /**
  * Tests for {@link HotPathValidation}.
  *
@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("Hot Path Validation Tests")
 class HotPathValidationTest {
-
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
     @Test
     @DisplayName("Proc.tell() should not contain observability code")
     void validateProcTellIsPure() {
@@ -21,12 +24,8 @@ class HotPathValidationTest {
         assertDoesNotThrow(
                 () -> HotPathValidation.validateHotPaths(),
                 "Hot path methods must be free from observability infrastructure");
-    }
-
-    @Test
     @DisplayName("All hot paths should pass validation")
     void allHotPathsShouldBePure() {
         // Comprehensive validation of all registered hot paths
         HotPathValidation.validateHotPaths();
-    }
 }

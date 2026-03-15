@@ -133,44 +133,34 @@ public class ChaosDemo {
 
     /** Worker process: handles requests independently */
     static class Worker {
-        static Proc<Integer, Object> spawn(int workerId) {
+        static Proc<Integer, WorkerMessage> spawn(int workerId) {
             return Proc.spawn(
-                    () -> 0, // initial state: request count
+                    0, // initial state: request count
                     (processed, msg) ->
                             switch (msg) {
                                 case WorkerMessage.ProcessRequest(var id, var data) -> {
                                     // Simulate processing
-                                    Thread.sleep(5);
-                                    yield new Proc.StateResult<>(
-                                            processed + 1,
-                                            new WorkerResponse.Success(
-                                                    id,
-                                                    "Worker " + workerId + " processed: " + data));
+                                    try {
+                                        Thread.sleep(5);
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    }
+                                    yield processed + 1;
                                 }
-                                case WorkerMessage.GetStatus() ->
-                                        new Proc.StateResult<>(
-                                                processed, new WorkerResponse.Status(processed));
-                                default -> new Proc.StateResult<>(processed, null);
-                            },
-                    null);
+                                case WorkerMessage.GetStatus() -> processed;
+                                default -> processed;
+                            });
         }
     }
 
     /** Coordinator: drives load and measures chaos */
     static class Coordinator {
-        static Proc<Void, Object> spawn(
-                List<Proc<Integer, Object>> workers,
+        static Proc<Void, WorkerMessage> spawn(
+                List<ProcRef<Integer, WorkerMessage>> workers,
                 Metrics metrics,
-                Duration durationDuration,
+                Duration duration,
                 long chaosKillIntervalMs) {
-            return Proc.spawn(
-                    () -> null,
-                    (state, msg) -> {
-                        // This is a simplified coordinator
-                        // In a real system, this would be a proper state machine
-                        return new Proc.StateResult<>(state, null);
-                    },
-                    null);
+            return Proc.spawn(null, (state, msg) -> state);
         }
     }
 
@@ -192,42 +182,33 @@ public class ChaosDemo {
 
         // Create supervisor with worker pool
         var supervisor =
-                Supervisor.create()
-                        .withStrategy(RestartStrategy.ONE_FOR_ONE)
-                        .withMaxRestarts(100)
-                        .withWindowSeconds(60)
-                        .onChildExit(
-                                (childId, exitReason) -> {
-                                    if (childId.startsWith("worker-")) {
-                                        long recoveryStart = System.nanoTime();
-                                        metrics.recordDeath();
-                                        // Schedule recovery time measurement
-                                        scheduler.schedule(
-                                                () -> {
-                                                    long recoveryMs =
-                                                            (System.nanoTime() - recoveryStart)
-                                                                    / 1_000_000;
-                                                    metrics.recordRecovery(recoveryMs);
-                                                },
-                                                10,
-                                                TimeUnit.MILLISECONDS);
-                                    }
-                                })
-                        .build();
+                Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, 100, Duration.ofSeconds(60));
 
-        // Add worker children
-        List<Proc<Integer, Object>> workers = new ArrayList<>();
+        // Add worker children - store as ProcRef<Integer, Object> for flexibility
+        List<ProcRef<Integer, Object>> workers = new ArrayList<>();
         for (int i = 0; i < NUM_WORKERS; i++) {
             final int workerId = i;
-            var workerProc = Worker.spawn(workerId);
-            workers.add(workerProc);
-            supervisor.addChild(
-                    ChildSpec.of(
-                            "worker-" + i, () -> Worker.spawn(workerId), RestartType.PERMANENT));
+            var workerRef =
+                    supervisor.supervise(
+                            "worker-" + i,
+                            0,
+                            (state, msg) ->
+                                    switch (msg) {
+                                        case WorkerMessage.ProcessRequest(var id, var data) -> {
+                                            try {
+                                                Thread.sleep(5);
+                                            } catch (InterruptedException e) {
+                                                Thread.currentThread().interrupt();
+                                            }
+                                            yield state + 1;
+                                        }
+                                        case WorkerMessage.GetStatus() -> state;
+                                        default -> state;
+                                    });
+            workers.add(workerRef);
         }
 
-        // Start supervisor
-        supervisor.start();
+        // Supervisor is already started after create()
         long startTime = System.currentTimeMillis();
 
         // Schedule chaos: kill random workers
@@ -257,7 +238,7 @@ public class ChaosDemo {
                         () -> {
                             if (System.currentTimeMillis() - startTime < DEMO_DURATION_MS) {
                                 int randomWorker = ThreadLocalRandom.current().nextInt(NUM_WORKERS);
-                                Proc<Integer, Object> worker = workers.get(randomWorker);
+                                ProcRef<Integer, Object> worker = workers.get(randomWorker);
                                 try {
                                     worker.tell(
                                             new WorkerMessage.ProcessRequest(

@@ -16,6 +16,7 @@
 
 package io.github.seanchatmangpt.jotp.benchmark;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -64,6 +65,10 @@ import java.util.regex.Pattern;
  * }</pre>
  */
 public class JMHValidationTest {
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     private static final Path RESULTS_DIR =
             Paths.get("benchmark-results").toAbsolutePath().normalize();
@@ -74,29 +79,10 @@ public class JMHValidationTest {
     /** Test configurations to run. */
     private static final TestCase[] TEST_CASES = {
         new TestCase(
-                "Minimal",
-                1,
-                3,
-                5,
-                "Original (flawed) configuration - expects inflated latency"),
-        new TestCase(
-                "Standard",
-                3,
-                10,
-                10,
-                "Recommended configuration - expects accurate latency"),
-        new TestCase(
-                "Aggressive",
-                5,
-                15,
-                20,
-                "Maximum reliability - expects lowest latency"),
-        new TestCase(
-                "NoInline",
-                3,
-                10,
-                10,
-                "Prevent inlining - expects +10-20ns overhead")
+                "Minimal", 1, 3, 5, "Original (flawed) configuration - expects inflated latency"),
+        new TestCase("Standard", 3, 10, 10, "Recommended configuration - expects accurate latency"),
+        new TestCase("Aggressive", 5, 15, 20, "Maximum reliability - expects lowest latency"),
+        new TestCase("NoInline", 3, 10, 10, "Prevent inlining - expects +10-20ns overhead")
     };
 
     /** Run all validation tests and generate report. */
@@ -212,24 +198,28 @@ public class JMHValidationTest {
 
         report.append("| Configuration | Latency (ns) | Error (ns) | vs. Original |\n");
         report.append("|---------------|--------------|------------|--------------|\n");
-        report.append(String.format(
-                "| **Minimal** | %.2f | %.2f | baseline (original 456ns) |\n",
-                minimalResult.score, minimalResult.error));
-        report.append(String.format(
-                "| **Standard** | %.2f | %.2f | %.1f%% lower |\n",
-                standardResult.score,
-                standardResult.error,
-                (1 - standardResult.score / minimalResult.score) * 100));
-        report.append(String.format(
-                "| **Aggressive** | %.2f | %.2f | %.1f%% lower |\n",
-                aggressiveResult.score,
-                aggressiveResult.error,
-                (1 - aggressiveResult.score / minimalResult.score) * 100));
-        report.append(String.format(
-                "| **No Inline** | %.2f | %.2f | +%.1f%% vs. Standard |\n",
-                noInlineResult.score,
-                noInlineResult.error,
-                (noInlineResult.score / standardResult.score - 1) * 100));
+        report.append(
+                String.format(
+                        "| **Minimal** | %.2f | %.2f | baseline (original 456ns) |\n",
+                        minimalResult.score, minimalResult.error));
+        report.append(
+                String.format(
+                        "| **Standard** | %.2f | %.2f | %.1f%% lower |\n",
+                        standardResult.score,
+                        standardResult.error,
+                        (1 - standardResult.score / minimalResult.score) * 100));
+        report.append(
+                String.format(
+                        "| **Aggressive** | %.2f | %.2f | %.1f%% lower |\n",
+                        aggressiveResult.score,
+                        aggressiveResult.error,
+                        (1 - aggressiveResult.score / minimalResult.score) * 100));
+        report.append(
+                String.format(
+                        "| **No Inline** | %.2f | %.2f | +%.1f%% vs. Standard |\n",
+                        noInlineResult.score,
+                        noInlineResult.error,
+                        (noInlineResult.score / standardResult.score - 1) * 100));
 
         report.append("\n---\n\n");
 
@@ -239,8 +229,10 @@ public class JMHValidationTest {
         // Check if latency decreases with better warmup
         if (standardResult.score < minimalResult.score) {
             double improvement = (1 - standardResult.score / minimalResult.score) * 100;
-            report.append(String.format(
-                    "✅ **PASS:** Standard config is %.1f%% faster than Minimal\n", improvement));
+            report.append(
+                    String.format(
+                            "✅ **PASS:** Standard config is %.1f%% faster than Minimal\n",
+                            improvement));
             report.append(
                     "This confirms that original 456ns measurement included cold starts and JIT overhead.\n\n");
         } else {
@@ -251,26 +243,29 @@ public class JMHValidationTest {
         // Check if aggressive config provides additional improvement
         if (aggressiveResult.score < standardResult.score) {
             double improvement = (1 - aggressiveResult.score / standardResult.score) * 100;
-            report.append(String.format(
-                    "✅ **PASS:** Aggressive config is %.1f%% faster than Standard\n", improvement));
+            report.append(
+                    String.format(
+                            "✅ **PASS:** Aggressive config is %.1f%% faster than Standard\n",
+                            improvement));
             report.append("This confirms that more warmup improves accuracy.\n\n");
         } else {
-            report.append(
-                    "✅ **PASS:** Aggressive config is similar to Standard (within 5%)\n");
+            report.append("✅ **PASS:** Aggressive config is similar to Standard (within 5%)\n");
             report.append("This indicates Standard config is sufficient for accuracy.\n\n");
         }
 
         // Check inlining effects
         double inliningOverhead = (noInlineResult.score / standardResult.score - 1) * 100;
         if (inliningOverhead > 5 && inliningOverhead < 25) {
-            report.append(String.format(
-                    "✅ **PASS:** No Inline config is +%.1f%% overhead (expected 10-20%)\n",
-                    inliningOverhead));
+            report.append(
+                    String.format(
+                            "✅ **PASS:** No Inline config is +%.1f%% overhead (expected 10-20%)\n",
+                            inliningOverhead));
             report.append("This confirms JIT inlining is working correctly.\n\n");
         } else {
-            report.append(String.format(
-                    "⚠️ **WARN:** No Inline overhead is %.1f%% (expected 10-20%)\n",
-                    inliningOverhead));
+            report.append(
+                    String.format(
+                            "⚠️ **WARN:** No Inline overhead is %.1f%% (expected 10-20%)\n",
+                            inliningOverhead));
             report.append("This may indicate abnormal JIT behavior.\n\n");
         }
 
@@ -281,12 +276,13 @@ public class JMHValidationTest {
         double originalLatency = 456.0;
         double errorMagnitude = ((originalLatency - correctedLatency) / originalLatency) * 100;
 
-        report.append(String.format(
-                "**Original Measurement:** 456ns (flawed configuration)\n\n"));
+        report.append(String.format("**Original Measurement:** 456ns (flawed configuration)\n\n"));
         report.append(
-                String.format("**Corrected Measurement:** %.2fns ± %.2fns\n\n", correctedLatency, standardResult.error));
-        report.append(String.format(
-                "**Error Magnitude:** %.1f%% overestimate\n\n", errorMagnitude));
+                String.format(
+                        "**Corrected Measurement:** %.2fns ± %.2fns\n\n",
+                        correctedLatency, standardResult.error));
+        report.append(
+                String.format("**Error Magnitude:** %.1f%% overestimate\n\n", errorMagnitude));
 
         if (errorMagnitude > 20) {
             report.append(
@@ -307,7 +303,8 @@ public class JMHValidationTest {
         report.append("   - Warmup: 10 iterations × 2 seconds\n");
         report.append("   - Measurement: 10 iterations × 1 second\n\n");
         report.append("2. **Always use** `@State(Scope.Benchmark)` and `Blackhole` parameters\n\n");
-        report.append("3. **Prefer** `@BenchmarkMode(Mode.AverageTime)` over `Mode.SampleTime`\n\n");
+        report.append(
+                "3. **Prefer** `@BenchmarkMode(Mode.AverageTime)` over `Mode.SampleTime`\n\n");
         report.append("4. **Run with** `-XX:+PrintCompilation` to verify JIT activity\n\n");
 
         // Detailed results
@@ -316,8 +313,8 @@ public class JMHValidationTest {
             report.append("### ").append(result.testCase.name).append(" Configuration\n\n");
             report.append("**Configuration:** ").append(result.testCase).append("\n\n");
             report.append("**Description:** ").append(result.testCase.description).append("\n\n");
-            report.append(String.format(
-                    "**Result:** %.2f ± %.2f ns/op\n\n", result.score, result.error));
+            report.append(
+                    String.format("**Result:** %.2f ± %.2f ns/op\n\n", result.score, result.error));
             report.append("**Raw Output:**\n\n");
             report.append("```\n");
             report.append(result.output.substring(0, Math.min(500, result.output.length())));

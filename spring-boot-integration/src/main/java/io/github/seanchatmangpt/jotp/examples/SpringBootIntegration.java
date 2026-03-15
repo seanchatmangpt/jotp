@@ -200,15 +200,13 @@ public class SpringBootIntegration {
      */
     static class OrderStateMachine {
         static StateMachine<OrderState, OrderEvent, OrderContext> create(String orderId) {
-            return StateMachine.<OrderState, OrderEvent, OrderContext>create()
-                    .withInitialState(new OrderState.Pending())
-
-                    // Transition: Pending → ValidatingOrder
-                    .withTransition(
-                            OrderState.Pending.class,
-                            OrderEvent.InitiateOrder.class,
-                            (state, event, ctx) -> {
-                                ctx.request = event.request();
+            return StateMachine.create(
+                    new OrderState.Pending(),
+                    new OrderContext(),
+                    (state, event, ctx) -> switch (event) {
+                        case StateMachine.SMEvent.User<OrderEvent>(var userEvent) -> {
+                            if (state instanceof OrderState.Pending && userEvent.event() instanceof OrderEvent.InitiateOrder init) {
+                                ctx.request = init.request();
                                 System.out.printf(
                                         "[Order %s] Initiated: %s items, $%.2f%n",
                                         orderId,
@@ -216,25 +214,15 @@ public class SpringBootIntegration {
                                         ctx.request.totalAmount());
 
                                 // Simulate calling external validation service
-                                // In real system, this would be async message to validator agent
                                 simulateValidation(ctx);
 
-                                return new StateMachine.Transition.NextState(
+                                yield StateMachine.Transition.nextState(
                                         new OrderState.ValidatingOrder(),
-                                        List.of(
-                                                new StateMachine.Action.Set(
-                                                        () ->
-                                                                Duration.ofSeconds(5)
-                                                                        .toMillis()) // validation
-                                                // timeout
-                                                ));
-                            })
-
-                    // Transition: ValidatingOrder → ProcessingPayment
-                    .withTransition(
-                            OrderState.ValidatingOrder.class,
-                            OrderEvent.ValidationComplete.class,
-                            (state, event, ctx) -> {
+                                        ctx,
+                                        StateMachine.Action.stateTimeout(
+                                                Duration.ofSeconds(5).toMillis(),
+                                                "validation_timeout"));
+                            } else if (state instanceof OrderState.ValidatingOrder && userEvent.event() instanceof OrderEvent.ValidationComplete) {
                                 System.out.printf(
                                         "[Order %s] Validation passed, processing payment%n",
                                         orderId);
@@ -242,83 +230,71 @@ public class SpringBootIntegration {
                                 // Simulate calling external payment service
                                 simulatePayment(ctx);
 
-                                return new StateMachine.Transition.NextState(
+                                yield StateMachine.Transition.nextState(
                                         new OrderState.ProcessingPayment(),
-                                        List.of(
-                                                new StateMachine.Action.Set(
-                                                        () ->
-                                                                Duration.ofSeconds(10)
-                                                                        .toMillis()) // payment
-                                                // timeout
-                                                ));
-                            })
-
-                    // Transition: ProcessingPayment → ReservingInventory (on success)
-                    .withTransition(
-                            OrderState.ProcessingPayment.class,
-                            OrderEvent.PaymentApproved.class,
-                            (state, event, ctx) -> {
-                                ctx.paymentTransactionId = Optional.of(event.transactionId());
+                                        ctx,
+                                        StateMachine.Action.stateTimeout(
+                                                Duration.ofSeconds(10).toMillis(),
+                                                "payment_timeout"));
+                            } else if (state instanceof OrderState.ProcessingPayment && userEvent.event() instanceof OrderEvent.PaymentApproved approved) {
+                                ctx.paymentTransactionId = Optional.of(approved.transactionId());
                                 System.out.printf(
                                         "[Order %s] Payment approved (txn: %s), reserving inventory%n",
-                                        orderId, event.transactionId());
+                                        orderId, approved.transactionId());
 
                                 simulateInventoryReservation(ctx);
 
-                                return new StateMachine.Transition.NextState(
+                                yield StateMachine.Transition.nextState(
                                         new OrderState.ReservingInventory(),
-                                        List.of(
-                                                new StateMachine.Action.Set(
-                                                        () ->
-                                                                Duration.ofSeconds(5)
-                                                                        .toMillis()) // inventory
-                                                // timeout
-                                                ));
-                            })
-
-                    // Transition: ProcessingPayment → Failed (on payment failure)
-                    .withTransition(
-                            OrderState.ProcessingPayment.class,
-                            OrderEvent.PaymentFailed.class,
-                            (state, event, ctx) -> {
+                                        ctx,
+                                        StateMachine.Action.stateTimeout(
+                                                Duration.ofSeconds(5).toMillis(),
+                                                "inventory_timeout"));
+                            } else if (state instanceof OrderState.ProcessingPayment && userEvent.event() instanceof OrderEvent.PaymentFailed failed) {
                                 System.out.printf(
                                         "[Order %s] Payment failed: %s, aborting order%n",
-                                        orderId, event.reason());
+                                        orderId, failed.reason());
 
-                                return new StateMachine.Transition.Stop(
-                                        new OrderState.Failed(event.reason()), List.of());
-                            })
-
-                    // Transition: ReservingInventory → Confirmed (on success)
-                    .withTransition(
-                            OrderState.ReservingInventory.class,
-                            OrderEvent.InventoryReserved.class,
-                            (state, event, ctx) -> {
-                                ctx.inventoryReservationId = Optional.of(event.reservationId());
+                                yield StateMachine.Transition.stop("Payment failed: " + failed.reason());
+                            } else if (state instanceof OrderState.ReservingInventory && userEvent.event() instanceof OrderEvent.InventoryReserved reserved) {
+                                ctx.inventoryReservationId = Optional.of(reserved.reservationId());
                                 System.out.printf(
                                         "[Order %s] Inventory reserved (reservation: %s), order confirmed%n",
-                                        orderId, event.reservationId());
+                                        orderId, reserved.reservationId());
 
                                 // Send confirmation notification
                                 simulateSendConfirmation(ctx);
 
-                                return new StateMachine.Transition.NextState(
-                                        new OrderState.Confirmed(), List.of());
-                            })
-
-                    // Transition: ReservingInventory → Failed (on unavailable)
-                    .withTransition(
-                            OrderState.ReservingInventory.class,
-                            OrderEvent.InventoryUnavailable.class,
-                            (state, event, ctx) -> {
+                                yield StateMachine.Transition.nextState(
+                                        new OrderState.Confirmed(),
+                                        ctx);
+                            } else if (state instanceof OrderState.ReservingInventory && userEvent.event() instanceof OrderEvent.InventoryUnavailable unavailable) {
                                 System.out.printf(
                                         "[Order %s] Inventory unavailable: %s%n",
-                                        orderId, event.reason());
-                                // In real system, would refund payment here
-                                return new StateMachine.Transition.Stop(
-                                        new OrderState.Failed(event.reason()), List.of());
-                            })
-                    .build();
+                                        orderId, unavailable.reason());
+
+                                yield StateMachine.Transition.stop("Inventory unavailable: " + unavailable.reason());
+                            } else {
+                                yield StateMachine.Transition.keepState(ctx);
+                            }
+                        }
+                        case StateMachine.SMEvent.StateTimeout(var content) -> {
+                            if (state instanceof OrderState.ValidatingOrder) {
+                                System.out.printf("[Order %s] Validation timeout%n", orderId);
+                                yield StateMachine.Transition.stop("Validation timeout");
+                            } else if (state instanceof OrderState.ProcessingPayment) {
+                                System.out.printf("[Order %s] Payment timeout%n", orderId);
+                                yield StateMachine.Transition.stop("Payment timeout");
+                            } else if (state instanceof OrderState.ReservingInventory) {
+                                System.out.printf("[Order %s] Inventory reservation timeout%n", orderId);
+                                yield StateMachine.Transition.stop("Inventory reservation timeout");
+                            } else {
+                                yield StateMachine.Transition.keepState(ctx);
+                            }
+                        }
+                        default -> StateMachine.Transition.keepState(ctx);
+                    }
+            ).start();
         }
 
         private static void simulateValidation(OrderContext ctx) {
@@ -388,16 +364,10 @@ public class SpringBootIntegration {
 
         public OrderProcessingSystem() {
             this.supervisor =
-                    Supervisor.create()
-                            .withStrategy(RestartStrategy.ONE_FOR_ONE)
-                            .withMaxRestarts(3)
-                            .withWindowSeconds(30)
-                            .onChildExit(
-                                    (childId, exitReason) -> {
-                                        System.out.printf(
-                                                "  [Supervisor] Child exited: %s%n", childId);
-                                    })
-                            .build();
+                    Supervisor.create(
+                            Supervisor.Strategy.ONE_FOR_ONE,
+                            3,
+                            Duration.ofSeconds(30));
         }
 
         /**
@@ -408,29 +378,23 @@ public class SpringBootIntegration {
         public void processOrder(OrderRequest request) {
             String childId = "order-" + request.orderId();
 
-            supervisor.addChild(
-                    ChildSpec.of(
-                            childId,
-                            () ->
-                                    Proc.spawn(
-                                            OrderContext::new,
-                                            (ctx, event) -> {
-                                                // Handle order events in state machine
-                                                System.out.printf(
-                                                        "[Order %s] Event: %s%n",
-                                                        request.orderId(),
-                                                        event.getClass().getSimpleName());
-                                                return new Proc.StateResult<>(ctx, null);
-                                            },
-                                            null),
-                            RestartType.TEMPORARY // Remove after order completes
-                            ));
+            supervisor.supervise(
+                    childId,
+                    new OrderContext(),
+                    (ctx, msg) -> {
+                        // Handle order events in state machine
+                        System.out.printf(
+                                "[Order %s] Event: %s%n",
+                                request.orderId(),
+                                msg.getClass().getSimpleName());
+                        return ctx;
+                    });
 
             System.out.printf("Order %s submitted for processing%n", request.orderId());
         }
 
-        public void shutdown() {
-            supervisor.terminate();
+        public void shutdown() throws InterruptedException {
+            supervisor.stop();
         }
     }
 
