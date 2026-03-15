@@ -18,27 +18,33 @@ JOTP is a production-ready Java 26 framework implementing all 15 OTP (Erlang/OTP
 This project uses Maven 4 with the following key commands:
 
 ```bash
-# Compile (requires Java 26 with --enable-preview)
-mvnd compile
+# Via Make (recommended)
+make compile          # compile sources
+make test             # unit tests (T=ClassName for single class)
+make verify           # unit + integration + quality checks
+make format           # apply Spotless (Google Java Format AOSP)
+make benchmark-quick  # JMH: 1 fork, 1 warmup, 2 iterations
+make package          # build JAR (skips tests)
+make guard-check      # validate H_TODO/H_MOCK/H_STUB guards
+make deploy           # full cloud deploy pipeline (CLOUD=oci default)
+make help             # list all targets
 
-# Run unit tests
-mvnd test
-
-# Run all tests + quality checks
-mvnd verify
-
-# Format code (runs automatically on edit via hook)
-mvnd spotless:apply
-
-# Run a single test class
-mvnd test -Dtest=ProcTest
-
-# Full build with dogfood validation
-mvnd verify -Ddogfood
-
-# Faster with Maven Daemon (included)
-./bin/mvndw verify  # Auto-downloads mvnd if needed
+# Via mvnd (Maven Daemon)
+mvnd compile          # compile (requires Java 26 with --enable-preview)
+mvnd test             # run unit tests
+mvnd verify           # run all tests + quality checks
+mvnd spotless:apply   # format code (runs automatically on edit via hook)
+mvnd test -Dtest=ProcTest  # run a single test class
+mvnd verify -Ddogfood  # full build with dogfood validation
+./bin/mvndw verify     # auto-downloads mvnd if needed
 ```
+
+## Module & Runtime
+
+- **Module:** `io.github.seanchatmangpt.jotp` (Java 26 JPMS)
+- **Compiler flag:** `--enable-preview` required for all compilation and test runs
+- **Tests:** `*Test.java` → Maven Surefire (unit); `*IT.java` → Maven Failsafe (integration)
+- **Formatting:** Spotless runs automatically via PostToolUse hook after every `.java` edit
 
 ## Development Requirements
 
@@ -46,25 +52,75 @@ mvnd verify -Ddogfood
 - **Maven 4** (or use included Maven Wrapper: `./mvnw`)
 - Optional: `mvnd` (Maven Daemon) - 30% faster builds via persistent JVM
 
+## 15 OTP Primitives
+
+| Primitive | Purpose |
+|-----------|---------|
+| `Proc<S,M>` | Lightweight process with `LinkedTransferQueue` mailbox; pure `(S,M)→S` handler |
+| `Supervisor` | Fault-tolerant process tree; ONE_FOR_ONE / ONE_FOR_ALL / REST_FOR_ONE strategies |
+| `StateMachine<S,E,D>` | Full gen_statem contract; sealed S and E required for exhaustive switches |
+| `ProcRef<S,M>` | Stable handle that survives supervisor restarts — never hold raw `Proc` |
+| `ProcMonitor` | One-way DOWN notification; monitor side unaffected if target crashes |
+| `ProcLink` | Bidirectional crash propagation between two processes |
+| `ProcRegistry` | Name-based process lookup (equivalent to Erlang's `whereis/1`) |
+| `ProcTimer` | Scheduled message delivery to a Proc |
+| `ProcSys` | Live introspection: suspend/resume/statistics without stopping the process |
+| `ProcLib` | Process utility functions (init_ack handshake pattern) |
+| `CrashRecovery` | Wraps supplier in isolated virtual thread; returns `Result<T, Exception>` |
+| `Parallel` | Structured concurrency via `StructuredTaskScope` |
+| `EventManager<E>` | Typed pub-sub event bus; handler crash doesn't kill bus |
+| `Result<T,E>` | Railway-oriented error handling with sealed Ok/Err variants |
+| `ExitSignal` | Exit reason carrier for linked/monitored processes (trap_exit pattern) |
+
+## Java 26 Patterns to Use
+
+```java
+// Sealed types — exhaustive switch is compiler-enforced
+public sealed interface Transition<S,D> permits Transition.Next, Transition.Keep, Transition.Stop {}
+
+// Pattern matching with record patterns
+if (shape instanceof Circle(var radius)) { ... }
+switch (result) { case Success(var v) -> use(v); case Failure(var e) -> handle(e); }
+
+// Virtual threads + StructuredTaskScope (--enable-preview required)
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var task = scope.fork(() -> compute());
+    scope.join().throwIfFailed();
+    return task.get();
+}
+
+// ScopedValue over ThreadLocal (virtual-thread safe)
+static final ScopedValue<User> CURRENT_USER = ScopedValue.newInstance();
+ScopedValue.where(CURRENT_USER, user).run(() -> handleRequest());
+```
+
+## Forbidden Patterns (guards block on violation)
+
+```java
+// H_TODO — never leave in src/main/java
+// TODO: implement later    FIXME: this is broken
+
+// H_MOCK — never in production code
+class MockPaymentService implements PaymentService { ... }
+var mock = mockRepository();
+
+// H_STUB — never return empty stubs
+public String getName() { return ""; }
+public List<Item> getItems() { return null; }
+```
+If genuinely blocked: `throw new UnsupportedOperationException("not implemented: <reason>")`.
+
 ## Code Structure
 
 ### Core Package: `io.github.seanchatmangpt.jotp`
 
-- **`Proc<S,M>`**: Lightweight process with virtual-thread mailbox - Java 26 equivalent of Erlang process
-- **`Supervisor`**: Hierarchical process supervision with restart strategies (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)
-- **`StateMachine<S,E,D>`**: Complex workflows with sealed transitions
-- **`EventManager<E>`**: Typed event broadcasting
-- **`ProcRef<S,M>`**: Stable handle that survives supervisor restarts
-- **`ProcMonitor`**: Unilateral DOWN notifications
-- **`ProcLink`**: Bilateral crash propagation
-- **`ProcTimer`**: Timed message delivery
-- **`Parallel`**: Structured fan-out with fail-fast semantics
-- **`Result<T,E>`**: Railway-oriented error handling
-- **`CrashRecovery`**: Isolated retry with supervised recovery
-- **`ProcRegistry`**: Global process name table
-- **`ProcSys`**: Live introspection without stopping
-- **`ProcLib`**: Startup handshake (init_ack pattern)
-- **`ExitSignal`**: Exit signal trapping and handling
+```
+io.github.seanchatmangpt.jotp
+├── Proc, ProcRef, ProcLink, ProcMonitor, ProcRegistry, ProcTimer, ProcSys, ProcLib
+├── Supervisor, CrashRecovery, StateMachine, EventManager, Parallel, ExitSignal, Result
+├── ApplicationController, ApplicationSpec, ApplicationCallback, StartType, RunType
+└── dogfood/   ← template-generated examples, not production primitives
+```
 
 ### Key Design Patterns
 
@@ -83,6 +139,15 @@ Tests are organized in several categories:
 - **Stress Tests**: Performance and reliability under load (`stress.*`)
 - **Pattern Tests**: Enterprise integration patterns (`messagepatterns.*`)
 
+### Test Conventions
+
+- **JUnit 5** (`@Test`, `@BeforeEach`, `@ParameterizedTest`)
+- **AssertJ** for assertions (`assertThat(...)`, not `assertTrue`)
+- **jqwik** for property-based tests (`@Property`, `@ForAll`)
+- **Awaitility** for async (`await().atMost(...).until(...)`) — never `Thread.sleep()`
+- **Instancio** for test data generation
+- `ApplicationController.reset()` in `@BeforeEach` — required for test isolation
+
 ### Excluded Components
 
 Some components are currently excluded from compilation due to ongoing development:
@@ -90,13 +155,6 @@ Some components are currently excluded from compilation due to ongoing developme
 - `**/enterprise/**` - Enterprise patterns under evaluation
 - `**/pool/**` - Connection pooling patterns
 - Various experimental features with integration dependencies
-
-## Development Workflow
-
-1. **Code Formatting**: Uses Google Java Format (AOSP style) via Spotless
-2. **Quality Gates**: Javadoc validation, test coverage, static analysis
-3. **Preview Features**: All Java 26 preview features are enabled
-4. **Module System**: JPMS module `io.github.seanchatmangpt.jotp`
 
 ## Key Conventions
 
@@ -107,9 +165,18 @@ Some components are currently excluded from compilation due to ongoing developme
 - **Supervisors**: Use structured ChildSpec for complex scenarios
 - **Timeouts**: Always use timeouts for `ask()` calls to avoid deadlocks
 
+## Automation (hooks run automatically)
+
+- **SessionStart:** installs JDK 26 + mvnd, configures Maven proxy, shows git context
+- **PostToolUse (Edit/Write):** Spotless formats `.java` files, then guard validation runs
+
 ## Documentation
 
 - **Book**: `book/src/` - Comprehensive guide with examples
 - **Docs**: `docs/` - Technical documentation and patterns
+  - `docs/ARCHITECTURE.md` — enterprise patterns, competitive analysis, performance benchmarks
+  - `docs/SLA-PATTERNS.md` — SRE runbooks, monitoring, disaster recovery
+  - `docs/INTEGRATION-PATTERNS.md` — brownfield Spring Boot adoption strategy
 - **Examples**: `src/main/java/io/github/seanchatmangpt/jotp/examples/` - Working examples
 - **Thesis**: `docs/phd-thesis-otp-java26.md` - Formal OTP ↔ Java 26 equivalence proofs
+- **User Guide**: `docs/user-guide/` - Next.js/MDX documentation (100+ files, 150K+ words)
