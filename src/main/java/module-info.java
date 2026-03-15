@@ -39,15 +39,13 @@
  *
  * <p>Package: {@code io.github.seanchatmangpt.jotp.reactive}
  *
- * <p>Reactive stream adapters and Publisher bindings. API and behavior STABLE.
- *
  * <h3>Dogfood Examples (EXPERIMENTAL)</h3>
  *
  * <p>Packages: {@code io.github.seanchatmangpt.jotp.dogfood.*}
  *
  * <p>Real Java code generated from templates (core, concurrency, patterns, API, error-handling,
- * security, innovation, mclaren, messaging, reactive). These demonstrate template-generated
- * patterns and are primarily for internal validation. No stability guarantees.
+ * security, innovation, mclaren, messaging). These demonstrate template-generated patterns and are
+ * primarily for internal validation. No stability guarantees.
  *
  * <h3>Message Patterns (STABLE)</h3>
  *
@@ -100,7 +98,6 @@ module io.github.seanchatmangpt.jotp {
 
     // Local exports
     exports io.github.seanchatmangpt.jotp;
-    exports io.github.seanchatmangpt.jotp.reactive;
     exports io.github.seanchatmangpt.jotp.dogfood.core;
     exports io.github.seanchatmangpt.jotp.dogfood.concurrency;
     exports io.github.seanchatmangpt.jotp.dogfood.patterns;
@@ -109,9 +106,11 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.otp;
     exports io.github.seanchatmangpt.jotp.dogfood.security;
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
-    exports io.github.seanchatmangpt.jotp.dogfood.reactive;
+    exports io.github.seanchatmangpt.jotp.dogfood.messaging;
+    exports io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
     // Enterprise Patterns
+    exports io.github.seanchatmangpt.jotp.enterprise.circuitbreaker;
     exports io.github.seanchatmangpt.jotp.enterprise.health;
     exports io.github.seanchatmangpt.jotp.enterprise.backpressure;
     exports io.github.seanchatmangpt.jotp.enterprise.recovery;

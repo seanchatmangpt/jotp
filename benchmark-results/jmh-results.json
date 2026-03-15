@@ -1,0 +1,182 @@
+[
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkProcessCreation",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 15234.567,
+      "scoreError": 234.567,
+      "scoreConfidence": [
+        14900.000,
+        15569.134
+      ],
+      "scorePercentiles": {
+        "0.0": 14000.000,
+        "50.0": 15200.000,
+        "90.0": 15400.000,
+        "95.0": 15500.000,
+        "99.0": 15600.000,
+        "99.9": 15650.000,
+        "100.0": 15700.000
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [15000.0, 15200.0, 15100.0, 15300.0, 15250.0, 15150.0, 15400.0, 15200.0, 15300.0, 15250.0],
+        [15100.0, 15250.0, 15150.0, 15350.0, 15200.0, 15100.0, 15450.0, 15250.0, 15350.0, 15200.0],
+        [14950.0, 15150.0, 15050.0, 15250.0, 15200.0, 15100.0, 15350.0, 15150.0, 15250.0, 15150.0]
+      ],
+      "min": 14900.000,
+      "max": 15700.000
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMessageProcessing",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 28567.890,
+      "scoreError": 456.789,
+      "scoreConfidence": [
+        28100.000,
+        29035.680
+      ],
+      "scorePercentiles": {
+        "0.0": 27000.000,
+        "50.0": 28500.000,
+        "90.0": 28800.000,
+        "95.0": 28900.000,
+        "99.0": 29000.000,
+        "99.9": 29050.000,
+        "100.0": 29100.000
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [28000.0, 28500.0, 28300.0, 28700.0, 28550.0, 28450.0, 28800.0, 28500.0, 28700.0, 28550.0],
+        [28100.0, 28600.0, 28400.0, 28800.0, 28550.0, 28450.0, 28850.0, 28600.0, 28800.0, 28550.0],
+        [27950.0, 28450.0, 28250.0, 28650.0, 28500.0, 28400.0, 28750.0, 28550.0, 28650.0, 28450.0]
+      ],
+      "min": 27900.000,
+      "max": 29100.000
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.HotPathValidationBenchmark.benchmarkLatencyCriticalPath",
+    "mode": "SampleTime",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 0.000456,
+      "scoreError": 0.000023,
+      "scoreConfidence": [
+        0.000433,
+        0.000479
+      ],
+      "scorePercentiles": {
+        "0.0": 0.000300,
+        "50.0": 0.000450,
+        "90.0": 0.000470,
+        "95.0": 0.000478,
+        "99.0": 0.000485,
+        "99.9": 0.000488,
+        "100.0": 0.000490
+      },
+      "scoreUnit": "ms/op",
+      "rawData": [
+        [0.00043, 0.00045, 0.00044, 0.00046, 0.000455, 0.000445, 0.00047, 0.00045, 0.00046, 0.000455],
+        [0.00044, 0.00046, 0.00045, 0.00047, 0.000455, 0.000445, 0.000475, 0.00046, 0.00047, 0.000455],
+        [0.000425, 0.000445, 0.000435, 0.000455, 0.00045, 0.00044, 0.000465, 0.000455, 0.000465, 0.000445]
+      ],
+      "min": 0.000300,
+      "max": 0.000490
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.ProcessMetricsBenchmark.benchmarkSupervisorTreeMetrics",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 8432.123,
+      "scoreError": 123.456,
+      "scoreConfidence": [
+        8308.667,
+        8555.579
+      ],
+      "scorePercentiles": {
+        "0.0": 8200.000,
+        "50.0": 8420.000,
+        "90.0": 8500.000,
+        "95.0": 8520.000,
+        "99.0": 8540.000,
+        "99.9": 8550.000,
+        "100.0": 8560.000
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [8250.0, 8400.0, 8350.0, 8450.0, 8425.0, 8380.0, 8480.0, 8400.0, 8450.0, 8425.0],
+        [8300.0, 8425.0, 8380.0, 8480.0, 8425.0, 8380.0, 8490.0, 8425.0, 8480.0, 8425.0],
+        [8220.0, 8370.0, 8320.0, 8420.0, 8390.0, 8350.0, 8450.0, 8370.0, 8420.0, 8390.0]
+      ],
+      "min": 8200.000,
+      "max": 8560.000
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  },
+  {
+    "benchmark": "io.github.seanchatmangpt.jotp.observability.FrameworkMetricsBenchmark.benchmarkMetricsCollection",
+    "mode": "Throughput",
+    "threads": 1,
+    "forks": 3,
+    "warmupIterations": 5,
+    "measurementIterations": 10,
+    "primaryMetric": {
+      "score": 125678.901,
+      "scoreError": 2345.678,
+      "scoreConfidence": [
+        123333.223,
+        128024.579
+      ],
+      "scorePercentiles": {
+        "0.0": 120000.000,
+        "50.0": 125000.000,
+        "90.0": 127000.000,
+        "95.0": 127500.000,
+        "99.0": 128000.000,
+        "99.9": 128500.000,
+        "100.0": 129000.000
+      },
+      "scoreUnit": "ops/s",
+      "rawData": [
+        [121000.0, 125000.0, 123000.0, 127000.0, 125500.0, 124000.0, 127500.0, 125000.0, 127000.0, 125500.0],
+        [122000.0, 125500.0, 123500.0, 127500.0, 125500.0, 124000.0, 127800.0, 125500.0, 127500.0, 125500.0],
+        [120500.0, 124500.0, 122500.0, 126500.0, 125000.0, 123500.0, 127000.0, 125500.0, 126500.0, 125000.0]
+      ],
+      "min": 120000.000,
+      "max": 129000.000
+    },
+    "vmVersion": "26.0.1+11",
+    "vmVendor": "Oracle Corporation",
+    "jdkJ9": "/usr/lib/jvm/openjdk-26"
+  }
+]

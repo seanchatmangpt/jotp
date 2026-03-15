@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # JOTP Application Service
+  jotp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        - VERSION=${VERSION:-latest}
+    image: jotp:${VERSION:-latest}
+    container_name: jotp-app
+    ports:
+      - "8080:8080"
+      - "5005:5005"  # Debug port
+    environment:
+      # JVM options
+      - JAVA_OPTS=-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XshowSettings:vm
+      # Application config
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount source for development (comment out in production)
+      - ./src:/app/src:ro
+      # Mount logs
+      - jotp-logs:/app/logs
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # PostgreSQL Database (optional - for testing)
+  postgres:
+    image: postgres:16-alpine
+    container_name: jotp-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-jotp}
+      - POSTGRES_USER=${POSTGRES_USER:-jotp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-jotp_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jotp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Cache (optional - for testing)
+  redis:
+    image: redis:7-alpine
+    container_name: jotp-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # Test Service (runs tests in container)
+  jotp-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    image: jotp-test:${VERSION:-latest}
+    container_name: jotp-test
+    environment:
+      - MVND_OPTS=-T1C
+    volumes:
+      - test-results:/build/target/test-results
+    networks:
+      - jotp-network
+    profiles:
+      - test
+
+networks:
+  jotp-network:
+    driver: bridge
+    name: jotp-network
+
+volumes:
+  postgres-data:
+    name: jotp-postgres-data
+  redis-data:
+    name: jotp-redis-data
+  jotp-logs:
+    name: jotp-logs
+  test-results:
+    name: jotp-test-results

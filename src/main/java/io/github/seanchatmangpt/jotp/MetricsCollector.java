@@ -372,6 +372,17 @@ public final class MetricsCollector implements Application.Infrastructure {
         return gauge(name, null);
     }
 
+    /** Get or create a gauge with tags and a supplier. */
+    public Gauge gauge(String name, Map<String, String> tags, Supplier<Double> supplier) {
+        String key = name + tags.toString();
+        return gauges.computeIfAbsent(
+                key,
+                k -> {
+                    metadata.put(k, new MetricInfo(name, MetricType.GAUGE, "", tags));
+                    return new GaugeImpl(supplier);
+                });
+    }
+
     /** Get or create a histogram. */
     public Histogram histogram(String name) {
         return histograms.computeIfAbsent(

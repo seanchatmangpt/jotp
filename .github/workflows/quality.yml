@@ -1,0 +1,353 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '26'
+  JAVA_DISTRIBUTION: 'oracle'
+  MAVEN_OPTS: >-
+    -Xmx2g
+    -Xms1g
+    -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+
+jobs:
+  spotless-check:
+    name: Spotless Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Check code formatting
+        run: |
+          echo "Checking code formatting with Spotless..."
+          ./mvnw spotless:check --batch-mode --no-transfer-progress
+
+      - name: Auto-format if failed
+        if: failure()
+        run: |
+          echo "Code formatting issues found. Running Spotless apply..."
+          ./mvnw spotless:apply --batch-mode --no-transfer-progress
+
+      - name: Show formatting diff
+        if: failure()
+        run: |
+          echo "Showing formatting changes..."
+          git diff --stat
+
+      - name: Upload formatted code
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-code
+          path: |
+            src/
+          retention-days: 1
+
+  checkstyle-check:
+    name: Checkstyle Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Run Checkstyle
+        run: |
+          echo "Running Checkstyle analysis..."
+          ./mvnw checkstyle:check --batch-mode --no-transfer-progress || true
+
+      - name: Generate Checkstyle report
+        if: always()
+        run: |
+          echo "Generating Checkstyle report..."
+          ./mvnw checkstyle:checkstyle --batch-mode --no-transfer-progress || true
+
+      - name: Upload Checkstyle results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkstyle-report
+          path: |
+            target/checkstyle-result.xml
+            target/checkstyle-checker.xml
+          retention-days: 7
+
+      - name: Annotate PR with Checkstyle issues
+        if: github.event_name == 'pull_request' && always()
+        uses: jwgmeligmijling/checkstyle-annotations-action@v1
+        with:
+          reportFile: target/checkstyle-result.xml
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  pmd-analysis:
+    name: PMD Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Run PMD analysis
+        run: |
+          echo "Running PMD static analysis..."
+          ./mvnw pmd:check --batch-mode --no-transfer-progress || true
+
+      - name: Upload PMD report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmd-report
+          path: target/pmd/
+          retention-days: 7
+
+  spotbugs-scan:
+    name: SpotBugs Bug Detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Run SpotBugs
+        run: |
+          echo "Running SpotBugs analysis..."
+          ./mvnw spotbugs:check --batch-mode --no-transfer-progress || true
+
+      - name: Upload SpotBugs report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: target/spotbugs/
+          retention-days: 7
+
+  dependency-analysis:
+    name: Dependency Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Analyze dependencies
+        run: |
+          echo "Analyzing dependencies..."
+          ./mvnw dependency:analyze --batch-mode --no-transfer-progress || true
+
+      - name: Check for dependency updates
+        run: |
+          echo "Checking for dependency updates..."
+          ./mvnw versions:display-dependency-updates --batch-mode --no-transfer-progress || true
+
+      - name: Check for plugin updates
+        run: |
+          echo "Checking for plugin updates..."
+          ./mvnw versions:display-plugin-updates --batch-mode --no-transfer-progress || true
+
+      - name: Generate dependency tree
+        run: |
+          echo "Generating dependency tree..."
+          ./mvnw dependency:tree --batch-mode --no-transfer-progress > dependency-tree.txt
+
+      - name: Upload dependency tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-tree
+          path: dependency-tree.txt
+          retention-days: 7
+
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Check license headers
+        run: |
+          echo "Checking license headers..."
+          ./mvnw license:check --batch-mode --no-transfer-progress || {
+            echo "License header check failed"
+            echo "Run: ./mvnw license:format"
+            exit 1
+          }
+
+      - name: Download third-party licenses
+        run: |
+          echo "Downloading third-party licenses..."
+          ./mvnw license:download-licenses --batch-mode --no-transfer-progress || true
+
+      - name: Aggregate third-party licenses
+        run: |
+          echo "Aggregating third-party licenses..."
+          ./mvnw license:aggregate-third-party --batch-mode --no-transfer-progress || true
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: |
+            target/generated-sources/license/
+            target/site/
+          retention-days: 7
+
+  coverage-check:
+    name: Coverage Threshold Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Run tests with coverage
+        run: |
+          echo "Running tests with coverage..."
+          ./mvnw clean test jacoco:check --batch-mode --no-transfer-progress -T1C
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/site/jacoco/
+          retention-days: 7
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: madrapps/jacoco-report@v1.6.1
+        with:
+          paths: target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 40
+          min-coverage-changed-files: 60
+          title: Code Coverage Report
+          update-comment: true
+
+  quality-summary:
+    name: Quality Summary
+    runs-on: ubuntu-latest
+    needs: [spotless-check, checkstyle-check, pmd-analysis, spotbugs-scan, dependency-analysis, license-check, coverage-check]
+    if: always()
+
+    steps:
+      - name: Generate quality report
+        run: |
+          echo "# Code Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Quality Checks" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Spotless | ${{ needs.spotless-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkstyle | ${{ needs.checkstyle-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| PMD | ${{ needs.pmd-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SpotBugs | ${{ needs.spotbugs-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ${{ needs.dependency-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License | ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage | ${{ needs.coverage-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check overall quality
+        run: |
+          FAILED=0
+
+          if [ "${{ needs.spotless-check.result }}" != "success" ]; then
+            echo "❌ Spotless check failed"
+            FAILED=1
+          fi
+
+          if [ "${{ needs.checkstyle-check.result }}" != "success" ]; then
+            echo "❌ Checkstyle failed"
+            FAILED=1
+          fi
+
+          if [ "${{ needs.pmd-analysis.result }}" != "success" ]; then
+            echo "⚠️ PMD analysis found issues"
+          fi
+
+          if [ "${{ needs.spotbugs-scan.result }}" != "success" ]; then
+            echo "⚠️ SpotBugs found issues"
+          fi
+
+          if [ "${{ needs.dependency-analysis.result }}" != "success" ]; then
+            echo "⚠️ Dependency analysis found issues"
+          fi
+
+          if [ "${{ needs.license-check.result }}" != "success" ]; then
+            echo "❌ License check failed"
+            FAILED=1
+          fi
+
+          if [ "${{ needs.coverage-check.result }}" != "success" ]; then
+            echo "❌ Coverage check failed"
+            FAILED=1
+          fi
+
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Quality checks failed"
+            exit 1
+          else
+            echo "✅ All critical quality checks passed"
+            exit 0
+          fi
