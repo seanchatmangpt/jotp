@@ -169,6 +169,52 @@ XMLEOF
 
 setup_maven_proxy
 
+# ── Import TLS Inspection CA into JVM truststore ───────────────────────────
+# The sandbox egress proxy does TLS inspection; its CA cert must be trusted by Java.
+import_proxy_ca_cert() {
+  local CACERTS="${JDK26_HOME}/lib/security/cacerts"
+  local CA_CERT="/usr/local/share/ca-certificates/swp-ca-production.crt"
+  if [ -f "${CA_CERT}" ] && [ -f "${CACERTS}" ]; then
+    if ! keytool -list -cacerts -storepass changeit -alias anthropic-swp-ca-prod >/dev/null 2>&1; then
+      keytool -import -trustcacerts -noprompt \
+        -alias anthropic-swp-ca-prod \
+        -file "${CA_CERT}" \
+        -cacerts \
+        -storepass changeit >/dev/null 2>&1 && \
+        echo "Imported Anthropic TLS inspection CA into JVM truststore" || \
+        echo "[WARN] Failed to import Anthropic CA cert"
+    else
+      echo "Anthropic TLS inspection CA already in JVM truststore"
+    fi
+  fi
+}
+
+import_proxy_ca_cert
+
+# ── Install dtr-core to local Maven repo ──────────────────────────────────
+# dtr is not yet on Maven Central; install from source on first run.
+install_dtr() {
+  local DTR_VERSION="2026.3.0"
+  local DTR_JAR="${HOME}/.m2/repository/io/github/seanchatmangpt/dtr/dtr-core/${DTR_VERSION}/dtr-core-${DTR_VERSION}.jar"
+  if [ ! -f "${DTR_JAR}" ]; then
+    echo "Installing dtr-core ${DTR_VERSION} from source..."
+    local TMP_DTR
+    TMP_DTR=$(mktemp -d)
+    if git clone --depth=1 https://github.com/seanchatmangpt/dtr.git "${TMP_DTR}/dtr" 2>/dev/null; then
+      (cd "${TMP_DTR}/dtr" && mvnd install -pl dtr-core -am -DskipTests -q 2>/dev/null) && \
+        echo "dtr-core ${DTR_VERSION} installed" || \
+        echo "[WARN] dtr-core install failed"
+    else
+      echo "[WARN] Could not clone dtr repo"
+    fi
+    rm -rf "${TMP_DTR}"
+  else
+    echo "dtr-core ${DTR_VERSION} already in local Maven repo"
+  fi
+}
+
+install_dtr
+
 # ── Start maven-proxy-v2.py bridge (optional, for https_proxy env) ─────────
 if [ -n "${https_proxy:-}${HTTPS_PROXY:-}${http_proxy:-}${HTTP_PROXY:-}" ]; then
   PROXY_SCRIPT="${REPO_ROOT}/maven-proxy-v2.py"

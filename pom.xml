@@ -42,6 +42,7 @@
 
     <properties>
         <maven.compiler.release>26</maven.compiler.release>
+        <dtr.version>2026.3.0</dtr.version>
         <junit.version>5.12.2</junit.version>
         <awaitility.version>4.3.0</awaitility.version>
         <assertj.version>3.27.3</assertj.version>
@@ -90,6 +91,12 @@
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
             <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.seanchatmangpt.dtr</groupId>
+            <artifactId>dtr-core</artifactId>
+            <version>${dtr.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
