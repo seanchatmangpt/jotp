@@ -50,7 +50,7 @@ class ScatterGatherTest {
         for (int i = 0; i < 3; i++) {
             int serverId = i;
             var proc =
-                    new Proc<>(
+                    new Proc<ServerState, EchoMessage>(
                             new ServerState(0),
                             (state, msg) -> {
                                 // Echo server: just increment counter and return
@@ -82,7 +82,7 @@ class ScatterGatherTest {
                 scatterGather.scatterGather(
                         message,
                         recipients,
-                        1000, // 1 second timeout
+                        Duration.ofMillis(1000), // 1 second timeout
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
@@ -93,8 +93,7 @@ class ScatterGatherTest {
                                                 .ask(
                                                         new EchoMessage(
                                                                 reqWithId.requestId(),
-                                                                reqWithId.payload().payload()),
-                                                        Duration.ofSeconds(1))
+                                                                reqWithId.payload().payload()))
                                                 .thenApply(
                                                         s -> {
                                                             return new ScatterGather.ReplyWithId<>(
@@ -138,7 +137,7 @@ class ScatterGatherTest {
                 scatterGather.scatterGather(
                         message,
                         List.of(recipients.get(0), slowRecipient, recipients.get(1)),
-                        500, // 500 ms timeout (shorter than 5 second sleep)
+                        Duration.ofMillis(500), // 500 ms timeout (shorter than 5 second sleep)
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
@@ -149,8 +148,7 @@ class ScatterGatherTest {
                                         r.ask(
                                                         new EchoMessage(
                                                                 reqWithId.requestId(),
-                                                                reqWithId.payload().payload()),
-                                                        Duration.ofMillis(500))
+                                                                reqWithId.payload().payload()))
                                                 .thenApply(
                                                         s -> {
                                                             return new ScatterGather.ReplyWithId<>(
@@ -185,7 +183,7 @@ class ScatterGatherTest {
                                 correlationId,
                                 new EchoMessage("req", "test"),
                                 recipients,
-                                1000,
+                                1000L,
                                 reqWithId -> {
                                     var futures =
                                             new ArrayList<
@@ -199,8 +197,7 @@ class ScatterGatherTest {
                                                                         reqWithId.requestId(),
                                                                         reqWithId
                                                                                 .payload()
-                                                                                .payload()),
-                                                                Duration.ofSeconds(1))
+                                                                                .payload()))
                                                         .thenApply(
                                                                 s -> {
                                                                     return new ScatterGather
@@ -230,7 +227,7 @@ class ScatterGatherTest {
                         .<EchoMessage, String, ServerState, EchoMessage, Integer>scatterGatherWith(
                                 message,
                                 recipients,
-                                1000,
+                                1000L,
                                 (corrId, replies) -> {
                                     // Aggregate: count total replies
                                     return replies.size();
@@ -248,8 +245,7 @@ class ScatterGatherTest {
                                                                         reqWithId.requestId(),
                                                                         reqWithId
                                                                                 .payload()
-                                                                                .payload()),
-                                                                Duration.ofSeconds(1))
+                                                                                .payload()))
                                                         .thenApply(
                                                                 s -> {
                                                                     return new ScatterGather
@@ -288,7 +284,7 @@ class ScatterGatherTest {
                                 scatterGatherWithFallback(
                                         new EchoMessage("fallback-req", "test"),
                                         List.of(failingRecipient),
-                                        1000,
+                                        1000L,
                                         (corrId, replies) -> "success: " + replies.size(),
                                         error -> "fallback: " + error.getMessage(),
                                         reqWithId -> {
@@ -299,8 +295,7 @@ class ScatterGatherTest {
                                                                             reqWithId.requestId(),
                                                                             reqWithId
                                                                                     .payload()
-                                                                                    .payload()),
-                                                                    Duration.ofSeconds(1))
+                                                                                    .payload()))
                                                             .thenApply(
                                                                     s -> {
                                                                         return new ScatterGather
@@ -355,7 +350,7 @@ class ScatterGatherTest {
                 scatterGather.scatterGather(
                         new EchoMessage("concurrent", "test"),
                         concurrentRecipients,
-                        2000, // 2 second timeout
+                        Duration.ofMillis(2000), // 2 second timeout
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
@@ -365,8 +360,7 @@ class ScatterGatherTest {
                                         r.ask(
                                                         new EchoMessage(
                                                                 reqWithId.requestId(),
-                                                                reqWithId.payload().payload()),
-                                                        Duration.ofSeconds(2))
+                                                                reqWithId.payload().payload()))
                                                 .thenApply(
                                                         s -> {
                                                             return new ScatterGather.ReplyWithId<>(
@@ -426,7 +420,7 @@ class ScatterGatherTest {
                 scatterGather.scatterGather(
                         new EchoMessage("order", "test"),
                         orderedRecipients,
-                        1000,
+                        Duration.ofMillis(1000),
                         reqWithId -> {
                             var futures =
                                     new ArrayList<
@@ -440,8 +434,7 @@ class ScatterGatherTest {
                                                 .ask(
                                                         new EchoMessage(
                                                                 reqWithId.requestId(),
-                                                                reqWithId.payload().payload()),
-                                                        Duration.ofSeconds(1))
+                                                                reqWithId.payload().payload()))
                                                 .thenApply(
                                                         s -> {
                                                             return new ScatterGather.ReplyWithId<>(

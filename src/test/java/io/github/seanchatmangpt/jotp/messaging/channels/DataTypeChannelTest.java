@@ -70,10 +70,12 @@ class DataTypeChannelTest {
     void testRegisterRoutes() throws InterruptedException {
         var channel = DataTypeChannel.create();
 
-        var cmdProc = new Proc<>(new MessageTracker(), (s, msg) -> s.record(msg));
-        var evtProc = new Proc<>(new MessageTracker(), (s, msg) -> s.record(msg));
-        var cmdHandler = new ProcRef<>(cmdProc);
-        var evtHandler = new ProcRef<>(evtProc);
+        var cmdProc =
+                new Proc<>(new MessageTracker(), (MessageTracker s, Message msg) -> s.record(msg));
+        var evtProc =
+                new Proc<>(new MessageTracker(), (MessageTracker s, Message msg) -> s.record(msg));
+        ProcRef<MessageTracker, Message> cmdHandler = new ProcRef<>(cmdProc);
+        ProcRef<MessageTracker, Message> evtHandler = new ProcRef<>(evtProc);
 
         DataTypeChannel.addRoute(channel, Message.CommandMsg.class, cmdHandler);
         DataTypeChannel.addRoute(channel, Message.EventMsg.class, evtHandler);

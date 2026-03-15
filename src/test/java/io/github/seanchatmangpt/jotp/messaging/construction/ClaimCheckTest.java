@@ -1,6 +1,5 @@
 package io.github.seanchatmangpt.jotp.messaging.construction;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.seanchatmangpt.jotp.Result;
@@ -53,7 +52,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result = ClaimCheck.<String>retrieve(claimId);
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(result.fold(s -> s, e -> null)).isEqualTo(payload);
+        assertThat((String) result.fold(s -> s, e -> null)).isEqualTo(payload);
     }
 
     @Test
@@ -63,7 +62,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result = ClaimCheck.<String>retrieve(nonExistentId);
 
         assertThat(result.isFailure()).isTrue();
-        assertThat(result.fold(s -> null, e -> e)).contains("No payload found");
+        assertThat((String) result.fold(s -> null, e -> e)).contains("No payload found");
     }
 
     // ── Claim management ─────────────────────────────────────────────────
@@ -113,7 +112,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result = ClaimCheck.<String>consumeClaim(claimId);
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(result.fold(s -> s, e -> null)).isEqualTo(payload);
+        assertThat((String) result.fold(s -> s, e -> null)).isEqualTo(payload);
         assertThat(ClaimCheck.exists(claimId)).isFalse();
     }
 
@@ -151,7 +150,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result = checked.<String>retrieve();
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(result.fold(s -> s, e -> null)).isEqualTo(payload);
+        assertThat((String) result.fold(s -> s, e -> null)).isEqualTo(payload);
     }
 
     // ── Type safety and generics ─────────────────────────────────────────
@@ -165,7 +164,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<Person, String> result = ClaimCheck.retrieve(claimId);
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(result.fold(p -> p.name(), e -> null)).isEqualTo("Alice");
+        assertThat((String) result.fold(p -> p.name(), e -> null)).isEqualTo("Alice");
     }
 
     // ── Error handling and validation ────────────────────────────────────
@@ -182,7 +181,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result = ClaimCheck.<String>retrieve(null);
 
         assertThat(result.isFailure()).isTrue();
-        assertThat(result.fold(s -> null, e -> e)).contains("claimId must not be null");
+        assertThat((String) result.fold(s -> null, e -> e)).contains("claimId must not be null");
     }
 
     @Test
@@ -190,7 +189,7 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result = ClaimCheck.<String>consumeClaim(null);
 
         assertThat(result.isFailure()).isTrue();
-        assertThat(result.fold(s -> null, e -> e)).contains("claimId must not be null");
+        assertThat((String) result.fold(s -> null, e -> e)).contains("claimId must not be null");
     }
 
     // ── Concurrency and storage ──────────────────────────────────────────
@@ -225,8 +224,8 @@ class ClaimCheckTest implements WithAssertions {
         Result<String, String> result1 = ClaimCheck.<String>retrieve(claimId1);
         Result<String, String> result2 = ClaimCheck.<String>retrieve(claimId2);
 
-        assertThat(result1.fold(s -> s, e -> null)).isEqualTo(payload1);
-        assertThat(result2.fold(s -> s, e -> null)).isEqualTo(payload2);
+        assertThat((String) result1.fold(s -> s, e -> null)).isEqualTo(payload1);
+        assertThat((String) result2.fold(s -> s, e -> null)).isEqualTo(payload2);
     }
 
     // ── Railway-oriented composition ─────────────────────────────────────
@@ -242,7 +241,7 @@ class ClaimCheckTest implements WithAssertions {
                         .map(s -> s + "-processed");
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(result.fold(s -> s, e -> null)).isEqualTo("DOCUMENT-123-PROCESSED");
+        assertThat((String) result.fold(s -> s, e -> null)).isEqualTo("DOCUMENT-123-PROCESSED");
     }
 
     @Test
@@ -267,6 +266,6 @@ class ClaimCheckTest implements WithAssertions {
                         .map(p -> p + " (priority=" + checked.metadata().get("priority") + ")");
 
         assertThat(result.isSuccess()).isTrue();
-        assertThat(result.fold(s -> s, e -> null)).contains("(priority=high)");
+        assertThat((String) result.fold(s -> s, e -> null)).contains("(priority=high)");
     }
 }

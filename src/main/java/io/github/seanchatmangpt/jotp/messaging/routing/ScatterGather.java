@@ -158,4 +158,84 @@ public class ScatterGather<Req, Rep, S, M> {
         }
         return result;
     }
+
+    /**
+     * Scatter-Gather with an explicit correlation ID.
+     *
+     * @param correlationId the correlation ID to use for this request
+     * @param request the request to scatter
+     * @param recipients list of process references to send to
+     * @param timeoutMillis maximum time to wait in milliseconds
+     * @param requestMapper function to wrap the request with ID and send to recipient
+     * @return {@code Result.success(replies)} or {@code Result.failure(exception)}
+     */
+    public static <Req, Rep, S, M> Result<List<Rep>, Exception> scatterGatherCorrelated(
+            String correlationId,
+            Req request,
+            List<ProcRef<S, M>> recipients,
+            long timeoutMillis,
+            Function<RequestWithId<Req>, CompletableFuture<ReplyWithId<Rep>>> requestMapper) {
+        var sg = new ScatterGather<Req, Rep, S, M>();
+        return sg.scatterGather(
+                request, recipients, Duration.ofMillis(timeoutMillis), requestMapper);
+    }
+
+    /**
+     * Scatter-Gather with a custom aggregator function.
+     *
+     * @param request the request to scatter
+     * @param recipients list of process references to send to
+     * @param timeoutMillis maximum time to wait in milliseconds
+     * @param aggregator function to aggregate replies into a single value
+     * @param requestMapper function to wrap the request with ID and send to recipient
+     * @return {@code Result.success(aggregated)} or {@code Result.failure(exception)}
+     */
+    public static <Req, Rep, S, M, Agg> Result<Agg, Exception> scatterGatherWith(
+            Req request,
+            List<ProcRef<S, M>> recipients,
+            long timeoutMillis,
+            java.util.function.BiFunction<String, List<Rep>, Agg> aggregator,
+            Function<RequestWithId<Req>, CompletableFuture<ReplyWithId<Rep>>> requestMapper) {
+        var sg = new ScatterGather<Req, Rep, S, M>();
+        var requestId = UUID.randomUUID().toString();
+        var requestWithId = new RequestWithId<>(requestId, request);
+        var baseResult =
+                sg.scatterGather(
+                        request, recipients, Duration.ofMillis(timeoutMillis), requestMapper);
+        return switch (baseResult) {
+            case Result.Ok<List<Rep>, Exception> ok ->
+                    Result.ok(aggregator.apply(requestId, ok.value()));
+            case Result.Err<List<Rep>, Exception> err -> Result.failure(err.error());
+        };
+    }
+
+    /**
+     * Scatter-Gather with a custom aggregator and fallback on failure.
+     *
+     * @param request the request to scatter
+     * @param recipients list of process references to send to
+     * @param timeoutMillis maximum time to wait in milliseconds
+     * @param aggregator function to aggregate replies into a single value
+     * @param fallback function to produce a fallback value on failure
+     * @param requestMapper function to wrap the request with ID and send to recipient
+     * @return {@code Result.success(aggregated or fallback)}
+     */
+    public static <Req, Rep, S, M, Agg> Result<Agg, Exception> scatterGatherWithFallback(
+            Req request,
+            List<ProcRef<S, M>> recipients,
+            long timeoutMillis,
+            java.util.function.BiFunction<String, List<Rep>, Agg> aggregator,
+            java.util.function.Function<Exception, Agg> fallback,
+            Function<RequestWithId<Req>, CompletableFuture<ReplyWithId<Rep>>> requestMapper) {
+        var sg = new ScatterGather<Req, Rep, S, M>();
+        var requestId = UUID.randomUUID().toString();
+        var baseResult =
+                sg.scatterGather(
+                        request, recipients, Duration.ofMillis(timeoutMillis), requestMapper);
+        return switch (baseResult) {
+            case Result.Ok<List<Rep>, Exception> ok ->
+                    Result.ok(aggregator.apply(requestId, ok.value()));
+            case Result.Err<List<Rep>, Exception> err -> Result.ok(fallback.apply(err.error()));
+        };
+    }
 }

@@ -31,7 +31,9 @@ class AggregatorTest {
 
     @BeforeEach
     void setup() {
-        aggregator = Aggregator.create(3, Duration.ofSeconds(5), items -> new CompleteMsg(items));
+        aggregator =
+                Aggregator.<Item, CompleteMsg>create(
+                        3, Duration.ofSeconds(5), items -> new CompleteMsg(items));
     }
 
     @DisplayName("Basic aggregation: all parts arrive in order")
@@ -80,7 +82,8 @@ class AggregatorTest {
     @Test
     void testSinglePartAggregation() {
         var singleAgg =
-                Aggregator.create(1, Duration.ofSeconds(5), items -> new CompleteMsg(items));
+                Aggregator.<Item, CompleteMsg>create(
+                        1, Duration.ofSeconds(5), items -> new CompleteMsg(items));
 
         UUID corrId = UUID.randomUUID();
         var part = createPart(new Item("solo", 99), 1, 1, corrId);
@@ -95,7 +98,7 @@ class AggregatorTest {
     void testLargeAggregation() {
         int partCount = 15;
         var largeAgg =
-                Aggregator.create(
+                Aggregator.<Item, CompleteMsg>create(
                         partCount, Duration.ofSeconds(5), items -> new CompleteMsg(items));
 
         UUID corrId = UUID.randomUUID();
@@ -150,7 +153,8 @@ class AggregatorTest {
     @Test
     void testTimeoutOnIncompleteAggregation() throws Exception {
         var shortTimeoutAgg =
-                Aggregator.create(2, Duration.ofMillis(200), items -> new CompleteMsg(items));
+                Aggregator.<Item, CompleteMsg>create(
+                        2, Duration.ofMillis(200), items -> new CompleteMsg(items));
 
         UUID corrId = UUID.randomUUID();
         var part1 = createPart(new Item("1", 10), 1, 2, corrId);
@@ -176,7 +180,8 @@ class AggregatorTest {
     @Test
     void testCleanupStale() throws Exception {
         var shortTimeoutAgg =
-                Aggregator.create(2, Duration.ofMillis(200), items -> new CompleteMsg(items));
+                Aggregator.<Item, CompleteMsg>create(
+                        2, Duration.ofMillis(200), items -> new CompleteMsg(items));
 
         UUID corrId1 = UUID.randomUUID();
         UUID corrId2 = UUID.randomUUID();
@@ -239,22 +244,26 @@ class AggregatorTest {
     void testInvalidCreation() {
         assertThatThrownBy(
                         () ->
-                                Aggregator.create(
+                                Aggregator.<Item, CompleteMsg>create(
                                         0, Duration.ofSeconds(5), items -> new CompleteMsg(items)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("targetCount");
 
         assertThatThrownBy(
                         () ->
-                                Aggregator.create(
+                                Aggregator.<Item, CompleteMsg>create(
                                         -1, Duration.ofSeconds(5), items -> new CompleteMsg(items)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("targetCount");
 
-        assertThatThrownBy(() -> Aggregator.create(5, null, items -> new CompleteMsg(items)))
+        assertThatThrownBy(
+                        () ->
+                                Aggregator.<Item, CompleteMsg>create(
+                                        5, null, items -> new CompleteMsg(items)))
                 .isInstanceOf(NullPointerException.class);
 
-        assertThatThrownBy(() -> Aggregator.create(5, Duration.ofSeconds(5), null))
+        assertThatThrownBy(
+                        () -> Aggregator.<Item, CompleteMsg>create(5, Duration.ofSeconds(5), null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -262,7 +271,8 @@ class AggregatorTest {
     @Test
     void testProperties() {
         var duration = Duration.ofSeconds(10);
-        var agg = Aggregator.create(7, duration, items -> new CompleteMsg(items));
+        var agg =
+                Aggregator.<Item, CompleteMsg>create(7, duration, items -> new CompleteMsg(items));
 
         assertThat(agg.expectedPartCount()).isEqualTo(7);
         assertThat(agg.timeout()).isEqualTo(duration);
@@ -274,7 +284,7 @@ class AggregatorTest {
         var callCounter = new java.util.concurrent.atomic.AtomicInteger(0);
 
         var agg =
-                Aggregator.create(
+                Aggregator.<Item, CompleteMsg>create(
                         2,
                         Duration.ofSeconds(5),
                         items -> {
@@ -335,7 +345,7 @@ class AggregatorTest {
     void testLargeAggregationWith50Parts() {
         int partCount = 50;
         var largeAgg =
-                Aggregator.create(
+                Aggregator.<Item, CompleteMsg>create(
                         partCount, Duration.ofSeconds(10), items -> new CompleteMsg(items));
 
         UUID corrId = UUID.randomUUID();
@@ -362,7 +372,9 @@ class AggregatorTest {
     @DisplayName("Timeout with zero duration")
     @Test
     void testZeroDurationTimeout() throws Exception {
-        var zeroTimeoutAgg = Aggregator.create(2, Duration.ZERO, items -> new CompleteMsg(items));
+        var zeroTimeoutAgg =
+                Aggregator.<Item, CompleteMsg>create(
+                        2, Duration.ZERO, items -> new CompleteMsg(items));
 
         UUID corrId = UUID.randomUUID();
         var part1 = createPart(new Item("1", 10), 1, 2, corrId);

@@ -326,11 +326,13 @@ class RoutingSlipTest {
     void testPayloadEnrichment() {
         // Arrange
         var payload = new Payload("original", new ArrayList<>());
-        var message = RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
+        RoutingSlip.MessageWithSlip<Payload, ProcessState> message =
+                RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
 
         // Act: simulate enrichment at each hop
         var enriched = message.payload().withEntry("Step-1-processed");
-        var reMessage = RoutingSlip.withSlip(enriched, hops.toArray(new ProcRef[0]));
+        RoutingSlip.MessageWithSlip<Payload, ProcessState> reMessage =
+                RoutingSlip.withSlip(enriched, hops.toArray(new ProcRef[0]));
 
         // Assert
         assertThat(reMessage.payload().history()).contains("Step-1-processed");

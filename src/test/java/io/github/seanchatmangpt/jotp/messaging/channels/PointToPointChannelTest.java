@@ -179,7 +179,7 @@ class PointToPointChannelTest {
         Thread.sleep(200);
 
         // Then: message passed through all stages
-        assertThat(pipeline).hasLength(3);
+        assertThat(pipeline).hasSize(3);
         var finalState = ProcSys.getState(pipeline[2]).get();
         assertThat(finalState.stagesPassed).isEqualTo(1);
         assertThat(finalState.currentValue).isEqualTo("STAGE_3");

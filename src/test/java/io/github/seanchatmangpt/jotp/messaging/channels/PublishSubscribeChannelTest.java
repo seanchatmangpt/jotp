@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.messaging.channels;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.*;
 import java.util.concurrent.*;
@@ -97,8 +98,8 @@ class PublishSubscribeChannelTest {
         List<Message> sub1Events = Collections.synchronizedList(new ArrayList<>());
         List<Message> sub2Events = Collections.synchronizedList(new ArrayList<>());
 
-        var handler1 = (java.util.function.Consumer<Message>) sub1Events::add;
-        var handler2 = (java.util.function.Consumer<Message>) sub2Events::add;
+        var handler1 = (EventManager.Handler<Message>) sub1Events::add;
+        var handler2 = (EventManager.Handler<Message>) sub2Events::add;
 
         channel.subscribe(handler1);
         var h2 = channel.subscribe(handler2);

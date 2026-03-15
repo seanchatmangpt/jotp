@@ -209,7 +209,7 @@ class DocumentMessageTest implements WithAssertions {
 
         @Test
         @DisplayName("validates document type on deserialization")
-        void validatesDocumentType() throws IOException {
+        void validatesDocumentType() throws Exception {
             Customer customer = new Customer("CUST-010", "Karen", "karen@example.com");
 
             DocumentMessage<Customer> msg = DocumentMessage.create("Customer", customer);
@@ -354,7 +354,7 @@ class DocumentMessageTest implements WithAssertions {
 
         @Test
         @DisplayName("multiple messages from same entity are independent")
-        void multipleIndependentMessages() throws IOException {
+        void multipleIndependentMessages() throws Exception {
             Customer customer = new Customer("CUST-019", "Tina", "tina@example.com");
 
             DocumentMessage<Customer> msg1 = DocumentMessage.create("Customer", customer);
