@@ -42,7 +42,8 @@
 
     <properties>
         <maven.compiler.release>26</maven.compiler.release>
-        <junit.version>5.12.2</junit.version>
+        <junit.version>6.0.3</junit.version>
+        <dtr.version>2026.2.0</dtr.version>
         <awaitility.version>4.3.0</awaitility.version>
         <assertj.version>3.27.3</assertj.version>
         <jqwik.version>1.9.3</jqwik.version>
@@ -64,6 +65,12 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.seanchatmangpt.dtr</groupId>
+            <artifactId>dtr-core</artifactId>
+            <version>${dtr.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
