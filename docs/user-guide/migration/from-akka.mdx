@@ -1,0 +1,1049 @@
+---
+title: "Migrating from Akka"
+description: "Comprehensive guide for Akka developers moving to JOTP"
+---
+
+import { Tabs, Tab } from 'nextra/components'
+
+# Migrating from Akka to JOTP
+
+A comprehensive guide for Akka developers moving to JOTP (Java 26 implementation of OTP primitives).
+
+## Overview
+
+JOTP brings Erlang/OTP's battle-tested concurrency patterns to the JVM using Java 26's virtual threads. While Akka was inspired by Erlang/OTP, JOTP provides a more direct mapping to OTP primitives with Java 26's modern language features.
+
+**Key Differences:**
+- **Virtual Threads:** JOTP uses Java 26 virtual threads instead of Akka's custom dispatcher
+- **Typed Messages:** JOTP enforces type safety with sealed interfaces
+- **No Configuration:** JOTP uses Java code instead of HOCON configuration
+- **OTP Parity:** JOTP implements all 15 OTP primitives with full feature parity
+
+---
+
+## Concept Mapping
+
+### Core Primitives
+
+| Akka | JOTP | Notes |
+|------|------|-------|
+| `ActorRef<T>` | `Proc<S,M>` or `ProcRef<S,M>` | Typed handles with state and message types |
+| `Actor` | `Proc<S,M>` handler function | Functional style vs object-oriented |
+| `ActorSystem` | No equivalent | No central coordinator needed |
+| `Props` | Constructor or `Proc.spawn()` | No configuration objects |
+| `Inbox` | `ask()` pattern | Built-in request-reply |
+| `Dispatcher` | ForkJoinPool (default) | Virtual threads use carrier threads |
+| `Mailbox` | `LinkedTransferQueue` | Lock-free MPMC queue |
+| `tell(!)` | `tell()` | Fire-and-forget messaging |
+| `ask(?)` | `ask()` | Request-reply with timeout |
+
+### Supervision
+
+| Akka | JOTP | Notes |
+|------|------|-------|
+| `supervise()` | `supervisor.supervise()` | Direct API, no props |
+| `OneForOneStrategy` | `Strategy.ONE_FOR_ONE` | Same semantics |
+| `AllForOneStrategy` | `Strategy.ONE_FOR_ALL` | Different name, same behavior |
+| `SupervisorStrategy` | `Strategy` enum | Simplified model |
+| `childSpec()` | `ChildSpec` record | Explicit configuration |
+| `restart()` | Automatic via Supervisor | No manual restart needed |
+
+### Patterns
+
+| Akka Pattern | JOTP Equivalent | Notes |
+|--------------|-----------------|-------|
+| `Actor` subclass | `Proc<S,M>` with handler | Functional vs OO |
+| `AbstractBehavior` | Handler function | Pattern matching instead of methods |
+| `ReceiveBuilder` | `switch` expressions | Compiler-verified exhaustiveness |
+| `Stash` | `Action.postpone()` | StateMachine feature |
+| `FSM` | `StateMachine<S,E,D>` | Full OTP gen_statem parity |
+| `Persistence` | Not in JOTP 1.0 | Use event sourcing separately |
+| `Cluster` | Not in JOTP 1.0 | Use distributed systems tools |
+| `Stream` | Not in JOTP | Use Reactive Streams |
+
+---
+
+## Actor Migration
+
+### Basic Actor
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    public class CounterActor extends AbstractBehavior<CounterCommand> {
+        public static class Increment implements CounterCommand {}
+        public static class GetCount implements CounterCommand {}
+
+        private int count = 0;
+
+        public static Behavior<CounterCommand> create() {
+            return Behaviors.setup(CounterActor::new);
+        }
+
+        private CounterActor(ActorContext<CounterCommand> context) {
+            super(context);
+        }
+
+        @Override
+        public Receive<CounterCommand> createReceive() {
+            return newReceiveBuilder()
+                .onMessage(Increment.class, msg -> {
+                    count++;
+                    return this;
+                })
+                .onMessage(GetCount.class, msg -> {
+                    msg.getReplyTo().tell(count);
+                    return this;
+                })
+                .build();
+        }
+    }
+
+    // Usage
+    var system = ActorSystem.create(CounterActor.create(), "counter");
+    var counter = system.systemActorOf(CounterActor.create(), "counter");
+    counter.tell(new Increment());
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol (sealed interface)
+    sealed interface CounterMsg permits Increment, GetCount {}
+    record Increment() implements CounterMsg {}
+    record GetCount() implements CounterMsg {}
+
+    // State (immutable record)
+    record CounterState(int count) {}
+
+    // Process creation
+    var counter = Proc.spawn(
+        new CounterState(0),
+        (state, msg) -> switch (msg) {
+            case Increment _ -> new CounterState(state.count() + 1);
+            case GetCount _ -> state;  // ask() returns state
+        }
+    );
+
+    // Usage
+    counter.tell(new Increment());
+    int count = counter.ask(new GetCount()).get(1, TimeUnit.SECONDS).count();
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No ActorSystem:** Processes are created directly
+2. **Functional style:** Handler function instead of class
+3. **No Behaviors:** Simple state transformation function
+4. **Explicit state:** Immutable record vs mutable field
+
+### Ask Pattern
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    public class AskExample {
+        public CompletionStage<String> askCounter(ActorRef<CounterCommand> counter) {
+            return AskWith.ask(
+                counter,
+                replyTo -> new GetCount(replyTo),
+                Duration.ofSeconds(5),
+                system.scheduler()
+            );
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    public class AskExample {
+        public CompletableFuture<String> askCounter(Proc<CounterState, CounterMsg> counter) {
+            return counter.ask(new GetCount())
+                .thenApply(state -> String.valueOf(state.count()));
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Built-in:** `ask()` is a core method, not utility
+2. **Direct state:** Returns state directly, no wrapper
+3. **No replyTo:** No separate message type for replies
+
+### Typed Actor Context
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    public class ContextActor extends AbstractBehavior<Command> {
+        private final ActorContext<Command> context;
+
+        private ContextActor(ActorContext<Command> context) {
+            this.context = context;
+        }
+
+        @Override
+        public Receive<Command> createReceive() {
+            return newReceiveBuilder()
+                .onMessage(SpawnChild.class, msg -> {
+                    var child = context.spawn(ChildActor.create(), "child-" + msg.id());
+                    msg.getReplyTo().tell(child);
+                    return this;
+                })
+                .onMessage(LogSelf.class, msg -> {
+                    System.out.println(context.getSelf());
+                    System.out.println(context.getChildren());
+                    return this;
+                 })
+                .build();
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // JOTP doesn't have ActorContext
+    // Child spawning is done via Supervisor or directly
+    sealed interface Command permits SpawnChild, LogSelf {}
+    record SpawnChild(String id, CompletableFuture<ProcRef<ChildState, ChildMsg>> replyTo) implements Command {}
+    record LogSelf() implements Command {}
+
+    var parent = Proc.spawn(
+        new ParentState(Map.of()),
+        (state, msg) -> switch (msg) {
+            case SpawnChild(var id, var replyTo) -> {
+                var child = Proc.spawn(new ChildState(), childHandler);
+                var childRef = new ProcRef<>(child);
+                replyTo.complete(childRef);
+                yield new ParentState(merge(state.children(), Map.of(id, childRef)));
+            }
+            case LogSelf _ -> {
+                System.out.println("No self-reference needed in JOTP");
+                System.out.println("Children tracked in state: " + state.children());
+                yield state;
+            }
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No built-in hierarchy:** Parent tracks children manually
+2. **State-based:** Child references in state, not context
+3. **Explicit lifecycle:** Manual spawning and tracking
+
+---
+
+## Supervision Migration
+
+### Basic Supervisor
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    public class WorkerSupervisor extends AbstractBehavior<Command> {
+        public static Behavior<Command> create() {
+            return Behaviors.setup(WorkerSupervisor::new);
+        }
+
+        private WorkerSupervisor(ActorContext<Command> context) {
+            super(context);
+        }
+
+        @Override
+        public Receive<Command> createReceive() {
+            return newReceiveBuilder()
+                .onMessage(CreateChild.class, msg -> {
+                    var child = context.spawn(
+                        Behaviors.supervise(WorkerActor.create())
+                            .onFailure[Exception].restart(),
+                        "worker-" + msg.id()
+                    );
+                    msg.getReplyTo().tell(child);
+                    return this;
+                })
+                .build();
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        5,
+        Duration.ofSeconds(60)
+    );
+
+    var workerRef = supervisor.supervise(
+        "worker-1",
+        new WorkerState(),
+        workerHandler
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No parent actor:** Supervisor is standalone
+2. **Direct API:** `supervise()` instead of context.spawn
+3. **Automatic restart:** No explicit supervision strategy needed
+
+### Restart Strategies
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    var strategy = SupervisorStrategy.restart()
+        .withLimit(
+            10,  // maxRestarts
+            Duration.ofMinutes(1)  // timeRange
+        );
+
+    var child = context.spawn(
+        Behaviors.supervise(WorkerActor.create())
+            .onFailure[Exception].withStrategy(strategy),
+        "worker"
+    );
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        10,
+        Duration.ofMinutes(1)
+    );
+
+    var workerRef = supervisor.supervise(
+        "worker",
+        new WorkerState(),
+        workerHandler
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Strategy at supervisor level:** Not per-child
+2. **All exceptions:** No need to specify exception types
+3. **Simplified API:** Less configuration
+
+### All-For-One Supervision
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    var strategy = SupervisorStrategy.restart()
+        .withLimit(5, Duration.ofMinutes(1))
+        .withStrategy(new AllForOneStrategy());
+
+    var child1 = context.spawn(
+        Behaviors.supervise(Worker1.create())
+            .onFailure[Exception].withStrategy(strategy),
+        "worker1"
+    );
+    var child2 = context.spawn(
+        Behaviors.supervise(Worker2.create())
+            .onFailure[Exception].withStrategy(strategy),
+        "worker2"
+    );
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ALL,  // All children restart on any crash
+        5,
+        Duration.ofMinutes(1)
+    );
+
+    var worker1 = supervisor.supervise("worker1", new Worker1State(), worker1Handler);
+    var worker2 = supervisor.supervise("worker2", new Worker2State(), worker2Handler);
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Strategy applies to all:** Set once on supervisor
+2. **Automatic coordination:** No need to link strategies
+
+---
+
+## State Machine Migration
+
+### Akka FSM
+
+<Tabs items={['Akka FSM', 'JOTP StateMachine']}>
+  <Tab>
+    ```java
+    public class Lock extends AbstractFSM<LockState, LockData> {
+        {
+            startWith(Locked, new LockData("1234", ""));
+
+            when(Locked,
+                matchEvent(
+                    Button.class,
+                    (button, data) -> {
+                        var newInput = data.input() + button.digit();
+                        if (newInput.equals(data.correctCode())) {
+                            return goTo(Open)
+                                .using(new LockData(data.correctCode(), ""))
+                                .forMax(Duration.ofSeconds(10));
+                        } else if (newInput.length() >= 4) {
+                            return stay().using(new LockData(data.correctCode(), ""));
+                        } else {
+                            return stay().using(new LockData(data.correctCode(), newInput));
+                        }
+                    }
+                )
+            );
+
+            when(Open,
+                matchEvent(
+                    StateTimeout.class,
+                    (timeout, data) -> goTo(Locked)
+                )
+                .matchEvent(
+                    Lock.class,
+                    (lock, data) -> goTo(Locked)
+                )
+            );
+
+            initialize();
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    sealed interface LockState permits Locked, Open {}
+    record Locked() implements LockState {}
+    record Open() implements LockState {}
+
+    sealed interface LockEvent permits Button, Lock {}
+    record Button(char digit) implements LockEvent {}
+    record Lock() implements LockEvent {}
+
+    record LockData(String correctCode, String input) {}
+
+    var lockMachine = StateMachine.of(
+        new Locked(),
+        new LockData("1234", ""),
+        (state, event, data) -> switch (state) {
+            case Locked _ -> switch (event) {
+                case SMEvent.User(Button(var digit)) -> {
+                    var newInput = data.input() + digit;
+                    if (newInput.equals(data.correctCode())) {
+                        yield Transition.nextState(
+                            new Open(),
+                            new LockData(data.correctCode(), ""),
+                            Action.stateTimeout(10_000, new Lock())
+                        );
+                    } else if (newInput.length() >= 4) {
+                        yield Transition.keepState(new LockData(data.correctCode(), ""));
+                    } else {
+                        yield Transition.keepState(new LockData(data.correctCode(), newInput));
+                    }
+                }
+                case SMEvent.StateTimeout(var _) ->
+                    yield Transition.keepState(new LockData(data.correctCode(), ""));
+                default -> Transition.keepState(data);
+            };
+
+            case Open _ -> switch (event) {
+                case SMEvent.User(Lock _), SMEvent.StateTimeout(var _) ->
+                    yield Transition.nextState(new Locked(), data);
+                default ->
+                    yield Transition.keepState(data, Action.postpone());
+            };
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Explicit state/data:** Separation of concerns
+2. **No DSL:** Pure Java with pattern matching
+3. **Full OTP parity:** State timeouts, postpone, etc.
+4. **Type-safe:** Compiler verifies all cases
+
+---
+
+## Configuration Migration
+
+### Akka Configuration (HOCON)
+
+<Tabs items={['application.conf', 'JOTP (No Configuration)'}]}>
+  <Tab>
+    ```hocon
+    akka {
+      loglevel = "DEBUG"
+      actor {
+        provider = "local"
+
+        default-dispatcher {
+          type = Dispatcher
+          executor = "thread-pool-executor"
+          thread-pool-executor {
+            fixed-pool-size = 16
+          }
+          throughput = 5
+        }
+
+        my-dispatcher {
+          type = Dispatcher
+          executor = "fork-join-executor"
+          fork-join-executor {
+            parallelism-min = 2
+            parallelism-factor = 2.0
+            parallelism-max = 10
+          }
+        }
+      }
+
+      remote {
+        artery {
+          canonical {
+            hostname = "127.0.0.1"
+            port = 25520
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // JOTP uses Java 26 virtual threads - no dispatcher configuration needed
+    // Virtual threads are scheduled by the JVM on carrier threads
+
+    // For custom executors (rarely needed):
+    var customExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
+    // Remote communication (not in JOTP 1.0):
+    // Use distributed systems tools (Kafka, gRPC, etc.)
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No configuration files:** All in Java code
+2. **Virtual threads:** JVM handles scheduling
+3. **No built-in remoting:** Use standard Java tools
+
+---
+
+## Dispatchers and Mailboxes
+
+### Dispatcher Migration
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    // Using default dispatcher
+    var actor1 = context.spawn(MyActor.create(), "actor1");
+
+    // Using custom dispatcher
+    var actor2 = context.spawn(
+        Behaviors.setup(MyActor2::new),
+        "actor2",
+        DispatcherSelector.fromConfig("akka.my-dispatcher")
+    );
+
+    // Pinned dispatcher (single thread)
+    var actor3 = context.spawn(
+        BlockingActor.create(),
+        "blocking",
+        DispatcherSelector.pinned()
+    );
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // All processes use virtual threads (no dispatcher concept)
+    var proc1 = Proc.spawn(state1, handler1);
+
+    // For blocking operations, use a dedicated executor
+    var blockingExecutor = Executors.newFixedThreadPool(4);
+
+    // Offload blocking work
+    (state, msg) -> switch (msg) {
+        case BlockingOp _ -> {
+            var future = CompletableFuture.supplyAsync(
+                () -> blockingOperation(),
+                blockingExecutor
+            );
+            // Handle async result
+            yield state;
+        }
+    };
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No dispatchers:** Virtual threads handle everything
+2. **Explicit blocking:** Offload to thread pool if needed
+3. **Simpler model:** Less configuration overhead
+
+---
+
+## Testing Migration
+
+### Akka TestKit
+
+<Tabs items={['Akka TestKit', 'JOTP']}>
+  <Tab>
+    ```java
+    class CounterTest extends JUnit5TestKit {
+        @Test
+        void testIncrement() {
+            var counter = testKit.spawn(CounterActor.create());
+            var probe = testKit.createTestProbe();
+
+            counter.tell(new Increment());
+            counter.tell(new GetCount(probe.ref()));
+
+            probe.expectMessage(1L);
+        }
+
+        @Test
+        void testSupervision() {
+            var supervisor = testKit.spawn(SupervisorActor.create());
+            var probe = testKit.createTestProbe();
+
+            supervisor.tell(new CreateChild(probe.ref()));
+            var child = probe.expectMessageClass(ActorRef.class);
+
+            child.tell(new Crash());
+            // Supervisor restarts child
+            child.tell(new Ping(probe.ref()));
+            probe.expectMessage(Finished.INSTANCE);
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    class CounterTest {
+        @Test
+        void testIncrement() {
+            var counter = Proc.spawn(new CounterState(0), counterHandler);
+            counter.tell(new Increment());
+
+            var result = counter.ask(new GetCount()).join();
+            assertEquals(1, result.count());
+        }
+
+        @Test
+        void testSupervision() {
+            var supervisor = Supervisor.create(
+                Supervisor.Strategy.ONE_FOR_ONE,
+                5,
+                Duration.ofSeconds(60)
+            );
+
+            var childRef = supervisor.supervise(
+                "child",
+                new ChildState(),
+                (state, msg) -> switch (msg) {
+                    case Crash _ -> throw new RuntimeException("Crashed!");
+                    case Ping _ -> state;
+                }
+            );
+
+            // Wait for restart
+            Thread.sleep(200);
+
+            // Child should be restarted
+            assertTrue(childRef.proc().isRunning());
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No TestKit:** Use standard CompletableFuture
+2. **Direct assertions:** No probes needed
+3. **Simpler setup:** Less boilerplate
+
+---
+
+## Message Patterns
+
+### Become/Unbecome
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    public class StatefulActor extends AbstractBehavior<Command> {
+        private Behavior<Command> active = Behaviors.receiveMessage(msg -> {
+            if (msg instanceof Stop) {
+                return idle;
+            }
+            // Handle active state
+            return this;
+        });
+
+        private Behavior<Command> idle = Behaviors.receiveMessage(msg -> {
+            if (msg instanceof Start) {
+                return active;
+            }
+            // Handle idle state
+            return this;
+        });
+
+        @Override
+        public Receive<Command> createReceive() {
+            return newReceiveBuilder().onMessage(Command.class, msg -> idle).build();
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    sealed interface ActorState permits Idle, Active {}
+    record Idle() implements ActorState {}
+    record Active() implements ActorState {}
+
+    sealed interface Command permits Start, Stop, Other {}
+    record Start() implements Command {}
+    record Stop() implements Command {}
+    record Other(String data) implements Command {}
+
+    var actor = Proc.spawn(
+        new Idle(),
+        (state, msg) -> switch (state) {
+            case Idle _ -> switch (msg) {
+                case Start _ -> new Active();
+                case Other(var data) -> {
+                    // Ignore or queue
+                    yield new Idle();
+                }
+            };
+            case Active _ -> switch (msg) {
+                case Stop _ -> new Idle();
+                case Other(var data) -> {
+                    // Process message
+                    yield new Active();
+                }
+            };
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **State in data:** Not in handler function
+2. **Explicit switching:** Switch on state and message
+3. **Type-safe:** State is part of the process type
+
+### Stash Pattern
+
+<Tabs items={['Akka', 'JOTP']}>
+  <Tab>
+    ```java
+    public class StashActor extends AbstractBehavior<Command>
+        implements StashFactory<Command> {
+
+        private final Stash<Command> stash;
+
+        private StashActor(ActorContext<Command> context) {
+            super(context);
+            this.stash = StashFactory.create(context, this);
+        }
+
+        @Override
+        public Receive<Command> createReceive() {
+            return newReceiveBuilder()
+                .onMessage(Initialize.class, msg -> {
+                    stash.unstashAll();
+                    return initialized();
+                })
+                .onMessage(Command.class, msg -> {
+                    stash.stash(msg);
+                    return this;
+                })
+                .build();
+        }
+
+        private Receive<Command> initialized() {
+            return newReceiveBuilder()
+                .onMessage(Command.class, msg -> {
+                    // Handle normally
+                    return this;
+                })
+                .build();
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    sealed interface State permits Uninitialized, Initialized {}
+    record Uninitialized(List<Command> stashed) implements State {}
+    record Initialized() implements State {}
+
+    var actor = Proc.spawn(
+        new Uninitialized(List.of()),
+        (state, msg) -> switch (state) {
+            case Uninitialized(var stashed) -> switch (msg) {
+                case Initialize _ -> {
+                    // Process all stashed messages
+                    var newState = new Initialized();
+                    for (var m : stashed) {
+                        newState = handleInInitialized(newState, m);
+                    }
+                    yield newState;
+                }
+                case Command _ -> {
+                    // Stash message
+                    yield new Uninitialized(append(stashed, msg));
+                }
+            };
+            case Initialized _ -> handleInInitialized(state, msg);
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Manual stash:** Track in state
+2. **Explicit processing:** Loop through stashed messages
+3. **More control:** Can implement custom stash logic
+
+---
+
+## Migration Checklist
+
+### Phase 1: Core Concepts (Week 1-2)
+- [ ] Understand virtual threads vs Akka dispatchers
+- [ ] Learn sealed interfaces for message protocols
+- [ ] Practice functional handler style
+- [ ] Remove ActorSystem dependencies
+
+### Phase 2: Actor Migration (Week 3-4)
+- [ ] Convert AbstractBehavior to handler functions
+- [ ] Remove ReceiveBuilder usage
+- [ ] Implement ask/tell patterns
+- [ ] Migrate context logging and monitoring
+
+### Phase 3: Supervision (Week 5-6)
+- [ ] Design supervisor hierarchy
+- [ ] Convert supervision strategies
+- [ ] Implement ChildSpec configurations
+- [ ] Test crash recovery scenarios
+
+### Phase 4: State Machines (Week 7-8)
+- [ ] Identify FSM use cases
+- [ ] Convert FSM to StateMachine<S,E,D>
+- [ ] Implement state timeouts and transitions
+- [ ] Remove stash dependencies
+
+### Phase 5: Advanced Features (Week 9-10)
+- [ ] Remove configuration files
+- [ ] Implement custom executors for blocking work
+- [ ] Set up distributed communication (if needed)
+- [ ] Performance testing and optimization
+
+---
+
+## Common Gotchas
+
+### 1. No ActorSystem
+
+**Problem:** Looking for a central ActorSystem.
+
+**Solution:** Create processes directly; no central coordinator needed.
+
+```java
+// WRONG
+var system = ActorSystem.create(...);
+
+// CORRECT
+var proc = Proc.spawn(state, handler);
+```
+
+### 2. No Context Self-Reference
+
+**Problem:** Need to reference "self" in messages.
+
+**Solution:** Use ProcRef or pass references explicitly.
+
+```java
+// WRONG
+context.getSelf().tell(msg);
+
+// CORRECT
+var selfRef = new ProcRef<>(proc);
+selfRef.tell(msg);
+```
+
+### 3. Message Ordering Guarantees
+
+**Problem:** Akka guarantees message order per sender.
+
+**Solution:** JOTP provides the same guarantee via mailbox.
+
+```java
+// Same guarantee
+proc1.tell(msg1);
+proc1.tell(msg2);
+// proc1 processes msg1 then msg2
+```
+
+### 4. Dispatcher Performance
+
+**Problem:** Trying to optimize dispatcher configuration.
+
+**Solution:** Virtual threads handle scheduling efficiently.
+
+```java
+// NOT NEEDED
+akka {
+  actor {
+    default-dispatcher {
+      throughput = 5
+    }
+  }
+}
+
+// JVM handles this automatically
+```
+
+### 5. Remote Actors
+
+**Problem:** Need distributed actors.
+
+**Solution:** Use distributed systems tools.
+
+```java
+// NOT IN JOTP 1.0
+context.spawn(..., "remote@host:port")
+
+// INSTEAD: Use Kafka, gRPC, etc.
+var producer = createKafkaProducer();
+producer.send(new ProducerRecord<>("topic", msg));
+```
+
+---
+
+## Best Practices for Migration
+
+### 1. Start with Stateless Actors
+Migrate simple actors first to learn the functional style.
+
+### 2. Use Sealed Types Extensively
+Leverage the compiler for exhaustive message handling.
+
+```java
+sealed interface Command permits A, B, C {}
+record A() implements Command {}
+record B() implements Command {}
+record C() implements Command {}
+```
+
+### 3. Embrace Immutability
+All state should be immutable records.
+
+```java
+public record UserState(
+    String id,
+    String name,
+    List<String> roles  // Immutable list
+) {}
+```
+
+### 4. Test Supervision Trees
+Verify crash recovery works as expected.
+
+```java
+@Test
+void testSupervisorRestarts() {
+    var sup = Supervisor.create(ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+    var child = sup.supervise("test", state, handler);
+
+    // Crash child
+    child.proc().thread().interrupt();
+
+    // Verify restart
+    assertTrue(child.proc().isRunning());
+}
+```
+
+### 5. Monitor Process Health
+Use ProcSys for introspection.
+
+```java
+var stats = ProcSys.of(proc).statistics();
+System.out.println("Messages: " + stats.messagesIn());
+System.out.println("Queue: " + stats.queueDepth());
+```
+
+---
+
+## Performance Considerations
+
+### Virtual Thread Advantages
+- **Scalability:** Millions of processes
+- **Memory:** ~1 KB per process
+- **Latency:** Sub-millisecond context switching
+
+### When to Use Platform Threads
+- Heavy CPU computation
+- JNI calls with pinning
+- Legacy integration points
+
+---
+
+## Effort Estimation
+
+| Component | Complexity | Time Estimate |
+|-----------|------------|---------------|
+| Basic actor migration | Medium | 2-3 weeks |
+| Ask/tell patterns | Low | 1-2 weeks |
+| Supervision strategies | Medium | 2-3 weeks |
+| FSM to StateMachine | High | 3-4 weeks |
+| Removing configuration | Low | 1 week |
+| Testing migration | Medium | 2-3 weeks |
+| Performance tuning | Medium | 2-3 weeks |
+| **Total** | | **8-10 weeks** |
+
+---
+
+## Rollback Strategy
+
+### Phase 1: Side-by-Side Deployment
+- Run Akka and JOTP versions in parallel
+- Compare behavior and performance
+- Gradually shift traffic to JOTP
+
+### Phase 2: Feature Flags
+- Use feature flags to switch between implementations
+- Monitor error rates and latency
+- Quick rollback via configuration
+
+### Phase 3: Database Compatibility
+- Ensure both versions use same database schema
+- Implement data migration if needed
+- Test rollback with production data
+
+---
+
+## Further Reading
+
+- [JOTP Architecture Overview](/docs/explanations/architecture-overview)
+- [How-To: Build Supervision Trees](/docs/how-to/build-supervision-trees)
+- [How-To: Create Lightweight Processes](/docs/how-to/create-lightweight-processes)
+- [Examples: Spring Boot Integration](/docs/examples/spring-boot-integration)
+
+---
+
+**Conclusion:** JOTP provides a simpler, more type-safe alternative to Akka with direct OTP parity. The migration requires shifting from object-oriented to functional style, but the core patterns remain similar. Embrace virtual threads, sealed types, and let supervisors handle failures.

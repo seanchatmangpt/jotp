@@ -1,0 +1,378 @@
+# Tuning Virtual Threads
+
+import { BenchmarkChart } from '@/components/benchmark-chart';
+import { TuningConfig } from '@/components/tuning-config';
+
+**Version:** 1.0.0-SNAPSHOT
+**Last Updated:** 2026-03-15
+**Component:** Virtual Thread Scheduler
+
+## Executive Summary
+
+JOTP leverages Java 26's virtual threads to achieve lightweight concurrency. This guide covers virtual thread configuration, scheduler tuning, and production deployment patterns for optimal performance.
+
+## Virtual Thread Scheduler Parallelism
+
+### Default Behavior
+
+**Default:** Auto-detect (number of physical CPU cores)
+
+```bash
+# System property
+jdk.virtualThreadScheduler.parallelism
+```
+
+### Configuration
+
+```bash
+# Set parallelism to physical core count
+java -Djdk.virtualThreadScheduler.parallelism=16 -jar app.jar
+
+# Set to auto-detect (default)
+java -Djdk.virtualThreadScheduler.parallelism=0 -jar app.jar
+
+# Limit parallelism (for shared environments)
+java -Djdk.virtualThreadScheduler.parallelism=4 -jar app.jar
+```
+
+### Tuning Guidelines
+
+<TuningConfig
+  scenarios={[
+    {
+      name: "CPU-bound handlers",
+      parallelism: "Physical cores",
+      rationale: "Avoid oversubscription"
+    },
+    {
+      name: "I/O-bound handlers",
+      parallelism: "2× physical cores",
+      rationale: "Hide I/O latency"
+    },
+    {
+      name: "Mixed workload",
+      parallelism: "1.5× physical cores",
+      rationale: "Balance CPU and I/O"
+    },
+    {
+      name: "Containerized",
+      parallelism: "CPU quota",
+      rationale: "Respect limits"
+    }
+  ]}
+/>
+
+### Example Configurations
+
+**16-core server, I/O-bound handlers:**
+```bash
+java \
+  --enable-preview \
+  -Djdk.virtualThreadScheduler.parallelism=32 \
+  -XX:+UseZGC \
+  -Xms8g -Xmx8g \
+  -jar your-service.jar
+```
+
+**4-core container, CPU-bound handlers:**
+```bash
+java \
+  --enable-preview \
+  -Djdk.virtualThreadScheduler.parallelism=4 \
+  -XX:+UseG1GC \
+  -Xms512m -Xmx2g \
+  -jar your-service.jar
+```
+
+## Virtual Thread Stack Size
+
+### Characteristics
+
+**Default:** Platform-dependent (typically 1 MB for platform threads, much smaller for virtual)
+
+**Memory Impact:**
+```
+Stack Usage = Number of Processes × Average Stack Depth
+
+1M processes × 1KB average stack = 1 GB total
+```
+
+### Monitoring Stack Usage
+
+```bash
+# Enable JVM thread monitoring
+jcmd <pid> Thread.print
+
+# Look for:
+# - Virtual thread count: Should be <10K per 1GB heap
+# - Carrier thread count: Should match parallelism
+# - Blocked threads: Should be 0
+```
+
+## Carrier Thread Pool
+
+### Architecture
+
+Virtual threads are scheduled on carrier threads (ForkJoinPool).
+
+```java
+// Carrier thread configuration
+System.setProperty("jdk.virtualThreadScheduler.parallelism", "16");
+System.setProperty("jdk.virtualThreadScheduler.implicitTasks", "true");
+```
+
+### Monitoring Carrier Threads
+
+```bash
+# Use JFR to monitor carrier threads
+jcmd <pid> JFR.start name=vt dur=60s
+jcmd <pid> JFR.stop
+
+# Open in JDK Mission Control
+# Look for: jdk.VirtualThreadStart, jdk.VirtualThreadEnd
+```
+
+### Performance Impact
+
+<BenchmarkChart
+  title="Throughput vs. Carrier Thread Parallelism"
+  data={[
+    { parallelism: 2, throughput: 45 },
+    { parallelism: 4, throughput: 82 },
+    { parallelism: 8, throughput: 95 },
+    { parallelism: 16, throughput: 100 },
+    { parallelism: 32, throughput: 98 },
+    { parallelism: 64, throughput: 90 }
+  ]}
+  unit="%"
+  normalized={true}
+/>
+
+**Analysis:**
+- **Optimal:** 1-1.5× physical cores for CPU-bound workloads
+- **Oversubscription:** >2× cores causes diminishing returns
+- **Undersubscription:** <0.5× cores leaves CPU idle
+
+## Thread Pinning Issues
+
+### Symptom
+
+High latency despite virtual threads
+
+### Detection
+
+```bash
+# Enable JFR
+java -XX:+FlightRecorder -XX:StartFlightRecording=duration=60s -jar app.jar
+
+# Open in JDK Mission Control
+# Look for: jdk.VirtualThreadPinned
+```
+
+### Solution
+
+**Bad:**
+```java
+// synchronized blocks pin virtual threads
+synchronized (lock) {
+    // This pins the virtual thread to carrier thread
+}
+```
+
+**Good:**
+```java
+// Use ReentrantLock
+ReentrantLock lock = new ReentrantLock();
+lock.lock();
+try {
+    // This does NOT pin virtual thread
+} finally {
+    lock.unlock();
+}
+```
+
+## Performance Profiles
+
+### Latency-Optimized Profile
+
+**Use Case:** Trading desks, real-time fraud detection
+
+```bash
+java \
+  --enable-preview \
+  -Djdk.virtualThreadScheduler.parallelism=16 \
+  -XX:+UseZGC \
+  -XX:+ZGenerational \
+  -Xms8g -Xmx8g \
+  -XX:SoftMaxHeapSize=7g \
+  -XX:+AlwaysPreTouch \
+  -XX:ReservedCodeCacheSize=512m \
+  -XX:+UnlockExperimentalVMOptions \
+  -XX:+UseTransparentHugePages \
+  -jar your-service.jar
+```
+
+**Characteristics:**
+- P99 latency: <1 ms
+- GC pauses: <1 ms
+- Heap: Fixed (no resize)
+- Throughput: Medium
+
+### Throughput-Optimized Profile
+
+**Use Case:** Batch processing, event pipelines
+
+```bash
+java \
+  --enable-preview \
+  -Djdk.virtualThreadScheduler.parallelism=0 \
+  -XX:+UseG1GC \
+  -Xms4g -Xmx16g \
+  -XX:G1HeapRegionSize=32m \
+  -XX:MaxGCPauseMillis=50 \
+  -XX:+UseStringDeduplication \
+  -XX:+OptimizeStringConcat \
+  -jar your-service.jar
+```
+
+**Characteristics:**
+- P99 latency: <50 ms
+- GC pauses: <50 ms
+- Heap: Dynamic (4-16 GB)
+- Throughput: High
+
+### Memory-Constrained Profile
+
+**Use Case:** Containerized, sidecar deployments
+
+```bash
+java \
+  --enable-preview \
+  -Djdk.virtualThreadScheduler.parallelism=2 \
+  -XX:+UseSerialGC \
+  -Xms256m -Xmx512m \
+  -XX:TieredStopAtLevel=1 \
+  -XX:ReservedCodeCacheSize=64m \
+  -XX:MaxRAMPercentage=75.0 \
+  -jar your-service.jar
+```
+
+**Characteristics:**
+- P99 latency: <500 ms
+- GC pauses: <100 ms
+- Heap: Fixed (512 MB)
+- Throughput: Low
+
+## Custom Thread Pools
+
+### For Blocking I/O in Handlers
+
+```java
+// Create custom executor for blocking operations
+ExecutorService blockingPool = Executors.newFixedThreadPool(
+    Runtime.getRuntime().availableProcessors() * 2,
+    new ThreadFactoryBuilder()
+        .setNameFormat("blocking-pool-%d")
+        .setDaemon(true)
+        .build()
+);
+
+// Use in handler
+static State handle(State state, Msg msg) {
+    return switch (msg) {
+        case FetchData(var id) -> {
+            // Offload blocking I/O to custom pool
+            var result = CompletableFuture.supplyAsync(
+                () -> db.query(id),
+                blockingPool
+            ).join();
+            yield state.withData(result);
+        }
+        default -> state;
+    };
+}
+```
+
+## Monitoring Virtual Thread Health
+
+### Key Metrics
+
+```java
+// Virtual thread count
+long virtualThreadCount = Thread.getAllStackTraces().keySet().stream()
+    .filter(Thread::isVirtual)
+    .count();
+
+// Carrier thread utilization
+double carrierUtilization = getCarrierThreadCpuTime();
+
+// Pinned thread detection
+long pinnedThreadCount = Thread.getAllStackTraces().keySet().stream()
+    .filter(Thread::isVirtual)
+    .filter(t -> isPinned(t))
+    .count();
+```
+
+### Alert Thresholds
+
+| Metric | Warning | Critical | Action |
+|--------|---------|----------|--------|
+| **Virtual Thread Count** | >100K | >1M | Check for leaks |
+| **Carrier Utilization** | >80% | >95% | Increase parallelism |
+| **Pinned Threads** | >10 | >100 | Fix synchronized blocks |
+| **Thread Creation Rate** | >1K/s | >10K/s | Check for thrashing |
+
+## Common Issues
+
+### Issue: Thread Explosion
+
+**Symptom:** Millions of virtual threads created
+
+**Diagnosis:**
+```bash
+# Monitor thread count
+jcmd <pid> Thread.print | grep -c "virtual"
+```
+
+**Solution:**
+```java
+// Limit concurrent operations using Semaphore
+Semaphore semaphore = new Semaphore(1000);
+
+// Before creating virtual thread
+semaphore.acquire();
+try {
+    // Do work
+} finally {
+    semaphore.release();
+}
+```
+
+### Issue: High CPU Usage
+
+**Symptom:** CPU at 100% despite low throughput
+
+**Diagnosis:**
+```bash
+# Enable JVM CPU profiling
+java -XX:+FlightRecorder -XX:StartFlightRecording=duration=60s -jar app.jar
+
+# Open JFR in JDK Mission Control
+# Look for:
+# - Hot methods (mailbox.poll, LinkedTransferQueue.offer)
+# - CPU time by thread
+# - Lock contention
+```
+
+**Solution:**
+- Increase parallelism to reduce contention
+- Use partitioning to reduce CAS contention
+- Check for tight polling loops
+
+## Next Steps
+
+Continue exploring performance optimization:
+
+- [**Message Throughput**](./message-throughput.md) - Optimizing message passing
+- [**Supervision Tuning**](./supervision-tuning.md) - Restart strategies and backoff
+- [**Memory Optimization**](./memory-optimization.md) - Heap sizing and process isolation

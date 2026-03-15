@@ -1,0 +1,436 @@
+---
+title: CrashRecovery API Reference
+description: Isolated retry with supervised recovery - Joe Armstrong's "let it crash" philosophy applied to Java
+sidebar_position: 6
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# CrashRecovery API Reference
+
+**Joe Armstrong's "let it crash" philosophy** — Isolated retry with supervised recovery for resilient fault tolerance.
+
+## Overview
+
+`CrashRecovery` implements the core OTP principle that **reliable systems are designed for failure, not prevention**. Instead of complex error handling, you embrace crashes and restart with fresh state. Each attempt runs in an isolated virtual thread (no shared state between attempts), mirroring Erlang's lightweight process model.
+
+### Key Principles
+
+- **Let It Crash**: Don't prevent failures — design to recover from them
+- **Isolated Execution**: Each attempt runs in a fresh virtual thread with no shared state
+- **Automatic Retry**: Up to `maxAttempts` retries with transparent success/failure handling
+- **Type-Safe Results**: Returns `Result<T, Exception>` for explicit error handling
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| Supervisor restart strategies | `CrashRecovery.retry()` for single-task recovery |
+| `let it crash` philosophy | Explicit retry with isolated virtual threads |
+| Process crash and restart | Fresh virtual thread per attempt |
+| `gen_server:call` timeout | Use `Supplier` with external timeout |
+
+## Type Parameters
+
+- **`<T>`** — Result type. The successful return value from the retry operation.
+
+## Public API
+
+### Static Methods
+
+#### `retry(int maxAttempts, Supplier<T> supplier)`
+
+Attempt `supplier` up to `maxAttempts` times, each in an isolated virtual thread. Returns the first successful result, or a `Failure` containing the last exception if all attempts are exhausted.
+
+```java
+var result = CrashRecovery.retry(3, () -> {
+    var response = httpClient.get("https://api.example.com/data");
+    if (response.status() >= 500) {
+        throw new RuntimeException("Server error");
+    }
+    return response.body();
+});
+
+switch (result) {
+    case Result.Success(var body) -> System.out.println("Got: " + body);
+    case Result.Failure(var ex) -> System.err.println("Failed after 3 attempts: " + ex);
+}
+```
+
+**Parameters:**
+- `maxAttempts` — Maximum number of attempts (must be >= 1)
+- `supplier` — Work to attempt (runs in a fresh virtual thread each time)
+
+**Returns:** `Result<T, Exception>` with the first successful result, or the last exception
+
+**Throws:**
+- `NullPointerException` if `supplier` is null
+- `IllegalArgumentException` if `maxAttempts < 1`
+
+**Behavior:**
+- Each attempt runs in a new virtual thread (isolated from previous attempts)
+- Stops on first successful result
+- Returns last exception if all attempts fail
+- Virtual thread is joined before next attempt (sequential retry)
+
+**Use cases:**
+- Resilient HTTP requests
+- Database connection retries
+- External service calls with transient failures
+- Flaky operation recovery
+
+---
+
+## Implementation Details
+
+### Virtual Thread Isolation
+
+Each retry attempt executes in a fresh virtual thread:
+
+```java
+private static <T> Result<T, Exception> runInVirtualThread(Supplier<T> supplier) {
+    var ref = new Object() { Result<T, Exception> result; };
+    var thread = Thread.ofVirtual().start(() -> ref.result = Result.of(supplier::get));
+    try {
+        thread.join(); // Wait for completion
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return Result.failure(e);
+    }
+    return ref.result;
+}
+```
+
+This ensures:
+- **No shared state** between attempts
+- **Fresh thread context** for each retry
+- **Isolated crashes** — one attempt's failure doesn't affect others
+
+### Retry Strategy
+
+The retry loop is **sequential** (not parallel):
+
+```java
+for (int attempt = 0; attempt < maxAttempts; attempt++) {
+    last = runInVirtualThread(supplier);
+    if (last.isSuccess()) {
+        return last; // Stop on first success
+    }
+}
+return last; // Return last failure
+```
+
+**Characteristics:**
+- No exponential backoff (immediate retry)
+- Sequential execution (waits for each attempt)
+- Returns first success or last failure
+- No jitter or randomness
+
+### Armstrong's Principle
+
+> "Processes share nothing" — Each virtual thread is a fresh "process" with no state carried over from a previous crash.
+
+This differs from `Supervisor`:
+- **`CrashRecovery`**: One-shot task retry (fire-and-forget)
+- **`Supervisor`**: Persistent process management with lifecycle
+
+## Common Usage Patterns
+
+### HTTP Request with Retry
+
+```java
+var result = CrashRecovery.retry(3, () -> {
+    var response = httpClient.get("https://api.example.com/data");
+    if (response.status() == 503) {
+        throw new RuntimeException("Service unavailable");
+    }
+    return response.body();
+});
+
+if (result.isSuccess()) {
+    System.out.println("Data: " + result.orElseThrow());
+} else {
+    logger.error("Failed after retries", result.exceptionOrNull());
+}
+```
+
+### Database Connection Retry
+
+```java
+var connection = CrashRecovery.retry(5, () -> {
+    var conn = dataSource.getConnection();
+    if (!conn.isValid(2)) {
+        throw new SQLException("Connection not valid");
+    }
+    return conn;
+});
+
+connection.ifPresentOrElse(
+    conn -> performQuery(conn),
+    () -> logger.error("Could not establish connection")
+);
+```
+
+### External Service Call
+
+```java
+var price = CrashRecovery.retry(3, () -> {
+    var response = pricingService.getPrice(productId);
+    if (response.isTimeout()) {
+        throw new TimeoutException("Pricing service timeout");
+    }
+    return response.value();
+});
+
+switch (price) {
+    case Result.Success(var value) -> checkout.setPrice(value);
+    case Result.Failure(var ex) -> checkout.setPrice(DEFAULT_PRICE);
+}
+```
+
+### File Operation with Retry
+
+```java
+var content = CrashRecovery.retry(2, () -> {
+    return Files.readString(Path.of("/tmp/ephemeral-data.txt"));
+});
+
+content.ifPresentOrElse(
+    data -> processData(data),
+    () -> logger.warn("Data file unavailable")
+);
+```
+
+## Best Practices
+
+### 1. Set Appropriate Retry Limits
+
+```java
+// Good: Limited retries for transient failures
+CrashRecovery.retry(3, () -> callFlakyService());
+
+// Bad: Unlimited retries (use maxAttempts carefully)
+CrashRecovery.retry(Integer.MAX_VALUE, () -> callService()); // Risk of infinite loop
+```
+
+### 2. Handle Both Success and Failure
+
+```java
+// Good: Explicit pattern matching on Result
+var result = CrashRecovery.retry(3, supplier);
+switch (result) {
+    case Result.Success(var value) -> handleSuccess(value);
+    case Result.Failure(var ex) -> handleFailure(ex);
+}
+
+// Bad: Ignoring failure case
+var result = CrashRecovery.retry(3, supplier);
+var value = result.orElseThrow(); // May throw!
+```
+
+### 3. Use for Idempotent Operations
+
+```java
+// Good: Idempotent operation (safe to retry)
+CrashRecovery.retry(3, () -> paymentService.charge(accountId, amount));
+
+// Bad: Non-idempotent (side effects on retry)
+CrashRecovery.retry(3, () -> sendEmailNotification(email)); // May send duplicates!
+```
+
+### 4. Combine with Timeouts
+
+```java
+// Good: External timeout for each attempt
+var result = CrashRecovery.retry(3, () ->
+    httpClient.get(url)
+        .timeout(Duration.ofSeconds(5))
+        .body()
+);
+```
+
+### 5. Consider Circuit Breakers for Cascading Failures
+
+```java
+// Good: Check circuit state before retry
+if (circuitBreaker.allowRequest()) {
+    var result = CrashRecovery.retry(3, () -> callService());
+    if (result.isFailure()) {
+        circuitBreaker.recordFailure();
+    }
+} else {
+    logger.warn("Circuit breaker open - skipping call");
+}
+```
+
+## Gotchas
+
+### 1. No Exponential Backoff
+
+```java
+// Current behavior: Immediate retry
+CrashRecovery.retry(3, () -> callService());
+// Attempts are immediate (no delay between them)
+```
+
+**Solution:** Add manual sleep or use `Supervisor` for backoff strategies:
+
+```java
+// Manual backoff
+for (int i = 0; i < 3; i++) {
+    var result = CrashRecovery.retry(1, () -> callService());
+    if (result.isSuccess()) break;
+    Thread.sleep(1000 * (i + 1)); // Exponential backoff
+}
+```
+
+### 2. Sequential Execution
+
+```java
+// Current behavior: Sequential (not parallel)
+CrashRecovery.retry(3, () -> slowOperation());
+// Each attempt waits for the previous one to complete
+```
+
+**For parallel retries**, use structured concurrency:
+
+```java
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var futures = IntStream.range(0, 3)
+        .mapToObj(i -> scope.fork(() -> callService()))
+        .toList();
+
+    scope.join();
+    var result = futures.stream()
+        .filter(f -> f.state() == Future.State.SUCCESS)
+        .findFirst()
+        .map(Future::resultNow)
+        .orElseThrow();
+}
+```
+
+### 3. No Jitter
+
+In distributed systems, thundering herd can occur if all clients retry simultaneously:
+
+```java
+// Risk: All clients retry at same time after server restart
+CrashRecovery.retry(3, () -> callSharedService());
+```
+
+**Solution:** Add random jitter:
+
+```java
+Random jitter = new Random();
+var result = CrashRecovery.retry(3, () -> {
+    Thread.sleep(jitter.nextInt(1000)); // Random delay 0-1000ms
+    return callService();
+});
+```
+
+### 4. Exception Loss
+
+Only the **last** exception is returned:
+
+```java
+// Only the last exception is preserved
+var result = CrashRecovery.retry(3, () -> {
+    throw new RuntimeException("Attempt " + attemptCount);
+});
+// You only see the exception from attempt 3, not 1 or 2
+```
+
+**Solution:** Log all failures manually:
+
+```java
+for (int attempt = 0; attempt < 3; attempt++) {
+    try {
+        return supplier.get();
+    } catch (Exception e) {
+        logger.warn("Attempt {} failed: {}", attempt + 1, e.getMessage());
+    }
+}
+```
+
+## Performance Considerations
+
+### When to Use CrashRecovery
+
+- **Transient failures**: Network timeouts, temporary server errors
+- **Flaky dependencies**: External services with intermittent failures
+- **One-shot operations**: Single tasks that need retry, not persistent processes
+
+### When NOT to Use CrashRecovery
+
+- **Permanent failures**: Invalid data, authentication errors (won't recover)
+- **Stateful operations**: Non-idempotent actions (e.g., sending emails)
+- **Long-running processes**: Use `Supervisor` for persistent process management
+- **Complex backoff**: Need exponential backoff or jitter (use custom retry logic)
+
+### Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| Single attempt | ~1μs | Virtual thread spawn + execution |
+| Retry loop (3 attempts) | ~3μs + operation time | Sequential execution |
+| Virtual thread spawn | ~1μs | Thread.ofVirtual().start() |
+
+### Scaling Limits
+
+- **Attempts**: Limited by `maxAttempts` parameter (no hard limit)
+- **Parallelism**: Sequential only (no parallel retries)
+- **Memory**: ~1 KB heap per virtual thread (during execution)
+
+## Production Usage
+
+### Monitoring and Observability
+
+```java
+var result = CrashRecovery.retry(3, () -> {
+    metrics.incrementRetryAttempts();
+    try {
+        return callService();
+    } finally {
+        metrics.recordAttemptResult(result.isSuccess());
+    }
+});
+```
+
+### Integration with Supervision Trees
+
+```java
+// In a supervisor child process
+var proc = Proc.spawn(initialState, (state, msg) -> {
+    if (msg instanceof CallService) {
+        var result = CrashRecovery.retry(3, this::callService);
+        return handleResult(state, result);
+    }
+    return state;
+});
+```
+
+### Distributed Systems
+
+```java
+// For distributed retry, consider adding client-side jitter
+var result = CrashRecovery.retry(3, () -> {
+    Thread.sleep(ThreadLocalRandom.current().nextInt(1000)); // Jitter
+    return distributedClient.call(nodeId);
+});
+```
+
+## Related Classes
+
+- **[`Supervisor`](supervisor.md)** — Hierarchical process supervision with restart strategies
+- **[`Proc<S,M>`](proc.md)** — Lightweight process with virtual-thread mailbox
+- **[`Result<T,E>`](result.md)** — Railway-oriented error handling
+- **[`ProcRef`](../proc_ref.md)** — Stable handle that survives supervisor restarts
+
+## See Also
+
+- [JOTP Architecture](../architecture.md)
+- [Supervisor API](supervisor.md)
+- [Result Type Documentation](result.md)
+- [OTP Design Principles](https://erlang.org/doc/design_principles/des_princ.html)
+- [Joe Armstrong on "Let It Crash"](https://joearms.github.io/#/blog-id=bb2783e8-d8ad-4bc3-8548-dbd943cdf576)

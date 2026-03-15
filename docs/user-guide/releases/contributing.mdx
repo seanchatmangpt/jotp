@@ -1,0 +1,718 @@
+# Contributing to JOTP Releases
+
+This document describes how to contribute to JOTP releases, including feature development, bug fixes, documentation, and the release process itself.
+
+## Overview
+
+JOTP welcomes contributions from the community! This guide covers:
+
+1. **Feature Development** - Adding new features and primitives
+2. **Bug Fixes** - Fixing bugs and issues
+3. **Documentation** - Improving documentation and examples
+4. **Release Contributions** - Participating in the release process
+5. **Testing** - Writing and maintaining tests
+6. **Code Review** - Reviewing pull requests
+
+## Getting Started
+
+### Prerequisites
+
+**Required:**
+- Java 26 with `--enable-preview`
+- Maven 4 (or included Maven Wrapper)
+- Git
+- GitHub account
+
+**Recommended:**
+- IDE (IntelliJ IDEA, Eclipse, VS Code)
+- GPG key (for release signing)
+- Maven Daemon (mvnd) for faster builds
+
+### Setup Development Environment
+
+```bash
+# Fork the repository
+# https://github.com/seanchatmangpt/jotp/fork
+
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/jotp.git
+cd jotp
+
+# Add upstream remote
+git remote add upstream https://github.com/seanchatmangpt/jotp.git
+
+# Install dependencies
+mvnd install
+
+# Run tests
+mvnd test
+
+# Run full verification
+mvnd verify
+```
+
+### Development Workflow
+
+```bash
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Make changes
+# ... code, test, commit ...
+
+# Format code
+mvnd spotless:apply
+
+# Run tests
+mvnd test
+
+# Push to your fork
+git push origin feature/your-feature-name
+
+# Create pull request on GitHub
+```
+
+## Contribution Types
+
+### 1. Feature Development
+
+**Scope:**
+- New OTP primitives
+- New APIs or abstractions
+- Performance improvements
+- Integration with other frameworks
+
+**Process:**
+
+#### Step 1: Proposal
+
+**Before coding:**
+- Open a GitHub Discussion
+- Describe the feature and use case
+- Get feedback from maintainers
+- Check if it fits the roadmap
+
+**Proposal Template:**
+```markdown
+## Feature Proposal: [Title]
+
+### Summary
+[Brief description of the feature]
+
+### Motivation
+[Why is this feature needed? What problem does it solve?]
+
+### Proposed Solution
+[Detailed description of the solution]
+
+### Alternatives Considered
+[What other approaches were considered? Why not chosen?]
+
+### API Design
+[Proposed API with code examples]
+
+### Impact
+- Breaking changes: Yes/No
+- Performance impact: [description]
+- Documentation updates needed: Yes/No
+
+### Timeline
+- Estimated effort: [Small/Medium/Large]
+- Target release: [version]
+```
+
+#### Step 2: Implementation
+
+**After approval:**
+```bash
+# Create feature branch
+git checkout -b feature/your-feature
+
+# Implement feature
+# ... write code ...
+
+# Add tests
+# ... write tests in src/test/java/ ...
+
+# Add documentation
+# ... update user guide, API docs ...
+
+# Run full test suite
+mvnd verify
+
+# Format code
+mvnd spotless:apply
+
+# Commit changes
+git commit -m "feat: Add your feature description"
+```
+
+**Code Quality Checklist:**
+- [ ] Code follows Google Java Format (AOSP style)
+- [ ] All tests pass: `mvnd test`
+- [ ] New tests added (unit + integration)
+- [ ] Javadoc added for public APIs
+- [ ] User guide updated (if user-facing)
+- [ ] Examples added (if applicable)
+- [ ] Performance benchmarked (if performance-critical)
+
+#### Step 3: Pull Request
+
+**Create PR:**
+```bash
+# Push to your fork
+git push origin feature/your-feature
+
+# Create pull request on GitHub
+# https://github.com/seanchatmangpt/jotp/compare
+```
+
+**PR Template:**
+```markdown
+## Description
+[Brief description of changes]
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+## Testing
+- [ ] Unit tests added
+- [ ] Integration tests added
+- [ ] All tests pass: `mvnd verify`
+
+## Checklist
+- [ ] Code follows style guidelines
+- [ ] Self-review completed
+- [ ] Documentation updated
+- [ ] No new warnings generated
+- [ ] Added tests/updated existing tests
+- [ ] All commits properly signed
+
+## Related Issues
+Fixes #123
+Related to #456
+```
+
+### 2. Bug Fixes
+
+**Scope:**
+- Fixing incorrect behavior
+- Resolving crashes or errors
+- Performance issues
+- Memory leaks
+
+**Process:**
+
+#### Step 1: Report Bug
+
+**Before fixing:**
+- Search existing issues
+- Create minimal reproducible example
+- Include environment details
+- Attach stack traces/logs
+
+**Bug Report Template:**
+```markdown
+## Bug Report: [Title]
+
+### Description
+[Clear description of the bug]
+
+### Reproduction Steps
+1. [First step]
+2. [Second step]
+3. [Bug occurs]
+
+### Expected Behavior
+[What should happen]
+
+### Actual Behavior
+[What actually happens]
+
+### Environment
+- JOTP version: [version]
+- Java version: [version]
+- OS: [OS and version]
+
+### Stack Trace
+```
+[paste stack trace here]
+```
+
+### Minimal Reproducible Example
+```java
+// Code that reproduces the bug
+```
+```
+
+#### Step 2: Fix Bug
+
+```bash
+# Create bugfix branch
+git checkout -b fix/issue-number-description
+
+# Write failing test first (TDD)
+# ... test that reproduces the bug ...
+
+# Run test - verify it fails
+mvnd test -Dtest=YourTest
+
+# Fix bug
+# ... implement fix ...
+
+# Run test - verify it passes
+mvnd test -Dtest=YourTest
+
+# Run all tests
+mvnd verify
+
+# Commit
+git commit -m "fix: Resolve issue #123 - description"
+```
+
+**Bug Fix Checklist:**
+- [ ] Reproducible test case added
+- [ ] Fix implemented
+- [ ] All tests pass
+- [ ] No regressions introduced
+- [ ] Edge cases considered
+- [ ] Documentation updated (if behavior changed)
+
+### 3. Documentation
+
+**Scope:**
+- User guide improvements
+- API documentation (Javadoc)
+- Examples and tutorials
+- Architecture diagrams
+- Migration guides
+
+**Types of Documentation:**
+
+#### User Guide
+```bash
+# Edit user guide
+vim docs/user-guide/how-to/new-guide.md
+
+# Preview changes (if using static site generator)
+cd docs && npm run dev
+
+# Test examples
+mvnd exec:java -Dexec.mainClass="your.example.Class"
+
+# Commit
+git commit -m "docs: Add user guide for XYZ"
+```
+
+#### API Documentation (Javadoc)
+```java
+/**
+ * Process with state and message handling.
+ *
+ * <p>A {@code Proc} represents a lightweight concurrent process with:
+ * <ul>
+ *   <li>Immutable state of type {@code S}</li>
+ *   <li>Message handler for messages of type {@code M}</li>
+ *   <li>Virtual thread for execution</li>
+ * </ul>
+ *
+ * <p>Example usage:
+ * <pre>{@code
+ * var proc = Proc.spawn(0, (state, msg) -> state + 1);
+ * proc.tell("increment");
+ * }</pre>
+ *
+ * @param <S> the type of process state
+ * @param <M> the type of messages
+ * @author Sean Chat Mangpt
+ * @since 1.0.0
+ * @see ProcRef
+ */
+public class Proc<S, M> {
+    // ...
+}
+```
+
+#### Examples
+```bash
+# Create example
+vim src/main/java/io/github/seanchatmangpt/jotp/examples/NewExample.java
+
+# Test example compiles
+mvnd compile
+
+# Test example runs
+mvnd exec:java -Dexec.mainClass="io.github.seanchatmangpt.jotp.examples.NewExample"
+
+# Document example
+vim docs/user-guide/examples/new-example.md
+```
+
+**Documentation Checklist:**
+- [ ] Clear and concise writing
+- [ ] Code examples tested
+- [ ] Screenshots (if applicable)
+- [ ] Links to related docs
+- [ ] Spelling and grammar checked
+- [ ] Formatting consistent
+
+### 4. Release Contributions
+
+**Scope:**
+- Release testing
+- Release notes
+- Migration guides
+- Verification testing
+- Bug triage for releases
+
+#### Beta Testing
+
+```bash
+# Checkout release candidate branch
+git checkout release/1.0.0-rc.1
+
+# Build and install
+mvnd clean install
+
+# Test in your project
+# ... use JOTP in your application ...
+
+# Report issues
+# https://github.com/seanchatmangpt/jotp/issues/new
+```
+
+#### Release Notes
+
+```markdown
+## [Version] - [Date]
+
+### Added
+- New feature 1
+- New feature 2
+
+### Changed
+- Modified behavior of X
+
+### Deprecated
+- API Y is deprecated
+
+### Removed
+- API Z removed
+
+### Fixed
+- Bug fix 1
+- Bug fix 2
+
+### Security
+- Security fix 1
+```
+
+#### Verification Testing
+
+```bash
+# Clone release
+git clone https://github.com/seanchatmangpt/jotp.git
+cd jotp
+git checkout v1.0.0
+
+# Run smoke tests
+mvnd verify
+
+# Test examples
+mvnd exec:java -Dexec.mainClass="io.github.seanchatmangpt.jotp.examples.ChaosDemo"
+
+# Test in real application
+# ... integration testing ...
+```
+
+### 5. Testing
+
+**Scope:**
+- Unit tests
+- Integration tests
+- Property-based tests
+- Stress tests
+- Benchmarking
+
+#### Unit Tests
+
+```java
+@Test
+@DisplayName("Proc should spawn with initial state")
+void testProcSpawn() {
+    // Given
+    var initialState = 0;
+    var handler = (Integer state, String msg) -> state + 1;
+
+    // When
+    var proc = Proc.spawn(initialState, handler);
+
+    // Then
+    assertNotNull(proc);
+}
+
+@Test
+@DisplayName("Proc should handle messages sequentially")
+void testSequentialMessageHandling() throws Exception {
+    // Given
+    var proc = Proc.spawn(0, (state, msg) -> state + 1);
+
+    // When
+    proc.tell("increment");
+    proc.tell("increment");
+    proc.tell("increment");
+
+    // Then
+    var result = proc.ask("get", Duration.ofSeconds(1)).join();
+    assertEquals(3, result);
+}
+```
+
+#### Integration Tests
+
+```java
+@Test
+@DisplayName("Supervisor should restart crashed child")
+void testSupervisorRestart() {
+    // Given
+    var supervisor = new Supervisor(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        5,
+        Duration.ofMinutes(1)
+    );
+
+    var crashHandler = (Integer state, String msg) -> {
+        if (msg.equals("crash")) {
+            throw new RuntimeException("Intentional crash");
+        }
+        return state;
+    };
+
+    var child = supervisor.supervise("crashy", 0, crashHandler);
+
+    // When
+    child.tell("crash");
+
+    // Then - supervisor should restart child
+    await().atMost(5, TimeUnit.SECONDS)
+        .until(() -> supervisor.isChildAlive("crashy"));
+
+    assertTrue(supervisor.isChildAlive("crashy"));
+}
+```
+
+#### Property-Based Tests (jqwik)
+
+```java
+@Property
+@DisplayName("Result should satisfy error handling properties")
+void testResultProperties(
+    @ForAll int value,
+    @ForAll String error
+) {
+    var ok = Result.ok(value);
+    var err = Result.error(error);
+
+    // Property: ok values are equal
+    assertEquals(value, ok.unwrap());
+
+    // Property: error values are equal
+    assertEquals(error, err.unwrapError());
+
+    // Property: mapping preserves structure
+    assertEquals(
+        ok.map(x -> x * 2),
+        Result.ok(value * 2)
+    );
+}
+```
+
+**Test Checklist:**
+- [ ] Test covers happy path
+- [ ] Test covers error cases
+- [ ] Test covers edge cases
+- [ ] Test is deterministic
+- [ ] Test is fast (< 1 second)
+- [ ] Test has clear assertions
+- [ ] Test has descriptive name
+
+### 6. Code Review
+
+**Scope:**
+- Reviewing pull requests
+- Providing feedback
+- Testing PRs locally
+- Suggesting improvements
+
+#### Review Process
+
+```bash
+# Checkout PR branch
+git fetch origin pull/123/head:pr-123
+git checkout pr-123
+
+# Build and test
+mvnd verify
+
+# Run specific tests
+mvnd test -Dtest=ProcTest
+
+# Check formatting
+mvnd spotless:check
+
+# Leave review on GitHub
+# https://github.com/seanchatmangpt/jotp/pull/123
+```
+
+#### Review Checklist
+
+**Code Quality:**
+- [ ] Code is readable and clear
+- [ ] Code follows style guidelines
+- [ ] Code is efficient
+- [ ] Code is well-structured
+- [ ] No code duplication
+
+**Testing:**
+- [ ] Tests are comprehensive
+- [ ] Tests cover edge cases
+- [ ] Tests are deterministic
+- [ ] No test duplication
+
+**Documentation:**
+- [ ] Javadoc added for public APIs
+- [ ] User guide updated (if needed)
+- [ ] Examples added (if needed)
+- [ ] Release notes included
+
+**API Design:**
+- [ ] API is intuitive
+- [ ] API is consistent with existing APIs
+- [ ] API is backward compatible (if not major version)
+- [ ] API has examples
+
+#### Review Template
+
+```markdown
+## Review: [PR Title]
+
+### Overall Assessment
+- [ ] Approve
+- [ ] Request changes
+- [ ] Comment
+
+### Strengths
+- [What's good about this PR?]
+
+### Issues
+- [Specific issues with line numbers]
+
+### Suggestions
+- [Suggestions for improvement]
+
+### Testing
+- [ ] Tested locally
+- [ ] All tests pass
+```
+
+## Release-Specific Contributions
+
+### For Major Releases (1.0.0, 2.0.0)
+
+**Timeline: 3 months before release**
+
+**Contributions Needed:**
+1. **Feature Freeze** - No new features, only bug fixes
+2. **Testing** - Comprehensive testing in real applications
+3. **Documentation** - Complete user guide, API docs, examples
+4. **Performance** - Benchmarking and optimization
+5. **Security** - Security audit and vulnerability scanning
+6. **Migration** - Migration guides from previous version
+
+**Checklist:**
+- [ ] All planned features implemented
+- [ ] All tests passing
+- [ ] Documentation complete
+- [ ] Release notes drafted
+- [ ] Migration guide written
+- [ ] Security review completed
+- [ ] Performance benchmarks run
+- [ ] Beta testers recruited
+- [ ] Bug triage completed
+
+### For Minor Releases (1.1.0, 1.2.0)
+
+**Timeline: 1 month before release**
+
+**Contributions Needed:**
+1. **Feature Implementation** - New features backward compatible
+2. **Documentation** - Update user guide for new features
+3. **Testing** - Test new features
+4. **Examples** - Examples demonstrating new features
+
+### For Patch Releases (1.0.1, 1.0.2)
+
+**Timeline: 1 week before release**
+
+**Contributions Needed:**
+1. **Bug Fixes** - Critical bug fixes only
+2. **Security Patches** - Security vulnerabilities
+3. **Testing** - Verify fixes don't break existing functionality
+
+## Recognition
+
+**Contributors will be:**
+- Listed in release notes
+- Mentioned in blog posts
+- Credited in documentation
+- Invited to become maintainers (for consistent contributors)
+
+**Maintainer Criteria:**
+- 5+ merged PRs
+- Active in code reviews
+- Helpful in community
+- Understanding of codebase
+
+## Communication
+
+**Channels:**
+- **GitHub Issues** - Bug reports, feature requests
+- **GitHub Discussions** - General discussions, proposals
+- **Pull Requests** - Code contributions
+- **Discord** - Real-time chat (link in README)
+
+**Expectations:**
+- Be respectful and constructive
+- Provide context for changes
+- Respond to feedback
+- Follow code of conduct
+
+## Getting Help
+
+**Resources:**
+- [Documentation](../)
+- [Architecture Guide](../explanations/architecture.md)
+- [API Reference](../reference/)
+- [Examples](../examples/)
+
+**Asking Questions:**
+1. Search existing discussions/issues
+2. Create minimal reproducible example
+3. Include environment details
+4. Use appropriate channel (Issue vs Discussion)
+
+## Related Documentation
+
+- [Changelog](./changelog.mdx) - Release history
+- [Release Process](./release-process.mdx) - How releases are made
+- [Migration Guides](./migration-guides.mdx) - Version-specific migrations
+- [Deprecation Policy](./deprecation-policy.mdx) - API deprecation policy
+
+---
+
+**Thank you for contributing to JOTP!** 🚀
+
+Every contribution, no matter how small, helps make JOTP better for everyone.

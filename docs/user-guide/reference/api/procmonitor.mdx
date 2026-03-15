@@ -1,0 +1,344 @@
+---
+title: "ProcMonitor API Reference"
+description: "Unilateral DOWN notifications when processes terminate"
+sidebar_position: 6
+---
+
+# ProcMonitor API Reference
+
+**OTP process monitoring** — Unilateral DOWN notifications when target processes terminate.
+
+## Overview
+
+`ProcMonitor` provides unidirectional monitoring: when a monitored process terminates (normal or abnormal), the monitor receives a DOWN notification carrying the exit reason. The monitoring process itself is never killed.
+
+### Key Characteristics
+
+- **Unidirectional** — One-way monitoring (monitor is never killed)
+- **Any Termination** — Notified on both normal and abnormal exits
+- **Explicit Cancellation** — Remove monitors with `demonitor()`
+- **Composable** — Works alongside supervision and linking
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `monitor(process, Pid)` | `ProcMonitor.monitor(proc, downHandler)` |
+| `demonitor(MonitorRef)` | `ProcMonitor.demonitor(ref)` |
+| `{'DOWN', Ref, process, Pid, Reason}` | `Consumer<Throwable>` (null = normal, non-null = crash) |
+
+## Public API
+
+### Monitoring
+
+#### `monitor<S,M>(Proc<S,M> target, Consumer<Throwable> downHandler)`
+
+Start monitoring a process.
+
+```java
+Proc<String, String> worker = Proc.spawn(initialState, handler);
+
+MonitorRef<String, String> ref = ProcMonitor.monitor(
+    worker,
+    reason -> {
+        if (reason == null) {
+            System.out.println("Worker stopped normally");
+        } else {
+            System.err.println("Worker crashed: " + reason);
+        }
+    }
+);
+```
+
+**Parameters:**
+- `target` — Process to monitor
+- `downHandler` — Called when target terminates
+  - `null` reason → normal exit (via `Proc.stop()`)
+  - Non-null `Throwable` → abnormal exit (crash)
+
+**Returns:** `MonitorRef` for cancellation
+
+**Thread Safety:** `downHandler` is called on the target's virtual thread
+
+---
+
+#### `demonitor(MonitorRef<?, ?> ref)`
+
+Cancel a monitor.
+
+```java
+ProcMonitor.monitor(worker, reason -> handleDown(reason));
+
+// Later: cancel the monitor
+ProcMonitor.demonitor(ref);
+```
+
+**Safe to call:** After target has already terminated (no-op)
+
+---
+
+## Usage Patterns
+
+### Monitoring Worker Completion
+
+```java
+Proc<WorkState, WorkMsg> worker = Proc.spawn(initialState, handler);
+
+ProcMonitor.monitor(worker, reason -> {
+    if (reason == null) {
+        System.out.println("Work completed successfully");
+        results.complete("DONE");
+    } else {
+        System.err.println("Work failed: " + reason);
+        results.completeExceptionally(reason);
+    }
+});
+
+worker.tell(new StartWork());
+```
+
+---
+
+### Implementing Call Timeouts
+
+```java
+// This is how Proc.ask() implements timeouts internally
+Proc<Response, Request> server = Proc.spawn(state, handler);
+
+MonitorRef<Response, Request> ref = ProcMonitor.monitor(
+    server,
+    reason -> {
+        // Server died before responding
+        responseFuture.completeExceptionally(
+            new IllegalStateException("Server crashed: " + reason)
+        );
+    }
+);
+
+server.tell(new Request(responseFuture));
+
+// If server doesn't respond in time, timeout fires
+CompletableFuture.runAsync(() -> {
+    try {
+        Thread.sleep(Duration.ofSeconds(5));
+        if (!responseFuture.isDone()) {
+            ProcMonitor.demonitor(ref);
+            responseFuture.completeExceptionally(
+                new TimeoutException("No response in 5 seconds")
+            );
+        }
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+    }
+});
+```
+
+---
+
+### Monitoring Multiple Processes
+
+```java
+List<Proc<TaskState, TaskMsg>> workers = new ArrayList<>();
+
+for (int i = 0; i < 10; i++) {
+    var worker = Proc.spawn(state, handler);
+    ProcMonitor.monitor(worker, reason -> {
+        activeWorkersCount.decrementAndGet();
+        if (reason != null) {
+            failedWorkers.incrementAndGet();
+        }
+    });
+    workers.add(worker);
+    activeWorkersCount.incrementAndGet();
+}
+```
+
+---
+
+### Supervision + Monitoring
+
+```java
+// Child is supervised AND monitored
+ProcRef<CacheState, CacheMsg> cache = supervisor.supervise("cache", state, handler);
+
+ProcMonitor.monitor(cache.proc(), reason -> {
+    // This fires even though supervisor handles restart
+    // Useful for logging, metrics, alerts
+    metrics.recordCrash("cache", reason);
+    alertService.send("Cache crashed: " + reason.getMessage());
+});
+
+// When cache crashes:
+// 1. Supervisor restarts it (automatically)
+// 2. Monitor fires (additional notification)
+// 3. Both actions are independent
+```
+
+---
+
+## Implementation Details
+
+### Mechanism
+
+`ProcMonitor` uses termination callbacks on the target process:
+
+```java
+public static <S, M> MonitorRef<S, M> monitor(
+    Proc<S, M> target,
+    Consumer<Throwable> downHandler
+) {
+    // Register termination callback
+    target.addTerminationCallback(downHandler);
+
+    // Return opaque ref for cancellation
+    return new MonitorRef<>(target, downHandler);
+}
+```
+
+When the target process terminates:
+1. Process fires all termination callbacks
+2. `downHandler` is invoked with exit reason
+3. Monitor ref can still be used to cancel (no-op after termination)
+
+---
+
+### Thread Safety
+
+- **Callback invocation:** On target's virtual thread (must not block)
+- **Callback list:** `CopyOnWriteArrayList` (thread-safe iteration)
+- **Cancellation:** Removes callback from list (atomic)
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `monitor()` | ~100ns | Add to callback list |
+| `demonitor()` | ~50ns | Remove from list |
+| DOWN notification | <1μs | Callback invocation |
+
+**Overhead:** Negligible (single callback per monitor)
+
+---
+
+## Best Practices
+
+### 1. Use Non-Blocking Down Handlers
+
+```java
+// Good: Just enqueue a message
+ProcMonitor.monitor(worker, reason -> {
+    this.mailbox.add(new WorkerDown(reason));
+});
+
+// Bad: Blocking operation
+ProcMonitor.monitor(worker, reason -> {
+    httpClient.post(reason);  // Blocks worker thread!
+});
+```
+
+---
+
+### 2. Always Check Reason Type
+
+```java
+ProcMonitor.monitor(target, reason -> {
+    if (reason == null) {
+        // Normal exit
+        logger.info("Process stopped normally");
+    } else {
+        // Abnormal exit
+        logger.error("Process crashed: {}", reason.getMessage());
+    }
+});
+```
+
+---
+
+### 3. Clean Up Monitors
+
+```java
+var ref = ProcMonitor.monitor(worker, handler);
+
+try {
+    // Do work...
+} finally {
+    ProcMonitor.demonitor(ref);  // Always clean up
+}
+```
+
+---
+
+### 4. Use for Long-Lived Observers
+
+```java
+// Monitoring service
+public class MonitoringService {
+    private final List<MonitorRef<?, ?>> monitors = new ArrayList<>();
+
+    public <S, M> void watch(Proc<S, M> proc, String name) {
+        var ref = ProcMonitor.monitor(proc, reason -> {
+            if (reason == null) {
+                logger.info("{} stopped normally", name);
+            } else {
+                logger.error("{} crashed: {}", name, reason);
+                alertService.send(name + " crashed");
+            }
+        });
+        monitors.add(ref);
+    }
+
+    public void shutdown() {
+        monitors.forEach(ProcMonitor::demonitor);
+        monitors.clear();
+    }
+}
+```
+
+---
+
+## Gotchas
+
+### 1. Down Handler Runs on Target Thread
+
+```java
+ProcMonitor.monitor(worker, reason -> {
+    // This runs on worker's virtual thread
+    Thread.sleep(1000);  // BAD: blocks worker thread termination
+});
+```
+
+---
+
+### 2. Multiple Monitors Independent
+
+```java
+// Multiple monitors on same process
+ProcMonitor.monitor(worker, handler1);
+ProcMonitor.monitor(worker, handler2);
+ProcMonitor.monitor(worker, handler3);
+
+// When worker terminates, ALL handlers fire
+// Each monitor is independent
+```
+
+---
+
+### 3. demonitor() After Termination
+
+```java
+var ref = ProcMonitor.monitor(worker, handler);
+worker.stop();  // Worker terminates, handler fires
+
+ProcMonitor.demonitor(ref);  // No-op (already terminated)
+```
+
+---
+
+## See Also
+
+- [ProcLink API](./proclink.mdx) — Bilateral crash propagation
+- [Proc API](./proc.mdx) — Lightweight process primitive
+- [Supervisor API](./supervisor.mdx) — Hierarchical supervision
+- [Erlang monitor/2 Documentation](https://erlang.org/doc/man/erlang.html#monitor-2) — OTP reference

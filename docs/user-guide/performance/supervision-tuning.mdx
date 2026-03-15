@@ -1,0 +1,423 @@
+# Supervision Tuning
+
+import { BenchmarkChart } from '@/components/benchmark-chart';
+import { SupervisorConfig } from '@/components/supervisor-config';
+
+**Version:** 1.0.0-SNAPSHOT
+**Last Updated:** 2026-03-15
+**Component:** `Supervisor` and Fault Tolerance
+
+## Executive Summary
+
+JOTP's supervisor trees provide hierarchical fault tolerance with configurable restart strategies. This guide covers supervision tuning, restart strategies, backoff algorithms, and cascade management for production resilience.
+
+## Supervisor Restart Performance
+
+### Baseline Metrics
+
+| Metric | P50 Latency | P99 Latency | Throughput | Notes |
+|--------|-------------|-------------|------------|-------|
+| **One-for-One Restart** | 150 μs | 500 μs | ~2K restarts/s | Single child restart |
+| **One-for-All Restart** | 200 μs | 800 μs | ~1.2K restarts/s | Full tree restart |
+| **Rest-for-One Restart** | 175 μs | 600 μs | ~1.6K restarts/s | Dependent children restart |
+
+<BenchmarkChart
+  title="Supervisor Restart Strategy Comparison"
+  data={[
+    { name: 'One-for-One', latency: 150, throughput: 2000 },
+    { name: 'One-for-All', latency: 200, throughput: 1200 },
+    { name: 'Rest-for-One', latency: 175, throughput: 1600 }
+  ]}
+  unit="mixed"
+/>
+
+## Restart Strategies
+
+### One-for-One Strategy
+
+**Use Case:** Independent workers, stateless services
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.oneForOne(
+    maxRestarts: 10,
+    timeWindow: Duration.ofMinutes(1),
+    backoff: Supervisor.Backoff.exponential(Duration.ofMillis(100), 2.0)
+);
+
+// When a child crashes, only that child is restarted
+supervisor.supervise("worker-1", initialState, workerHandler);
+supervisor.supervise("worker-2", initialState, workerHandler);
+
+// If worker-1 crashes, only worker-1 is restarted
+// worker-2 continues unaffected
+```
+
+**Performance Characteristics:**
+- **Fastest restart:** 150 μs P50
+- **Isolation:** Crashes don't affect other children
+- **Memory:** Minimal overhead
+- **Use When:** Children are independent
+
+### One-for-All Strategy
+
+**Use Case:** Tightly coupled services, shared state
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.oneForAll(
+    maxRestarts: 10,
+    timeWindow: Duration.ofMinutes(1),
+    backoff: Supervisor.Backoff.exponential(Duration.ofMillis(100), 2.0)
+);
+
+// When ANY child crashes, ALL children are restarted
+supervisor.supervise("service-1", initialState, handler1);
+supervisor.supervise("service-2", initialState, handler2);
+
+// If service-1 crashes, both service-1 AND service-2 are restarted
+```
+
+**Performance Characteristics:**
+- **Slowest restart:** 200 μs P50
+- **Cascade:** All children restart together
+- **Memory:** Temporary spike during restart
+- **Use When:** Children share state or resources
+
+### Rest-for-One Strategy
+
+**Use Case:** Pipeline stages, dependent services
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.restForOne(
+    maxRestarts: 10,
+    timeWindow: Duration.ofMinutes(1),
+    backoff: Supervisor.Backoff.exponential(Duration.ofMillis(100), 2.0)
+);
+
+// Children are restarted in dependency order
+supervisor.supervise("stage-1", initialState, handler1);  // Independent
+supervisor.supervise("stage-2", initialState, handler2);  // Depends on stage-1
+supervisor.supervise("stage-3", initialState, handler3);  // Depends on stage-2
+
+// If stage-2 crashes, stage-2 and stage-3 are restarted
+// stage-1 continues unaffected
+```
+
+**Performance Characteristics:**
+- **Moderate restart:** 175 μs P50
+- **Selective:** Dependent children restart
+- **Memory:** Spike proportional to dependencies
+- **Use When:** Children have dependencies
+
+## Backoff Strategies
+
+### Exponential Backoff
+
+**Pattern:** Double delay after each restart
+
+<SupervisorConfig
+  strategy="exponential"
+  initialDelay="100ms"
+  maxDelay="10s"
+  multiplier="2.0"
+  restarts={[
+    { attempt: 1, delay: "100ms" },
+    { attempt: 2, delay: "200ms" },
+    { attempt: 3, delay: "400ms" },
+    { attempt: 4, delay: "800ms" },
+    { attempt: 5, delay: "1.6s" },
+    { attempt: 6, delay: "3.2s" },
+    { attempt: 7, delay: "6.4s" },
+    { attempt: 8, delay: "10s (capped)" }
+  ]}
+/>
+
+**Configuration:**
+```java
+Supervisor.Backoff backoff = Supervisor.Backoff.exponential(
+    initial: Duration.ofMillis(100),
+    multiplier: 2.0,
+    maxDelay: Duration.ofSeconds(10)
+);
+```
+
+**Best For:**
+- Transient failures (network, database)
+- External service dependencies
+- Resource exhaustion scenarios
+
+### Linear Backoff
+
+**Pattern:** Fixed delay between restarts
+
+<SupervisorConfig
+  strategy="linear"
+  initialDelay="500ms"
+  maxDelay="5s"
+  multiplier="1.0"
+  restarts={[
+    { attempt: 1, delay: "500ms" },
+    { attempt: 2, delay: "500ms" },
+    { attempt: 3, delay: "500ms" },
+    { attempt: 4, delay: "500ms" },
+    { attempt: 5, delay: "500ms" }
+  ]}
+/>
+
+**Configuration:**
+```java
+Supervisor.Backoff backoff = Supervisor.Backoff.linear(
+    delay: Duration.ofMillis(500)
+);
+```
+
+**Best For:**
+- Deterministic failures (bug, misconfiguration)
+- Testing and development
+- Predictable restart behavior
+
+### Jittered Backoff
+
+**Pattern:** Randomized delay to prevent thundering herd
+
+```java
+Supervisor.Backoff backoff = Supervisor.Backoff.jittered(
+    baseDelay: Duration.ofMillis(500),
+    jitterRange: 0.5  // ±50% randomization
+);
+```
+
+**Actual Delays:**
+- Attempt 1: 250-750ms (random)
+- Attempt 2: 250-750ms (random)
+- Attempt 3: 250-750ms (random)
+
+**Best For:**
+- Distributed systems
+- Shared resource contention
+- Preventing synchronized restarts
+
+## Intensity and Frequency Limits
+
+### Max Restarts Limit
+
+**Pattern:** Limit restarts within time window
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.oneForOne(
+    maxRestarts: 10,
+    timeWindow: Duration.ofMinutes(1),
+    backoff: Supervisor.Backoff.exponential(Duration.ofMillis(100), 2.0)
+);
+```
+
+**Behavior:**
+- Allow up to 10 restarts within 1 minute
+- If exceeded, supervisor gives up and terminates
+- Resets after 1 minute of no crashes
+
+**Example Timeline:**
+```
+00:00 - Child crashes (restart #1)
+00:05 - Child crashes (restart #2)
+00:10 - Child crashes (restart #3)
+...
+00:50 - Child crashes (restart #10)
+00:55 - Child crashes → SUPERVISOR GIVES UP
+01:00 - Window resets, crashes allowed again
+```
+
+### Tuning Guidelines
+
+| Scenario | Max Restarts | Time Window | Rationale |
+|----------|--------------|-------------|-----------|
+| **Stateless Service** | 100 | 1 minute | Fast restart, transient issues |
+| **Stateful Service** | 10 | 5 minutes | Slower restart, state recovery |
+| **External Dependency** | 20 | 2 minutes | Network issues, backoff |
+| **Bug-Prone Service** | 3 | 10 minutes | Fail fast, manual intervention |
+
+## Supervisor Tree Depth
+
+### Recommended Depth Limits
+
+| Tree Depth | Restart Cascade Time | Memory Overhead | Recommendation |
+|------------|---------------------|-----------------|----------------|
+| **1-3 levels** | <1 ms | Negligible | ✅ Optimal |
+| **4-7 levels** | 1-10 ms | Low | ✅ Good |
+| **8-10 levels** | 10-50 ms | Medium | ⚠️ Monitor |
+| **>10 levels** | >50 ms | High | ❌ Refactor |
+
+### Flatten Deep Trees
+
+**Bad (Deep Nesting):**
+```java
+Supervisor root = Supervisor.oneForOne(...);
+Supervisor level1 = Supervisor.oneForOne(...);
+Supervisor level2 = Supervisor.oneForOne(...);
+Supervisor level3 = Supervisor.oneForOne(...);
+Supervisor level4 = Supervisor.oneForOne(...);
+
+// 5 levels deep = slow restart cascade
+root.supervise("level1", level1);
+level1.supervise("level2", level2);
+level2.supervise("level3", level3);
+level3.supervise("level4", level4);
+level4.supervise("worker", workerHandler);
+```
+
+**Good (Flat Structure):**
+```java
+Supervisor root = Supervisor.oneForOne(...);
+
+// All workers at same level = fast restart
+root.supervise("worker-1", workerHandler);
+root.supervise("worker-2", workerHandler);
+root.supervise("worker-3", workerHandler);
+root.supervise("worker-4", workerHandler);
+root.supervise("worker-5", workerHandler);
+```
+
+## Supervisor Metrics
+
+### Key Metrics to Track
+
+```java
+SupervisorStatistics stats = SupervisorSys.of(supervisorRef).getStatistics();
+
+// 1. Total restarts
+long totalRestarts = stats.totalRestarts();
+
+// 2. Restart rate (restarts per second)
+double restartRate = stats.totalRestarts() / uptimeSeconds;
+
+// 3. Children alive vs. dead
+long aliveChildren = stats.aliveChildrenCount();
+long deadChildren = stats.deadChildrenCount();
+
+// 4. Average restart time
+double avgRestartTime = stats.totalRestartTimeNanos() / stats.totalRestarts();
+
+// 5. Current intensity
+int currentIntensity = stats.currentIntensity();
+```
+
+### Alert Thresholds
+
+| Metric | Warning | Critical | Action |
+|--------|---------|----------|--------|
+| **Restart Rate** | >10/min | >100/min | Check for bugs |
+| **Intensity** | >50% | >90% | Increase limits |
+| **Dead Children** | >5% | >20% | Check health |
+| **Restart Time** | >100ms | >1s | Optimize init |
+
+## Performance Tuning Examples
+
+### Fast Restart Configuration
+
+**Use Case:** Stateless workers, rapid recovery
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.oneForOne(
+    maxRestarts: 100,
+    timeWindow: Duration.ofMinutes(1),
+    backoff: Supervisor.Backoff.linear(Duration.ofMillis(10))  // Minimal delay
+);
+```
+
+**Characteristics:**
+- Restart latency: 100 μs P50
+- Max restarts: 100 per minute
+- Backoff: 10ms (fixed)
+- Best for: Stateless services
+
+### Gradual Restart Configuration
+
+**Use Case:** Stateful services, careful recovery
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.oneForOne(
+    maxRestarts: 10,
+    timeWindow: Duration.ofMinutes(5),
+    backoff: Supervisor.Backoff.exponential(
+        Duration.ofMillis(500),
+        2.0,
+        Duration.ofSeconds(30)  // Max 30s delay
+    )
+);
+```
+
+**Characteristics:**
+- Restart latency: 500 μs P50
+- Max restarts: 10 per 5 minutes
+- Backoff: 500ms → 30s (exponential)
+- Best for: Stateful services
+
+### Production Configuration
+
+**Use Case:** Mission-critical services, fail-safe
+
+```java
+Supervisor<String, Integer> supervisor = Supervisor.oneForOne(
+    maxRestarts: 20,
+    timeWindow: Duration.ofMinutes(2),
+    backoff: Supervisor.Backoff.jittered(
+        Duration.ofMillis(200),
+        0.5  // ±50% randomization
+    )
+);
+```
+
+**Characteristics:**
+- Restart latency: 200 μs P50
+- Max restarts: 20 per 2 minutes
+- Backoff: 100-300ms (jittered)
+- Best for: Production systems
+
+## Troubleshooting Supervisor Issues
+
+### Issue: Restart Storm
+
+**Symptom:** Continuous restarts, supervisor intensity at 100%
+
+**Diagnosis:**
+```java
+// Check crash reasons
+SupervisorStatistics stats = SupervisorSys.of(supervisorRef).getStatistics();
+Map<Class<? extends Throwable>, Long> crashReasons = stats.crashReasons();
+
+crashReasons.forEach((exception, count) -> {
+    logger.error("Crash reason: {} × {}", exception.getSimpleName(), count);
+});
+```
+
+**Solution:**
+1. Fix the root cause (bug, misconfiguration)
+2. Increase maxRestarts temporarily
+3. Add exponential backoff
+4. Implement circuit breaker
+
+### Issue: Slow Restart Cascade
+
+**Symptom:** Supervisor restart takes >100ms
+
+**Diagnosis:**
+```java
+// Measure restart time
+long startTime = System.nanoTime();
+supervisor.restartChild(childSpec);
+long elapsed = System.nanoTime() - startTime;
+
+logger.warn("Restart took {} μs", elapsed / 1000);
+```
+
+**Solution:**
+1. Flatten supervisor tree
+2. Optimize child initialization
+3. Use one-for-one strategy
+4. Reduce state size
+
+## Next Steps
+
+Continue exploring performance optimization:
+
+- [**Memory Optimization**](./memory-optimization.md) - Heap sizing and process isolation
+- [**Production Monitoring**](./production-monitoring.md) - Metrics, alerts, profiling

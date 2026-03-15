@@ -1,0 +1,384 @@
+# Distributed OTP - Multi-Node Deployment & Clustering
+
+import { Diagram } from '@/components/diagram';
+
+## Overview
+
+Distributed OTP extends JOTP's fault-tolerance model across multiple JVM nodes, providing location-transparent message passing, automatic failover, and distributed consensus — all while maintaining the same `Proc<S,M>` programming model you use locally.
+
+## Core Concepts
+
+### Location Transparency
+
+The fundamental principle: **a `ProcRef` is a `ProcRef`**, whether the process lives on the same JVM or across the network.
+
+```java
+// Local process
+ProcRef<OrderState, OrderMsg> local = registry.lookup("order-service");
+
+// Remote process — same API, different location
+ProcRef<OrderState, OrderMsg> remote = registry.lookup("payment-service");
+
+// Send messages identically
+local.tell(new OrderMsg.Create(orderId));
+remote.tell(new PaymentMsg.Charge(orderId, amount));
+```
+
+### Node Identity
+
+Each JVM in the cluster has a stable identity:
+
+```java
+record NodeId(
+    String name,        // Logical name (e.g., "node1")
+    String host,        // Hostname or IP
+    int port,           // TCP port
+    UUID instanceId,    // Unique per JVM start
+    long startEpoch     // Milliseconds since epoch (for tie-breaking)
+) {}
+```
+
+## Architecture Diagrams
+
+### Three-Tier Cluster Topology
+
+<Diagram caption="Distributed OTP cluster with 3 nodes showing message flow, leader election, and supervision tree">
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │         Distributed Application          │
+                    │      (e.g., telemetry-processor)        │
+                    └─────────────────────────────────────────┘
+                                       │
+                    ┌──────────────────┼──────────────────┐
+                    │                  │                  │
+              ┌─────▼─────┐      ┌─────▼─────┐      ┌─────▼─────┐
+              │  Node 1   │      │  Node 2   │      │  Node 3   │
+              │  Leader   │      │ Standby   │      │ Standby   │
+              │ (Primary) │      │           │      │           │
+              └─────┬─────┘      └─────┬─────┘      └─────┬─────┘
+                    │                  │                  │
+        ┌───────────┼──────────────────┼──────────────────┼───────────┐
+        │           │       TCP Gossip Protocol           │           │
+        │           │    (heartbeat, status, PING/PONG)  │           │
+        └───────────┴──────────────────┴──────────────────┴───────────┘
+
+Node 1 (Leader) Internal Structure:
+┌─────────────────────────────────────────────────────────────────┐
+│ DistributedNode("node1", "10.0.1.10", 0)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  TCP Server (port 5432)                                         │
+│    ├─ Connection from node2 (10.0.1.11:5432)                   │
+│    └─ Connection from node3 (10.0.1.12:5432)                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Application: telemetry-processor                               │
+│    ├─ Status: RUNNING (leader)                                 │
+│    ├─ AcquisitionSupervisor (ONE_FOR_ONE)                      │
+│    │    ├─ ParameterDataAccess["vCar:Chassis"]                 │
+│    │    ├─ ParameterDataAccess["nEngine:Chassis"]               │
+│    │    └─ ParameterDataAccess["pBrakeF:Chassis"]               │
+│    └─ SqlRaceSession (StateMachine)                            │
+│         └─ State: Live                                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Monitor Thread (virtual)                                       │
+│    └─ Watching: none (I am leader)                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+### Message Flow: Local vs Remote
+
+<Diagram caption="Message routing comparison for local and remote processes">
+
+```
+Local Message Send (same JVM):
+┌─────────────────────────────────────────────────────────────┐
+│ Process A                                Process B           │
+│ (ProcRef<OrderState, OrderMsg>)         (Proc<PmtState, PmtMsg>)
+│     │                                            ▲           │
+│     │ tell(PaymentMsg.Charge(100))                 │           │
+│     └───────────────────inline────────────────────┘           │
+│              (Direct queue enqueue, ~1µs latency)             │
+└─────────────────────────────────────────────────────────────┘
+
+Remote Message Send (cross-JVM):
+┌──────────────────────────────────────────────────────────────────────────┐
+│ JVM A (node1)                                     JVM B (node2)          │
+│                                                                          │
+│ Process A               DistributedActorRef         Process B             │
+│ (ProcRef)               (RemoteDistributedActorRef) (Proc)                │
+│     │                                                      ▲             │
+│     │ tell(PaymentMsg.Charge(100))                         │             │
+│     ▼                                                      │             │
+│ [1] Serialize: Jackson ──→ byte[] (~10-50µs)               │             │
+│     │                                                      │             │
+│     ▼                                                      │             │
+│ [2] Transport: UDP/TCP ──→ Network (~100-500µs LAN)        │             │
+│     │                                                      │             │
+│     │  ────────────────────────────────────────────────►  │             │
+│     │          WireEnvelope{                              │             │
+│     │            actorId: "payment-service",              │             │
+│     │            payload: {...},                           │             │
+│     │            correlationId: null                       │             │
+│     │          }                                           │             │
+│     │                                                      │             │
+│     │                                           [3] Deserialize (~10-50µs)│
+│     │                                                      │             │
+│     │                                           [4] Enqueue in B's mailbox │
+│     └──────────────────────────────────────────────────────┘             │
+│                     Total latency: ~120-600µs (LAN)                      │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+## Leader Election & Failover
+
+### Deterministic Election Algorithm
+
+JOTP uses a **priority-based deterministic election** — no distributed consensus required for basic failover:
+
+```java
+// Priority list (highest first)
+List<NodeId> priority = List.of(
+    new NodeId("cp1", "10.0.1.10", 5432, UUID.randomUUID(), epoch1),
+    new NodeId("cp2", "10.0.1.11", 5432, UUID.randomUUID(), epoch2),
+    new NodeId("cp3", "10.0.1.12", 5432, UUID.randomUUID(), epoch3)
+);
+
+// Election logic (run independently on each node):
+1. Scan priority list from highest to lowest
+2. For each node before self:
+   - If alive via PING → become STANDBY, monitor it
+3. If no higher-priority node alive:
+   - Check if any lower-priority node is RUNNING (takeover)
+   - Otherwise, become RUNNING (normal start)
+```
+
+### Failover Timeline
+
+<Diagram caption="Automatic failover sequence when leader crashes">
+
+```
+Time 0ms: Leader Running
+┌─────────────────────────────────────────────────────────────────┐
+│ Node 1 (cp1)          Node 2 (cp2)          Node 3 (cp3)        │
+│ RUNNING               STANDBY              STANDBY               │
+│ Leader                Monitoring cp1       Monitoring cp1       │
+│                       [heartbeat─────►]    [heartbeat─────►]    │
+│                       [◄─────PONG]         [◄─────PONG]         │
+└─────────────────────────────────────────────────────────────────┘
+
+Time 500ms: Leader Crashes
+┌─────────────────────────────────────────────────────────────────┐
+│ Node 1 (cp1)          Node 2 (cp2)          Node 3 (cp3)        │
+│ DEAD                  STANDBY              STANDBY               │
+│ [Network timeout]     Monitoring cp1       Monitoring cp1       │
+│                       [heartbeat X]        [heartbeat X]        │
+│                       [timeout]            [timeout]            │
+└─────────────────────────────────────────────────────────────────┘
+
+Time 1000ms: Failover Timeout Elapsed
+┌─────────────────────────────────────────────────────────────────┐
+│ Node 1 (cp1)          Node 2 (cp2)          Node 3 (cp3)        │
+│ DEAD                  ELECTING             ELECTING             │
+│                       [PING cp1 X]         [PING cp1 X]         │
+│                       [PING cp3 ✓]        [PING cp2 ✓]         │
+│                       "cp3 is alive"       "cp2 is alive"       │
+│                       Defer to cp3         I'm next in line!    │
+└─────────────────────────────────────────────────────────────────┘
+
+Time 1200ms: New Leader Elected
+┌─────────────────────────────────────────────────────────────────┐
+│ Node 1 (cp1)          Node 2 (cp2)          Node 3 (cp3)        │
+│ DEAD                  STANDBY              RUNNING              │
+│                       Monitoring cp3       Leader               │
+│                       [heartbeat─────►]                         │
+│                       [◄─────PONG]                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+### Configuration
+
+```java
+// Define distributed application spec
+var spec = new DistributedAppSpec(
+    "telemetry-processor",                    // App name
+    List.of(                                  // Priority tiers
+        List.of(node1.nodeId()),              // Tier 1: primary datacenter
+        List.of(node2.nodeId(), node3.nodeId()) // Tier 2: backup datacenter
+    ),
+    Duration.ofMillis(500)                    // Failover timeout
+);
+
+// Register at all nodes
+node1.register(spec, new ApplicationCallbacks() {
+    public void onStart(StartMode mode) {
+        supervisor = AcquisitionSupervisor.start(parameters);
+    }
+    public void onStop() {
+        if (supervisor != null) supervisor.shutdown();
+    }
+});
+
+node2.register(spec, callbacks2);
+node3.register(spec, callbacks3);
+
+// Start application (only leader actually runs it)
+node1.start("telemetry-processor");  // Normal start
+node2.start("telemetry-processor");  // Standby
+node3.start("telemetry-processor");  // Standby
+```
+
+## Wire Protocol
+
+### TCP Command Format
+
+JOTP uses a simple newline-terminated TCP protocol:
+
+```
+PING                                → PONG
+STATUS appName                      → RUNNING | STOPPED
+START appName normal                → OK | ERROR reason
+START appName failover fromWire     → OK | ERROR reason
+START appName takeover fromWire     → OK | ERROR reason
+STOP appName                        → OK | ERROR reason
+```
+
+### Message Envelope
+
+```java
+record WireEnvelope(
+    String actorId,       // Target process name
+    String messageType,   // Fully-qualified record class name
+    byte[] payload,       // Jackson/Protobuf encoded message
+    String correlationId, // null for tell, UUID for ask
+    NodeId replyTo        // null for tell, sender NodeId for ask
+) {}
+```
+
+## Production Deployment
+
+### Horizontal Scaling
+
+```java
+// 5-node cluster for high availability
+var nodes = List.of(
+    new DistributedNode("cp1", "10.0.1.10", 5432, config),
+    new DistributedNode("cp2", "10.0.1.11", 5432, config),
+    new DistributedNode("cp3", "10.0.1.12", 5432, config),
+    new DistributedNode("cp4", "10.0.2.10", 5432, config), // Different AZ
+    new DistributedNode("cp5", "10.0.2.11", 5432, config)  // Different AZ
+);
+
+// Cross-datacenter priority
+var spec = new DistributedAppSpec(
+    "global-service",
+    List.of(
+        List.of(nodes.get(0).nodeId(), nodes.get(1).nodeId(), nodes.get(2).nodeId()), // DC1
+        List.of(nodes.get(3).nodeId(), nodes.get(4).nodeId()) // DC2
+    ),
+    Duration.ofSeconds(2) // Longer timeout for cross-DC failover
+);
+```
+
+### Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jotp-cluster
+spec:
+  replicas: 3
+  serviceName: jotp-headless
+  template:
+    spec:
+      containers:
+      - name: jotp
+        image: jotp:26.0.0
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NODE_PRIORITY
+          value: "$(echo $POD_NAME | sed 's/jotp-cluster-//')" # 0, 1, 2...
+        ports:
+        - containerPort: 5432
+          name: gossip
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  node1:
+    image: jotp:26.0.0
+    environment:
+      - NODE_NAME=node1
+      - PORT=5432
+    ports:
+      - "5432:5432"
+
+  node2:
+    image: jotp:26.0.0
+    environment:
+      - NODE_NAME=node2
+      - PORT=5432
+    depends_on:
+      - node1
+
+  node3:
+    image: jotp:26.0.0
+    environment:
+      - NODE_NAME=node3
+      - PORT=5432
+    depends_on:
+      - node1
+```
+
+## Performance Characteristics
+
+### Latency Breakdown
+
+| Operation | Local | Remote (LAN) | Remote (WAN) |
+|-----------|-------|--------------|--------------|
+| `tell()` | ~1µs | ~120-600µs | ~10-100ms |
+| `ask()` (round-trip) | ~2µs | ~240-1200µs | ~20-200ms |
+| Leader election | N/A | ~200-400ms | ~2-5s |
+
+### Throughput
+
+| Transport | Messages/sec | Latency p50 | Bandwidth |
+|-----------|--------------|-------------|-----------|
+| Local (queue) | 10M+/s | <1µs | N/A |
+| UDP (LAN) | 1.2M/s | ~80µs | ~1 Gbps |
+| TCP (LAN) | 800K/s | ~150µs | ~800 Mbps |
+| gRPC (LAN) | 500K/s | ~200µs | ~600 Mbps |
+
+## Tradeoffs
+
+### When to Use Distributed OTP
+
+**Ideal for:**
+- High-availability services (N+1 redundancy)
+- Geographic distribution (multi-datacenter)
+- Horizontal scaling (stateless services)
+- Fault isolation (crash boundaries between JVMs)
+
+**Not ideal for:**
+- Extreme low-latency requirements (<100µs)
+- Single-machine high-throughput (>10M msg/s)
+- Simple single-process applications
+- Tight coupling between components
+
+## Next Steps
+
+- [Message Bus Architecture](./message-bus-architecture) — Enterprise messaging patterns
+- [Distributed State](./distributed-state) — State management across nodes
+- [Fault Tolerance](./fault-tolerance) — Crash recovery and supervision

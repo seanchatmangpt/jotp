@@ -1,0 +1,713 @@
+---
+title: "Your First Process"
+description: "Deep dive into Proc creation, messaging patterns, and state management"
+difficulty: beginner
+estimatedTime: "20 minutes"
+tutorialNumber: 2
+totalTutorials: 6
+nextTutorial: "03-understanding-virtual-threads"
+prevTutorial: "01-getting-started"
+---
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CodeBlock } from '@/components/ui/code-block';
+
+# Your First Process
+
+<Badge variant="secondary">Tutorial 2 of 6</Badge>
+
+Now that you've set up your environment, let's dive deep into creating and managing JOTP processes. You'll learn the anatomy of a process, different messaging patterns, and how to manage state effectively.
+
+## What You'll Learn
+
+In this tutorial, you'll master:
+
+- The anatomy of a JOTP process
+- Different ways to create processes
+- Message passing patterns (tell, ask, fire-and-forget)
+- State management best practices
+- Process lifecycle and cleanup
+
+## The Anatomy of a Process
+
+Every JOTP process consists of three core components:
+
+```java
+{1.  STATE     - Immutable data stored in the process
+2.  MESSAGES   - Sealed interface defining what messages it accepts
+3.  HANDLER    - Function that processes messages and returns new state}
+```
+
+Let's examine each component in detail.
+
+## Component 1: Process State
+
+Process state should always be **immutable**. We use Java records for this:
+
+```java
+{/**
+ * Process state - represents everything the process knows.
+ * Always immutable to prevent concurrent modification issues.
+ */
+public record UserState(
+    String username,
+    int loginCount,
+    Optional<Instant> lastLogin,
+    Set<String> roles
+) {
+    // Smart constructors for validation
+    public UserState {
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Username required");
+        }
+        roles = Set.copyOf(roles);  // Defensive copy
+    }
+
+    // Convenient factory methods
+    public static UserState create(String username) {
+        return new UserState(
+            username,
+            0,
+            Optional.empty(),
+            Set.of("user")
+        );
+    }
+
+    // State transition methods
+    public UserState withLogin() {
+        return new UserState(
+            username,
+            loginCount + 1,
+            Optional.of(Instant.now()),
+            roles
+        );
+    }
+
+    public UserState withRole(String role) {
+        Set<String> newRoles = new HashSet<>(roles);
+        newRoles.add(role);
+        return new UserState(
+            username,
+            loginCount,
+            lastLogin,
+            Set.copyOf(newRoles)
+        );
+    }
+}}
+```
+
+<CopyButton>Copy UserState.java</CopyButton>
+
+### Why Immutable State?
+
+<Alert>
+  <AlertTitle>🎯 Why Records for State?</AlertTitle>
+  <AlertDescription>
+    <ul className="list-disc list-inside space-y-1">
+      <li><strong>Thread Safety:</strong> No locks needed - state can't be modified after creation</li>
+      <li><strong>Predictable Transitions:</strong> Each message creates a new state, making debugging easier</li>
+      <li><strong>Time Travel:</strong> You can keep a history of states for auditing</li>
+      <li><strong>Pattern Matching:</strong> Java's pattern matching works beautifully with records</li>
+    </ul>
+  </AlertDescription>
+</Alert>
+
+## Component 2: Message Definitions
+
+Messages define the **protocol** of your process. Use sealed interfaces:
+
+```java
+{/**
+ * Message protocol - defines all valid messages for this process.
+ * Sealed interface ensures exhaustive pattern matching.
+ */
+public sealed interface UserMsg
+    permits Login, Logout, AddRole, RemoveRole, GetInfo {}
+
+/**
+ * Command messages - request an action
+ */
+public record Login(String sessionId) implements UserMsg {}
+public record Logout() implements UserMsg {}
+public record AddRole(String role) implements UserMsg {}
+public record RemoveRole(String role) implements UserMsg {}
+
+/**
+ * Query messages - request information
+ */
+public record GetInfo() implements UserMsg {}
+```
+
+<CopyButton>Copy UserMsg.java</CopyButton>
+
+### Message Design Principles
+
+1. **Commands vs Queries:** Separate messages that change state from those that query it
+2. **Validation in Constructors:** Validate message parameters at creation time
+3. **Self-Documenting:** Message names should clearly indicate intent
+4. **Immutable Fields:** All message fields should be final
+
+## Component 3: Message Handler
+
+The handler is where the magic happens. It processes messages and returns new state:
+
+```java
+{import io.github.seanchatmangpt.jotp.Proc;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+
+/**
+ * Message handler - pure function that transforms state.
+ *
+ * Key principles:
+ * 1. No side effects in the handler
+ * 2. Return new state, don't modify old state
+ * 3. Throw exceptions for error conditions (let it crash!)
+ */
+public class UserHandler {
+
+    public static Proc.StateResult<UserState, Object> handle(
+        UserState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            // Handle login - update login count and timestamp
+            case Login(var sessionId) -> {
+                System.out.println("🔐 User logged in: " + state.username());
+                yield new Proc.StateResult<>(
+                    state.withLogin(),
+                    "Login successful"
+                );
+            }
+
+            // Handle logout - just log it
+            case Logout() -> {
+                System.out.println("👋 User logged out: " + state.username());
+                yield new Proc.StateResult<>(state, "Logout successful");
+            }
+
+            // Add role - validate and update
+            case AddRole(var role) -> {
+                if (state.roles().contains(role)) {
+                    System.out.println("⚠️ Role already exists: " + role);
+                    yield new Proc.StateResult<>(
+                        state,
+                        "Role already exists: " + role
+                    );
+                }
+                System.out.println("➕ Added role: " + role);
+                yield new Proc.StateResult<>(
+                    state.withRole(role),
+                    "Added role: " + role
+                );
+            }
+
+            // Remove role
+            case RemoveRole(var role) -> {
+                if (!state.roles().contains(role)) {
+                    yield new Proc.StateResult<>(
+                        state,
+                        "Role not found: " + role
+                    );
+                }
+                Set<String> newRoles = new HashSet<>(state.roles());
+                newRoles.remove(role);
+                yield new Proc.StateResult<>(
+                    new UserState(
+                        state.username(),
+                        state.loginCount(),
+                        state.lastLogin(),
+                        Set.copyOf(newRoles)
+                    ),
+                    "Removed role: " + role
+                );
+            }
+
+            // Query - return state without modifying
+            case GetInfo() -> {
+                String info = String.format(
+                    "User: %s, Logins: %d, Roles: %s",
+                    state.username(),
+                    state.loginCount(),
+                    state.roles()
+                );
+                yield new Proc.StateResult<>(state, info);
+            }
+
+            // Default - unknown message
+            default -> {
+                System.err.println("❓ Unknown message: " + msg);
+                yield new Proc.StateResult<>(state, null);
+            }
+        };
+    }
+}}
+```
+
+<CopyButton>Copy UserHandler.java</CopyButton>
+
+## Creating Processes: Three Ways
+
+### Method 1: Direct Process Creation
+
+```java
+{import io.github.seanchatmangpt.jotp.Proc;
+
+// Create a standalone process
+Proc<UserState, UserMsg> userProc = Proc.spawn(
+    () -> UserState.create("alice"),  // Initial state supplier
+    UserHandler::handle,              // Message handler
+    null                              // No exit signal handler needed
+);
+
+// Send a message
+userProc.tell(new Login("session-123"));
+
+// Clean shutdown
+userProc.stop();}
+```
+
+### Method 2: Supervised Process (Recommended)
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+
+// Create a supervisor for automatic restarts
+var supervisor = new Supervisor(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofMinutes(1)
+);
+
+// Create a supervised process
+ProcRef<UserState, UserMsg> userRef = supervisor.supervise(
+    "user-alice",
+    UserState.create("alice"),
+    UserHandler::handle
+);
+
+// Send messages
+userRef.tell(new AddRole("admin"));
+userRef.tell(new AddRole("moderator"));
+
+// Query state
+var response = userRef.ask(new GetInfo(), Duration.ofSeconds(1)).get();
+System.out.println(response);
+
+// Shutdown supervisor (automatically stops all children)
+supervisor.shutdown();}
+```
+
+### Method 3: Using ProcRef for Stable References
+
+```java
+{/**
+ * ProcRef survives supervisor restarts - use this for long-lived references.
+ */
+public class UserManager {
+    private final ProcRef<UserState, UserMsg> userRef;
+
+    public UserManager(Supervisor supervisor, String username) {
+        this.userRef = supervisor.supervise(
+            "user-" + username,
+            UserState.create(username),
+            UserHandler::handle
+        );
+    }
+
+    public void addRole(String role) {
+        userRef.tell(new AddRole(role));
+    }
+
+    public String getInfo() throws Exception {
+        return (String) userRef.ask(new GetInfo(), Duration.ofSeconds(1))
+            .orElse("User not available");
+    }
+}}
+```
+
+## Message Passing Patterns
+
+### Pattern 1: Tell (Fire-and-Forget)
+
+Use `tell()` when you don't need a response:
+
+```java
+{/**
+ * Tell pattern - asynchronous, no response expected.
+ * Best for: Logging, metrics, notifications, commands where result doesn't matter.
+ */
+public void tellExample() {
+    ProcRef<UserState, UserMsg> user = createUser();
+
+    // These are all non-blocking
+    user.tell(new Login("session-1"));
+    user.tell(new AddRole("admin"));
+    user.tell(new AddRole("moderator"));
+
+    // No waiting - execution continues immediately
+    System.out.println("Messages sent!");
+
+    // Use when:
+    // - You don't need a response
+    // - Speed is more important than confirmation
+    // - Multiple independent operations
+}}
+```
+
+### Pattern 2: Ask (Request-Response)
+
+Use `ask()` when you need a response:
+
+```java
+{/**
+ * Ask pattern - synchronous request-response with timeout.
+ * Best for: Queries, confirming operations, getting state.
+ */
+public void askExample() throws Exception {
+    ProcRef<UserState, UserMsg> user = createUser();
+
+    // Send message and wait for response
+    var response = user.ask(new GetInfo(), Duration.ofSeconds(1)).get();
+
+    // Response is guaranteed to be the result of handling GetInfo
+    System.out.println("User info: " + response);
+
+    // Use when:
+    // - You need the result
+    // - Operation must complete before continuing
+    // - You need to handle errors
+}}
+```
+
+### Pattern 3: Ask with Error Handling
+
+Always handle timeouts and errors:
+
+```java
+{import java.util.concurrent.TimeoutException;
+
+public void askWithErrorHandling() {
+    ProcRef<UserState, UserMsg> user = createUser();
+
+    try {
+        var response = user.ask(new GetInfo(), Duration.ofSeconds(1))
+            .orTimeout()  // Throws TimeoutException if no response
+            .get();
+
+        System.out.println("Success: " + response);
+
+    } catch (TimeoutException e) {
+        System.err.println("⏰ Process didn't respond in time");
+        // Process might be crashed - supervisor will restart it
+
+    } catch (Exception e) {
+        System.err.println("❌ Error: " + e.getMessage());
+    }
+}}
+```
+
+## Complete Example: User Management System
+
+Let's put it all together:
+
+```java
+{package com.example.jotp.tutorial;
+
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.TimeoutException;
+
+/**
+ * Complete user management system demonstrating:
+ * - State management with records
+ * - Sealed message protocols
+ * - Tell and ask patterns
+ * - Supervision and fault tolerance
+ */
+public class UserManagementDemo {
+
+    // ──────────────────────────────────────────────────────
+    // State Definition
+    // ──────────────────────────────────────────────────────
+
+    record UserState(
+        String username,
+        int loginCount,
+        Optional<Instant> lastLogin,
+        Set<String> roles
+    ) {
+        public static UserState create(String username) {
+            return new UserState(
+                username,
+                0,
+                Optional.empty(),
+                Set.of("user")
+            );
+        }
+
+        public UserState withLogin() {
+            return new UserState(
+                username,
+                loginCount + 1,
+                Optional.of(Instant.now()),
+                roles
+            );
+        }
+
+        public UserState withRole(String role) {
+            Set<String> newRoles = new HashSet<>(roles);
+            newRoles.add(role);
+            return new UserState(
+                username,
+                loginCount,
+                lastLogin,
+                Set.copyOf(newRoles)
+            );
+        }
+    }
+
+    // ──────────────────────────────────────────────────────
+    // Message Protocol
+    // ──────────────────────────────────────────────────────
+
+    sealed interface UserMsg
+        permits Login, Logout, AddRole, RemoveRole, GetInfo {}
+
+    record Login(String sessionId) implements UserMsg {}
+    record Logout() implements UserMsg {}
+    record AddRole(String role) implements UserMsg {}
+    record RemoveRole(String role) implements UserMsg {}
+    record GetInfo() implements UserMsg {}
+
+    // ──────────────────────────────────────────────────────
+    // Message Handler
+    // ──────────────────────────────────────────────────────
+
+    static Proc.StateResult<UserState, Object> handle(
+        UserState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case Login(var sessionId) -> {
+                System.out.println("🔐 " + state.username() + " logged in");
+                yield new Proc.StateResult<>(
+                    state.withLogin(),
+                    "Login successful"
+                );
+            }
+            case AddRole(var role) -> {
+                System.out.println("➕ Added role " + role + " to " + state.username());
+                yield new Proc.StateResult<>(
+                    state.withRole(role),
+                    "Added role: " + role
+                );
+            }
+            case GetInfo() -> {
+                String info = String.format(
+                    "User: %s, Logins: %d, Roles: %s",
+                    state.username(),
+                    state.loginCount(),
+                    state.roles()
+                );
+                yield new Proc.StateResult<>(state, info);
+            }
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+
+    // ──────────────────────────────────────────────────────
+    // Main Demo
+    // ──────────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  JOTP User Management System Demo         ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        // Create supervisor
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Create user processes
+        var alice = supervisor.supervise(
+            "user-alice",
+            UserState.create("alice"),
+            UserManagementDemo::handle
+        );
+
+        var bob = supervisor.supervise(
+            "user-bob",
+            UserState.create("bob"),
+            UserManagementDemo::handle
+        );
+
+        // Demonstrate tell pattern (fire-and-forget)
+        System.out.println("--- Using Tell Pattern ---");
+        alice.tell(new Login("session-1"));
+        alice.tell(new AddRole("admin"));
+        alice.tell(new AddRole("moderator"));
+
+        bob.tell(new Login("session-2"));
+        bob.tell(new AddRole("user"));
+
+        // Demonstrate ask pattern (request-response)
+        System.out.println("\n--- Using Ask Pattern ---");
+
+        var aliceInfo = alice.ask(new GetInfo(), Duration.ofSeconds(1)).get();
+        System.out.println("Alice: " + aliceInfo);
+
+        var bobInfo = bob.ask(new GetInfo(), Duration.ofSeconds(1)).get();
+        System.out.println("Bob: " + bobInfo);
+
+        // Shutdown
+        System.out.println("\n--- Shutting Down ---");
+        supervisor.shutdown();
+        System.out.println("✨ All processes stopped cleanly");
+    }
+}}
+```
+
+<CopyButton>Copy complete example</CopyButton>
+
+## Understanding Process Lifecycle
+
+Every process goes through these stages:
+
+```
+CREATED → STARTED → RUNNING → STOPPED
+                ↓
+              CRASHED (if exception)
+                ↓
+          RESTARTED (by supervisor)
+```
+
+<Alert>
+  <AlertTitle>🎯 Key Lifecycle Points</AlertTitle>
+  <AlertDescription>
+    <ul className="list-disc list-inside space-y-1">
+      <li><strong>Created:</strong> Process object exists but hasn't started processing</li>
+      <li><strong>Started:</strong> Virtual thread begins, starts processing messages</li>
+      <li><strong>Running:</strong> Process is actively handling messages from mailbox</li>
+      <li><strong>Stopped:</strong> Clean shutdown via <code>stop()</code> - no crash callbacks fired</li>
+      <li><strong>Crashed:</strong> Unhandled exception - supervisor may restart</li>
+    </ul>
+  </AlertDescription>
+</Alert>
+
+## Best Practices
+
+### DO ✅
+
+```java
+{✅ Use sealed interfaces for messages
+✅ Use records for state
+✅ Keep handlers as pure functions
+✅ Provide timeouts for ask()
+✅ Let supervisors handle crashes
+✅ Use tell() when you don't need a response
+✅ Document message protocols}
+```
+
+### DON'T ❌
+
+```java
+{❌ Modify state after creation
+❌ Share mutable state between processes
+❌ Catch exceptions in handlers (let them crash!)
+❌ Use ask() without timeout
+❌ Put blocking I/O in handlers
+❌ Use null in message fields}
+```
+
+## Checkpoint Summary
+
+<Card className="mt-6">
+  <CardHeader>
+    <CardTitle>✅ Checkpoint: What You've Learned</CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-2">
+    <p>You've mastered:</p>
+    <ul className="list-disc list-inside space-y-1 mt-2">
+      <li>The three components of a process: State, Messages, Handler</li>
+      <li>Three ways to create processes: Direct, Supervised, ProcRef</li>
+      <li>Message passing patterns: Tell (async) and Ask (sync)</li>
+      <li>Process lifecycle and management</li>
+      <li>Best practices for state management</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## Practice Exercise
+
+Build a **Shopping Cart** process with:
+
+1. **State:** Cart with items, total, and customer ID
+2. **Messages:** AddItem, RemoveItem, Checkout, GetCart
+3. **Handler:** Validate items, calculate totals
+4. **Features:**
+   - Prevent adding items with negative quantity
+   - Calculate total price
+   - Clear cart on checkout
+   - Return cart summary
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium">Show Hint</summary>
+  ```java
+  record CartState(String customerId, Map<String, Integer> items, double total) {}
+
+  sealed interface CartMsg permits AddItem, RemoveItem, Checkout, GetCart {}
+  record AddItem(String itemId, int quantity, double price) implements CartMsg {}
+  record Checkout() implements CartMsg {}
+  record GetCart() implements CartMsg {}
+
+  // Handler validates and calculates totals
+  ```
+</details>
+
+## Common Issues
+
+<Alert variant="destructive">
+  <AlertTitle>⚠️ Troubleshooting</AlertTitle>
+  <AlertDescription>
+    <div className="space-y-3">
+      <div>
+        <strong>Issue: "Pattern matching not exhaustive"</strong><br/>
+        <span className="text-sm">Solution: Add a <code>default</code> case or ensure all sealed types are covered.</span>
+      </div>
+      <div>
+        <strong>Issue: Process doesn't respond to ask()</strong><br/>
+        <span className="text-sm">Solution: Ensure your handler returns a <code>StateResult</code> with a non-null response.</span>
+      </div>
+      <div>
+        <strong>Issue: State changes not visible</strong><br/>
+        <span className="text-sm">Solution: Remember to return the NEW state from your handler, not modify the old one.</span>
+      </div>
+    </div>
+  </AlertDescription>
+</Alert>
+
+## Next Steps
+
+You're now a process pro! Next, we'll explore **virtual threads** - the magic that makes JOTP processes so lightweight.
+
+**Next:** [Understanding Virtual Threads →](/docs/user-guide/tutorials/beginner/03-understanding-virtual-threads)
+
+---
+
+## Additional Resources
+
+- [Proc API Documentation](/docs/reference/api/proc)
+- [Message Passing Patterns](/docs/user-guide/how-to/send-receive-messages)
+- [State Machine Guide](/docs/user-guide/how-to/state-machine-workflow)

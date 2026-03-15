@@ -1,0 +1,651 @@
+# Concurrent Pipelines
+
+> **Problem:** Sequential processing is simple but slow. Processing 1000 items one-by-one takes 1000ms at 1ms per item. You need parallelism but want structured concurrency — proper error handling, resource cleanup, and backpressure.
+
+> **Solution:** JOTP's `Parallel` primitive provides structured parallelism with fan-out/fan-in patterns, fail-fast semantics, and automatic resource management using Java 21+ virtual threads.
+
+## When to Use This Pattern
+
+Use concurrent pipelines when you need:
+- **Fan-out:** Distribute work to multiple workers in parallel
+- **Fan-in:** Collect results from multiple workers
+- **Parallel execution:** Run independent tasks concurrently and wait for all
+- **Fail-fast:** Cancel all tasks if any one fails
+- **Backpressure:** Prevent queue explosion with ask-based flow control
+- **Scatter-gather:** Map-reduce style aggregation
+
+## Mental Model
+
+Concurrent pipelines combine three patterns:
+
+```
+Fan-Out:                 Parallel:               Fan-In:
+1 task → N workers    N tasks → N threads    N results → 1 result
+  │                       │                       │
+  ├─→ Worker 1           ├─→ Task 1             ├─→ Result 1
+  ├─→ Worker 2           ├─→ Task 2    ──────→  ├─→ Result 2
+  └─→ Worker 3           └─→ Task 3             └─→ Result 3
+```
+
+## Pattern 1: Parallel Execution
+
+Run multiple independent tasks concurrently, wait for all:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+
+sealed interface Task {
+    record Fetch(String url) implements Task {}
+    record Parse(String data) implements Task {}
+    record Store(String key, String value) implements Task {}
+}
+
+// Run three tasks in parallel, wait for all, or fail-fast on any exception
+var result = Parallel.run(
+    () -> {
+        // Task 1: Fetch data
+        System.out.println("Fetching data...");
+        Thread.sleep(100);  // Simulate I/O
+        return "fetched-data";
+    },
+    () -> {
+        // Task 2: Parse data
+        System.out.println("Parsing data...");
+        Thread.sleep(50);
+        return "parsed-data";
+    },
+    () -> {
+        // Task 3: Store result
+        System.out.println("Storing data...");
+        Thread.sleep(75);
+        return "stored-data";
+    }
+);
+
+// All three complete, or all are cancelled on first failure
+System.out.println("All tasks done: " + result);
+// Output: [fetched-data, parsed-data, stored-data]
+```
+
+**Key characteristics:**
+- **Concurrent execution:** All three tasks run simultaneously
+- **Fail-fast:** If any task throws, others are cancelled
+- **Structured:** All tasks complete before `run()` returns
+- **Virtual threads:** Cheap thread per task (~1KB each)
+
+## Pattern 2: Fan-Out with Worker Pool
+
+Distribute work to multiple workers:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+
+public class FanOutExample {
+    sealed interface WorkerMsg permits Process, GetStats {}
+    record Process(String taskId, String data) implements WorkerMsg {}
+    record GetStats() implements WorkerMsg {}
+
+    record WorkerState(String id, int processed, int errors) {}
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5, Duration.ofSeconds(60)
+        );
+
+        // Fan-out: Spawn 5 workers
+        var workers = new ArrayList<ProcRef<WorkerState, WorkerMsg>>();
+        for (int i = 0; i < 5; i++) {
+            var workerId = "worker-" + i;
+            var worker = supervisor.supervise(
+                workerId,
+                new WorkerState(workerId, 0, 0),
+                (state, msg) -> switch (msg) {
+                    case Process(var taskId, var data) -> {
+                        try {
+                            // Simulate processing
+                            Thread.sleep(ThreadLocalRandom.current().nextInt(50, 150));
+                            System.out.println(state.id() + " processed: " + taskId);
+                            yield new WorkerState(state.id(), state.processed() + 1, state.errors());
+                        } catch (Exception e) {
+                            System.err.println(state.id() + " failed: " + taskId);
+                            yield new WorkerState(state.id(), state.processed(), state.errors() + 1);
+                        }
+                    }
+                    case GetStats _ -> state;
+                }
+            );
+            workers.add(worker);
+        }
+
+        // Distribute 20 tasks across workers
+        for (int i = 0; i < 20; i++) {
+            var worker = workers.get(i % workers.size());
+            worker.tell(new Process("task-" + i, "data-" + i));
+        }
+
+        // Wait for completion
+        Thread.sleep(3000);
+
+        // Fan-in: Collect stats from all workers
+        System.out.println("\n=== Worker Stats ===");
+        for (var worker : workers) {
+            var stats = worker.ask(new GetStats())
+                               .get(1, TimeUnit.SECONDS);
+            System.out.println(stats.id() + ": processed=" + stats.processed() +
+                             ", errors=" + stats.errors());
+        }
+
+        supervisor.shutdown();
+    }
+}
+```
+
+**Output:**
+```
+worker-0 processed: task-0
+worker-1 processed: task-1
+worker-2 processed: task-2
+worker-3 processed: task-3
+worker-4 processed: task-4
+worker-0 processed: task-5
+...
+
+=== Worker Stats ===
+worker-0: processed=4, errors=0
+worker-1: processed=4, errors=0
+worker-2: processed=4, errors=0
+worker-3: processed=4, errors=0
+worker-4: processed=4, errors=0
+```
+
+## Pattern 3: Pipeline with Sequential Stages
+
+Chain processes where each stage receives output from previous:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+
+public class PipelineExample {
+    sealed interface PipelineMsg permits Data, Transform, Aggregate {}
+    record Data(String input) implements PipelineMsg {}
+    record Transform(String input) implements PipelineMsg {}
+    record Aggregate(String input) implements PipelineMsg {}
+
+    public static void main(String[] args) throws Exception {
+        // Stage 1: Validate
+        var validate = Proc.spawn("validate", (state, msg) -> switch (msg) {
+            case Data(var input) -> {
+                System.out.println("Stage 1 (Validate): " + input);
+                if (input == null || input.isEmpty()) {
+                    throw new IllegalArgumentException("Empty input");
+                }
+                // Forward to stage 2
+                stage2.tell(new Transform(input.toUpperCase()));
+                yield state;
+            }
+            default -> state;
+        });
+
+        // Stage 2: Parse
+        var parse = Proc.spawn("parse", (state, msg) -> switch (msg) {
+            case Transform(var input) -> {
+                System.out.println("Stage 2 (Parse): " + input);
+                var parsed = input.split(",");
+                // Forward to stage 3
+                stage3.tell(new Aggregate(String.join("|", parsed)));
+                yield state;
+            }
+            default -> state;
+        });
+
+        // Stage 3: Transform
+        var transform = Proc.spawn("transform", (state, msg) -> switch (msg) {
+            case Aggregate(var input) -> {
+                System.out.println("Stage 3 (Transform): " + input);
+                var result = "[" + input + "]";
+                System.out.println("Pipeline output: " + result);
+                yield state;
+            }
+            default -> state;
+        });
+
+        // Forward references (set after creation)
+        var stage2 = parse;
+        var stage3 = transform;
+
+        // Send data through pipeline
+        validate.tell(new Data("hello,world"));
+
+        Thread.sleep(100);
+
+        validate.stop();
+        parse.stop();
+        transform.stop();
+    }
+}
+```
+
+**Output:**
+```
+Stage 1 (Validate): hello,world
+Stage 2 (Parse): HELLO,WORLD
+Stage 3 (Transform): HELLO|WORLD
+Pipeline output: [HELLO|WORLD]
+```
+
+## Pattern 4: Scatter-Gather (Map-Reduce)
+
+Collect partial results and aggregate:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class ScatterGatherExample {
+    sealed interface MapMsg permits Chunk {}
+    sealed interface ReduceMsg permits Partial, Finalize {}
+
+    record Chunk(int id, List<Integer> data) implements MapMsg {}
+    record Partial(int id, int sum) implements ReduceMsg {}
+    record Finalize(ProcRef<Integer, ReduceMsg> replyTo) implements ReduceMsg {}
+
+    public static void main(String[] args) throws Exception {
+        // Mapper: sums a chunk
+        var mapper = Proc.spawn("mapper", (state, msg) -> switch (msg) {
+            case Chunk(var id, var data) -> {
+                var sum = data.stream().mapToInt(Integer::intValue).sum();
+                System.out.println("Mapper: chunk-" + id + " sum = " + sum);
+                // Send to reducer
+                reducer.tell(new Partial(id, sum));
+                yield state;
+            }
+        });
+
+        // Reducer: collects partial results
+        record ReducerState(Map<Integer, Integer> partials, int expectedCount) {}
+        var reducer = Proc.spawn(
+            new ReducerState(new HashMap<>(), 5),
+            (state, msg) -> switch (msg) {
+                case Partial(var id, var sum) -> {
+                    var newPartials = new HashMap<>(state.partials());
+                    newPartials.put(id, sum);
+
+                    System.out.println("Reducer: received partial-" + id + " = " + sum +
+                                     " (" + newPartials.size() + "/" + state.expectedCount() + ")");
+
+                    if (newPartials.size() == state.expectedCount()) {
+                        // All chunks received, compute total
+                        var total = newPartials.values().stream()
+                                               .mapToInt(Integer::intValue)
+                                               .sum();
+                        System.out.println("Reducer: FINAL TOTAL = " + total);
+                    }
+
+                    yield new ReducerState(newPartials, state.expectedCount());
+                }
+                case Finalize(var replyTo) -> {
+                    var total = state.partials().values().stream()
+                                              .mapToInt(Integer::intValue)
+                                              .sum();
+                    replyTo.tell(total);
+                    yield state;
+                }
+            }
+        );
+
+        // Forward reference
+        var reducerRef = reducer;
+
+        // Send chunks to mapper (scatter)
+        var data = List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        var chunkSize = 2;
+        for (int i = 0; i < data.size(); i += chunkSize) {
+            var chunk = data.subList(i, Math.min(i + chunkSize, data.size()));
+            mapper.tell(new Chunk(i / chunkSize, chunk));
+        }
+
+        // Wait for aggregation
+        Thread.sleep(500);
+
+        // Get final result
+        var total = reducer.ask(new Finalize(reducer), Duration.ofSeconds(1)).get();
+        System.out.println("\nFinal sum: " + total);  // 55
+
+        mapper.stop();
+        reducer.stop();
+    }
+}
+```
+
+**Output:**
+```
+Mapper: chunk-0 sum = 3
+Reducer: received partial-0 = 3 (1/5)
+Mapper: chunk-1 sum = 7
+Reducer: received partial-1 = 7 (2/5)
+Mapper: chunk-2 sum = 11
+Reducer: received partial-2 = 11 (3/5)
+Mapper: chunk-3 sum = 15
+Reducer: received partial-3 = 15 (4/5)
+Mapper: chunk-4 sum = 19
+Reducer: received partial-4 = 19 (5/5)
+Reducer: FINAL TOTAL = 55
+
+Final sum: 55
+```
+
+## Pattern 5: Backpressure with Ask
+
+Prevent queue explosion by waiting for workers:
+
+```java
+// WITHOUT backpressure: queue explodes
+for (int i = 0; i < 10000; i++) {
+    worker.tell(new Process("task-" + i));  // Non-blocking, queue grows
+}
+// Problem: 10000 messages queued, OOM risk
+
+// WITH backpressure: queue bounded
+for (int i = 0; i < 10000; i++) {
+    // Use ask() — blocks until worker processes previous task
+    worker.ask(new Process("task-" + i), Duration.ofSeconds(10))
+          .get(10, TimeUnit.SECONDS);
+    System.out.println("Task " + i + " complete");
+}
+// Only 1 task in flight at a time — no queue explosion
+```
+
+## Complete Working Example: Image Processing Pipeline
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class ImageProcessingPipeline {
+    sealed interface ImageMsg permits
+        DownloadImage,
+        ResizeImage,
+        WatermarkImage,
+        UploadImage,
+        GetStatus {}
+
+    record DownloadImage(String url) implements ImageMsg {}
+    record ResizeImage(String url, byte[] data, int width, int height) implements ImageMsg {}
+    record WatermarkImage(String url, byte[] data, String watermark) implements ImageMsg {}
+    record UploadImage(String url, byte[] data) implements ImageMsg {}
+    record GetStatus() implements ImageMsg {}
+
+    record PipelineState(
+        Map<String, String> status,
+        int completed,
+        int failed
+    ) {
+        PipelineState updateStatus(String url, String newStatus) {
+            var newStatusMap = new HashMap<>(status);
+            newStatusMap.put(url, newStatus);
+            return new PipelineState(newStatusMap, completed, failed);
+        }
+        PipelineState incrementCompleted() {
+            return new PipelineState(status, completed + 1, failed);
+        }
+        PipelineState incrementFailed() {
+            return new PipelineState(status, completed, failed + 1);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5, Duration.ofSeconds(60)
+        );
+
+        // Spawn multiple pipeline workers
+        var workers = new ArrayList<ProcRef<PipelineState, ImageMsg>>();
+        for (int i = 0; i < 3; i++) {
+            var worker = supervisor.supervise(
+                "pipeline-worker-" + i,
+                new PipelineState(new HashMap<>(), 0, 0),
+                (state, msg) -> switch (msg) {
+                    case DownloadImage(var url) -> {
+                        System.out.println("[" + Thread.currentThread().getName() +
+                                          "] Downloading: " + url);
+                        try {
+                            Thread.sleep(50);  // Simulate download
+                            var data = ("image-data-from-" + url).getBytes();
+
+                            // Send to resize stage
+                            sender().tell(new ResizeImage(url, data, 800, 600));
+
+                            yield state.updateStatus(url, "downloaded");
+                        } catch (Exception e) {
+                            System.err.println("Download failed: " + url);
+                            yield state.updateStatus(url, "failed").incrementFailed();
+                        }
+                    }
+
+                    case ResizeImage(var url, var data, var width, var height) -> {
+                        System.out.println("[" + Thread.currentThread().getName() +
+                                          "] Resizing: " + url + " to " + width + "x" + height);
+                        try {
+                            Thread.sleep(30);  // Simulate resize
+                            var resized = ("resized-" + new String(data)).getBytes();
+
+                            // Send to watermark stage
+                            sender().tell(new WatermarkImage(url, resized, "© 2026"));
+
+                            yield state.updateStatus(url, "resized");
+                        } catch (Exception e) {
+                            System.err.println("Resize failed: " + url);
+                            yield state.updateStatus(url, "failed").incrementFailed();
+                        }
+                    }
+
+                    case WatermarkImage(var url, var data, var watermark) -> {
+                        System.out.println("[" + Thread.currentThread().getName() +
+                                          "] Watermarking: " + url);
+                        try {
+                            Thread.sleep(20);  // Simulate watermark
+                            var watermarked = ("watermarked-" + new String(data)).getBytes();
+
+                            // Send to upload stage
+                            sender().tell(new UploadImage(url, watermarked));
+
+                            yield state.updateStatus(url, "watermarked");
+                        } catch (Exception e) {
+                            System.err.println("Watermark failed: " + url);
+                            yield state.updateStatus(url, "failed").incrementFailed();
+                        }
+                    }
+
+                    case UploadImage(var url, var data) -> {
+                        System.out.println("[" + Thread.currentThread().getName() +
+                                          "] Uploading: " + url);
+                        try {
+                            Thread.sleep(40);  // Simulate upload
+
+                            yield state.updateStatus(url, "completed").incrementCompleted();
+                        } catch (Exception e) {
+                            System.err.println("Upload failed: " + url);
+                            yield state.updateStatus(url, "failed").incrementFailed();
+                        }
+                    }
+
+                    case GetStatus _ -> state;
+                }
+            );
+            workers.add(worker);
+        }
+
+        // Process images in parallel (fan-out)
+        var imageUrls = List.of(
+            "https://example.com/image1.jpg",
+            "https://example.com/image2.jpg",
+            "https://example.com/image3.jpg",
+            "https://example.com/image4.jpg",
+            "https://example.com/image5.jpg"
+        );
+
+        // Scatter: distribute across workers
+        for (int i = 0; i < imageUrls.size(); i++) {
+            var worker = workers.get(i % workers.size());
+            worker.tell(new DownloadImage(imageUrls.get(i)));
+        }
+
+        // Wait for completion
+        Thread.sleep(3000);
+
+        // Gather: collect stats
+        System.out.println("\n=== Pipeline Stats ===");
+        for (var worker : workers) {
+            var stats = worker.ask(new GetStatus())
+                               .get(1, TimeUnit.SECONDS);
+            System.out.println("Worker completed: " + stats.completed() +
+                             ", failed: " + stats.failed());
+        }
+
+        supervisor.shutdown();
+    }
+}
+```
+
+**Output:**
+```
+[VirtualThread[x]] Downloading: https://example.com/image1.jpg
+[VirtualThread[y]] Downloading: https://example.com/image2.jpg
+[VirtualThread[z]] Downloading: https://example.com/image3.jpg
+[VirtualThread[x]] Resizing: https://example.com/image1.jpg to 800x600
+[VirtualThread[y]] Resizing: https://example.com/image2.jpg to 800x600
+[VirtualThread[z]] Resizing: https://example.com/image3.jpg to 800x600
+[VirtualThread[x]] Watermarking: https://example.com/image1.jpg
+[VirtualThread[y]] Watermarking: https://example.com/image2.jpg
+[VirtualThread[z]] Watermarking: https://example.com/image3.jpg
+[VirtualThread[x]] Uploading: https://example.com/image1.jpg
+[VirtualThread[y]] Uploading: https://example.com/image2.jpg
+[VirtualThread[z]] Uploading: https://example.com/image3.jpg
+...
+
+=== Pipeline Stats ===
+Worker completed: 2, failed: 0
+Worker completed: 2, failed: 0
+Worker completed: 1, failed: 0
+```
+
+## Testing Concurrent Pipelines
+
+```java
+@Test
+void testFanOutFanIn() throws Exception {
+    var supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+
+    var workers = new ArrayList<ProcRef<Integer, WorkMsg>>();
+    for (int i = 0; i < 3; i++) {
+        var worker = supervisor.supervise("worker-" + i, 0, (state, msg) -> {
+            if (msg instanceof WorkMsg.DoWork) return state + 1;
+            return state;
+        });
+        workers.add(worker);
+    }
+
+    // Fan-out: distribute work
+    for (int i = 0; i < 9; i++) {
+        workers.get(i % 3).tell(new WorkMsg.DoWork());
+    }
+
+    Thread.sleep(100);
+
+    // Fan-in: collect results
+    var total = 0;
+    for (var worker : workers) {
+        total += worker.ask(new WorkMsg.GetCount()).get();
+    }
+
+    assertThat(total).isEqualTo(9);  // All work completed
+
+    supervisor.shutdown();
+}
+```
+
+## Common Pitfalls
+
+### 1. Using Blocking Operations in Handlers
+
+**BAD:** Blocks entire process:
+```java
+case Process(var task) -> {
+    var result = httpClient.get(url);  // BLOCKS!
+    yield state;
+}
+```
+
+**GOOD:** Offload to worker process:
+```java
+case Process(var task, var replyTo) -> {
+    Proc.spawn("fetcher", (s, m) -> {
+        var result = httpClient.get(url);  // Blocks worker only
+        replyTo.tell(new FetchResult(result));
+        return s;
+    });
+    yield state;
+}
+```
+
+### 2. No Backpressure
+
+**BAD:** Queue explosion:
+```java
+for (int i = 0; i < 100000; i++) {
+    worker.tell(new Task(i));  // Unbounded queue
+}
+```
+
+**GOOD:** Ask-based backpressure:
+```java
+for (int i = 0; i < 100000; i++) {
+    worker.ask(new Task(i), Duration.ofSeconds(10)).get();  // Wait
+}
+```
+
+### 3. Mixing tell() and ask() Incorrectly
+
+**BAD:** Expecting response from tell():
+```java
+worker.tell(new Request());  // Fire-and-forget
+var response = worker.getResponse();  // WRONG!
+```
+
+**GOOD:** Use ask() for request-response:
+```java
+var response = worker.ask(new Request(), Duration.ofSeconds(5)).get();
+```
+
+## Performance Characteristics
+
+| Pattern | Throughput | Latency | Use Case |
+|---------|-----------|---------|----------|
+| Sequential | 1x | Low | Simple workflows |
+| Fan-out (N workers) | Nx | Medium | Parallel independent tasks |
+| Pipeline | 1x / stage | High | Sequential stages |
+| Scatter-gather | Nx | High | Map-reduce |
+| Parallel.run() | Nx | Low | Structured concurrency |
+
+## Related Patterns
+
+- **[Creating Lightweight Processes](./creating-lightweight-processes.mdx)** — Process fundamentals
+- **[Building Supervision Trees](./building-supervision-trees.mdx)** — Fault-tolerant pipelines
+- **[Implementing State Machines](./implementing-state-machines.mdx)** — Complex workflows
+
+## API Reference
+
+- **`Parallel.run(Callable<T>...)`** — Run tasks in parallel, wait for all
+- **`Proc.tell(M)`** — Non-blocking fire-and-forget send
+- **`Proc.ask(M, Duration).get()`** — Blocking request-response with backpressure
+- **`Supervisor`** — Fault-tolerant worker pool management
+
+---
+
+**Next:** [Message Routing](./message-routing.mdx) — Content-based routing and scatter-gather

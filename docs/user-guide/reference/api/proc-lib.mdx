@@ -1,0 +1,627 @@
+---
+title: ProcLib API Reference
+description: Startup handshake (init_ack pattern) - OTP's proc_lib for synchronous process startup
+sidebar_position: 9
+---
+
+# ProcLib API Reference
+
+**OTP `proc_lib`** — Synchronous process startup with initialization handshake to prevent race conditions in supervision trees.
+
+## Overview
+
+`ProcLib` implements the critical `init_ack` pattern from OTP: a parent blocks until the child explicitly signals readiness. This prevents the supervisor from returning before the child has initialized, eliminating race conditions where the child might crash during startup.
+
+### Key Concepts
+
+- **Startup Handshake**: Parent blocks until child calls `initAck()`
+- **Type-Safe Results**: Returns sealed `StartResult` (Ok or Err)
+- **Configurable Timeout**: Prevents indefinite blocking
+- **Java 26 ScopedValue**: Clean integration with structured concurrency
+
+### The Race Condition Problem
+
+Without `ProcLib`:
+
+```java
+// RISK: Race condition!
+var child = new Proc<>(initialState, handler);
+// Child hasn't initialized yet, but parent returns
+// Child might crash during init, but supervisor won't know
+```
+
+With `ProcLib`:
+
+```java
+// SAFE: Handshake ensures init completed
+var result = ProcLib.startLink(initialState, initHandler, loopHandler);
+switch (result) {
+    case Ok(var proc) -> { /* Child is ready */ }
+    case Err(var reason) -> { /* Child crashed during init */ }
+}
+```
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `proc_lib:start_link/3` | `ProcLib.startLink(initial, initHandler, loopHandler)` |
+| `proc_lib:init_ack({ok, self()})` | `ProcLib.initAck()` |
+| `{ok, Pid}` | `StartResult.Ok(proc)` |
+| `{error, Reason}` | `StartResult.Err(reason)` |
+| `gen_server:init/1` | `initHandler` function |
+
+## Public API
+
+### Static Methods
+
+#### `startLink(S initial, Function<S, S> initHandler, BiFunction<S, M, S> loopHandler)`
+
+Spawn a process and block until it signals readiness with default 5-second timeout.
+
+```java
+var result = ProcLib.startLink(
+    initialState,
+    state -> {
+        // Initialization logic
+        database.connect();
+        cache.warmup();
+        ProcLib.initAck(); // Signal readiness
+        return state;
+    },
+    (state, msg) -> switch (msg) {
+        // Normal message loop
+        case WorkItem w -> handleWork(state, w);
+    }
+);
+
+switch (result) {
+    case ProcLib.StartResult.Ok(var proc) -> {
+        System.out.println("Process ready: " + proc);
+        proc.tell(new WorkItem(data));
+    }
+    case ProcLib.StartResult.Err(var reason) -> {
+        logger.error("Failed to start process", reason);
+    }
+}
+```
+
+**Parameters:**
+- `initial` — Initial state
+- `initHandler` — Runs once before message loop; must call `initAck()`
+- `loopHandler` — Main message loop `(state, msg) -> nextState`
+
+**Returns:** `StartResult<S,M>` with either `Ok(proc)` or `Err(reason)`
+
+---
+
+#### `startLink(S initial, Function<S, S> initHandler, BiFunction<S, M, S> loopHandler, Duration initTimeout)`
+
+Same as above, but with explicit timeout.
+
+```java
+var result = ProcLib.startLink(
+    initialState,
+    state -> {
+        // Long-running initialization
+        Thread.sleep(3000); // Simulated work
+        ProcLib.initAck();
+        return state;
+    },
+    loopHandler,
+    Duration.ofSeconds(10) // 10-second timeout
+);
+```
+
+**Parameters:**
+- `initTimeout` — How long to wait for `initAck()` before returning `Err`
+
+---
+
+#### `initAck()`
+
+Signal successful initialization from within the init handler. Unblocks the parent waiting in `startLink()`.
+
+```java
+var result = ProcLib.startLink(
+    initialState,
+    state -> {
+        // Perform initialization
+        registerWithServiceDiscovery();
+        warmupCache();
+        ProcLib.initAck(); // MUST be called!
+        return state;
+    },
+    loopHandler
+);
+```
+
+**Behavior:**
+- Must be called from within `initHandler`
+- Unblocks the parent waiting in `startLink()`
+- Safe no-op if called outside of `startLink` context
+- Uses Java 26 `ScopedValue` for clean scope management
+
+---
+
+### Result Types
+
+#### `StartResult<S, M>`
+
+Sealed interface for startup results.
+
+**Implementations:**
+
+- **`Ok(proc)`** — Successful startup, process is alive and ready
+- **`Err(reason)`** — Failed startup (crash or timeout)
+
+```java
+switch (result) {
+    case ProcLib.StartResult.Ok(var proc) -> {
+        // Process is ready to use
+        proc.tell(new WorkItem(data));
+    }
+    case ProcLib.StartResult.Err(var reason) -> {
+        // Handle failure
+        logger.error("Startup failed", reason);
+    }
+}
+```
+
+## Implementation Details
+
+### Handshake Protocol
+
+`ProcLib` uses a synthetic "init sentinel" message to trigger initialization:
+
+```java
+// Wrapper handler intercepts first message
+BiFunction<S, M, S> wrappedHandler = new BiFunction<>() {
+    boolean initDone = false;
+
+    public S apply(S state, M msg) {
+        if (!initDone) {
+            initDone = true;
+            // Run init handler with ScopedValue binding
+            return ScopedValue.where(INIT_LATCH, ready).call(() ->
+                initHandler.apply(state)
+            );
+        }
+        return loopHandler.apply(state, msg);
+    }
+};
+
+// Deliver sentinel to trigger init
+child.tell(initSentinel());
+```
+
+**Benefits:**
+- No changes to `Proc` constructor
+- Init handler runs in process virtual thread
+- Clean separation between init and loop
+
+### Java 26 ScopedValue Integration
+
+Uses `ScopedValue` instead of ThreadLocal for cleaner concurrency:
+
+```java
+private static final ScopedValue<CountDownLatch> INIT_LATCH = ScopedValue.newInstance();
+
+public static void initAck() {
+    try {
+        CountDownLatch latch = INIT_LATCH.get();
+        if (latch != null) {
+            latch.countDown();
+        }
+    } catch (NoSuchElementException e) {
+        // initAck() called outside of startLink scope — safe no-op
+    }
+}
+```
+
+**Benefits:**
+- Automatic cleanup (no thread-local pollution)
+- Structured concurrency friendly
+- Clearer scope boundaries
+
+### Timeout Handling
+
+```java
+boolean completed = ready.await(initTimeout.toMillis(), TimeUnit.MILLISECONDS);
+if (!completed) {
+    child.stop(); // Kill the child
+    return new StartResult.Err<>(
+        new RuntimeException("init timed out after " + initTimeout)
+    );
+}
+```
+
+**Behavior:**
+- If `initAck()` not called within timeout, process is stopped
+- Returns `Err` with timeout exception
+- Parent can handle the failure appropriately
+
+## Common Usage Patterns
+
+### Resource Initialization
+
+```java
+var result = ProcLib.startLink(
+    new DatabaseState(null),
+    state -> {
+        // Initialize database connection
+        var conn = DriverManager.getConnection(url, user, pass);
+        ProcLib.initAck();
+        return new DatabaseState(conn);
+    },
+    (state, msg) -> switch (msg) {
+        case Query(var q, var r) -> executeQuery(state.conn(), q, r);
+    }
+);
+```
+
+### Service Registration
+
+```java
+var result = ProcLib.startLink(
+    new ServiceState(),
+    state -> {
+        // Register with service discovery
+        serviceDiscovery.register("my-service", host, port);
+        ProcRegistry.register("my-service", self);
+        ProcLib.initAck();
+        return state;
+    },
+    handler
+);
+```
+
+### Cache Warmup
+
+```java
+var result = ProcLib.startLink(
+    new CacheState(),
+    state -> {
+        // Load frequently accessed data
+        var data = loadHotData();
+        ProcLib.initAck();
+        return new CacheState(data);
+    },
+    handler
+);
+```
+
+### Validation Failures
+
+```java
+var result = ProcLib.startLink(
+    new ConfigState(),
+    state -> {
+        // Validate configuration
+        if (!config.isValid()) {
+            throw new IllegalArgumentException("Invalid configuration");
+        }
+        ProcLib.initAck();
+        return state;
+    },
+    handler
+);
+
+if (result instanceof ProcLib.StartResult.Err(var reason)) {
+    logger.error("Configuration validation failed", reason);
+}
+```
+
+## Best Practices
+
+### 1. Always Call initAck()
+
+```java
+// Good: Explicit initAck()
+ProcLib.startLink(state,
+    state -> {
+        initialize();
+        ProcLib.initAck(); // MUST call this
+        return state;
+    },
+    handler
+);
+
+// Bad: Forgetting initAck() leads to timeout
+ProcLib.startLink(state,
+    state -> {
+        initialize();
+        // Oops, forgot initAck()!
+        return state;
+    },
+    handler
+); // Times out after 5 seconds!
+```
+
+### 2. Handle Both Ok and Err
+
+```java
+// Good: Explicit pattern matching
+switch (result) {
+    case ProcLib.StartResult.Ok(var proc) -> startUsing(proc);
+    case ProcLib.StartResult.Err(var reason) -> handleFailure(reason);
+}
+
+// Bad: Assuming success
+var proc = ((ProcLib.StartResult.Ok<MyState, MyMsg>) result).proc();
+// ClassCastException if result is Err!
+```
+
+### 3. Use Appropriate Timeouts
+
+```java
+// Good: Timeout matches expected init time
+ProcLib.startLink(state, initHandler, loopHandler,
+    Duration.ofSeconds(30)); // 30 seconds for cache warmup
+
+// Bad: Timeout too short
+ProcLib.startLink(state, initHandler, loopHandler,
+    Duration.ofMillis(100)); // 100ms for database init? Too short!
+```
+
+### 4. Register Services in Init Handler
+
+```java
+// Good: Register before initAck()
+ProcLib.startLink(state,
+    state -> {
+        ProcRegistry.register("my-service", self);
+        serviceDiscovery.register("my-service", host, port);
+        ProcLib.initAck(); // Now service is discoverable
+        return state;
+    },
+    handler
+);
+
+// Bad: Register outside of startLink
+var proc = new Proc<>(state, handler);
+ProcRegistry.register("my-service", proc);
+// Race: Other threads might find proc before it's ready!
+```
+
+### 5. Use initAck() After All Setup
+
+```java
+// Good: All initialization before initAck()
+ProcLib.startLink(state,
+    state -> {
+        var conn = connectToDatabase();
+        var cache = warmupCache();
+        validateConfiguration();
+        ProcRegistry.register("service", self);
+        ProcLib.initAck(); // Everything is ready
+        return new ServiceState(conn, cache);
+    },
+    handler
+);
+
+// Bad: initAck() too early
+ProcLib.startLink(state,
+    state -> {
+        ProcLib.initAck(); // Too early!
+        var conn = connectToDatabase(); // Might fail after initAck
+        return state;
+    },
+    handler
+);
+```
+
+## Gotchas
+
+### 1. initAck() Outside of startLink()
+
+```java
+// Risk: Calling initAck() outside of init handler
+public void someMethod() {
+    ProcLib.initAck(); // Safe no-op, but does nothing!
+}
+```
+
+**Behavior:** Safe no-op (throws `NoSuchElementException` caught internally)
+
+### 2. Exceptions Before initAck()
+
+```java
+// Exception during init
+ProcLib.startLink(state,
+    state -> {
+        connectToDatabase(); // Throws SQLException
+        ProcLib.initAck(); // Never reached!
+        return state;
+    },
+    handler
+);
+
+// Result: Err(SQLException)
+```
+
+**Behavior:** Process crashes, returns `Err` with exception
+
+### 3. Timeout Does Not Kill Process Immediately
+
+```java
+// Timeout behavior
+ProcLib.startLink(state,
+    state -> {
+        Thread.sleep(10000); // Long init
+        ProcLib.initAck(); // Never called in time
+        return state;
+    },
+    handler,
+    Duration.ofSeconds(5)
+);
+
+// Process is stopped after timeout, but not instantly
+```
+
+**Note:** Process is stopped asynchronously, might take a few milliseconds
+
+### 4. Self Reference in Init Handler
+
+```java
+// How to get "self" reference?
+ProcLib.startLink(state,
+    state -> {
+        // Proc<?> self = ??? // Can't access proc from here!
+        ProcLib.initAck();
+        return state;
+    },
+    handler
+);
+```
+
+**Solution:** Use `ProcRegistry` or pass `Proc` reference differently:
+
+```java
+ProcLib.startLink(state,
+    state -> {
+        // Register by name instead of by reference
+        ProcRegistry.register("my-service", ???); // Still can't get self!
+        ProcLib.initAck();
+        return state;
+    },
+    handler
+);
+```
+
+**Current limitation:** No way to get `self` reference in init handler. Consider using `Proc.spawn()` and manual registration if you need this.
+
+### 5. Mutable State in Init Handler
+
+```java
+// Risk: Modifying state before initAck()
+var sharedState = new ArrayList<>();
+
+ProcLib.startLink(sharedState,
+    state -> {
+        state.add("item1"); // Modifying shared list
+        ProcLib.initAck();
+        return state; // Same list returned
+    },
+    handler
+);
+```
+
+**Solution:** Use immutable state:
+
+```java
+ProcLib.startLink(List.of(), // Empty immutable list
+    state -> {
+        var newState = new ArrayList<>(state);
+        newState.add("item1");
+        ProcLib.initAck();
+        return List.copyOf(newState); // Immutable copy
+    },
+    handler
+);
+```
+
+## Performance Considerations
+
+### Operation Latency
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `startLink()` (successful) | ~1μs + init time | Virtual thread spawn + init |
+| `startLink()` (timeout) | ~initTimeout | Blocks until timeout |
+| `initAck()` | <100ns | CountDownLatch.countDown() |
+
+### Memory Footprint
+
+- **ScopedValue binding**: ~64 bytes per startup
+- **CountDownLatch**: ~32 bytes
+- **Synthetic init message**: ~16 bytes
+
+### When to Use ProcLib
+
+- **Supervised processes**: Children that need initialization before use
+- **Service registration**: Ensure services are ready before discovery
+- **Resource initialization**: Database connections, cache warmup, etc.
+- **Complex startup**: Multi-step initialization that might fail
+
+### When NOT to Use ProcLib
+
+- **Simple processes**: Trivial initialization (just use `Proc.spawn()`)
+- **Fire-and-forget**: Don't care if init succeeds
+- **No dependencies**: Process doesn't need to be ready immediately
+- **Performance critical**: Microsecond-scale startup overhead matters
+
+## Production Usage
+
+### Integration with Supervision Trees
+
+```java
+// In a supervisor
+var childResult = ProcLib.startLink(
+    childState,
+    state -> {
+        // Child-specific initialization
+        initializeChildResources();
+        ProcLib.initAck();
+        return state;
+    },
+    childHandler
+);
+
+switch (childResult) {
+    case ProcLib.StartResult.Ok(var child) -> {
+        // Add child to supervision tree
+        supervisor.watch(child);
+    }
+    case ProcLib.StartResult.Err(var reason) -> {
+        // Handle failed child startup
+        logger.error("Child failed to start", reason);
+        supervisor.handleChildStartupFailure(reason);
+    }
+}
+```
+
+### Health Check Integration
+
+```java
+// Process reports health only after initAck()
+var result = ProcLib.startLink(
+    new HealthState(false),
+    state -> {
+        // Initialize
+        initializeResources();
+        ProcLib.initAck();
+        return new HealthState(true); // Healthy after init
+    },
+    handler
+);
+
+// Health check endpoint
+@GetMapping("/health")
+public boolean isHealthy() {
+    return ProcRegistry.whereis("my-service")
+        .map(proc -> {
+            try {
+                var state = ProcSys.getState(proc).get(1, TimeUnit.SECONDS);
+                return state.isHealthy();
+            } catch (Exception e) {
+                return false;
+            }
+        })
+        .orElse(false);
+}
+```
+
+## Related Classes
+
+- **[`Proc<S,M>`](proc.md)** — Lightweight process with virtual-thread mailbox
+- **[`Supervisor`](supervisor.md)** — Hierarchical process supervision
+- **[`ProcRegistry`](proc-registry.md)** — Global process name table
+- **[`ScopedValue`](https://docs.oracle.com/en/java/javase/21/core/structured-concurrency.html)** — Java 21+ scoped values
+
+## See Also
+
+- [JOTP Architecture](../architecture.md)
+- [Supervisor API](supervisor.md)
+- [OTP proc_lib Documentation](https://erlang.org/doc/man/proc_lib.html)
+- [OTP Design Principles: Supervision Trees](https://erlang.org/doc/design_principles/sup_princ.html)

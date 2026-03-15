@@ -1,0 +1,435 @@
+---
+title: "Parallel API Reference"
+description: "Structured fan-out with fail-fast semantics - Java 26 pmap equivalent"
+sidebar_position: 9
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Parallel API Reference
+
+**Parallel fan-out with fail-fast semantics** — Inspired by Erlang's supervisor philosophy.
+
+## Overview
+
+`Parallel` runs multiple tasks concurrently on virtual threads with all-or-nothing semantics. If any task fails, all remaining tasks are cancelled immediately — "crash one, crash all."
+
+### Key Characteristics
+
+- **Structured Concurrency** — Java 26 `StructuredTaskScope`
+- **Fail-Fast** — First failure cancels all remaining tasks
+- **Virtual Threads** — Each task runs on its own virtual thread
+- **Railway Result** — Returns `Result<List<T>, Exception>`
+- **Zero Overhead** — Virtual threads cost ~1 KB each
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `pmap(Fun, List)` | `Parallel.all(tasks)` |
+| spawn_link + monitor | StructuredTaskScope Joiner |
+
+## Public API
+
+### Parallel Execution
+
+#### `all<T>(List<Supplier<T>> tasks)`
+
+Run all tasks concurrently with fail-fast semantics.
+
+```java
+var tasks = List.of(
+    () -> service.fetchUser(1),
+    () -> service.fetchUser(2),
+    () -> service.fetchUser(3)
+);
+
+Result<List<User>, Exception> result = Parallel.all(tasks);
+
+switch (result) {
+    case Result.Success(var users) ->
+        users.forEach(u -> System.out.println("Got: " + u));
+    case Result.Failure(var ex) ->
+        System.err.println("Fetch failed: " + ex);
+}
+```
+
+**Returns:**
+- `Success(List<T>)` — All tasks succeeded (results in fork order)
+- `Failure(Exception)` — First task failure (others cancelled)
+
+---
+
+## Usage Patterns
+
+### Parallel Fetch
+
+```java
+var tasks = List.of(
+    () -> httpClient.get("https://api.example.com/users/1"),
+    () -> httpClient.get("https://api.example.com/users/2"),
+    () -> httpClient.get("https://api.example.com/users/3")
+);
+
+Parallel.all(tasks).match(
+    users -> users.forEach(System.out::println),
+    error -> System.err.println("HTTP failed: " + error)
+);
+```
+
+---
+
+### Fan-Out / Fan-In
+
+```java
+// Fan-out: Process chunks in parallel
+List<String> chunks = readLargeFile();
+
+var tasks = chunks.stream()
+    .map(chunk -> (Supplier<ProcessedChunk>) () ->
+        processChunk(chunk)
+    )
+    .toList();
+
+Result<List<ProcessedChunk>, Exception> result = Parallel.all(tasks);
+
+// Fan-in: Combine results
+result.match(
+    processed -> {
+        var merged = mergeProcessed(processed);
+        writeOutput(merged);
+    },
+    error -> System.err.println("Processing failed: " + error)
+);
+```
+
+---
+
+### Multi-Service Aggregation
+
+```java
+record AggregatedData(User user, Order order, Inventory inventory) {}
+
+var tasks = List.of(
+    (Supplier<User>) userService::getCurrentUser,
+    (Supplier<Order>) orderService::getPendingOrder,
+    (Supplier<Inventory>) inventoryService::getAvailable
+);
+
+Parallel.all(tasks)
+    .map(list -> new AggregatedData(
+        list.get(0),  // User
+        list.get(1),  // Order
+        list.get(2)   // Inventory
+    ))
+    .peek(data -> cache.put("current", data))
+    .match(
+        data -> renderDashboard(data),
+        error -> showError("Failed to load data: " + error)
+    );
+```
+
+---
+
+### Parallel Validation
+
+```java
+sealed interface ValidationError permits InvalidEmail, InvalidAge {}
+record InvalidEmail(String email) implements ValidationError {}
+record InvalidAge(int age) implements ValidationError {}
+
+Result<User, ValidationError> validateUser(String email, int age) {
+    var tasks = List.of(
+        (Supplier<Boolean>) () -> email.matches(".*@.*"),
+        (Supplier<Boolean>) () -> age >= 18 && age <= 120
+    );
+
+    return Parallel.all(tasks)
+        .flatMap(valid -> {
+            if (!valid.get(0)) {
+                return Result.err(new InvalidEmail(email));
+            }
+            if (!valid.get(1)) {
+                return Result.err(new InvalidAge(age));
+            }
+            return Result.ok(new User(email, age));
+        });
+}
+```
+
+---
+
+### Batch Processing
+
+```java
+List<Item> items = readItems();
+
+// Process in batches of 100
+int batchSize = 100;
+List<List<Item>> batches = partition(items, batchSize);
+
+for (List<Item> batch : batches) {
+    var tasks = batch.stream()
+        .map(item -> (Supplier<ProcessedItem>) () ->
+            processItem(item)
+        )
+        .toList();
+
+    Parallel.all(tasks).match(
+        processed -> {
+            database.save(processed);
+            System.out.println("Processed " + processed.size() + " items");
+        },
+        error -> {
+            System.err.println("Batch failed: " + error);
+            throw new RuntimeException(error);
+        }
+    );
+}
+```
+
+---
+
+## Implementation Details
+
+### Structured Concurrency
+
+Uses Java 26's `StructuredTaskScope`:
+
+```java
+try (var scope = StructuredTaskScope.open(
+    StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow())
+) {
+    var subtasks = tasks.stream()
+        .map(t -> scope.fork(t::get))
+        .toList();
+    scope.join();
+    return Result.success(subtasks.stream()
+        .map(Subtask::get)
+        .toList());
+} catch (Exception e) {
+    return Result.failure(e);
+}
+```
+
+**Key Features:**
+- **Try-with-resources** — Ensures proper cleanup
+- **Joiner.awaitAllSuccessfulOrThrow()** — Fail-fast semantics
+- **scope.fork()** — Each task on its own virtual thread
+- **scope.join()** — Wait for all tasks or first failure
+
+---
+
+### Virtual Thread Execution
+
+Each task runs on a separate virtual thread:
+
+```java
+// Internally, StructuredTaskScope does:
+for (Supplier<T> task : tasks) {
+    scope.fork(() -> {
+        try {
+            return task.get();  // User's code
+        } catch (Exception e) {
+            // First failure cancels all other tasks
+            throw e;
+        }
+    });
+}
+```
+
+**Virtual Thread Benefits:**
+- ~1 KB per thread (vs ~1 MB for platform threads)
+- Millions of concurrent tasks possible
+- Blocking doesn't waste platform threads
+
+---
+
+### Cancellation
+
+On first failure, all remaining tasks are cancelled:
+
+```java
+// Task 1 fails
+// -> scope.join() throws immediately
+// -> StructuredTaskScope cancels all pending fork() calls
+// -> InterruptException delivered to remaining tasks
+```
+
+Tasks that handle `InterruptedException` can clean up gracefully.
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| Task fork | ~1μs | Virtual thread spawn |
+| Task join | <1μs | Future completion |
+| Failure cancellation | ~50μs | Interrupt all remaining tasks |
+
+**Scalability:**
+- Tasks: Thousands to millions (limited by heap)
+- Per-task overhead: ~1 KB (virtual thread stack)
+- Best for I/O-bound tasks (network, disk)
+
+**When to Use:**
+- ✅ I/O-bound parallelism (HTTP calls, database queries)
+- ✅ Independent tasks with no shared state
+- ✅ All-or-nothing semantics (fail-fast required)
+- ❌ CPU-intensive work (use `ForkJoinPool` instead)
+- ❌ Shared mutable state (race conditions)
+
+---
+
+## Best Practices
+
+### 1. Use for I/O-Bound Tasks
+
+```java
+// Good: I/O-bound tasks
+var tasks = List.of(
+    () -> httpClient.get(url1),
+    () -> httpClient.get(url2),
+    () -> database.query(sql)
+);
+
+// Bad: CPU-intensive tasks
+var tasks = List.of(
+    () -> fibonacci(1_000_000),
+    () -> primeSieve(10_000_000),
+    () -> matrixMultiply(largeMatrix)
+);
+// Use ForkJoinPool for CPU work instead
+```
+
+---
+
+### 2. Handle Interruption for Cleanup
+
+```java
+var tasks = List.of(
+    () -> {
+        try {
+            return processWithCleanup(resource);
+        } catch (InterruptedException e) {
+            cleanup(resource);
+            throw e;
+        }
+    }
+);
+```
+
+---
+
+### 3. Keep Tasks Pure
+
+```java
+// Good: No shared state
+var tasks = items.stream()
+    .map(item -> (Supplier<Result>) () -> process(item))
+    .toList();
+
+// Bad: Shared mutable state
+List<Result> results = new ArrayList<>();  // Shared!
+var tasks = items.stream()
+    .map(item -> (Supplier<Result>) () -> {
+        var result = process(item);
+        results.add(result);  // Race condition!
+        return result;
+    })
+    .toList();
+```
+
+---
+
+### 4. Use Railway Pattern for Error Handling
+
+```java
+Parallel.all(tasks)
+    .map(results -> transform(results))
+    .flatMap(results -> validate(results))
+    .peek(results -> cache.put(results))
+    .match(
+        success -> handleSuccess(success),
+        failure -> handleFailure(failure)
+    );
+```
+
+---
+
+## Gotchas
+
+### 1. Results Are in Fork Order
+
+```java
+var tasks = List.of(
+    () -> slowTask(),    // Finishes last
+    () -> fastTask(),    // Finishes first
+    () -> mediumTask()   // Finishes second
+);
+
+var result = Parallel.all(tasks);
+// Result list: [slowTask, fastTask, mediumTask]
+// Order is fork order, not completion order
+```
+
+---
+
+### 2. First Failure Cancels All Tasks
+
+```java
+var tasks = List.of(
+    () -> task1(),  // Completes successfully
+    () -> { throw new Exception("Boom!"); },  // Fails
+    () -> task3()   // Never completes (cancelled)
+);
+
+// Result: Failure with exception from task2
+// task3 is cancelled before completion
+```
+
+---
+
+### 3. Exceptions Wrapped in Result
+
+```java
+var result = Parallel.all(tasks);
+
+switch (result) {
+    case Result.Success(var value) -> /* ... */
+    case Result.Failure(var ex) -> {
+        // ex is the first exception thrown
+        System.err.println("Failed: " + ex);
+    }
+}
+```
+
+---
+
+### 4. Virtual Threads Still Have Limits
+
+```java
+// This will work (1000 tasks)
+Parallel.all(IntStream.range(0, 1000)
+    .mapToObj(i -> (Supplier<Integer>) () -> expensiveWork(i))
+    .toList());
+
+// This might cause memory issues (10 million tasks)
+Parallel.all(IntStream.range(0, 10_000_000)
+    .mapToObj(i -> (Supplier<Integer>) () -> expensiveWork(i))
+    .toList());
+// ~10 GB memory for virtual threads!
+
+// Solution: Batch the work
+```
+
+---
+
+## See Also
+
+- [Result API](./result.mdx) — Railway-oriented error handling
+- [Proc API](./proc.mdx) — Lightweight process primitive
+- [CrashRecovery](/docs/reference/crashrecovery) — Isolated retry with recovery
+- [Java 26 Structured Concurrency](https://openjdk.org/jeps/453) — JEP documentation

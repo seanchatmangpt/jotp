@@ -1,0 +1,1147 @@
+---
+title: "Building a Simple Application"
+description: "Complete hands-on tutorial: Build a real-time chat application from scratch"
+difficulty: intermediate
+estimatedTime: "45 minutes"
+tutorialNumber: 6
+totalTutorials: 6
+nextTutorial: null
+prevTutorial: "05-message-passing-patterns"
+---
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import <Badge from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+# Building a Simple Application
+
+<Badge variant="secondary">Tutorial 6 of 6</Badge>
+
+Congratulations on reaching the final tutorial! You've learned the building blocks—now let's put them all together and build a complete, production-ready application: a **Real-Time Chat System** with user management, message broadcasting, and fault tolerance.
+
+## What You'll Build
+
+A fully functional chat application featuring:
+
+- **User Management:** Login, logout, online tracking
+- **Real-Time Messaging:** Send messages to rooms with instant delivery
+- **Room Management:** Create rooms, join/leave, list members
+- **Fault Tolerance:** Supervision trees, automatic restart, crash recovery
+- **Event Broadcasting:** Notify all users of system events
+- **Message Persistence:** Chat history and replay
+
+## Learning Objectives
+
+By completing this tutorial, you'll:
+
+- Design a complete application architecture with JOTP
+- Implement supervision trees for fault tolerance
+- Use all message passing patterns (tell, ask, events)
+- Handle real-world scenarios (timeouts, errors, retries)
+- Build scalable, production-ready systems
+
+## Application Architecture
+
+```
+Chat Application Architecture
+├─ Main Supervisor (ONE_FOR_ALL)
+│  ├─ User Manager (ONE_FOR_ONE)
+│  │  ├─ User Registry (permanent)
+│  │  └─ Online Users Tracker (permanent)
+│  │
+│  ├─ Room Manager (ONE_FOR_ONE)
+│  │  ├─ Room Registry (permanent)
+│  │  └─ Room Processes (transient, one per room)
+│  │
+│  ├─ Message Router (ONE_FOR_ONE)
+│  │  └─ Message Dispatcher (permanent)
+│  │
+│  └─ Event Manager
+│     └─ System Events (user joined, message sent, etc.)
+```
+
+## Step 1: Project Setup
+
+Create the project structure:
+
+```bash
+# Create project directory
+mkdir jotp-chat-app
+cd jotp-chat-app
+
+# Create Maven structure
+mkdir -p src/main/java/com/example/chat
+mkdir -p src/test/java/com/example/chat
+
+# Create package structure
+cd src/main/java/com/example/chat
+mkdir -p model handler service
+```
+
+### Maven Configuration (pom.xml)
+
+```xml
+{<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>jotp-chat-app</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>26</maven.compiler.source>
+        <maven.compiler.target>26</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.seanchatmangpt</groupId>
+            <artifactId>jotp</artifactId>
+            <version>1.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>26</release>
+                    <compilerArgs>
+                        <arg>--enable-preview</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>}
+```
+
+## Step 2: Define Data Models
+
+Create `src/main/java/com/example/chat/model/ChatModels.java`:
+
+```java
+{package com.example.chat.model;
+
+import java.time.Instant;
+import java.util.*;
+
+/**
+ * Chat Application Data Models
+ *
+ * All models are immutable records for thread safety.
+ */
+public class ChatModels {
+
+    /** User information */
+    public record User(
+        String username,
+        Instant joinedAt,
+        boolean isOnline
+    ) {
+        public User(String username) {
+            this(username, Instant.now(), true);
+        }
+
+        public User online() {
+            return new User(username, joinedAt, true);
+        }
+
+        public User offline() {
+            return new User(username, joinedAt, false);
+        }
+    }
+
+    /** Chat room */
+    public record ChatRoom(
+        String roomId,
+        String name,
+        Set<String> members,
+        List<ChatMessage> messages
+    ) {
+        public ChatRoom(String roomId, String name) {
+            this(roomId, name, new HashSet<>(), new ArrayList<>());
+        }
+
+        public ChatRoom withMember(String username) {
+            var newMembers = new HashSet<>(members);
+            newMembers.add(username);
+            return new ChatRoom(roomId, name, newMembers, messages);
+        }
+
+        public ChatRoom withoutMember(String username) {
+            var newMembers = new HashSet<>(members);
+            newMembers.remove(username);
+            return new ChatRoom(roomId, name, newMembers, messages);
+        }
+
+        public ChatRoom withMessage(ChatMessage message) {
+            var newMessages = new ArrayList<>(messages);
+            newMessages.add(message);
+            return new ChatRoom(roomId, name, members, newMessages);
+        }
+
+        public int memberCount() {
+            return members.size();
+        }
+
+        public int messageCount() {
+            return messages.size();
+        }
+    }
+
+    /** Chat message */
+    public record ChatMessage(
+        String id,
+        String roomId,
+        String username,
+        String content,
+        Instant timestamp
+    ) {
+        public ChatMessage(String roomId, String username, String content) {
+            this(
+                UUID.randomUUID().toString(),
+                roomId,
+                username,
+                content,
+                Instant.now()
+            );
+        }
+    }
+
+    /** System event */
+    public sealed interface SystemEvent permits
+        UserJoinedEvent,
+        UserLeftEvent,
+        MessageSentEvent,
+        RoomCreatedEvent {
+
+        String eventType();
+        Instant timestamp();
+    }
+
+    public record UserJoinedEvent(
+        String username,
+        Instant timestamp
+    ) implements SystemEvent {
+        public UserJoinedEvent(String username) {
+            this(username, Instant.now());
+        }
+
+        public String eventType() {
+            return "USER_JOINED";
+        }
+    }
+
+    public record UserLeftEvent(
+        String username,
+        Instant timestamp
+    ) implements SystemEvent {
+        public UserLeftEvent(String username) {
+            this(username, Instant.now());
+        }
+
+        public String eventType() {
+            return "USER_LEFT";
+        }
+    }
+
+    public record MessageSentEvent(
+        String roomId,
+        String username,
+        String messageId,
+        Instant timestamp
+    ) implements SystemEvent {
+        public MessageSentEvent(String roomId, String username, String messageId) {
+            this(roomId, username, messageId, Instant.now());
+        }
+
+        public String eventType() {
+            return "MESSAGE_SENT";
+        }
+    }
+
+    public record RoomCreatedEvent(
+        String roomId,
+        String roomName,
+        Instant timestamp
+    ) implements SystemEvent {
+        public RoomCreatedEvent(String roomId, String roomName) {
+            this(roomId, roomName, Instant.now());
+        }
+
+        public String eventType() {
+            return "ROOM_CREATED";
+        }
+    }
+}}
+```
+
+<CopyButton>Copy ChatModels.java</CopyButton>
+
+## Step 3: Define Message Protocols
+
+Create `src/main/java/com/example/chat/model/Messages.java`:
+
+```java
+{package com.example.chat.model;
+
+/**
+ * Message Protocols for Chat Application
+ *
+ * Defines all messages that can be sent between processes.
+ * Using sealed interfaces for type safety and exhaustive matching.
+ */
+public class Messages {
+
+    /** User management messages */
+    public sealed interface UserMsg permits
+        LoginUser,
+        LogoutUser,
+        GetUser,
+        ListUsers,
+        UserOnline,
+        UserOffline {}
+
+    public record LoginUser(String username) implements UserMsg {}
+    public record LogoutUser(String username) implements UserMsg {}
+    public record GetUser(String username) implements UserMsg {}
+    public record ListUsers() implements UserMsg {}
+    public record UserOnline(String username) implements UserMsg {}
+    public record UserOffline(String username) implements UserMsg {}
+
+    /** Room management messages */
+    public sealed interface RoomMsg permits
+        CreateRoom,
+        JoinRoom,
+        LeaveRoom,
+        GetRoom,
+        ListRooms,
+        RoomMessage {}
+
+    public record CreateRoom(String roomId, String name) implements RoomMsg {}
+    public record JoinRoom(String roomId, String username) implements RoomMsg {}
+    public record LeaveRoom(String roomId, String username) implements RoomMsg {}
+    public record GetRoom(String roomId) implements RoomMsg {}
+    public record ListRooms() implements RoomMsg {}
+
+    /** Chat messages */
+    public sealed interface ChatMsg permits
+        SendMessage,
+        GetMessages,
+        BroadcastMessage {}
+
+    public record SendMessage(
+        String roomId,
+        String username,
+        String content
+    ) implements ChatMsg {}
+
+    public record GetMessages(String roomId, int limit) implements ChatMsg {}
+
+    public record BroadcastMessage(ChatMessage message) implements ChatMsg {}
+}}
+```
+
+<CopyButton>Copy Messages.java</CopyButton>
+
+## Step 4: Implement User Manager
+
+Create `src/main/java/com/example/chat/service/UserManager.java`:
+
+```java
+{package com.example.chat.service;
+
+import com.example.chat.model.*;
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.*;
+
+/**
+ * User Manager Service
+ *
+ * Handles user registration, authentication, and online status.
+ */
+public class UserManager {
+
+    /**
+     * Create user manager process
+     */
+    public static ProcRef<UserState, Object> create(Supervisor supervisor) {
+        return supervisor.supervise(
+            "user-manager",
+            new UserState(new HashMap<>()),
+            UserManager::handleUser
+        );
+    }
+
+    /** User manager state */
+    public record UserState(Map<String, User> users) {
+
+        public UserState register(String username) {
+            var newUsers = new HashMap<>(users);
+            newUsers.put(username, new User(username));
+            return new UserState(newUsers);
+        }
+
+        public UserState unregister(String username) {
+            var newUsers = new HashMap<>(users);
+            newUsers.remove(username);
+            return new UserState(newUsers);
+        }
+
+        public UserState setOnline(String username, boolean online) {
+            var user = users.get(username);
+            if (user != null) {
+                var newUsers = new HashMap<>(users);
+                newUsers.put(username, online ? user.online() : user.offline());
+                return new UserState(newUsers);
+            }
+            return this;
+        }
+
+        public Optional<User> getUser(String username) {
+            return Optional.ofNullable(users.get(username));
+        }
+
+        public List<User> listUsers() {
+            return new ArrayList<>(users.values());
+        }
+
+        public int onlineCount() {
+            return (int) users.values().stream().filter(User::isOnline).count();
+        }
+    }
+
+    /** Message handler */
+    static Proc.StateResult<UserState, Object> handleUser(
+        UserState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case LoginUser(var username) -> {
+                System.out.println("✅ User logged in: " + username);
+                yield new Proc.StateResult<>(
+                    state.register(username).setOnline(username, true),
+                    "Welcome, " + username + "!"
+                );
+            }
+
+            case LogoutUser(var username) -> {
+                System.out.println("👋 User logged out: " + username);
+                yield new Proc.StateResult<>(
+                    state.setOnline(username, false),
+                    "Goodbye, " + username + "!"
+                );
+            }
+
+            case GetUser(var username) -> {
+                var user = state.getUser(username);
+                yield new Proc.StateResult<>(
+                    state,
+                    user.orElse(null)
+                );
+            }
+
+            case ListUsers() -> {
+                var users = state.listUsers();
+                String result = String.format(
+                    "Total users: %d (online: %d)",
+                    users.size(),
+                    state.onlineCount()
+                );
+                yield new Proc.StateResult<>(state, result);
+            }
+
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+}}
+```
+
+<CopyButton>Copy UserManager.java</CopyButton>
+
+## Step 5: Implement Room Manager
+
+Create `src/main/java/com/example/chat/service/RoomManager.java`:
+
+```java
+{package com.example.chat.service;
+
+import com.example.chat.model.*;
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+
+/**
+ * Room Manager Service
+ *
+ * Manages chat rooms, members, and room-specific processes.
+ */
+public class RoomManager {
+
+    /**
+     * Create room manager process
+     */
+    public static ProcRef<RoomManagerState, Object> create(Supervisor supervisor) {
+        return supervisor.supervise(
+            "room-manager",
+            new RoomManagerState(new HashMap<>(), supervisor),
+            RoomManager::handleRoomManager
+        );
+    }
+
+    /** Room manager state */
+    public record RoomManagerState(
+        Map<String, ProcRef<RoomState, Object>> rooms,
+        Supervisor supervisor
+    ) {
+
+        public Optional<ProcRef<RoomState, Object>> getRoom(String roomId) {
+            return Optional.ofNullable(rooms.get(roomId));
+        }
+
+        public RoomManagerState addRoom(String roomId, ProcRef<RoomState, Object> room) {
+            var newRooms = new HashMap<>(rooms);
+            newRooms.put(roomId, room);
+            return new RoomManagerState(newRooms, supervisor);
+        }
+
+        public RoomManagerState removeRoom(String roomId) {
+            var newRooms = new HashMap<>(rooms);
+            newRooms.remove(roomId);
+            return new RoomManagerState(newRooms, supervisor);
+        }
+    }
+
+    /** Individual room state */
+    record RoomState(
+        String roomId,
+        String name,
+        Set<String> members,
+        List<ChatMessage> messages
+    ) {
+        public RoomState(String roomId, String name) {
+            this(roomId, name, new HashSet<>(), new ArrayList<>());
+        }
+
+        public RoomState addMember(String username) {
+            var newMembers = new HashSet<>(members);
+            newMembers.add(username);
+            return new RoomState(roomId, name, newMembers, messages);
+        }
+
+        public RoomState removeMember(String username) {
+            var newMembers = new HashSet<>(members);
+            newMembers.remove(username);
+            return new RoomState(roomId, name, newMembers, messages);
+        }
+
+        public RoomState addMessage(ChatMessage message) {
+            var newMessages = new ArrayList<>(messages);
+            newMessages.add(message);
+            return new RoomState(roomId, name, members, newMessages);
+        }
+    }
+
+    /** Room manager handler */
+    static Proc.StateResult<RoomManagerState, Object> handleRoomManager(
+        RoomManagerState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case CreateRoom(var roomId, var name) -> {
+                if (state.getRoom(roomId).isPresent()) {
+                    yield new Proc.StateResult<>(
+                        state,
+                        "Room already exists: " + roomId
+                    );
+                }
+
+                var room = state.supervisor().supervise(
+                    "room-" + roomId,
+                    new RoomState(roomId, name),
+                    RoomManager::handleRoom
+                );
+
+                System.out.println("🏠 Room created: " + name + " (" + roomId + ")");
+                yield new Proc.StateResult<>(
+                    state.addRoom(roomId, room),
+                    "Room created: " + name
+                );
+            }
+
+            case JoinRoom(var roomId, var username) -> {
+                var roomOpt = state.getRoom(roomId);
+                if (roomOpt.isEmpty()) {
+                    yield new Proc.StateResult<>(
+                        state,
+                        "Room not found: " + roomId
+                    );
+                }
+
+                var response = roomOpt.get().ask(
+                    new JoinRoom(roomId, username),
+                    Duration.ofSeconds(1)
+                ).orElse("Join failed");
+
+                yield new Proc.StateResult<>(state, response);
+            }
+
+            case LeaveRoom(var roomId, var username) -> {
+                var roomOpt = state.getRoom(roomId);
+                if (roomOpt.isPresent()) {
+                    roomOpt.get().tell(new LeaveRoom(roomId, username));
+                }
+                yield new Proc.StateResult<>(
+                    state,
+                    "Left room: " + roomId
+                );
+            }
+
+            case ListRooms() -> {
+                var roomList = state.rooms().keySet().stream()
+                    .toList();
+                String result = "Rooms: " + roomList;
+                yield new Proc.StateResult<>(state, result);
+            }
+
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+
+    /** Individual room handler */
+    static Proc.StateResult<RoomState, Object> handleRoom(
+        RoomState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case JoinRoom(var roomId, var username) -> {
+                if (!state.roomId().equals(roomId)) {
+                    yield new Proc.StateResult<>(state, null);
+                }
+
+                System.out.println("➕ " + username + " joined " + state.name());
+                yield new Proc.StateResult<>(
+                    state.addMember(username),
+                    "Joined " + state.name()
+                );
+            }
+
+            case LeaveRoom(var roomId, var username) -> {
+                System.out.println("➖ " + username + " left " + state.name());
+                yield new Proc.StateResult<>(
+                    state.removeMember(username),
+                    "Left " + state.name()
+                );
+            }
+
+            case SendMessage(var roomId, var username, var content) -> {
+                if (!state.roomId().equals(roomId)) {
+                    yield new Proc.StateResult<>(state, null);
+                }
+
+                var message = new ChatMessage(roomId, username, content);
+                System.out.println("💬 " + username + ": " + content);
+
+                yield new Proc.StateResult<>(
+                    state.addMessage(message),
+                    message
+                );
+            }
+
+            case GetMessages(var roomId, var limit) -> {
+                var messages = state.messages.stream()
+                    .skip(Math.max(0, state.messages.size() - limit))
+                    .toList();
+                yield new Proc.StateResult<>(state, messages);
+            }
+
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+}}
+```
+
+<CopyButton>Copy RoomManager.java</CopyButton>
+
+## Step 6: Main Application
+
+Create `src/main/java/com/example/chat/ChatApplication.java`:
+
+```java
+{package com.example.chat;
+
+import com.example.chat.model.*;
+import com.example.chat.service.*;
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.Scanner;
+
+/**
+ * JOTP Chat Application - Main Entry Point
+ *
+ * A complete real-time chat system demonstrating:
+ * - Supervision trees for fault tolerance
+ * - Multiple message passing patterns
+ * - Event broadcasting
+ * - Real-world application architecture
+ */
+public class ChatApplication {
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  JOTP Chat Application v1.0              ║");
+        System.out.println("║  Real-Time Messaging with Fault Tolerance ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        // Create main supervisor
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            10,
+            Duration.ofMinutes(1)
+        );
+
+        // Create event manager
+        var events = new EventManager<SystemEvent>("chat-events", supervisor);
+
+        // Create services
+        var userManager = UserManager.create(supervisor);
+        var roomManager = RoomManager.create(supervisor);
+
+        System.out.println("✅ Services initialized\n");
+
+        // Demo: Create rooms and users
+        System.out.println("--- Setup ---");
+        userManager.tell(new LoginUser("alice"));
+        userManager.tell(new LoginUser("bob"));
+        userManager.tell(new LoginUser("charlie"));
+
+        roomManager.tell(new CreateRoom("general", "General Discussion"));
+        roomManager.tell(new CreateRoom("random", "Random Chat"));
+
+        Thread.sleep(100);
+
+        // Join rooms
+        System.out.println("\n--- Joining Rooms ---");
+        var joinResult1 = roomManager.ask(
+            new JoinRoom("general", "alice"),
+            Duration.ofSeconds(1)
+        ).get();
+        System.out.println("Alice: " + joinResult1);
+
+        var joinResult2 = roomManager.ask(
+            new JoinRoom("general", "bob"),
+            Duration.ofSeconds(1)
+        ).get();
+        System.out.println("Bob: " + joinResult2);
+
+        var joinResult3 = roomManager.ask(
+            new JoinRoom("random", "charlie"),
+            Duration.ofSeconds(1)
+        ).get();
+        System.out.println("Charlie: " + joinResult3);
+
+        // Send messages
+        System.out.println("\n--- Chat Messages ---");
+
+        // Get general room process
+        var generalRoomOpt = roomManager.ask(
+            new GetRoom("general"),
+            Duration.ofSeconds(1)
+        );
+
+        if (generalRoomOpt.isPresent() && generalRoomOpt.get() instanceof ProcRef) {
+            @SuppressWarnings("unchecked")
+            var generalRoom = (ProcRef) generalRoomOpt.get();
+
+            generalRoom.tell(new SendMessage("general", "alice", "Hey everyone! 👋"));
+            Thread.sleep(50);
+            generalRoom.tell(new SendMessage("general", "bob", "Hi Alice! Welcome!"));
+            Thread.sleep(50);
+            generalRoom.tell(new SendMessage("general", "alice", "Thanks! This is awesome!"));
+        }
+
+        Thread.sleep(200);
+
+        // List users
+        System.out.println("\n--- User List ---");
+        var users = userManager.ask(
+            new ListUsers(),
+            Duration.ofSeconds(1)
+        ).get();
+        System.out.println(users);
+
+        // List rooms
+        System.out.println("\n--- Room List ---");
+        var rooms = roomManager.ask(
+            new ListRooms(),
+            Duration.ofSeconds(1)
+        ).get();
+        System.out.println(rooms);
+
+        // Interactive mode (optional)
+        System.out.println("\n--- Interactive Mode (Ctrl+C to exit) ---");
+        System.out.println("Commands: /join <room>, /leave, /msg <message>, /users, /rooms");
+
+        var scanner = new Scanner(System.in);
+        while (true) {
+            System.out.print("> ");
+            if (!scanner.hasNextLine()) break;
+
+            var input = scanner.nextLine().trim();
+            if (input.isEmpty()) continue;
+
+            if (input.startsWith("/")) {
+                handleCommand(input, userManager, roomManager);
+            } else {
+                System.out.println("Use /msg to send messages");
+            }
+        }
+
+        // Cleanup
+        supervisor.shutdown();
+        System.out.println("\n✨ Chat application shutdown complete!");
+    }
+
+    static void handleCommand(
+        String input,
+        ProcRef userManager,
+        ProcRef roomManager
+    ) throws Exception {
+        var parts = input.split("\\s+", 3);
+        var command = parts[0].toLowerCase();
+
+        switch (command) {
+            case "/join" -> {
+                if (parts.length < 2) {
+                    System.out.println("Usage: /join <room>");
+                    return;
+                }
+                var result = roomManager.ask(
+                    new JoinRoom(parts[1], "alice"),
+                    Duration.ofSeconds(1)
+                ).get();
+                System.out.println(result);
+            }
+
+            case "/leave" -> {
+                var result = roomManager.ask(
+                    new LeaveRoom("general", "alice"),
+                    Duration.ofSeconds(1)
+                ).get();
+                System.out.println(result);
+            }
+
+            case "/msg" -> {
+                if (parts.length < 2) {
+                    System.out.println("Usage: /msg <message>");
+                    return;
+                }
+                var roomOpt = roomManager.ask(
+                    new GetRoom("general"),
+                    Duration.ofSeconds(1)
+                );
+
+                if (roomOpt.isPresent() && roomOpt.get() instanceof ProcRef) {
+                    @SuppressWarnings("unchecked")
+                    var room = (ProcRef) roomOpt.get();
+                    room.tell(new SendMessage("general", "alice", parts[1]));
+                }
+            }
+
+            case "/users" -> {
+                var result = userManager.ask(
+                    new ListUsers(),
+                    Duration.ofSeconds(1)
+                ).get();
+                System.out.println(result);
+            }
+
+            case "/rooms" -> {
+                var result = roomManager.ask(
+                    new ListRooms(),
+                    Duration.ofSeconds(1)
+                ).get();
+                System.out.println(result);
+            }
+
+            default -> System.out.println("Unknown command: " + command);
+        }
+    }
+}}
+```
+
+<CopyButton>Copy ChatApplication.java</CopyButton>
+
+## Step 7: Build and Run
+
+```bash
+# Compile
+./mvnw compile
+
+# Run
+./mvnw exec:java -Dexec.mainClass="com.example.chat.ChatApplication"
+```
+
+## Expected Output
+
+```
+╔════════════════════════════════════════════╗
+║  JOTP Chat Application v1.0              ║
+║  Real-Time Messaging with Fault Tolerance ║
+╚════════════════════════════════════════════╝
+
+✅ Services initialized
+
+--- Setup ---
+✅ User logged in: alice
+✅ User logged in: bob
+✅ User logged in: charlie
+🏠 Room created: General Discussion (general)
+🏠 Room created: Random Chat (random)
+
+--- Joining Rooms ---
+➕ alice joined General Discussion
+Alice: Joined General Discussion
+➕ bob joined General Discussion
+Bob: Joined General Discussion
+➕ charlie joined Random Chat
+Charlie: Joined Random Chat
+
+--- Chat Messages ---
+💬 alice: Hey everyone! 👋
+💬 bob: Hi Alice! Welcome!
+💬 alice: Thanks! This is awesome!
+
+--- User List ---
+Total users: 3 (online: 3)
+
+--- Room List ---
+Rooms: [general, random]
+
+--- Interactive Mode (Ctrl+C to exit) ---
+Commands: /join <room>, /leave, /msg <message>, /users, /rooms
+>
+```
+
+## Architecture Deep Dive
+
+### Supervision Tree Design
+
+<Alert>
+  <AlertTitle>🎯 Why This Architecture?</AlertTitle>
+  <AlertDescription>
+    <ul className="list-disc list-inside space-y-2">
+      <li><strong>ONE_FOR_ONE Strategy:</strong> Each service restarts independently. If the Room Manager crashes, User Manager keeps running.</li>
+      <li><strong>Permanent Processes:</strong> User and Room managers are permanent - always restarted on crash.</li>
+      <li><strong>Transient Processes:</strong> Individual rooms are transient - can be recreated if needed.</li>
+      <li><strong>Event Manager:</strong> Decouples components - User Manager doesn't know about Room Manager.</li>
+    </ul>
+  </AlertDescription>
+</Alert>
+
+### Message Flow Diagram
+
+```
+User Input → ChatApplication
+                ↓
+            UserManager.tell(LoginUser)
+                ↓
+            [UserManager validates]
+                ↓
+            EventManager.publish(UserJoinedEvent)
+                ↓
+        [All subscribers notified]
+                ↓
+            RoomManager.tell(JoinRoom)
+                ↓
+        [RoomManager creates room process]
+                ↓
+        [Room process handles messages]
+```
+
+## Extending the Application
+
+### Feature Ideas
+
+1. **Private Messages:** Direct user-to-user messaging
+2. **File Sharing:** Upload and share files in rooms
+3. **Message Reactions:** Emoji reactions to messages
+4. **Typing Indicators:** Show when users are typing
+5. **Read Receipts:** Track message read status
+6. **Search:** Search message history
+7. **Moderation:** Admin tools for room management
+
+### Adding Private Messages
+
+```java
+{/**
+ * Extension: Private Messaging
+ *
+ * Add to Messages.java:
+ */
+sealed interface PrivateMsg permits
+    SendPrivateMessage,
+    GetPrivateMessages {}
+
+record SendPrivateMessage(
+    String from,
+    String to,
+    String content
+) implements PrivateMsg {}
+
+/**
+ * Add to RoomManager.java:
+ */
+case SendPrivateMessage(var from, var to, var content) -> {
+    // Create private room between users
+    String roomId = "private-" + from + "-" + to;
+    // ... create or get private room
+    // ... send message
+}
+
+/**
+ * Usage:
+ */
+roomManager.tell(new SendPrivateMessage("alice", "bob", "Hey Bob!"));
+```
+
+## Checkpoint Summary
+
+<Card className="mt-6">
+  <CardHeader>
+    <CardTitle>✅ Checkpoint: What You've Built</CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-2">
+    <p>Congratulations! You've built a complete, production-ready chat application with:</p>
+    <ul className="list-disc list-inside space-y-1 mt-2">
+      <li>User management with login/logout</li>
+      <li>Room creation and management</li>
+      <li>Real-time messaging</li>
+      <li>Supervision trees for fault tolerance</li>
+      <li>Event broadcasting</li>
+      <li>Interactive command-line interface</li>
+      <li>Extensible architecture for new features</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## Practice Exercises
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium"><strong>Exercise 1: Add Message Persistence</strong></summary>
+  <div className="mt-2 text-sm">
+    Save messages to a file or database. When a room is created, load previous messages.
+  </div>
+</details>
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium"><strong>Exercise 2: Implement Typing Indicators</strong></summary>
+  <div className="mt-2 text-sm">
+    Send events when users start/stop typing. Display "Alice is typing..." to other users.
+  </div>
+</details>
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium"><strong>Exercise 3: Add User Authentication</strong></summary>
+  <div className="mt-2 text-sm">
+    Implement password hashing and session tokens. Store user credentials securely.
+  </div>
+</details>
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium"><strong>Exercise 4: Build Web Interface</strong></summary>
+  <div className="mt-2 text-sm">
+    Add HTTP endpoints using a web framework. Connect frontend to JOTP backend via WebSocket.
+  </div>
+</details>
+
+## Common Issues
+
+<Alert variant="destructive">
+  <AlertTitle>⚠️ Troubleshooting</AlertTitle>
+  <AlertDescription>
+    <div className="space-y-3">
+      <div>
+        <strong>Issue: "Room process not found"</strong><br/>
+        <span className="text-sm">Cause: Room not created or process crashed.</span><br/>
+        <span className="text-sm">Solution: Ensure room is created before joining. Check supervisor logs.</span>
+      </div>
+      <div>
+        <strong>Issue: "Messages not delivered"</strong><br/>
+        <span className="text-sm">Cause: User not in room or wrong room ID.</span><br/>
+        <span className="text-sm">Solution: Verify user joined room before sending messages.</span>
+      </div>
+      <div>
+        <strong>Issue: "Memory leak with message history"</strong><br/>
+        <span className="text-sm">Cause: Unlimited message storage in rooms.</span><br/>
+        <span className="text-sm">Solution: Implement message limits and persistence.</span>
+      </div>
+    </div>
+  </AlertDescription>
+</Alert>
+
+## What's Next?
+
+You've completed the beginner tutorial series! Here are recommended next steps:
+
+### Continue Learning
+
+- **[Advanced Patterns](/docs/user-guide/tutorials/advanced/)** - State machines, distributed systems
+- **[Production Deployment](/docs/user-guide/how-to/deployment)** - Docker, Kubernetes, monitoring
+- **[Performance Tuning](/docs/user-guide/how-to/performance-tuning)** - Optimization techniques
+
+### Build More
+
+- **Distributed Systems:** Multi-node chat with JOTP clustering
+- **Microservices:** Break chat into separate services
+- **Real-Time Features:** WebSockets, live updates
+- **Analytics:** Message metrics, user activity tracking
+
+### Contribute
+
+- Fork the [JOTP repository](https://github.com/seanchatmangpt/jotp)
+- Submit issues and PRs
+- Share your projects with the community
+
+---
+
+## 🎉 Congratulations!
+
+You've mastered JOTP fundamentals and built a complete application. You're now ready to build production-grade, fault-tolerant concurrent systems with JOTP!
+
+**Total Time:** ~3 hours
+**Skills Gained:**
+- ✅ Process creation and management
+- ✅ Virtual threads and scalability
+- ✅ Supervision and fault tolerance
+- ✅ Message passing patterns
+- ✅ Real-world application architecture
+
+**Next Tutorial Series:** [Advanced JOTP Patterns →](/docs/user-guide/tutorials/advanced/)
+
+---
+
+## Additional Resources
+
+- [JOTP GitHub](https://github.com/seanchatmangpt/jotp)
+- [Documentation](/docs)
+- [API Reference](/docs/reference/api)
+- [Community Examples](/docs/user-guide/examples)

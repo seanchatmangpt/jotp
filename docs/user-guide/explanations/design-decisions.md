@@ -13,6 +13,58 @@ Every architecture involves trade-offs. This document explains the reasoning beh
 
 **Rejected:** Open interfaces with `instanceof` chains, `Object` message type, `enum` discriminators
 
+### Architecture: Type System Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Sealed Message Type System                  │
+└─────────────────────────────────────────────────────────────────┘
+
+                     Message (sealed interface)
+                           │
+         ┌─────────────────┼─────────────────┐
+         │                 │                 │
+    CounterMsg         AccountMsg        SystemMsg
+    (sealed)           (sealed)          (sealed)
+         │                 │                 │
+    ┌────┴────┐      ┌─────┴─────┐      ┌───┴────┐
+    │         │      │           │      │        │
+ Increment  Reset  Deposit  Withdraw  Shutdown  Debug
+ (record)  (record) (record)  (record)   (record) (record)
+
+Compiler guarantee: All subtypes known at compile time
+Exhaustiveness checking: switch must handle ALL cases
+```
+
+### Comparison: Sealed vs. Open Types
+
+**Open Type (BAD):**
+```java
+interface Message {}
+
+class Increment implements Message {}
+class Reset implements Message {}
+
+// Handler:
+if (msg instanceof Increment) { ... }
+else if (msg instanceof Reset) { ... }
+// Easy to miss a case — silent runtime bug
+```
+
+**Sealed Type (GOOD):**
+```java
+sealed interface Message permits Increment, Reset {}
+record Increment(int n) implements Message {}
+record Reset() implements Message {}
+
+// Handler:
+switch (msg) {
+    case Increment(var n) -> ...;
+    case Reset _ -> ...;
+    // COMPILER ERROR if case missing
+}
+```
+
 ### Why Sealed Interfaces Win
 
 Sealed interfaces give the compiler complete knowledge of all message types. This enables exhaustive pattern matching:
@@ -164,6 +216,54 @@ JOTP's version is testable as a pure function, requires no supervision framework
 **Chosen:** Virtual threads (`Thread.startVirtualThread`)
 
 **Rejected:** Project Reactor (`Mono`/`Flux`), RxJava, CompletableFuture chains
+
+### Architecture: Concurrency Model Comparison
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Virtual Thread Model (JOTP)                   │
+└─────────────────────────────────────────────────────────────────┘
+
+  Process 1      Process 2      Process 3      Process N
+  (virtual)      (virtual)      (virtual)      (virtual)
+      │              │              │              │
+      ▼              ▼              ▼              ▼
+  ┌────────────────────────────────────────────────────┐
+  │         Blocking I/O (traditional Java API)         │
+  │  - httpClient.send()  - db.query()  - file.read()  │
+  └────────────────────────────────────────────────────┘
+      │              │              │              │
+      ▼              ▼              ▼              ▼
+  ┌────────────────────────────────────────────────────┐
+  │              Virtual Thread Scheduler               │
+  │      (ForkJoinPool, Carrier Threads = CPU cores)   │
+  └────────────────────────────────────────────────────┘
+
+Code: Sequential, blocking, easy to debug
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                  Reactive Model (Project Reactor)                │
+└─────────────────────────────────────────────────────────────────┘
+
+  Mono/Flux chains
+      │
+      ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  .flatMap(req -> fetchUser(req.userId()))               │
+  │  .flatMap(user -> fetchAccount(user.accountId()))       │
+  │  .flatMap(account -> charge(account, amount))           │
+  │  .onErrorResume(InsufficientFundsException.class, ...)  │
+  │  .subscribe()                                           │
+  └─────────────────────────────────────────────────────────┘
+      │
+      ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │         Reactive Scheduler (event loop, callbacks)      │
+  └─────────────────────────────────────────────────────────┘
+
+Code: Async chains, hard to debug, callback hell in a suit
+```
 
 ### The Reactive Programming Problem
 
@@ -376,6 +476,47 @@ case Deposit(var amount) -> processNormalDeposit(amount);
 **Bounded mailboxes:** JOTP 1.0 uses unbounded mailboxes (a slow consumer can accumulate unlimited messages). In 2.0, bounded mailboxes with configurable back-pressure strategies will be the default, with unbounded as opt-in. Erlang uses unbounded mailboxes and has had production incidents because of it — JOTP should learn from this.
 
 **Type variance:** The `Proc<S,M>` type parameters are invariant. For event broadcasting patterns, covariant message types (`Proc<S, ? extends BaseMsg>`) would allow better hierarchy composition. This requires careful API design and is planned for 2.0.
+
+---
+
+## Architecture: Decision Trade-off Matrix
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │     JOTP Design Decision Space          │
+                    └─────────────────────────────────────────┘
+
+                              Type Safety
+                                  ▲
+                                  │
+            Sealed Interfaces    │    Open Types
+           (compile errors)      │   (runtime errors)
+                   ┌─────────────┴─────────────┐
+                   │                           │
+         ┌─────────┴─────────┐       ┌─────────┴─────────┐
+         │                   │       │                   │
+  Pure Functions      Mutable Objects
+  (testable)         (hard to test)
+         │                   │
+         └─────────┬─────────┘
+                   │
+      Virtual Threads    Reactive Streams
+      (blocking OK)      (async chains)
+                   │
+         ┌─────────┴─────────┐
+         │                   │
+ Result<T,E>      Checked Exceptions
+ (railway)        (cross-boundary)
+                   │
+         ┌─────────┴─────────┐
+         │                   │
+    15 Primitives    Full OTP (40+)
+    (80/20 rule)     (complexity)
+```
+
+**Chosen path:** Follow arrows down-left (JOTP design)
+- Sealed interfaces → Pure functions → Virtual threads → Result<T,E> → 15 primitives
+- Maximizes correctness, testability, simplicity
 
 ---
 

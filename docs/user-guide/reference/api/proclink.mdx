@@ -1,0 +1,351 @@
+---
+title: "ProcLink API Reference"
+description: "Bilateral crash propagation between processes - OTP link/1 equivalent"
+sidebar_position: 7
+---
+
+# ProcLink API Reference
+
+**OTP process links** — Bilateral crash propagation between two processes.
+
+## Overview
+
+`ProcLink` creates bidirectional links between processes. When either linked process terminates abnormally (non-normal exit), the other receives an exit signal and is terminated too (unless trapping exits).
+
+### Key Characteristics
+
+- **Bidirectional** — Crash propagates both ways
+- **Abnormal Only** — Normal `Proc.stop()` doesn't propagate
+- **Exit Trapping** — Can be caught via `trapExits(true)`
+- **Composable** — Works alongside supervision and monitoring
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `link(Pid)` | `ProcLink.link(a, b)` |
+| `spawn_link(Fun)` | `ProcLink.spawnLink(parent, state, handler)` |
+| `unlink(Pid)` | Not directly supported (use monitoring) |
+| `process_flag(trap_exit, true)` | `proc.trapExits(true)` |
+
+## Public API
+
+### Linking
+
+#### `link(Proc<?, ?> a, Proc<?, ?> b)`
+
+Establish a bidirectional link between two processes.
+
+```java
+Proc<StateA, MsgA> processA = Proc.spawn(stateA, handlerA);
+Proc<StateB, MsgB> processB = Proc.spawn(stateB, handlerB);
+
+ProcLink.link(processA, processB);
+
+// If processA crashes abnormally, processB is interrupted
+// If processB crashes abnormally, processA is interrupted
+```
+
+**Crash Propagation:**
+- Abnormal exit (exception) → fires crash callbacks → interrupts peer
+- Normal exit (`Proc.stop()`) → does NOT affect peer
+
+---
+
+#### `spawnLink<S,M>(Proc<?, ?> parent, S initial, BiFunction<S, M, S> handler)`
+
+Atomically spawn and link a child process.
+
+```java
+Proc<ParentState, ParentMsg> parent = Proc.spawn(parentState, parentHandler);
+
+Proc<ChildState, ChildMsg> child = ProcLink.spawnLink(
+    parent,
+    childState,
+    childHandler
+);
+
+// If child crashes, parent is interrupted
+// If parent crashes (crash callbacks fire), child is interrupted
+```
+
+**Atomicity:** No window between spawn and link where child could crash undetected
+
+---
+
+## Usage Patterns
+
+### Linked Pair
+
+```java
+Proc<CacheState, CacheMsg> cache = Proc.spawn(cacheState, cacheHandler);
+Proc<WriterState, WriterMsg> writer = Proc.spawn(writerState, writerHandler);
+
+ProcLink.link(cache, writer);
+
+// If cache crashes, writer is terminated
+// If writer crashes, cache is terminated
+// Both stay alive if either stops normally
+```
+
+---
+
+### Parent-Child Link
+
+```java
+Proc<ParentState, ParentMsg> parent = Proc.spawn(parentState, parentHandler);
+Proc<ChildState, ChildMsg> child = ProcLink.spawnLink(parent, childState, childHandler);
+
+// If child crashes:
+// 1. Parent receives ExitSignal (if trapping exits)
+// 2. Or parent is interrupted (if not trapping)
+
+// If parent crashes (crash callbacks fire):
+// 1. Child is interrupted
+```
+
+---
+
+### Exit Trapping with Links
+
+```java
+// Parent that traps exits
+sealed interface ParentMsg implements ExitSignal, UserParentMsg {}
+record UserParentMsg(String data) implements ParentMsg {}
+
+Proc<ParentState, ParentMsg> parent = Proc.spawn(parentState, parentHandler);
+parent.trapExits(true);  // Trap exit signals
+
+Proc<ChildState, ChildMsg> child = ProcLink.spawnLink(parent, childState, childHandler);
+
+// When child crashes:
+// - Parent receives ExitSignal as message in mailbox
+// - Parent can handle it gracefully
+```
+
+---
+
+### Linked Processes with Supervision
+
+```java
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofMinutes(1)
+);
+
+ProcRef<DbState, DbMsg> db = supervisor.supervise("db", dbState, dbHandler);
+Proc<CacheState, CacheMsg> cache = Proc.spawn(cacheState, cacheHandler);
+
+// Link supervised child to independent process
+ProcLink.link(db.proc(), cache);
+
+// If db crashes:
+// 1. Supervisor restarts db (via supervision)
+// 2. Cache is interrupted (via link)
+
+// If cache crashes:
+// 1. Db is interrupted (crash callback fires)
+// 2. Supervisor restarts db (if it crashed)
+
+// Both mechanisms work independently
+```
+
+---
+
+### Linked Triad
+
+```java
+Proc<AState, AMsg> a = Proc.spawn(aState, aHandler);
+Proc<BState, BMsg> b = Proc.spawn(bState, bHandler);
+Proc<CState, CMsg> c = Proc.spawn(cState, cHandler);
+
+ProcLink.link(a, b);
+ProcLink.link(b, c);
+ProcLink.link(a, c);
+
+// If ANY process crashes abnormally:
+// - ALL linked processes are interrupted
+// - Forms a fully-connected graph
+```
+
+---
+
+## Implementation Details
+
+### Crash Delivery
+
+When a linked process crashes abnormally:
+
+```java
+// In Proc.addCrashCallback()
+proc.addCrashCallback(() -> {
+    // Deliver exit signal to all linked processes
+    for (Proc<?, ?> linked : linkedProcesses) {
+        linked.deliverExitSignal(this.lastError());
+    }
+});
+```
+
+The linked process's `deliverExitSignal()` checks `trapExits`:
+
+- **Not trapping:** Interrupt immediately (crash propagation)
+- **Trapping:** Enqueue `ExitSignal` as message (graceful handling)
+
+---
+
+### Bidirectionality
+
+Links are always bidirectional:
+
+```java
+ProcLink.link(a, b);
+
+// Internally:
+a.addCrashCallback(() -> b.deliverExitSignal(a.lastError()));
+b.addCrashCallback(() -> a.deliverExitSignal(b.lastError()));
+```
+
+Both processes get crash callbacks for each other.
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `link()` | ~100ns | Two callback registrations |
+| Crash delivery | <1μs | Callback invocation + interrupt |
+| `spawnLink()` | ~2μs | Spawn + link combined |
+
+**Overhead:** Minimal (two callback registrations per link)
+
+---
+
+## Best Practices
+
+### 1. Use spawnLink for Children
+
+```java
+// Good: Atomic spawn + link
+var child = ProcLink.spawnLink(parent, state, handler);
+
+// Bad: Window between spawn and link
+var child = new Proc<>(state, handler);  // Could crash here!
+ProcLink.link(parent, child);
+```
+
+---
+
+### 2. Trap Exits for Graceful Handling
+
+```java
+parent.trapExits(true);
+
+// In parent handler
+case ExitSignal(var reason) -> {
+    System.err.println("Child crashed: " + reason);
+    // Handle gracefully (restart, cleanup, etc.)
+    yield state;
+}
+```
+
+---
+
+### 3. Prefer Monitoring for Unidirectional Needs
+
+```java
+// If you only need to know when child dies:
+ProcMonitor.monitor(child, reason -> {
+    logger.info("Child terminated: {}", reason);
+});
+
+// Don't use link unless you want bidirectional crash propagation
+```
+
+---
+
+### 4. Combine with Supervision Carefully
+
+```java
+// Supervised child + linked peer
+ProcRef<Worker, WorkerMsg> worker = supervisor.supervise("worker", state, handler);
+Proc<Logger, LogMsg> logger = Proc.spawn(logState, logHandler);
+
+ProcLink.link(worker.proc(), logger);
+
+// If worker crashes:
+// 1. Supervisor restarts worker (supervision)
+// 2. Logger is interrupted (link)
+
+// If logger crashes:
+// 1. Worker is interrupted (link)
+// 2. Supervisor restarts worker (supervision)
+
+// Both mechanisms work together
+```
+
+---
+
+## Gotchas
+
+### 1. Normal Exit Doesn't Propagate
+
+```java
+ProcLink.link(a, b);
+
+a.stop();  // Normal exit
+// b is NOT affected
+
+// Only abnormal exits (exceptions) propagate
+```
+
+---
+
+### 2. Linked Processes Can't Be Unlinked
+
+```java
+ProcLink.link(a, b);
+
+// No way to unlink!
+// Use monitoring instead if you need cancellation
+```
+
+---
+
+### 3. Exit Signal Type Safety
+
+```java
+// If M doesn't include ExitSignal:
+proc.trapExits(true);
+ProcLink.link(proc, other);
+
+// When other crashes:
+// ClassCastException at dispatch time!
+
+// Solution: Ensure M includes ExitSignal
+sealed interface Msg extends ExitSignal, UserMsg {}
+```
+
+---
+
+### 4. Spawn + Link Window
+
+```java
+// Wrong: Window for crash
+var child = new Proc<>(state, handler);
+// Child could crash here before link!
+ProcLink.link(parent, child);
+
+// Right: Atomic spawn + link
+var child = ProcLink.spawnLink(parent, state, handler);
+```
+
+---
+
+## See Also
+
+- [ProcMonitor API](./procmonitor.mdx) — Unilateral crash monitoring
+- [Proc API](./proc.mdx) — Lightweight process primitive
+- [Supervisor API](./supervisor.mdx) — Hierarchical supervision
+- [Erlang link/1 Documentation](https://erlang.org/doc/man/erlang.html#link-1) — OTP reference

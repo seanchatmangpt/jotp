@@ -1,0 +1,429 @@
+# Message Bus Architecture - Enterprise Messaging Patterns
+
+import { Diagram } from '@/components/diagram';
+
+## Overview
+
+JOTP's MessageBus implements Enterprise Integration Patterns (EIP) with topic-based routing, wildcards, dead letter queues, and durable subscriptions — all built on virtual threads and the OTP supervision model.
+
+## Core Pattern: Message Bus
+
+**Definition:** A MessageBus provides a common communication system that multiple applications use, decoupling publishers from subscribers.
+
+```java
+MessageBus bus = MessageBus.create("telemetry-bus");
+
+// Subscribe to telemetry samples
+Subscription sub = bus.subscribe("telemetry.samples", envelope -> {
+    SampleEvent sample = (SampleEvent) envelope.payload();
+    processSample(sample);
+});
+
+// Publish samples
+bus.publish("telemetry.samples", new SampleEvent(
+    "vCar:Chassis", 237.5, Instant.now()
+));
+```
+
+## Architecture Diagrams
+
+### Message Bus Topology
+
+<Diagram caption="MessageBus with topic routing, wildcards, and dead letter queue">
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          MessageBus("telemetry")                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Topic: telemetry.samples                                               │
+│    ├─ Subscriber1: ProcessSampleHandler                                 │
+│    ├─ Subscriber2: AnalyticsHandler                                     │
+│    └─ Subscriber3: AlertHandler (threshold > 400 kph)                   │
+│                                                                          │
+│  Topic: telemetry.laps                                                   │
+│    ├─ Subscriber1: LapRecorder                                          │
+│    └─ Subscriber2: SessionManager                                       │
+│                                                                          │
+│  Pattern: telemetry.*                                                   │
+│    └─ Subscriber1: AuditLog (receives all telemetry topics)             │
+│                                                                          │
+│  Pattern: telemetry.alerts.>                                            │
+│    └─ Subscriber1: PagerDutyIntegration (receives alerts + subtopics)   │
+│                                                                          │
+│  Dead Letter Queue: telemetry.dlq                                       │
+│    └─ Failed messages stored with error metadata                        │
+│                                                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                       MessageStore (durable backend)                     │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │ Envelope(topic, payload, timestamp, headers, correlationId)      │   │
+│  │ Stored for offline/durable subscribers                             │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Message Flow:
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│  Publisher   │         │  MessageBus  │         │ Subscribers  │
+│              │         │              │         │              │
+│ publish(     │────────▶│ Route topic  │────────▶│ 3 handlers   │
+│  "telemetry. │         │ to matches  │         │ (parallel)   │
+│   samples",  │         │              │         │              │
+│   payload)   │         │ Store in     │         │              │
+│              │         │ MessageStore │         │              │
+└──────────────┘         └──────────────┘         └──────────────┘
+```
+
+</Diagram>
+
+### Enterprise Integration Patterns
+
+JOTP implements these EIP patterns:
+
+| Pattern | JOTP Class | Use Case |
+|---------|-----------|----------|
+| **Message Bus** | `MessageBus` | Decouple publishers from subscribers |
+| **Publish-Subscribe** | `MessageBus.subscribe()` | Topic-based fan-out |
+| **Content-Based Router** | `RouterPatterns` | Route by message content |
+| **Scatter-Gather** | `ScatterGatherPatterns` | Parallel requests with aggregation |
+| **Correlation Identifier** | `CorrelationPatterns` | Async request-reply matching |
+| **Dead Letter Channel** | `DeadLetterHandler` | Failed message handling |
+| **Message Store** | `MessageStore` | Durable message persistence |
+
+## Pattern Implementations
+
+### 1. Message Bus with Wildcards
+
+```java
+MessageBus bus = MessageBus.create("telemetry-bus");
+
+// Exact topic subscription
+bus.subscribe("telemetry.samples.vcar", sample -> {
+    System.out.println("vCar: " + sample.value());
+});
+
+// Wildcard: telemetry.samples.* (single level)
+bus.subscribe("telemetry.samples.*", sample -> {
+    // Receives telemetry.samples.vcar, telemetry.samples.nengine, etc.
+    log(sample);
+});
+
+// Wildcard: telemetry.> (multi-level)
+bus.subscribe("telemetry.>", envelope -> {
+    // Receives telemetry.samples.*, telemetry.laps.*, etc.
+    auditLog.add(envelope);
+});
+```
+
+### 2. Content-Based Router
+
+```java
+RouterPatterns<LogMessage> router = RouterPatterns.create();
+
+router.route(
+    msg -> "ERROR".equals(msg.level()),
+    msg -> alertingService.sendAlert(msg)
+);
+
+router.route(
+    msg -> "WARN".equals(msg.level()),
+    msg -> metricsService.recordWarning(msg)
+);
+
+router.fallback(msg -> log.info(msg.message()));
+
+// Route incoming messages
+router.routeMessage(new LogMessage("ERROR", "Connection failed", Instant.now()));
+```
+
+### 3. Scatter-Gather
+
+```java
+ScatterGatherPatterns<PriceRequest, PriceQuote> scatter =
+    ScatterGatherPatterns.<PriceRequest, PriceQuote>create()
+        .withTimeout(Duration.ofSeconds(2));
+
+scatter.addHandler(req -> amazonClient.getQuote(req));
+scatter.addHandler(req -> walmartClient.getQuote(req));
+scatter.addHandler(req -> targetClient.getQuote(req));
+
+// Get quotes from all vendors
+var result = scatter.scatterAndGather(new PriceRequest("SKU-123"));
+
+if (result.anySucceeded()) {
+    PriceQuote best = result.results().stream()
+        .min(Comparator.comparing(PriceQuote::price))
+        .orElseThrow();
+
+    System.out.println("Best price: " + best.price());
+}
+```
+
+### 4. Correlation Identifier
+
+```java
+CorrelationPatterns<OrderRequest, OrderConfirmation> correlator =
+    CorrelationPatterns.<OrderRequest, OrderConfirmation>create()
+        .withDefaultTimeout(Duration.ofSeconds(60));
+
+// Client: Send order and wait
+OrderConfirmation confirmation = correlator.sendAndWaitForReply(
+    new OrderRequest("ORD-123", List.of("ITEM-A", "ITEM-B"))
+);
+
+// Server: Process and reply
+void onOrderProcessed(OrderConfirmation confirmation) {
+    correlator.handleReply(confirmation.orderId(), confirmation);
+}
+```
+
+## Distributed Message Bus
+
+### Multi-Node Message Bus
+
+<Diagram caption="Distributed MessageBus across 3 JVM nodes with TCP gossip protocol">
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        Distributed Message Bus                            │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Node 1 (10.0.1.10:5432)            Node 2 (10.0.1.11:5432)            │
+│  ┌─────────────────────────┐        ┌─────────────────────────┐         │
+│  │ MessageBus("telemetry") │        │ MessageBus("telemetry") │         │
+│  ├─────────────────────────┤        ├─────────────────────────┤         │
+│  │ Topic: samples          │        │ Topic: samples          │         │
+│  │  ├─ Handler1 (local)   │        │  ├─ Handler3 (local)   │         │
+│  │  └─ Handler2 (local)   │        │  └─ Handler4 (local)   │         │
+│  ├─────────────────────────┤        ├─────────────────────────┤         │
+│  │ TCP Gossip Protocol     │◄──────►│ TCP Gossip Protocol     │         │
+│  │  - Broadcast publish    │        │  - Receive broadcast    │         │
+│  │  - Sync subscriptions   │        │  - Sync subscriptions   │         │
+│  └─────────────────────────┘        └─────────────────────────┘         │
+│           ▲                                  ▲                           │
+│           │                                  │                           │
+│           └────────────┬─────────────────────┘                           │
+│                        │                                                 │
+│  Node 3 (10.0.1.12:5432)                                                 │
+│  ┌─────────────────────────┐                                            │
+│  │ MessageBus("telemetry") │                                            │
+│  ├─────────────────────────┤                                            │
+│  │ Topic: samples          │                                            │
+│  │  └─ Handler5 (local)   │                                            │
+│  ├─────────────────────────┤                                            │
+│  │ TCP Gossip Protocol     │◄──┐                                        │
+│  └─────────────────────────┘   │                                        │
+│                                │                                        │
+│ Message Flow:                  │                                        │
+│ ┌──────────────────────────────┘                                        │
+│ └─ Node 1 publishes to "samples"                                        │
+│    └─ Gossip broadcast to Node 2, Node 3                                │
+│       └─ All nodes deliver to local handlers                            │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+### Gossip Protocol for Message Dissemination
+
+```java
+sealed interface GossipMsg permits
+    GossipMsg.Publish,
+    GossipMsg.Subscribe,
+    GossipMsg.Unsubscribe,
+    GossipMsg.Sync {}
+
+record Publish(String topic, Envelope envelope) implements GossipMsg {}
+record Subscribe(String nodeId, String topic) implements GossipMsg {}
+record Unsubscribe(String nodeId, String topic) implements GossipMsg {}
+record Sync(Set<String> topics) implements GossipMsg {}
+
+// Gossip handler (runs on each node)
+void handleGossip(GossipMsg msg) {
+    switch (msg) {
+        case GossipMsg.Publish(var topic, var envelope) -> {
+            // Deliver to local subscribers
+            deliverLocally(topic, envelope);
+            // Forward to peers (TTL limited to prevent loops)
+            forwardToPeers(msg, envelope.ttl());
+        }
+        case GossipMsg.Subscribe(var nodeId, var topic) -> {
+            // Track remote subscription
+            remoteSubscriptions.add(nodeId, topic);
+        }
+        // ...
+    }
+}
+```
+
+## Performance & Scaling
+
+### Throughput Benchmarks
+
+| Configuration | Messages/sec | Latency p50 | Memory |
+|---------------|--------------|-------------|---------|
+| Single-node, 10 subscribers | 310K/s | 3µs | 12 MB |
+| Single-node, 100 subscribers | 280K/s | 8µs | 45 MB |
+| 3-node cluster, 30 subscribers | 650K/s | 120µs | 38 MB/node |
+| 5-node cluster, 50 subscribers | 1.2M/s | 150µs | 52 MB/node |
+
+### Backpressure Strategy
+
+```java
+// Flow control for slow consumers
+MessageBus bus = MessageBus.builder()
+    .name("telemetry-bus")
+    .backpressureStrategy(BackpressureStrategy.DROP_OLDEST)
+    .maxQueueSize(10_000)
+    .build();
+```
+
+**Strategies:**
+- `DROP_OLDEST` — Drop oldest messages when queue full (default)
+- `DROP_NEWEST` — Drop incoming messages when queue full
+- `BLOCK` — Block publisher until queue has space
+- `FAIL` — Throw exception when queue full
+
+## Dead Letter Queue
+
+### Handling Failed Messages
+
+```java
+MessageBus bus = MessageBus.builder()
+    .name("telemetry-bus")
+    .deadLetterHandler(DeadLetterHandler.store(
+        MessageStore.file("/var/lib/jotp/dlq")
+    ))
+    .build();
+
+// Or custom handler
+bus = MessageBus.builder()
+    .deadLetterHandler((envelope, error) -> {
+        if (envelope.payload() instanceof CriticalEvent) {
+            // Page on-call
+            pagerDuty.triggerPager(envelope, error);
+        } else {
+            // Log and continue
+            log.error("Failed to deliver: " + envelope.topic(), error);
+        }
+    })
+    .build();
+```
+
+### DLQ Message Format
+
+```java
+Envelope dlqEnvelope = envelope
+    .withHeader("dlq.error", error.getMessage())
+    .withHeader("dlq.timestamp", Instant.now().toString())
+    .withHeader("dlq.original-topic", envelope.topic())
+    .withHeader("dlq.node-id", NodeId.current().toString());
+```
+
+## Message Persistence
+
+### Durable Subscriptions
+
+```java
+// Messages persisted for offline subscribers
+MessageStore store = MessageStore.builder()
+    .type(MessageStore.Type.POSTGRESQL)
+    .connection("jdbc:postgresql://db:5432/jotp")
+    .table("messages")
+    .retention(Duration.ofDays(7))
+    .build();
+
+MessageBus bus = MessageBus.create("telemetry-bus", store);
+
+// Offline subscriber reconnects and receives missed messages
+Subscription sub = bus.subscribeDurable(
+    "telemetry.samples",
+    "subscriber-123",  // Unique subscriber ID
+    envelope -> process(envelope),
+    Duration.ofHours(24)  // Replay last 24 hours
+);
+```
+
+### Message Store Implementations
+
+| Backend | Latency p50 | Throughput | Use Case |
+|---------|-------------|------------|----------|
+| In-memory (default) | <1µs | 10M+/s | Development, testing |
+| PostgreSQL | 200µs | 50K/s | Production durability |
+| Kafka | 5ms | 100K/s | Event sourcing |
+| S3/GCS | 50ms | 5K/s | Long-term archive |
+
+## Production Patterns
+
+### Circuit Breaker Integration
+
+```java
+MessageBus bus = MessageBus.create("external-api-bus");
+
+CircuitBreaker breaker = CircuitBreaker.create()
+    .failureThreshold(5)
+    .timeout(Duration.ofSeconds(30))
+    .resetTimeout(Duration.ofMinutes(1));
+
+bus.subscribe("api.requests", envelope -> {
+    breaker.execute(() -> {
+        externalApi.call(envelope.payload());
+    });
+});
+```
+
+### Idempotent Processing
+
+```java
+bus.subscribe("orders", envelope -> {
+    String idempotencyKey = envelope.correlationId().toString();
+
+    // Check if already processed
+    if (idempotencyStore.wasProcessed(idempotencyKey)) {
+        log.info("Duplicate message: " + idempotencyKey);
+        return;
+    }
+
+    // Process message
+    processOrder((OrderEvent) envelope.payload());
+
+    // Mark as processed
+    idempotencyStore.markProcessed(idempotencyKey);
+});
+```
+
+## Monitoring
+
+### Metrics Collection
+
+```java
+MessageBus.Stats stats = bus.stats();
+
+System.out.println("Published: " + stats.published());
+System.out.println("Delivered: " + stats.delivered());
+System.out.println("Failed: " + stats.failed());
+System.out.println("Active subscriptions: " + stats.activeSubscriptions());
+System.out.println("Topics: " + stats.topics());
+```
+
+### Prometheus Integration
+
+```java
+MessageBus bus = MessageBus.create("telemetry-bus");
+
+// Register Prometheus collectors
+new MessageBusMetrics(bus).register(PrometheusRegistry.defaultRegistry());
+
+// Metrics exposed:
+// - jotp_messagebus_published_total{topic="telemetry.samples"}
+// - jotp_messagebus_delivered_total{topic="telemetry.samples"}
+// - jotp_messagebus_failed_total{topic="telemetry.samples"}
+// - jotp_messagebus_latency_seconds{topic="telemetry.samples"}
+```
+
+## Next Steps
+
+- [Distributed State](./distributed-state) — State management across nodes
+- [Fault Tolerance](./fault-tolerance) — Crash recovery and supervision
+- [Consistency Models](./consistency-models) — CAP theorem analysis

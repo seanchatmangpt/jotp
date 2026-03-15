@@ -1,0 +1,768 @@
+---
+title: "Supervision Basics"
+description: "Building fault-tolerant systems with supervision trees and restart strategies"
+difficulty: intermediate
+estimatedTime: "30 minutes"
+tutorialNumber: 4
+totalTutorials: 6
+nextTutorial: "05-message-passing-patterns"
+prevTutorial: "03-understanding-virtual-threads"
+---
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+# Supervision Basics
+
+<Badge variant="secondary">Tutorial 4 of 6</Badge>
+
+Supervision is JOTP's secret sauce for building fault-tolerant systems. Instead of trying to prevent all failures, JOTP embraces them: processes crash, supervisors restart them, and the system keeps running. In this tutorial, you'll master supervision trees and restart strategies.
+
+## What You'll Learn
+
+By the end of this tutorial, you'll understand:
+
+- The "let it crash" philosophy
+- How supervisors monitor and restart processes
+- Three restart strategies: ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE
+- Building supervision trees for complex applications
+- Configuring restart limits and intensity
+
+## The Philosophy: Let It Crash
+
+<Alert>
+  <AlertTitle>💡 Core Principle</AlertTitle>
+  <AlertDescription>
+    <p className="mb-2"><strong>"Defensive programming fails. Let it crash succeeds."</strong></p>
+    <p className="text-sm">Instead of writing complex error handling in each process, let supervisors handle failures uniformly. This results in:</p>
+    <ul className="list-disc list-inside mt-2 text-sm">
+      <li><strong>Cleaner code:</strong> Focus on the happy path, not error cases</li>
+      <li><strong>Better isolation:</strong> Errors don't propagate unexpectedly</li>
+      <li><strong>Automatic recovery:</strong> Fresh process state after restart</li>
+      <li><strong>Easier debugging:</strong> Crash logs show what went wrong</li>
+    </ul>
+  </AlertDescription>
+</Alert>
+
+## Anatomy of a Supervisor
+
+A supervisor is a process that monitors child processes:
+
+```java
+{import io.github.seanchatmangpt.jotp.Supervisor;
+import java.time.Duration;
+
+/**
+ * Supervisor Configuration
+ *
+ * - Strategy: How to handle child crashes
+ * - Max Restarts: Maximum restarts allowed
+ * - Time Window: Period for max restarts calculation
+ * - Callbacks: Optional notifications for lifecycle events
+ */
+var supervisor = Supervisor.create()
+    .withStrategy(RestartStrategy.ONE_FOR_ONE)
+    .withMaxRestarts(5)           // Max 5 restarts
+    .withWindowSeconds(60)        // Within 60 seconds
+    .onChildExit((childId, reason) -> {
+        System.out.println("Child " + childId + " exited: " + reason);
+    })
+    .build();
+
+// Add child processes
+supervisor.supervise("child-1", initialState, handler);
+supervisor.supervise("child-2", initialState, handler);
+
+// Start supervision
+supervisor.start();}
+```
+
+## Restart Strategies
+
+### Strategy 1: ONE_FOR_ONE
+
+When a child crashes, **only that child** is restarted:
+
+```
+Before Crash:
+┌─────────────────────────────┐
+│  Supervisor (ONE_FOR_ONE)   │
+│  ├─ Child 1 (RUNNING)       │  ← Crashes!
+│  ├─ Child 2 (RUNNING)       │  ← Unaffected
+│  └─ Child 3 (RUNNING)       │  ← Unaffected
+└─────────────────────────────┘
+
+After Crash:
+┌─────────────────────────────┐
+│  Supervisor (ONE_FOR_ONE)   │
+│  ├─ Child 1 (RESTARTING)    │  ← Only this restarts
+│  ├─ Child 2 (RUNNING)       │  ← Kept running
+│  └─ Child 3 (RUNNING)       │  ← Kept running
+└─────────────────────────────┘
+```
+
+**Use case:** Independent processes where failures don't affect others.
+
+```java
+{/**
+ * ONE_FOR_ONE Strategy Example
+ *
+ * Perfect for: Independent workers, stateless services
+ */
+public class OneForOneDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Create 3 independent workers
+        var worker1 = supervisor.supervise("worker-1", 0, workerHandler);
+        var worker2 = supervisor.supervise("worker-2", 0, workerHandler);
+        var worker3 = supervisor.supervise("worker-3", 0, workerHandler);
+
+        // Worker 1 crashes
+        System.out.println("Crashing worker-1...");
+        worker1.tell(new CrashMessage());
+
+        Thread.sleep(100);
+
+        // Only worker-1 is restarted!
+        System.out.println("Worker-2 still running: " + worker2.isAlive());
+        System.out.println("Worker-3 still running: " + worker3.isAlive());
+        System.out.println("Worker-1 restarted: " + worker1.isAlive());
+
+        supervisor.shutdown();
+    }
+
+    static Proc.StateResult<Integer, Object> workerHandler(Integer state, Object msg) {
+        if (msg instanceof CrashMessage) {
+            throw new RuntimeException("Worker crashed!");
+        }
+        return new Proc.StateResult<>(state + 1, null);
+    }
+
+    record CrashMessage() {}
+}}
+```
+
+### Strategy 2: ONE_FOR_ALL
+
+When a child crashes, **all children** are restarted:
+
+```
+Before Crash:
+┌─────────────────────────────┐
+│  Supervisor (ONE_FOR_ALL)   │
+│  ├─ Child 1 (RUNNING)       │  ← Crashes!
+│  ├─ Child 2 (RUNNING)       │  ← Also restarted
+│  └─ Child 3 (RUNNING)       │  ← Also restarted
+└─────────────────────────────┘
+
+After Crash:
+┌─────────────────────────────┐
+│  Supervisor (ONE_FOR_ALL)   │
+│  ├─ Child 1 (RESTARTING)    │
+│  ├─ Child 2 (RESTARTING)    │  ← All restart
+│  └─ Child 3 (RESTARTING)    │  ← together
+└─────────────────────────────┘
+```
+
+**Use case:** Tightly coupled processes that share state or dependencies.
+
+```java
+{/**
+ * ONE_FOR_ALL Strategy Example
+ *
+ * Perfect for: Stateful services, shared resource managers
+ */
+public class OneForAllDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ALL,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Create 3 tightly coupled workers
+        // They share a database connection pool
+        var worker1 = supervisor.supervise("worker-1", new ConnectionState(), dbHandler);
+        var worker2 = supervisor.supervise("worker-2", new ConnectionState(), dbHandler);
+        var worker3 = supervisor.supervise("worker-3", new ConnectionState(), dbHandler);
+
+        System.out.println("All workers using same DB connection...");
+
+        // Worker 1 crashes (e.g., DB connection lost)
+        System.out.println("Worker-1 detected DB failure, crashing...");
+        worker1.tell(new CrashMessage());
+
+        Thread.sleep(100);
+
+        // ALL workers are restarted to get fresh connections
+        System.out.println("All workers restarted with fresh connections!");
+
+        supervisor.shutdown();
+    }
+
+    record ConnectionState() {}
+
+    static Proc.StateResult<ConnectionState, Object> dbHandler(
+        ConnectionState state,
+        Object msg
+    ) {
+        if (msg instanceof CrashMessage) {
+            throw new RuntimeException("Database connection lost!");
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    record CrashMessage() {}
+}}
+```
+
+### Strategy 3: REST_FOR_ONE
+
+When a child crashes, **that child and all started after it** are restarted:
+
+```
+Before Crash:
+┌─────────────────────────────┐
+│  Supervisor (REST_FOR_ONE)  │
+│  ├─ Child 1 (RUNNING)       │  ← Started first
+│  ├─ Child 2 (RUNNING)       │  ← Started second
+│  └─ Child 3 (RUNNING)       │  ← Crashes! Started last
+└─────────────────────────────┘
+
+After Crash:
+┌─────────────────────────────┐
+│  Supervisor (REST_FOR_ONE)  │
+│  ├─ Child 1 (RUNNING)       │  ← Unaffected
+│  ├─ Child 2 (RESTARTING)    │  ← Restarted (after 1)
+│  └─ Child 3 (RESTARTING)    │  ← Restarted (crashed)
+└─────────────────────────────┘
+```
+
+**Use case:** Dependency chains where earlier processes support later ones.
+
+```java
+{/**
+ * REST_FOR_ONE Strategy Example
+ *
+ * Perfect for: Dependency chains, pipelines, layered services
+ */
+public class RestForOneDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.REST_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Dependency chain: Config → Database → Service
+        var config = supervisor.supervise("config", new ConfigState(), configHandler);
+        var database = supervisor.supervise("database", new DbState(), dbHandler);
+        var service = supervisor.supervise("service", new ServiceState(), serviceHandler);
+
+        System.out.println("Started: Config → Database → Service");
+
+        // Service crashes (maybe database is unreachable)
+        System.out.println("\nService crashed due to DB error...");
+        service.tell(new CrashMessage());
+
+        Thread.sleep(100);
+
+        // Service and Database restart (they depend on each other)
+        // Config stays running (independent)
+        System.out.println("Config still running: " + config.isAlive());
+        System.out.println("Database restarted: " + database.isAlive());
+        System.out.println("Service restarted: " + service.isAlive());
+
+        supervisor.shutdown();
+    }
+
+    record ConfigState() {}
+    record DbState() {}
+    record ServiceState() {}
+
+    static Proc.StateResult<ConfigState, Object> configHandler(ConfigState s, Object m) {
+        return new Proc.StateResult<>(s, null);
+    }
+
+    static Proc.StateResult<DbState, Object> dbHandler(DbState s, Object m) {
+        return new Proc.StateResult<>(s, null);
+    }
+
+    static Proc.StateResult<ServiceState, Object> serviceHandler(ServiceState s, Object m) {
+        if (m instanceof CrashMessage) {
+            throw new RuntimeException("Service crashed!");
+        }
+        return new Proc.StateResult<>(s, null);
+    }
+
+    record CrashMessage() {}
+}}
+```
+
+## Building Supervision Trees
+
+Real applications use hierarchical supervision trees:
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+
+/**
+ * Supervision Tree for a Web Application
+ *
+ *                      App Supervisor
+ *                           (ONE_FOR_ALL)
+ *                     ┌─────┴─────┐
+ *                     │           │
+ *              Web Supervisor  DB Supervisor
+ *              (ONE_FOR_ONE)   (ONE_FOR_ONE)
+ *              ┌─┴─┬─┬─┐      ┌─┴─┬─┬─┐
+ *             R1  R2 R3 R4   C1  C2 C3 C4
+ *
+ * R = Request handler (stateless, independent)
+ * C = Database connection (stateful, shared)
+ */
+public class SupervisionTreeDemo {
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  JOTP Supervision Tree Demo               ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        // Level 1: Application Supervisor
+        var appSupervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ALL,  // If DB fails, restart web layer too
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Level 2: Web Supervisor
+        var webSupervisor = appSupervisor.supervise(
+            "web-layer",
+            null,
+            Supervisor.Strategy.ONE_FOR_ONE,  // Independent request handlers
+            10,
+            Duration.ofMinutes(1)
+        );
+
+        // Level 2: Database Supervisor
+        var dbSupervisor = appSupervisor.supervise(
+            "db-layer",
+            null,
+            Supervisor.Strategy.ONE_FOR_ONE,  // Independent connection pools
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Level 3: Request Handlers
+        for (int i = 1; i <= 5; i++) {
+            webSupervisor.supervise(
+                "request-handler-" + i,
+                new RequestHandlerState(i),
+                SupervisionTreeDemo::handleRequest
+            );
+        }
+
+        // Level 3: Connection Pools
+        for (int i = 1; i <= 3; i++) {
+            dbSupervisor.supervise(
+                "connection-pool-" + i,
+                new ConnectionPoolState(i),
+                SupervisionTreeDemo::handleConnection
+            );
+        }
+
+        System.out.println("✅ Supervision tree created");
+        System.out.println("   App Supervisor (ONE_FOR_ALL)");
+        System.out.println("   ├─ Web Supervisor (ONE_FOR_ONE) → 5 handlers");
+        System.out.println("   └─ DB Supervisor (ONE_FOR_ONE) → 3 pools\n");
+
+        // Simulate crashes
+        System.out.println("--- Simulating Request Handler Crash ---");
+        var handler1 = webSupervisor.getChild("request-handler-1").orElseThrow();
+        handler1.tell(new CrashMessage());
+
+        Thread.sleep(100);
+
+        System.out.println("Handler-1 restarted: " + handler1.isAlive());
+        System.out.println("Other handlers still running: " +
+            webSupervisor.getChild("request-handler-2").orElseThrow().isAlive());
+
+        System.out.println("\n--- Simulating Database Pool Crash ---");
+        var pool1 = dbSupervisor.getChild("connection-pool-1").orElseThrow();
+        pool1.tell(new CrashMessage());
+
+        Thread.sleep(100);
+
+        System.out.println("Pool-1 restarted: " + pool1.isAlive());
+
+        appSupervisor.shutdown();
+        System.out.println("\n✨ Demo complete!");
+    }
+
+    // State classes
+    record RequestHandlerState(int id) {}
+    record ConnectionPoolState(int id) {}
+
+    // Handler for request processors
+    static Proc.StateResult<RequestHandlerState, Object> handleRequest(
+        RequestHandlerState state,
+        Object msg
+    ) {
+        if (msg instanceof CrashMessage) {
+            throw new RuntimeException("Handler " + state.id() + " crashed!");
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    // Handler for connection pools
+    static Proc.StateResult<ConnectionPoolState, Object> handleConnection(
+        ConnectionPoolState state,
+        Object msg
+    ) {
+        if (msg instanceof CrashMessage) {
+            throw new RuntimeException("Pool " + state.id() + " crashed!");
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    record CrashMessage() {}
+}}
+```
+
+<CopyButton>Copy supervision tree example</CopyButton>
+
+## Configuring Restart Limits
+
+Prevent infinite restart loops with intensity limits:
+
+```java
+{/**
+ * Restart Intensity Configuration
+ *
+ * Max Restarts: Maximum number of restarts allowed
+ * Window: Time period for max restarts
+ *
+ * Example: 5 restarts within 60 seconds
+ * - If 5 restarts happen in 60 seconds → Supervisor gives up
+ * - If restarts are spaced out → Supervisor continues forever
+ */
+var supervisor = Supervisor.create()
+    .withStrategy(RestartStrategy.ONE_FOR_ONE)
+    .withMaxRestarts(5)        // Allow 5 restarts
+    .withWindowSeconds(60)     // Within 60 seconds
+    .onChildExit((childId, reason) -> {
+        if (reason instanceof Supervisor.TooManyRestartsException) {
+            System.err.println("❌ " + childId + " exceeded restart limit!");
+            // Escalate to human operator or recovery system
+        }
+    })
+    .build();
+
+/**
+ * Restart Timing Examples
+ *
+ * Scenario 1: Normal operation
+ * Restart at: 0s, 15s, 30s, 45s, 55s
+ * → 5 restarts in 60s
+ * → Supervisor shuts down child
+ *
+ * Scenario 2: Healthy system
+ * Restart at: 0s, 120s, 240s, 360s, 480s
+ * → 5 restarts, but not in 60s window
+ * → Supervisor continues forever
+ *
+ * Scenario 3: Crash loop
+ * Restart at: 0s, 1s, 2s, 3s, 4s
+ * → 5 restarts in 5 seconds
+ * → Supervisor shuts down child immediately
+ */}
+```
+
+## Advanced: Child Specifications
+
+For complex child configuration, use `ChildSpec`:
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.function.Supplier;
+
+/**
+ * ChildSpec: Detailed child process configuration
+ *
+ * - RestartType: When to restart (permanent, transient, temporary)
+ * - Shutdown: How long to wait for graceful shutdown
+ * - Factory: Supplier that creates the child process
+ */
+public class ChildSpecDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Child 1: Permanent - always restart
+        supervisor.addChild(ChildSpec.of(
+            "permanent-worker",
+            () -> createWorker("permanent"),
+            RestartType.PERMANENT
+        ));
+
+        // Child 2: Transient - restart only on abnormal exit
+        supervisor.addChild(ChildSpec.of(
+            "transient-worker",
+            () -> createWorker("transient"),
+            RestartType.TRANSIENT
+        ));
+
+        // Child 3: Temporary - never restart
+        supervisor.addChild(ChildSpec.of(
+            "temporary-worker",
+            () -> createWorker("temporary"),
+            RestartType.TEMPORARY
+        ));
+
+        supervisor.start();
+        // ...
+        supervisor.shutdown();
+    }
+
+    static Proc<?, ?> createWorker(String type) {
+        return Proc.spawn(
+            () -> type,
+            (state, msg) -> new Proc.StateResult<>(state, null),
+            null
+        );
+    }
+}}
+```
+
+## Complete Example: Fault-Tolerant Service
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Fault-Tolerant Payment Processing Service
+ *
+ * Demonstrates:
+ * - Supervision tree design
+ * - Multiple restart strategies
+ * - Crash recovery
+ * - Metrics collection
+ */
+public class PaymentServiceDemo {
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  Fault-Tolerant Payment Service           ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        // Create service supervisor
+        var serviceSupervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            10,
+            Duration.ofMinutes(1)
+        );
+
+        // Payment processor (may crash on invalid transactions)
+        var processor = serviceSupervisor.supervise(
+            "payment-processor",
+            new ProcessorState(new AtomicInteger(0)),
+            PaymentServiceDemo::handlePayment
+        );
+
+        // Metrics collector (should never crash)
+        var metrics = serviceSupervisor.supervise(
+            "metrics-collector",
+            new MetricsState(),
+            PaymentServiceDemo::handleMetrics
+        );
+
+        System.out.println("Processing 100 payments...");
+
+        // Process payments with random failures
+        for (int i = 0; i < 100; i++) {
+            if (i == 50) {
+                // Simulate crash
+                System.out.println("\n⚠️ Payment 50: Invalid transaction!");
+                processor.tell(new ProcessPayment(i, -100));  // Negative amount = crash
+            } else {
+                processor.tell(new ProcessPayment(i, ThreadLocalRandom.current().nextInt(10, 1000)));
+            }
+
+            metrics.tell(new RecordPayment(i));
+
+            if ((i + 1) % 10 == 0) {
+                System.out.println("Processed " + (i + 1) + " payments...");
+            }
+        }
+
+        Thread.sleep(100);
+
+        System.out.println("\n--- Final Statistics ---");
+        var stats = metrics.ask(new GetMetrics(), Duration.ofSeconds(1)).get();
+        System.out.println(stats);
+
+        serviceSupervisor.shutdown();
+        System.out.println("\n✨ Service complete!");
+    }
+
+    // State classes
+    record ProcessorState(AtomicInteger processed) {}
+    record MetricsState(int total, int failed) {
+        MetricsState() { this(0, 0); }
+        MetricsState withSuccess() { return new MetricsState(total + 1, failed); }
+        MetricsState withFailure() { return new MetricsState(total + 1, failed + 1); }
+    }
+
+    // Messages
+    sealed interface PaymentMsg permits ProcessPayment, GetMetrics, RecordPayment {}
+    record ProcessPayment(int id, int amount) implements PaymentMsg {}
+    record GetMetrics() implements PaymentMsg {}
+    record RecordPayment(int id) implements PaymentMsg {}
+
+    // Handlers
+    static Proc.StateResult<ProcessorState, Object> handlePayment(
+        ProcessorState state,
+        Object msg
+    ) {
+        if (msg instanceof ProcessPayment(var id, var amount)) {
+            if (amount < 0) {
+                // Crash on negative amount
+                throw new RuntimeException("Invalid payment amount: " + amount);
+            }
+            state.processed().incrementAndGet();
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<MetricsState, Object> handleMetrics(
+        MetricsState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case RecordPayment(var id) ->
+                new Proc.StateResult<>(state.withSuccess(), null);
+            case GetPayments() ->
+                new Proc.StateResult<>(state, String.format(
+                    "Total: %d, Failed: %d, Success: %.1f%%",
+                    state.total(),
+                    state.failed(),
+                    (1 - (double) state.failed() / state.total()) * 100
+                ));
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+
+    record GetPayments() {}
+}}
+```
+
+<CopyButton>Copy payment service example</CopyButton>
+
+## Checkpoint Summary
+
+<Card className="mt-6">
+  <CardHeader>
+    <CardTitle>✅ Checkpoint: What You've Learned</CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-2">
+    <p>You've mastered:</p>
+    <ul className="list-disc list-inside space-y-1 mt-2">
+      <li>The "let it crash" philosophy and its benefits</li>
+      <li>Three restart strategies: ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE</li>
+      <li>Building hierarchical supervision trees</li>
+      <li>Configuring restart limits and intensity</li>
+      <li>Using ChildSpec for advanced configuration</li>
+      <li>Real-world fault-tolerant service design</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## Practice Exercise
+
+Build a **Multi-Tenant SaaS Service** with:
+
+1. **Tenant Supervisor** (ONE_FOR_ONE) - Each tenant gets isolated processes
+2. **Per-Tenant Services:**
+   - Auth service (PERMANENT restart)
+   - Data service (TRANSIENT restart)
+   - Cache service (TEMPORARY restart)
+3. **Features:**
+   - 10 tenants with 3 services each
+   - Simulate tenant service crashes
+   - Verify isolation (tenant A crash doesn't affect tenant B)
+   - Track restart metrics per tenant
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium">Show Hint</summary>
+  ```java
+  var tenantSupervisor = new Supervisor(ONE_FOR_ONE, ...);
+
+  for (int tenantId : tenantIds) {
+      var tenant = tenantSupervisor.supervise("tenant-" + tenantId, ...);
+
+      tenant.supervise("auth", ..., PERMANENT);
+      tenant.supervise("data", ..., TRANSIENT);
+      tenant.supervise("cache", ..., TEMPORARY);
+  }
+  ```
+</details>
+
+## Common Issues
+
+<Alert variant="destructive">
+  <AlertTitle>⚠️ Troubleshooting</AlertTitle>
+  <AlertDescription>
+    <div className="space-y-3">
+      <div>
+        <strong>Issue: "All processes restarting when one crashes"</strong><br/>
+        <span className="text-sm">Cause: Using ONE_FOR_ALL strategy when you need ONE_FOR_ONE.</span><br/>
+        <span className="text-sm">Solution: Change restart strategy to ONE_FOR_ONE for independent processes.</span>
+      </div>
+      <div>
+        <strong>Issue: "Supervisor shuts down after few restarts"</strong><br/>
+        <span className="text-sm">Cause: Restart intensity too low for crash frequency.</span><br/>
+        <span className="text-sm">Solution: Increase maxRestarts or windowSeconds, or fix the crash.</span>
+      </div>
+      <div>
+        <strong>Issue: "Child processes not restarting"</strong><br/>
+        <span className="text-sm">Cause: Using TEMPORARY restart type or not starting supervisor.</span><br/>
+        <span className="text-sm">Solution: Use PERMANENT restart type and call supervisor.start().</span>
+      </div>
+    </div>
+  </AlertDescription>
+</Alert>
+
+## Next Steps
+
+Excellent work! You now understand how to build fault-tolerant systems. Next, we'll explore advanced **message passing patterns**.
+
+**Next:** [Message Passing Patterns →](/docs/user-guide/tutorials/beginner/05-message-passing-patterns)
+
+---
+
+## Additional Resources
+
+- [Supervisor API Reference](/docs/reference/api/supervisor)
+- [Building Supervision Trees](/docs/user-guide/how-to/build-supervision-trees)
+- [Handling Process Crashes](/docs/user-guide/how-to/handling-process-crashes)
+- [Let It Crash Philosophy](/docs/user-guide/explanations/let-it-crash-philosophy)

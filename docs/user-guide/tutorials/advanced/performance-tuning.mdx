@@ -1,0 +1,755 @@
+# Performance Tuning
+
+import { Callout } from '@/components/docs/callout';
+import { Tabs } from '@/components/docs/tabs';
+import { CodeBlock } from '@/components/docs/code-block';
+
+**Prerequisites:**
+- [Tutorial: Event-Driven Architectures](/user-guide/tutorials/advanced/event-driven-architectures)
+- [How-To: Performance Tuning](/user-guide/how-to/performance-tuning)
+- Understanding of JVM and concurrency
+
+## Overview
+
+This tutorial covers advanced performance optimization techniques for JOTP applications, including benchmarking methodologies, JVM tuning, and achieving production-grade throughput.
+
+## Learning Objectives
+
+By the end of this tutorial, you will:
+- Benchmark JOTP applications scientifically
+- Optimize process message passing
+- Tune JVM for virtual thread performance
+- Apply capacity planning methodologies
+- Troubleshoot performance bottlenecks
+
+## Performance Baseline
+
+### JOTP Performance Characteristics
+
+| Metric | Baseline | Optimized | Unit |
+|--------|----------|-----------|------|
+| **Message passing latency** | 456ns | <200ns | ns/op |
+| **Throughput (single process)** | 28K ops/sec | 150K ops/sec | ops/sec |
+| **Supervisor restart time** | 100ms | <50ms | ms |
+| **Memory per process** | 1.7 KB | <1 KB | bytes |
+| **Virtual thread overhead** | ~15 ops/thread | ~50 ops/thread | ops/thread |
+
+<Callout type="info">
+**Pro Tip: Performance Targets**
+
+Based on production benchmarks from `/Users/sac/jotp/docs/validation/performance/`:
+- **Tier 1 (Financial)**: p99 <10ms, 100K TPS
+- **Tier 2 (E-commerce)**: p99 <50ms, 50K TPS
+- **Tier 3 (Internal)**: p99 <100ms, 10K TPS
+
+Use these as SLA targets for capacity planning.
+</Callout>
+
+---
+
+## Part 1: Benchmarking Methodology
+
+### Scientific Benchmarking with JMH
+
+```java
+package io.github.seanchatmangpt.jotp.examples.performance;
+
+import org.openjdk.jmh.annotations.*;
+import io.github.seanchatmangpt.jotp.*;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * JotpPerformanceBenchmark - Scientific benchmarking using JMH
+ * to measure microsecond-level performance characteristics.
+ */
+@BenchmarkMode(Mode.Throughput)
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Warmup(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+@Fork(3)
+@State(Scope.Thread)
+public class JotpPerformanceBenchmark {
+
+    private Proc<Integer, String> proc;
+    private StateMachine<Integer, String, Integer> stateMachine;
+
+    @Setup
+    public void setup() {
+        proc = new Proc<>(0, (state, msg) -> state + 1);
+
+        stateMachine = StateMachine.<Integer, String, Integer>builder()
+            .state(Integer.class)
+                .on(String.class, (event, data) -> Transition.to(data + 1, data))
+            .build(0, 0);
+    }
+
+    // ── Benchmark 1: Proc.tell() Latency ────────────────────────────────────
+
+    @Benchmark
+    public void benchmarkProcTell() {
+        proc.tell("message");
+    }
+
+    // ── Benchmark 2: Proc Message Processing ────────────────────────────────
+
+    @Benchmark
+    @OperationsPerInvocation(1000)
+    public void benchmarkProcProcessing() {
+        for (int i = 0; i < 1000; i++) {
+            proc.tell("message-" + i);
+        }
+    }
+
+    // ── Benchmark 3: State Machine Transition ────────────────────────────────
+
+    @Benchmark
+    public void benchmarkStateMachineTransition() {
+        stateMachine.handle("event");
+    }
+
+    // ── Benchmark 4: Supervisor Child Spawn ─────────────────────────────────
+
+    @Benchmark
+    public void benchmarkSupervisorSpawn() throws Exception {
+        try (var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            java.time.Duration.ofSeconds(60)
+        )) {
+            supervisor.supervise(
+                "child-" + System.nanoTime(),
+                0,
+                (state, msg) -> state
+            );
+        }
+    }
+
+    // ── Benchmark 5: Event Manager Fan-out ──────────────────────────────────
+
+    @Benchmark
+    public void benchmarkEventManagerFanout() {
+        var eventManager = new EventManager<String>();
+
+        for (int i = 0; i < 10; i++) {
+            eventManager.subscribeHandler(event -> {});
+        }
+
+        eventManager.publish("test-event");
+    }
+
+    // ── Event Manager Helper ─────────────────────────────────────────────────
+
+    static class EventManager<E> {
+        private final java.util.List<java.util.function.Consumer<E>> handlers = new java.util.ArrayList<>();
+
+        public void subscribeHandler(java.util.function.Consumer<E> handler) {
+            handlers.add(handler);
+        }
+
+        public void publish(E event) {
+            for (var handler : handlers) {
+                handler.accept(event);
+            }
+        }
+    }
+
+    // ── Run Benchmarks ───────────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        var opt = new org.openjdk.jmh.options.OptionsBuilder()
+            .include(JotpPerformanceBenchmark.class.getSimpleName())
+            .build();
+
+        new org.openjdk.jmh.runner.Runner(opt).run();
+    }
+}
+```
+
+### Interpreting Benchmark Results
+
+```bash
+# Run benchmark
+mvnd test -Dtest=JotpPerformanceBenchmark -Pbenchmark
+
+# Expected output (example):
+# Benchmark                                          Mode  Cnt      Score      Error  Units
+# JotpPerformanceBenchmark.benchmarkProcTell       thrpt   30  150000.000 ± 2000.000  ops/s
+# JotpPerformanceBenchmark.benchmarkProcProcessing  thrpt   30  28000.000  ± 500.000   ops/s
+# JotpPerformanceBenchmark.benchmarkStateMachine... thrpt   30  45000.000  ± 1000.000  ops/s
+```
+
+<Callout type="warning">
+**Gotcha: Benchmark Validity**
+
+Common mistakes that invalidate benchmarks:
+1. **Not warming up JIT**: Results include compilation overhead
+2. **Single fork**: No statistical validity
+3. **Short measurement**: High variance, noise
+4. **Dead code elimination**: JIT optimizes away work
+
+Use JMH annotations to avoid these pitfalls.
+</Callout>
+
+---
+
+## Part 2: Process Optimization
+
+### Pattern: Optimizing Message Throughput
+
+```java
+package io.github.seanchatmangpt.jotp.examples.performance;
+
+import io.github.seanchatmangpt.jotp.*;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * OptimizedProc - High-throughput process with batched
+ * message processing and reduced allocation.
+ */
+public class OptimizedProc {
+
+    // ── Anti-Pattern: Synchronous Processing ────────────────────────────────
+
+    public static class SlowProc {
+        public static Proc<Long, String> create() {
+            return new Proc<>(
+                0L,
+                (state, msg) -> {
+                    // BAD: Synchronous I/O in handler
+                    try {
+                        Thread.sleep(1);  // Blocks virtual thread
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return state + 1;
+                }
+            );
+        }
+    }
+
+    // ── Pattern: Asynchronous Batch Processing ───────────────────────────────
+
+    public static Proc<AtomicLong, String> createOptimized() {
+        var counter = new AtomicLong(0);
+
+        return new Proc<>(
+            counter,
+            (state, msg) -> {
+                // GOOD: Non-blocking counter increment
+                state.incrementAndGet();
+                return state;
+            }
+        );
+    }
+
+    // ── Pattern: Message Batching ────────────────────────────────────────────
+
+    sealed interface BatchMsg permits
+        AddMessage,
+        FlushBatch {}
+
+    record AddMessage(String message) implements BatchMsg {}
+    record FlushBatch() implements BatchMsg {}
+
+    record BatchState(
+        java.util.List<String> buffer,
+        int batchSize,
+        long totalProcessed
+    ) {}
+
+    public static Proc<BatchState, BatchMsg> createBatchProcessor(int batchSize) {
+        return new Proc<>(
+            new BatchState(new java.util.ArrayList<>(), batchSize, 0),
+            (state, msg) -> switch (msg) {
+                case AddMessage(var message) -> {
+                    var newBuffer = new java.util.ArrayList<>(state.buffer());
+                    newBuffer.add(message);
+
+                    if (newBuffer.size() >= state.batchSize()) {
+                        // Process batch
+                        processBatch(newBuffer);
+
+                        yield new BatchState(
+                            new java.util.ArrayList<>(),
+                            state.batchSize(),
+                            state.totalProcessed() + newBuffer.size()
+                        );
+                    } else {
+                        yield new BatchState(
+                            newBuffer,
+                            state.batchSize(),
+                            state.totalProcessed()
+                        );
+                    }
+                }
+
+                case FlushBatch _ -> {
+                    if (!state.buffer().isEmpty()) {
+                        processBatch(state.buffer());
+                    }
+
+                    yield new BatchState(
+                        new java.util.ArrayList<>(),
+                        state.batchSize(),
+                        state.totalProcessed() + state.buffer().size()
+                    );
+                }
+            }
+        );
+    }
+
+    private static void processBatch(java.util.List<String> batch) {
+        // Simulate batch processing
+        System.out.println("[BATCH] Processing " + batch.size() + " messages");
+    }
+
+    // ── Benchmark Comparison ────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        var iterations = 100_000;
+
+        // Benchmark slow process
+        var slow = SlowProc.create();
+        var start = System.nanoTime();
+
+        for (int i = 0; i < iterations; i++) {
+            slow.tell("msg-" + i);
+        }
+
+        var slowTime = System.nanoTime() - start;
+        System.out.printf("Slow: %d ops in %d ms (%.0f ops/sec)%n",
+            iterations, slowTime / 1_000_000, iterations * 1e9 / slowTime);
+
+        // Benchmark optimized process
+        var optimized = createOptimized();
+        start = System.nanoTime();
+
+        for (int i = 0; i < iterations; i++) {
+            optimized.tell("msg-" + i);
+        }
+
+        var optimizedTime = System.nanoTime() - start;
+        System.out.printf("Optimized: %d ops in %d ms (%.0f ops/sec)%n",
+            iterations, optimizedTime / 1_000_000, iterations * 1e9 / optimizedTime);
+
+        // Benchmark batch process
+        var batch = createBatchProcessor(100);
+        start = System.nanoTime();
+
+        for (int i = 0; i < iterations; i++) {
+            batch.tell(new AddMessage("msg-" + i));
+        }
+        batch.tell(new FlushBatch());
+
+        var batchTime = System.nanoTime() - start;
+        System.out.printf("Batch: %d ops in %d ms (%.0f ops/sec)%n",
+            iterations, batchTime / 1_000_000, iterations * 1e9 / batchTime);
+
+        slow.stop();
+        optimized.stop();
+        batch.stop();
+    }
+}
+```
+
+---
+
+## Part 3: JVM Tuning for Virtual Threads
+
+### Production JVM Configuration
+
+```bash
+#!/bin/bash
+# jotp-production-jvm.sh - Production JVM settings for JOTP
+
+JAVA_OPTS=""
+
+# ── Virtual Thread Configuration ────────────────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -Djdk.virtualThreadScheduler.parallelism=32"
+JAVA_OPTS="${JAVA_OPTS} -Djdk.virtualThreadScheduler.maxPoolSize=256"
+
+# ── Heap Sizing (Based on capacity planning) ────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -Xms2g"
+JAVA_OPTS="${JAVA_OPTS} -Xmx4g"
+
+# ── GC Configuration (ZGC for low latency) ───────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -XX:+UseZGC"
+JAVA_OPTS="${JAVA_OPTS} -XX:ZCollectionInterval=5"
+
+# ── GC Logging (for performance analysis) ───────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -Xlog:gc*:file=gc.log:time,level,tags"
+JAVA_OPTS="${JAVA_OPTS} -XX:+UnlockDiagnosticVMOptions"
+JAVA_OPTS="${JAVA_OPTS} -XX:+LogVMOutput"
+JAVA_OPTS="${JAVA_OPTS} -XX:LogFile=vm.log"
+
+# ── Performance Tuning ───────────────────────────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -XX:+AlwaysPreTouch"
+JAVA_OPTS="${JAVA_OPTS} -XX:+UseStringDeduplication"
+
+# ── JMX Monitoring ──────────────────────────────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote"
+JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.port=9010"
+JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.authenticate=false"
+JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.ssl=false"
+
+# ── Flight Recorder (for profiling) ─────────────────────────────────────────
+JAVA_OPTS="${JAVA_OPTS} -XX:StartFlightRecording=filename=recording.jfr,dumponexit=true"
+
+# ── Application ──────────────────────────────────────────────────────────────
+java $JAVA_OPTS --enable-preview -jar jotp-application.jar
+```
+
+### GC Tuning for Throughput
+
+```bash
+# For maximum throughput (can tolerate higher latency)
+JAVA_OPTS="${JAVA_OPTS} -XX:+UseParallelGC"
+JAVA_OPTS="${JAVA_OPTS} -XX:ParallelGCThreads=16"
+JAVA_OPTS="${JAVA_OPTS} -XX:MaxGCPauseMillis=200"
+
+# For low latency (p99 <10ms)
+JAVA_OPTS="${JAVA_OPTS} -XX:+UseZGC"
+JAVA_OPTS="${JAVA_OPTS} -XX:ZCollectionInterval=5"
+
+# For balanced throughput/latency
+JAVA_OPTS="${JAVA_OPTS} -XX:+UseG1GC"
+JAVA_OPTS="${JAVA_OPTS} -XX:MaxGCPauseMillis=50"
+JAVA_OPTS="${JAVA_OPTS} -XX:G1ReservePercent=10"
+```
+
+<Callout type="info">
+**Pro Tip: Heap Sizing Formula**
+
+Based on benchmark data from `EnterpriseCapacityBenchmark.java`:
+
+```
+Heap (GB) = (Processes × 1.7 KB) + (Overhead × 0.5 GB)
+Heap (GB) = (100,000 × 1.7 KB) + 0.5 GB
+Heap (GB) = ~170 MB + 0.5 GB = ~0.67 GB
+
+For safety margin (2×): ~1.5 GB
+For production (3×): ~2.0 GB
+```
+
+Adjust based on your process count and message size.
+</Callout>
+
+---
+
+## Part 4: Capacity Planning
+
+### Production Capacity Calculator
+
+```java
+package io.github.seanchatmangpt.jotp.examples.performance;
+
+import io.github.seanchatmangpt.jotp.PerformanceModel;
+
+/**
+ * CapacityPlanningCalculator - Production capacity planning
+ * based on performance models and SLA requirements.
+ */
+public class CapacityPlanningCalculator {
+
+    public static void main(String[] args) {
+        // ── Input Parameters ───────────────────────────────────────────────────
+
+        var targetTPS = 50_000.0;  // Target transactions per second
+        var targetLatencyP99 = 50.0;  // Target p99 latency (ms)
+        var availability = 99.95;  // Target availability (%)
+
+        // ── Performance Model (from benchmarks) ───────────────────────────────
+
+        var throughputPerInstance = 28_567.0;  // ops/sec per instance
+        var latencyP99 = 29.0;  // ms p99
+        var cpuUtilization = 18.0;  // % CPU at target load
+        var memoryPerInstance = 256.0;  // MB
+
+        // ── Calculate Instance Count ───────────────────────────────────────────
+
+        var instancesNeeded = Math.ceil(targetTPS / throughputPerInstance);
+
+        // Add 20% buffer for spikes
+        var instancesWithBuffer = Math.ceil(instancesNeeded * 1.2);
+
+        // Add N+1 redundancy
+        var instancesWithRedundancy = instancesWithBuffer + 1;
+
+        // ── Calculate Resource Requirements ────────────────────────────────────
+
+        var totalCpu = instancesWithRedundancy * cpuUtilization;
+        var totalMemory = instancesWithRedundancy * memoryPerInstance;
+
+        // ── Calculate Cost ─────────────────────────────────────────────────────
+
+        var costPerCpuHour = 0.25;  // AWS: $0.25 per vCPU-hour
+        var costPerGbHour = 0.10;   // AWS: $0.10 per GB-hour
+
+        var monthlyCost = calculateMonthlyCost(
+            instancesWithRedundancy,
+            cpuUtilization,
+            memoryPerInstance,
+            costPerCpuHour,
+            costPerGbHour
+        );
+
+        // ── SLA Compliance Check ──────────────────────────────────────────────
+
+        var slaCompliant = latencyP99 <= targetLatencyP99;
+
+        // ── Report ─────────────────────────────────────────────────────────────
+
+        System.out.println("=".repeat(80));
+        System.out.println("CAPACITY PLANNING REPORT");
+        System.out.println("=".repeat(80));
+        System.out.printf("%-40s %,f ops/sec%n", "Target Throughput:", targetTPS);
+        System.out.printf("%-40s %.2f ms%n", "Target Latency (p99):", targetLatencyP99);
+        System.out.printf("%-40s %.2f%%%n", "Target Availability:", availability);
+        System.out.println();
+
+        System.out.println("INSTANCE CALCULATION");
+        System.out.println("-".repeat(80));
+        System.out.printf("%-40s %,f instances%n", "Minimum instances:", instancesNeeded);
+        System.out.printf("%-40s %,f instances%n", "With 20% buffer:", instancesWithBuffer);
+        System.out.printf("%-40s %,f instances%n", "With N+1 redundancy:", instancesWithRedundancy);
+        System.out.println();
+
+        System.out.println("RESOURCE REQUIREMENTS");
+        System.out.println("-".repeat(80));
+        System.out.printf("%-40s %.2f vCPUs%n", "Total CPU:", totalCpu);
+        System.out.printf("%-40s %.2f GB%n", "Total Memory:", totalMemory / 1024.0);
+        System.out.println();
+
+        System.out.println("COST PROJECTION");
+        System.out.println("-".repeat(80));
+        System.out.printf("%-40s $%,.2f per month%n", "Estimated Monthly Cost:", monthlyCost);
+        System.out.printf("%-40s $%,.2f per year%n", "Estimated Annual Cost:", monthlyCost * 12);
+        System.out.println();
+
+        System.out.println("SLA COMPLIANCE");
+        System.out.println("-".repeat(80));
+        System.out.printf("%-40s %s%n", "SLA Compliant:", slaCompliant ? "✅ YES" : "❌ NO");
+        System.out.printf("%-40s %.2f ms (target: %.2f ms)%n",
+            "Actual p99 Latency:", latencyP99, targetLatencyP99);
+        System.out.printf("%-40s %,.2f%% (target: %,.2f%%)%n",
+            "Predicted Availability:", availability, availability);
+        System.out.println();
+
+        System.out.println("=".repeat(80));
+    }
+
+    private static double calculateMonthlyCost(
+        double instances,
+        double cpuPerInstance,
+        double memoryPerInstanceMb,
+        double costPerCpuHour,
+        double costPerGbHour
+    ) {
+        var hoursPerMonth = 730.0;  // 24 × 30.42
+        var memoryPerInstanceGb = memoryPerInstanceMb / 1024.0;
+
+        var cpuCost = instances * cpuPerInstance * costPerCpuHour * hoursPerMonth;
+        var memoryCost = instances * memoryPerInstanceGb * costPerGbHour * hoursPerMonth;
+
+        return cpuCost + memoryCost;
+    }
+}
+```
+
+---
+
+## Part 5: Performance Troubleshooting
+
+### Detecting Bottlenecks
+
+```java
+package io.github.seanchatmangpt.jotp.examples.performance;
+
+import io.github.seanchatmangpt.jotp.*;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.ThreadMXBean;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * PerformanceProfiler - Detects and reports performance bottlenecks
+ * in JOTP applications.
+ */
+public class PerformanceProfiler {
+
+    public static void main(String[] args) throws Exception {
+        var proc = Proc.spawn(0, (state, msg) -> state + 1);
+
+        // ── Profile Message Processing ────────────────────────────────────────
+
+        System.out.println("=== Profiling Message Processing ===\n");
+
+        var iterations = 100_000;
+        var startMemory = getHeapUsed();
+        var startTime = System.nanoTime();
+
+        for (int i = 0; i < iterations; i++) {
+            proc.tell("message-" + i);
+        }
+
+        // Wait for processing
+        Thread.sleep(500);
+
+        var endTime = System.nanoTime();
+        var endMemory = getHeapUsed();
+
+        // ── Calculate Metrics ─────────────────────────────────────────────────
+
+        var elapsedTime = endTime - startTime;
+        var elapsedMs = elapsedTime / 1_000_000.0;
+        var throughput = (iterations * 1e9) / elapsedTime;
+        var latency = elapsedTime / iterations;
+        var memoryUsed = endMemory - startMemory;
+        var memoryPerOp = memoryUsed / (double) iterations;
+
+        // ── Report ───────────────────────────────────────────────────────────
+
+        System.out.printf("Throughput: %,.0f ops/sec%n", throughput);
+        System.out.printf("Latency: %.2f µs/op%n", latency / 1000.0);
+        System.out.printf("Memory Used: %.2f MB%n", memoryUsed / (1024.0 * 1024.0));
+        System.out.printf("Memory per Operation: %.2f bytes%n", memoryPerOp);
+
+        // ── Health Check ──────────────────────────────────────────────────────
+
+        System.out.println("\n=== Health Check ===\n");
+
+        checkThreadCount();
+        checkGcActivity();
+        checkCpuUtilization();
+
+        proc.stop();
+    }
+
+    private static long getHeapUsed() {
+        var memBean = ManagementFactory.getMemoryMXBean();
+        return memBean.getHeapMemoryUsage().getUsed();
+    }
+
+    private static void checkThreadCount() {
+        var threadBean = ManagementFactory.getThreadMXBean();
+        var threadCount = threadBean.getThreadCount();
+
+        System.out.printf("Thread Count: %d%n", threadCount);
+
+        if (threadCount > 10_000) {
+            System.out.println("⚠️  WARNING: High thread count (>10K)");
+        }
+    }
+
+    private static void checkGcActivity() {
+        var gcBeans = ManagementFactory.getGarbageCollectorMXBeans();
+
+        for (var gcBean : gcBeans) {
+            var collections = gcBean.getCollectionCount();
+            var time = gcBean.getCollectionTime();
+
+            System.out.printf("GC [%s]: %,d collections, %,d ms%n",
+                gcBean.getName(), collections, time);
+
+            if (time > 1000) {
+                System.out.println("⚠️  WARNING: High GC time (>1s)");
+            }
+        }
+    }
+
+    private static void checkCpuUtilization() {
+        var threadBean = ManagementFactory.getThreadMXBean();
+
+        if (threadBean.isCurrentThreadCpuTimeSupported()) {
+            var cpuTime = threadBean.getCurrentThreadCpuTime();
+            var wallTime = System.nanoTime() - cpuTime;
+
+            var cpuUtilization = (cpuTime * 100.0) / wallTime;
+
+            System.out.printf("CPU Utilization: %.2f%%%n", cpuUtilization);
+
+            if (cpuUtilization > 90.0) {
+                System.out.println("⚠️  WARNING: High CPU utilization (>90%)");
+            }
+        }
+    }
+}
+```
+
+---
+
+## Common Performance Pitfalls
+
+### 1. Excessive Allocations
+
+<Callout type="error">
+**Don't allocate in hot paths**
+
+```java
+// BAD: Allocates on every message
+.on(Event.class, (event, data) -> {
+    var list = new ArrayList<>();  // Allocation!
+    var map = new HashMap<>();      // Allocation!
+    return new State(list, map);    // Allocation!
+})
+
+// GOOD: Reuse mutable state
+record State(List<String> buffer, Map<String, String> cache) {
+    State withAdd(String value) {
+        buffer.add(value);
+        return this;
+    }
+}
+```
+</Callout>
+
+### 2. Blocking Operations
+
+<Callout type="error">
+**Avoid blocking virtual threads**
+
+```java
+// BAD: Blocks virtual thread
+.on(Event.class, (event, data) -> {
+    Thread.sleep(1000);  // Blocks!
+    return data;
+})
+
+// GOOD: Use async patterns
+.on(Event.class, (event, data) -> {
+    CompletableFuture.supplyAsync(() -> {
+        // Long-running operation
+    }).thenAccept(result -> {
+        process.tell(new AsyncComplete(result));
+    });
+    return data;
+})
+```
+</Callout>
+
+### 3. Oversized Supervision Trees
+
+<Callout type="error">
+**Don't create too many supervisor levels**
+
+```java
+// BAD: Excessive nesting
+Root → Supervisor → SubSupervisor → Worker
+
+// GOOD: Flatten when possible
+Root → Worker
+```
+</Callout>
+
+---
+
+## Further Reading
+
+- **[Performance Regression Analysis](/docs/validation/performance/benchmark-regression-analysis-report.md)** - Detailed performance data
+- **[Enterprise Capacity Benchmark](/src/test/java/io/github/seanchatmangpt/jotp/stress/EnterpriseCapacityBenchmark.java)** - Source code
+- **[Stress Test Architecture](/docs/infrastructure/testing/STRESS_TEST_ARCHITECTURE.md)** - Methodology
+- **[JMH Documentation](https://openjdk.org/projects/code-tools/jmh/)** - Benchmarking best practices
+
+---
+
+**Next Tutorial:** [Production Deployment](/user-guide/tutorials/advanced/production-deployment)

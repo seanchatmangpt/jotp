@@ -1,0 +1,635 @@
+---
+title: "StateMachine<S,E,D> API Reference"
+description: "Complex workflows with sealed transitions - Java 26 gen_statem equivalent"
+sidebar_position: 3
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# StateMachine<S,E,D> API Reference
+
+**Java 26 equivalent of Erlang/OTP's `gen_statem`** — Complex workflows with sealed transitions and timeout management.
+
+## Overview
+
+`StateMachine<S,E,D>` separates three concerns that simple processes conflate:
+
+1. **State (`S`)** — Which "mode" the machine is in (e.g., `locked` / `open`)
+2. **Event (`E`)** — External stimulus or internal trigger (e.g., `push_button`, `state_timeout`)
+3. **Data (`D`)** — Mutable context carried across all states (e.g., entered digits)
+
+### Key Characteristics
+
+- **Sealed Transitions** — Type-safe state transitions with exhaustive pattern matching
+- **Timeout Management** — state_timeout, event_timeout, and generic timeouts
+- **Postponement** — Defer events until next state change
+- **Internal Events** — Insert synthetic events at queue front
+- **State Enter Callbacks** — Execute actions when entering states
+
+### OTP Equivalence
+
+| Erlang gen_statem | Java StateMachine |
+|-------------------|-------------------|
+| `{next_state, S, D}` | `Transition.nextState(s, d)` |
+| `{keep_state, D}` | `Transition.keepState(d)` |
+| `{repeat_state, D}` | `Transition.repeatState(d)` |
+| `{stop, Reason}` | `Transition.stop(reason)` |
+| `[postpone]` | `Action.postpone()` |
+| `{{next_event,internal,C}}` | `Action.nextEvent(c)` |
+| `{{state_timeout,Ms,C}}` | `Action.stateTimeout(ms, c)` |
+| `{{timeout,Ms,C}}` | `Action.eventTimeout(ms, c)` |
+
+## Type Parameters
+
+- **`<S>`** — State type (sealed interface of records)
+- **`<E>`** — Event type (sealed interface of records)
+- **`<D>`** — Data type (immutable record recommended)
+
+## Factory Methods
+
+#### `of(S initialState, D initialData, TransitionFn<S,E,D> fn)`
+
+Create and start a state machine with default options.
+
+```java
+sealed interface LockState permits Locked, Open {}
+record Locked() implements LockState {}
+record Open() implements LockState {}
+
+sealed interface LockEvent permits PushButton {}
+record PushButton(char digit) implements LockEvent {}
+
+record LockData(String entered, String code) {}
+
+var sm = StateMachine.of(
+    new Locked(),
+    new LockData("", "1234"),
+    (state, event, data) -> switch (state) {
+        case Locked() -> switch (event) {
+            case SMEvent.User(PushButton(var b)) -> {
+                var entered = data.entered() + b;
+                yield entered.equals(data.code())
+                    ? Transition.nextState(new Open(), data)
+                    : Transition.keepState(data.withEntered(entered));
+            }
+            default -> Transition.keepState(data);
+        }
+        case Open() -> switch (event) {
+            case SMEvent.User(var _) -> Transition.nextState(new Locked(), data);
+            default -> Transition.keepState(data);
+        }
+    }
+);
+```
+
+---
+
+#### `create(S initialState, D initialData, TransitionFn<S,E,D> fn)`
+
+Create a builder for configuring options before starting.
+
+```java
+var sm = StateMachine.create(initialState, initialData, fn)
+    .withStateEnter()  // Enable state enter callbacks
+    .start();
+```
+
+---
+
+## Event API
+
+#### `send(E event)`
+
+Fire-and-forget: deliver event without waiting.
+
+```java
+sm.send(new PushButton('1'));
+sm.send(new PushButton('2'));
+sm.send(new PushButton('3'));
+```
+
+**OTP equivalent:** `gen_statem:cast(Pid, Event)`
+
+---
+
+#### `call(E event)`
+
+Request-reply: deliver event and return future with data after transition.
+
+```java
+CompletableFuture<LockData> future = sm.call(new PushButton('1'));
+future.thenAccept(data -> System.out.println("Entered: " + data.entered()));
+```
+
+**OTP equivalent:** `gen_statem:call(Pid, Event)`
+
+---
+
+## State/Data Queries
+
+#### `state()`
+
+Returns the current state (thread-safe volatile read).
+
+```java
+LockState current = sm.state();
+if (current instanceof Open) {
+    System.out.println("Lock is open");
+}
+```
+
+---
+
+#### `data()`
+
+Returns the current data (thread-safe volatile read).
+
+```java
+LockData data = sm.data();
+System.out.println("Entered: " + data.entered());
+```
+
+---
+
+#### `isRunning()`
+
+Returns `true` if the machine is still running.
+
+---
+
+#### `stopReason()`
+
+Returns the stop reason if the machine has stopped, or `null` if running.
+
+```java
+String reason = sm.stopReason();
+if (reason != null) {
+    System.err.println("Machine stopped: " + reason);
+}
+```
+
+---
+
+## Lifecycle
+
+#### `stop()`
+
+Gracefully shut down the state machine.
+
+```java
+sm.stop();  // Blocks until virtual thread finishes
+```
+
+---
+
+## Transition Types
+
+#### `Transition.nextState(S state, D data, Action... actions)`
+
+Move to a new state with optional data update and actions.
+
+```java
+yield Transition.nextState(
+    new Open(),
+    data.withEntered(""),
+    Action.stateTimeout(10_000, "lock")  // Auto-lock after 10s
+);
+```
+
+**Cancels:** Any pending state_timeout, replays postponed events
+
+---
+
+#### `Transition.keepState(D data, Action... actions)`
+
+Stay in current state with optional data update and actions.
+
+```java
+yield Transition.keepState(
+    data.withEntered(data.entered() + button),
+    Action.postpone()  // Defer current event
+);
+```
+
+**Does NOT cancel:** Timeouts or replay postponed events
+
+---
+
+#### `Transition.repeatState(D data, Action... actions)`
+
+Like keepState but re-triggers state enter callbacks and postponed event replay.
+
+```java
+yield Transition.repeatState(data);
+```
+
+**Re-triggers:** State enter callbacks, postponed event replay
+
+---
+
+#### `Transition.stop(String reason)`
+
+Terminate the state machine.
+
+```java
+yield Transition.stop("Invalid state transition");
+```
+
+---
+
+#### `Transition.stopAndReply(String reason, Action... replies)`
+
+Stop and complete pending call futures with explicit replies.
+
+```java
+yield Transition.stopAndReply(
+    "Shutting down",
+    Action.reply(callFuture, "Final response")
+);
+```
+
+---
+
+## Action Types
+
+### Timeout Actions
+
+#### `Action.stateTimeout(long delayMs, Object content)`
+
+Start state timeout (auto-canceled on state change).
+
+```java
+yield Transition.nextState(
+    newState,
+    newData,
+    Action.stateTimeout(5000, "timeout")  // Fires after 5s
+);
+```
+
+**Handled as:** `SMEvent.StateTimeout(content)`
+
+**Auto-canceled:** On any state change
+
+---
+
+#### `Action.eventTimeout(long delayMs, Object content)`
+
+Start event timeout (auto-canceled on any event arrival).
+
+```java
+yield Transition.keepState(
+    data,
+    Action.eventTimeout(1000, "no_activity")
+);
+```
+
+**Handled as:** `SMEvent.EventTimeout(content)`
+
+**Auto-canceled:** When any event arrives (including internal)
+
+---
+
+#### `Action.genericTimeout(String name, long delayMs, Object content)`
+
+Start named generic timeout (NOT auto-canceled).
+
+```java
+yield Transition.keepState(
+    data,
+    Action.genericTimeout("heartbeat", 30000, "ping")
+);
+```
+
+**Handled as:** `SMEvent.GenericTimeout(name, content)`
+
+**NOT auto-canceled:** Must be explicitly canceled
+
+---
+
+### Control Actions
+
+#### `Action.postpone()`
+
+Defer current event until next state change.
+
+```java
+case Open() -> switch (event) {
+    case SMEvent.User(var _) ->
+        yield Transition.keepState(data, Action.postpone());  // Defer until locked
+    default -> yield Transition.keepState(data);
+};
+```
+
+**Replayed:** On next state change (before processing new events)
+
+---
+
+#### `Action.nextEvent(Object content)`
+
+Insert synthetic internal event at queue front.
+
+```java
+yield Transition.nextState(
+    newState,
+    newData,
+    Action.nextEvent("internal_cleanup")
+);
+```
+
+**Processed:** Before next external mailbox message
+
+---
+
+#### `Action.reply(CompletableFuture<?> from, Object value)`
+
+Explicitly complete a pending call future.
+
+```java
+var callFuture = new CompletableFuture<Object>();
+
+// In transition
+yield Transition.keepState(
+    data,
+    Action.reply(callFuture, "Response value")
+);
+```
+
+---
+
+## Event Types
+
+#### `SMEvent.User<E>(E event)`
+
+External user event (cast or call).
+
+```java
+case SMEvent.User(PushButton(var digit)) -> {
+    // Handle button press
+}
+```
+
+---
+
+#### `SMEvent.StateTimeout<E>(Object content)`
+
+State timeout fired (auto-canceled on state change).
+
+```java
+case SMEvent.StateTimeout(var content) -> {
+    // Handle state timeout
+}
+```
+
+---
+
+#### `SMEvent.EventTimeout<E>(Object content)`
+
+Event timeout fired (auto-canceled on any event).
+
+```java
+case SMEvent.EventTimeout(var content) -> {
+    // Handle event timeout
+}
+```
+
+---
+
+#### `SMEvent.GenericTimeout<E>(String name, Object content)`
+
+Named generic timeout (not auto-canceled).
+
+```java
+case SMEvent.GenericTimeout(var name, var content) -> {
+    if ("heartbeat".equals(name)) {
+        // Handle heartbeat timeout
+    }
+}
+```
+
+---
+
+#### `SMEvent.Internal<E>(Object content)`
+
+Self-inserted synthetic event (via `Action.nextEvent`).
+
+```java
+case SMEvent.Internal(var content) -> {
+    // Handle internal event
+}
+```
+
+---
+
+#### `SMEvent.Enter<E>(Object previousState)`
+
+State enter callback (requires `withStateEnter()`).
+
+```java
+case SMEvent.Enter(var previousState) -> {
+    System.out.println("Entered state from: " + previousState);
+    yield Transition.keepState(data);
+}
+```
+
+**Fired:** Each time a state is entered (including initial state)
+
+---
+
+## Complete Example: Code Lock
+
+```java
+// State definitions
+sealed interface LockState permits Locked, Open {}
+record Locked() implements LockState {}
+record Open() implements LockState {}
+
+// Event definitions
+sealed interface LockEvent permits PushButton {}
+record PushButton(char digit) implements LockEvent {}
+
+// Data definition
+record LockData(String entered, String code) {
+    LockData withEntered(String entered) {
+        return new LockData(entered, code);
+    }
+}
+
+// State machine
+var sm = StateMachine.of(
+    new Locked(),
+    new LockData("", "1234"),
+    (state, event, data) -> switch (state) {
+        case Locked() -> switch (event) {
+            case SMEvent.User(PushButton(var b)) -> {
+                var entered = data.entered() + b;
+                if (entered.equals(data.code())) {
+                    // Correct code: unlock with auto-lock timeout
+                    yield Transition.nextState(
+                        new Open(),
+                        data.withEntered(""),
+                        Action.stateTimeout(10_000, "lock")
+                    );
+                } else if (entered.length() >= 4) {
+                    // Wrong code: reset
+                    yield Transition.nextState(
+                        new Locked(),
+                        data.withEntered("")
+                    );
+                } else {
+                    // Accumulate digits
+                    yield Transition.keepState(data.withEntered(entered));
+                }
+            }
+            case SMEvent.StateTimeout(var _) ->
+                yield Transition.keepState(data.withEntered(""));
+            default -> yield Transition.keepState(data);
+        }
+
+        case Open() -> switch (event) {
+            case SMEvent.StateTimeout(var _) ->
+                yield Transition.nextState(new Locked(), data);  // Auto-lock
+            case SMEvent.User(var _) ->
+                yield Transition.keepState(data, Action.postpone());  // Defer buttons
+            default -> yield Transition.keepState(data);
+        }
+    }
+);
+
+// Usage
+sm.send(new PushButton('1'));
+sm.send(new PushButton('2'));
+sm.send(new PushButton('3'));
+sm.send(new PushButton('4'));  // Unlocks
+
+Thread.sleep(12000);  // 12 seconds
+// Automatically re-locks after 10 second timeout
+```
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `send()` | ~100ns | Lock-free enqueue |
+| `call()` | ~1μs | Queue + future completion |
+| State transition | <1μs | Handler application only |
+| Timeout scheduling | ~50μs | ScheduledExecutorService overhead |
+
+**Memory Footprint:**
+- Per state machine: ~2 KB (virtual thread + event queues)
+- Event overhead: ~32 bytes per queued event
+
+---
+
+## Best Practices
+
+### 1. Use Sealed State Hierarchies
+
+```java
+// Good: Exhaustive pattern matching
+sealed interface State permits A, B, C {}
+record A() implements State {}
+record B() implements State {}
+record C() implements State {}
+
+// Bad: Non-exhaustive
+interface State {}
+```
+
+---
+
+### 2. Keep Data Immutable
+
+```java
+// Good: Immutable record with copy methods
+record Data(String value) {
+    Data withValue(String value) {
+        return new Data(value);
+    }
+}
+
+// Bad: Mutable fields
+class Data {
+    String value;  // Mutable!
+}
+```
+
+---
+
+### 3. Handle All Event Types
+
+```java
+case MyState() -> switch (event) {
+    case SMEvent.User(UserEvent(var x)) -> /* ... */
+    case SMEvent.StateTimeout(var _) -> /* ... */
+    case SMEvent.EventTimeout(var _) -> /* ... */
+    case SMEvent.GenericTimeout(var n, var c) -> /* ... */
+    case SMEvent.Internal(var _) -> /* ... */
+    case SMEvent.Enter(var prev) -> /* ... */
+};
+```
+
+---
+
+### 4. Use Timeouts for State Transitions
+
+```java
+// Good: Automatic state transitions
+yield Transition.nextState(
+    newState,
+    newData,
+    Action.stateTimeout(5000, "timeout")
+);
+
+// Handle timeout
+case SMEvent.StateTimeout(var _) ->
+    yield Transition.nextState(defaultState, defaultData);
+```
+
+---
+
+## Gotchas
+
+### 1. State Enter Can't Change State
+
+```java
+case SMEvent.Enter(var prev) -> {
+    // Wrong: Can't change state from enter callback
+    yield Transition.nextState(otherState, data);  // Ignored!
+
+    // Correct: Only process actions
+    yield Transition.keepState(data, Action.someAction());
+}
+```
+
+---
+
+### 2. Event Timeout Canceled on Any Event
+
+```java
+// Event timeout is canceled by ANY event, including internal
+Action.eventTimeout(5000, "no_activity")
+
+// If Action.nextEvent("internal") fires, event timeout is canceled
+```
+
+---
+
+### 3. Postponed Events Replay Before New Events
+
+```java
+// State A postpones event E1
+// State change to B
+// E1 replays BEFORE any new events sent to B
+```
+
+---
+
+## See Also
+
+- [Proc API](./proc.mdx) — Simple process primitive
+- [Supervisor API](./supervisor.mdx) — Hierarchical supervision
+- [State Machine Workflows](/docs/user-guide/how-to/state-machine-workflow) — Practical guide
+- [Erlang gen_statem Documentation](https://erlang.org/doc/man/gen_statem.html) — OTP reference

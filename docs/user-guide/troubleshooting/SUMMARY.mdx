@@ -1,0 +1,433 @@
+# Troubleshooting Guide Summary
+
+import { Card, Cards } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This guide provides comprehensive troubleshooting coverage for JOTP applications across development, testing, and production environments.
+
+<Callout type="info">
+  **Quick Start:** Start with the [Diagnostic Checklist](/docs/user-guide/troubleshooting/diagnostic-checklist) to identify your issue category, then navigate to the specific guide for detailed solutions.
+</Callout>
+
+---
+
+## Guide Structure
+
+The troubleshooting guide is organized into **9 core guides** covering different issue categories:
+
+### Core Troubleshooting Guides
+
+<Cards>
+  <Card title="Build Issues" icon="🔨" href="/docs/user-guide/troubleshooting/build-issues">
+    Compilation errors, Java 26 setup, Maven problems, formatting, and module system issues.
+  </Card>
+  <Card title="Runtime Issues" icon="⚡" href="/docs/user-guide/troubleshooting/runtime-issues">
+    Process lifecycle problems, message delivery failures, deadlocks, and virtual thread pinning.
+  </Card>
+  <Card title="Supervision Issues" icon="🌳" href="/docs/user-guide/troubleshooting/supervision-issues">
+    Supervisor restart problems, restart intensity exceeded, orphaned processes, and shutdown hangs.
+  </Card>
+  <Card title="Performance Issues" icon="📊" href="/docs/user-guide/troubleshooting/performance-issues">
+    High latency, memory leaks, GC pressure, thread exhaustion, and slow startups.
+  </Card>
+  <Card title="Testing Issues" icon="🧪" href="/docs/user-guide/troubleshooting/testing-issues">
+    Flaky async tests, Awaitility timeouts, mock setup problems, and test isolation failures.
+  </Card>
+  <Card title="Production Issues" icon="🚀" href="/docs/user-guide/troubleshooting/production-issues">
+    Production monitoring, distributed systems, memory issues in production, and performance degradation.
+  </Card>
+</Cards>
+
+### Reference Guides
+
+<Cards>
+  <Card title="Common Errors" icon="📖" href="/docs/user-guide/troubleshooting/common-errors">
+    Quick reference for common error messages with immediate solutions.
+  </Card>
+  <Card title="Debugging Techniques" icon="🔍" href="/docs/user-guide/troubleshooting/debugging-techniques">
+    Advanced debugging techniques, tools, and introspection methods.
+  </Card>
+  <Card title="Diagnostic Checklist" icon="✅" href="/docs/user-guide/troubleshooting/diagnostic-checklist">
+    Systematic diagnosis procedures for identifying and categorizing issues.
+  </Card>
+</Cards>
+
+---
+
+## Issue Categories
+
+### 1. Build Issues
+
+**When to use:** Compilation fails, IDE shows errors, Maven build problems
+
+**Common problems:**
+- Java 26 preview feature errors
+- Maven compilation failures
+- Spotless formatting issues
+- Dependency conflicts
+- Module system errors
+
+**Quick fix:**
+```bash
+mvnd clean compile
+mvnd spotless:apply
+java -version  # Verify Java 26
+```
+
+---
+
+### 2. Runtime Issues
+
+**When to use:** Processes crash, messages timeout, system hangs
+
+**Common problems:**
+- Process won't start
+- Messages not delivered
+- Mailbox overflow
+- Deadlock diagnosis
+- Virtual thread pinning
+
+**Quick fix:**
+```java
+// Enable debug tracing
+DebugOptions options = DebugOptions.builder()
+    .traceAll(true)
+    .build();
+Proc.setGlobalDebugOptions(options);
+
+// Check process state
+ProcInspection inspect = ProcSys.inspect(procId);
+System.out.println("State: " + inspect.state());
+System.out.println("Mailbox: " + inspect.mailboxSize());
+```
+
+---
+
+### 3. Supervision Issues
+
+**When to use:** Supervision tree not working, processes not restarting
+
+**Common problems:**
+- Children not restarting
+- Supervisor crashes
+- Restart intensity exceeded
+- Orphaned processes
+- Shutdown hangs
+
+**Quick fix:**
+```java
+// Check supervisor state
+SupervisorRef ref = supervisor.ref();
+ref.children().forEach((id, info) -> {
+    System.out.println(id + ": " + info.state());
+    System.out.println("  Restarts: " + info.restartCount());
+});
+
+// Verify restart strategy
+System.out.println("Strategy: " + ref.strategy());
+```
+
+---
+
+### 4. Performance Issues
+
+**When to use:** System slow, high memory usage, poor throughput
+
+**Common problems:**
+- High message latency
+- Memory leaks
+- GC pressure
+- Thread exhaustion
+- Slow startups
+
+**Quick fix:**
+```bash
+# Profile with JFR
+java -XX:StartFlightRecording=filename=rec.jfr,duration=60s ...
+
+# Check thread counts
+jcmd <pid> Thread.vthread_summary
+
+# Heap dump
+jmap -dump:format=b,file=heap.hprof <pid>
+```
+
+---
+
+### 5. Testing Issues
+
+**When to use:** Tests fail intermittently, race conditions
+
+**Common problems:**
+- Flaky async tests
+- Awaitility timeouts
+- Mock setup problems
+- Test isolation failures
+
+**Quick fix:**
+```java
+// Use Awaitility properly
+await()
+    .atMost(5, TimeUnit.SECONDS)
+    .pollInterval(100, TimeUnit.MILLISECONDS)
+    .untilAsserted(() -> {
+        assertEquals(expected, actual);
+    });
+
+// Clean up after tests
+@AfterEach
+void cleanup() {
+    ProcRegistry.getInstance().clear();
+}
+```
+
+---
+
+### 6. Production Issues
+
+**When to use:** Production debugging, distributed system problems
+
+**Common problems:**
+- Production monitoring setup
+- Distributed system issues
+- Memory issues in production
+- Performance degradation over time
+
+**Quick fix:**
+```bash
+# Production health check
+curl http://localhost:8080/health
+curl http://localhost:8080/metrics
+
+# Safe diagnostics
+jcmd <pid> ProcSys.summary
+jcmd <pid> Thread.print_to_file -file=/tmp/threads.txt
+
+# Enable tracing temporarily
+jcmd <pid> ProcSys.setTraceLevel VERBOSE
+# Remember: jcmd <pid> ProcSys.setTraceLevel WARN
+```
+
+---
+
+## Common Error Quick Reference
+
+| Error | Quick Fix | Guide |
+|-------|-----------|-------|
+| `ClassCastException` in handler | Use sealed interfaces with exhaustive matching | [Common Errors](/docs/user-guide/troubleshooting/common-errors) |
+| Process already registered | Check registry before registering | [Common Errors](/docs/user-guide/troubleshooting/common-errors) |
+| `TimeoutException` in ask() | Always use timeouts with fallback | [Common Errors](/docs/user-guide/troubleshooting/common-errors) |
+| Mailbox overflow | Implement backpressure or increase capacity | [Runtime Issues](/docs/user-guide/troubleshooting/runtime-issues) |
+| Children not restarting | Check restart intensity and strategy | [Supervision Issues](/docs/user-guide/troubleshooting/supervision-issues) |
+| OutOfMemoryError | Capture heap dump, analyze for leaks | [Performance Issues](/docs/user-guide/troubleshooting/performance-issues) |
+| Flaky test | Use Awaitility with proper waits | [Testing Issues](/docs/user-guide/troubleshooting/testing-issues) |
+| Virtual thread pinning | Replace synchronized with ReentrantLock | [Runtime Issues](/docs/user-guide/troubleshooting/runtime-issues) |
+
+---
+
+## Diagnostic Workflow
+
+### Step 1: Identify the Issue Category
+
+Use the flowchart in the [Diagnostic Checklist](/docs/user-guide/troubleshooting/diagnostic-checklist) to identify your issue category.
+
+### Step 2: Enable Debugging
+
+```java
+// Enable debug tracing
+DebugOptions options = DebugOptions.builder()
+    .traceAll(true)
+    .build();
+Proc.setGlobalDebugOptions(options);
+```
+
+### Step 3: Collect Diagnostic Information
+
+```bash
+# Thread dump
+jcmd <pid> Thread.print_to_file -file=threads.txt
+
+# Heap dump (if memory issue)
+jmap -dump:format=b,file=heap.hprof <pid>
+
+# JFR recording
+java -XX:StartFlightRecording=filename=rec.jfr,duration=60s ...
+```
+
+### Step 4: Follow the Relevant Guide
+
+Navigate to the specific guide for your issue category and follow the systematic diagnosis procedures.
+
+### Step 5: Apply Solutions
+
+Try the solutions in order of likelihood. Start with "Quick Fix" sections, then work through detailed solutions.
+
+### Step 6: Verify and Monitor
+
+```bash
+# Check system health
+jcmd <pid> ProcSys.summary
+
+# Monitor metrics
+curl http://localhost:8080/metrics
+```
+
+---
+
+## Key Diagnostic Commands
+
+### Process Inspection
+
+```java
+// Check process state
+ProcInspection inspect = ProcSys.inspect(procId);
+System.out.println("State: " + inspect.state());
+System.out.println("Mailbox: " + inspect.mailboxSize());
+System.out.println("Alive: " + inspect.isAlive());
+
+// List all processes
+Set<ProcId> all = ProcSys.allProcesses();
+```
+
+### JVM Diagnostics
+
+```bash
+# Thread dump
+jcmd <pid> Thread.print_to_file -file=threads.txt
+
+# Heap info
+jcmd <pid> GC.heap_info
+
+# Virtual threads
+jcmd <pid> Thread.vthread_summary
+
+# GC stats
+jstat -gcutil <pid> 1000 10
+```
+
+### JOTP-Specific Commands
+
+```bash
+# Process summary
+jcmd <pid> ProcSys.summary
+
+# List processes
+jcmd <pid> ProcSys.listProcesses
+
+# Set trace level
+jcmd <pid> ProcSys.setTraceLevel VERBOSE
+
+# Check version
+jcmd <pid> ProcSys.version
+```
+
+---
+
+## Prevention Best Practices
+
+### Development
+
+- [ ] Always use sealed interfaces for messages
+- [ ] Enable exhaustive pattern matching
+- [ ] Handle exceptions in all handlers
+- [ ] Use timeouts on `ask()` calls
+- [ ] Enable debug tracing during development
+
+### Testing
+
+- [ ] Use Awaitility for async assertions
+- [ ] Clean up processes in `@AfterEach`
+- [ ] Run tests multiple times to detect flakiness
+- [ ] Test with realistic load
+- [ ] Verify process cleanup
+
+### Production
+
+- [ ] Set up monitoring and alerting
+- [ ] Implement health checks
+- [ ] Use bounded mailboxes
+- [ ] Enable distributed tracing
+- [ ] Regular heap dump analysis in staging
+- [ ] Monitor GC pause times
+- [ ] Profile before deploying
+
+---
+
+## Getting Help
+
+### Before Asking for Help
+
+1. **Read the relevant guide** for your issue category
+2. **Follow the diagnostic checklist** to gather information
+3. **Enable debug tracing** and collect logs
+4. **Search existing issues** in the repository
+5. **Prepare a minimal reproducer**
+
+### Issue Report Template
+
+```markdown
+## Issue Description
+[Brief description]
+
+## Symptoms
+- [ ] Process won't start
+- [ ] Messages not delivered
+- [ ] High latency
+- [ ] Process crashes
+- [ ] Other: ______
+
+## Environment
+- Java version: ______
+- Maven version: ______
+- JOTP version: ______
+- OS: ______
+
+## Steps to Reproduce
+1.
+2.
+3.
+
+## Diagnostics Performed
+- [ ] Thread dump collected
+- [ ] Heap dump collected
+- [ ] Debug tracing enabled
+- [ ] Metrics collected
+
+## Logs and Diagnostics
+[Attach relevant logs, thread dumps, heap dumps]
+```
+
+### Resources
+
+- **GitHub Issues:** [JOTP Issues](https://github.com/seanchatmangpt/jotp/issues)
+- **Documentation:** [Main Docs](/docs)
+- **Examples:** [Example Code](/src/main/java/io/github/seanchatmangpt/jotp/examples/)
+- **Book:** [JOTP Book](/docs/book/)
+
+<Callout type="warning">
+  For emergency production issues, contact the JOTP core team via the private support channel with "URGENT: Production Issue" in the subject.
+</Callout>
+
+---
+
+## Troubleshooting Guides Index
+
+| Guide | Focus | Link |
+|-------|-------|------|
+| **Build Issues** | Compilation, Maven, formatting | [build-issues.mdx](/docs/user-guide/troubleshooting/build-issues) |
+| **Runtime Issues** | Process lifecycle, messaging | [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) |
+| **Supervision Issues** | Supervision trees, restarts | [supervision-issues.mdx](/docs/user-guide/troubleshooting/supervision-issues) |
+| **Performance Issues** | Latency, memory, GC | [performance-issues.mdx](/docs/user-guide/troubleshooting/performance-issues) |
+| **Testing Issues** | Flaky tests, async | [testing-issues.mdx](/docs/user-guide/troubleshooting/testing-issues) |
+| **Production Issues** | Production debugging, monitoring | [production-issues.mdx](/docs/user-guide/troubleshooting/production-issues) |
+| **Common Errors** | Error message reference | [common-errors.mdx](/docs/user-guide/troubleshooting/common-errors) |
+| **Debugging Techniques** | Advanced debugging | [debugging-techniques.mdx](/docs/user-guide/troubleshooting/debugging-techniques) |
+| **Diagnostic Checklist** | Systematic diagnosis | [diagnostic-checklist.mdx](/docs/user-guide/troubleshooting/diagnostic-checklist) |
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0
+**Maintainer:** JOTP Core Team

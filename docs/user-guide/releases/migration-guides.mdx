@@ -1,0 +1,638 @@
+# Migration Guides
+
+This document provides detailed migration guides for upgrading between JOTP versions, including breaking changes, deprecations, and recommended practices.
+
+## Overview
+
+JOTP follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
+- **Major** (X.0.0): Breaking changes
+- **Minor** (0.X.0): New features, backward compatible
+- **Patch** (0.0.X): Bug fixes, backward compatible
+
+## Version Compatibility
+
+| From Version | To Version | Compatibility | Migration Required |
+|--------------|------------|---------------|-------------------|
+| 0.9.0 | 1.0.0 | ⚠️ Breaking | Yes (rename methods) |
+| 0.1.0 | 0.9.0 | ⚠️ Breaking | Yes (Java 26 required) |
+| 1.0.0 | 1.0.1 | ✅ Compatible | No (patch release) |
+| 1.0.0 | 1.1.0 | ✅ Compatible | No (minor release) |
+
+## Migrating from 0.9.0 to 1.0.0
+
+### Summary of Changes
+
+Version 1.0.0 is the **Java 26 Launch Release** - a production-ready release with all 15 OTP primitives.
+
+**Key Changes:**
+- `Proc.send()` → `Proc.tell()` (Erlang/OTP naming consistency)
+- `Proc.start()` → `Proc.spawn()` (factory method pattern)
+- Removed deprecated `Proc.create()` method
+- Added `ProcRef<S,M>` as stable process reference
+- Enhanced supervisor with `ChildSpec` for complex scenarios
+
+### Breaking Changes
+
+#### 1. Method Renaming
+
+**Before (0.9.0):**
+```java
+import io.github.seanchatmangpt.jotp.Proc;
+
+var proc = Proc.start(
+    0,
+    (state, msg) -> state + 1
+);
+
+proc.send("increment");
+proc.send("increment");
+```
+
+**After (1.0.0):**
+```java
+import io.github.seanchatmangpt.jotp.Proc;
+
+var proc = Proc.spawn(
+    0,
+    (state, msg) -> switch (msg) {
+        case "increment" -> state + 1;
+        default -> state;
+    }
+);
+
+proc.tell("increment");
+proc.tell("increment");
+```
+
+**Benefits:**
+- Consistent with Erlang/OTP `!` operator (pronounced "tell")
+- Better factory method semantics
+- More intuitive API
+
+#### 2. ProcRef for Stable References
+
+**Before (0.9.0):**
+```java
+// Process reference could become stale after supervisor restart
+Proc<Integer, String> proc = supervisor.supervise("counter", handler);
+```
+
+**After (1.0.0):**
+```java
+// ProcRef survives supervisor restarts automatically
+ProcRef<Integer, String> procRef = supervisor.supervise(
+    "counter",
+    initialState,
+    handler
+);
+
+// Use procRef for all communication
+procRef.tell(new Increment());
+```
+
+**Benefits:**
+- Stable handle that survives supervisor restarts
+- Type-safe process references
+- Better supervision tree semantics
+
+#### 3. Supervisor ChildSpec
+
+**Before (0.9.0):**
+```java
+var supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 5, Duration.ofMinutes(1));
+
+supervisor.supervise("worker1", handler1, initialState1);
+supervisor.supervise("worker2", handler2, initialState2);
+supervisor.supervise("worker3", handler3, initialState3);
+```
+
+**After (1.0.0):**
+```java
+var supervisor = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofMinutes(1));
+
+// Define child specifications
+List<ChildSpec<String, String>> children = List.of(
+    new ChildSpec<>("worker1", handler1, initialState1),
+    new ChildSpec<>("worker2", handler2, initialState2),
+    new ChildSpec<>("worker3", handler3, initialState3)
+);
+
+// Start all children with supervision
+supervisor.startChildren(children);
+```
+
+**Benefits:**
+- Structured child process management
+- Declarative supervision tree definition
+- Easier to reason about supervision topology
+
+### Step-by-Step Migration
+
+#### Step 1: Update Dependencies
+
+```xml
+<!-- Before -->
+<dependency>
+    <groupId>io.github.seanchatmangpt</groupId>
+    <artifactId>jotp</artifactId>
+    <version>0.9.0</version>
+</dependency>
+
+<!-- After -->
+<dependency>
+    <groupId>io.github.seanchatmangpt</groupId>
+    <artifactId>jotp</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+#### Step 2: Update Imports (if using internal packages)
+
+⚠️ **Warning:** No internal packages should be imported. Use only public API:
+
+```java
+// ✓ Correct - Public API
+import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.Supervisor;
+import io.github.seanchatmangpt.jotp.ProcRef;
+
+// ✗ Wrong - Internal packages
+import io.github.seanchatmangpt.jotp.internal.*;
+```
+
+#### Step 3: Rename Method Calls
+
+**Find and Replace:**
+```bash
+# In your IDE, replace:
+# Proc.send → Proc.tell
+# Proc.start → Proc.spawn
+# Proc.create → Proc.spawn
+
+# Example regex replacements:
+# \.send\( → .tell(
+# Proc\.start\( → Proc.spawn(
+```
+
+#### Step 4: Update Process References
+
+**Before:**
+```java
+Proc<String, Integer> proc = Proc.spawn(initialState, handler);
+```
+
+**After:**
+```java
+// For simple processes, use Proc directly
+var proc = Proc.spawn(initialState, handler);
+
+// For supervised processes, use ProcRef
+ProcRef<String, Integer> procRef = supervisor.supervise("name", initialState, handler);
+```
+
+#### Step 5: Update Supervisor Usage
+
+**Before:**
+```java
+var supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 5, Duration.ofMinutes(1));
+supervisor.supervise("worker", handler, state);
+```
+
+**After:**
+```java
+var supervisor = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofMinutes(1));
+ProcRef<String, String> worker = supervisor.supervise("worker", state, handler);
+```
+
+#### Step 6: Update Test Code
+
+**Before:**
+```java
+@Test
+void testProcess() {
+    var proc = Proc.start(0, (state, msg) -> state + 1);
+    proc.send(5);
+    assertEquals(5, proc.state());
+}
+```
+
+**After:**
+```java
+@Test
+void testProcess() {
+    var proc = Proc.spawn(0, (state, msg) -> state + 1);
+    proc.tell(5);
+    var result = proc.ask("get", Duration.ofSeconds(1)).join();
+    assertEquals(5, result);
+}
+```
+
+#### Step 7: Verify Compilation
+
+```bash
+# Clean build
+mvnd clean compile
+
+# Run tests
+mvnd test
+
+# Verify all tests pass
+mvnd verify
+```
+
+### Rollback Plan
+
+If issues arise during migration:
+
+```xml
+<!-- Rollback to 0.9.0 -->
+<dependency>
+    <groupId>io.github.seanchatmangpt</groupId>
+    <artifactId>jotp</artifactId>
+    <version>0.9.0</version>
+</dependency>
+```
+
+Then revert code changes using git:
+```bash
+git diff HEAD~1 -- '*.java' | git apply -R
+```
+
+## Migrating from 0.1.0 to 0.9.0
+
+### Summary of Changes
+
+Version 0.9.0 introduced **Java 26 preview features**.
+
+**Key Changes:**
+- Requires Java 26 with `--enable-preview`
+- Virtual threads mandatory (no traditional thread fallback)
+- Sealed types for message protocols
+- Pattern matching for message handlers
+
+### Breaking Changes
+
+#### 1. Java Version Requirement
+
+**Before (0.1.0):**
+```bash
+# Java 21 or later
+java -version
+# openjdk version "21.0.1" 2023-10-17
+```
+
+**After (0.9.0):**
+```bash
+# Java 26 with preview features
+java --version
+# openjdk 26-beta 2026-03-17
+java --enable-preview ...
+```
+
+#### 2. Virtual Threads
+
+**Before (0.1.0):**
+```java
+// Traditional threads
+ExecutorService executor = Executors.newFixedThreadPool(10);
+```
+
+**After (0.9.0):**
+```java
+// Virtual threads (automatic)
+// No configuration needed - JOTP uses virtual threads internally
+var proc = Proc.spawn(initialState, handler);
+```
+
+#### 3. Sealed Types for Messages
+
+**Before (0.1.0):**
+```java
+interface Message {}
+class Increment implements Message {}
+class Decrement implements Message {}
+```
+
+**After (0.9.0):**
+```java
+sealed interface Message permits Increment, Decrement {}
+record Increment() implements Message {}
+record Decrement() implements Message {}
+```
+
+### Migration Steps
+
+#### Step 1: Upgrade Java
+
+```bash
+# Install Java 26
+sdk install java 26-ea
+
+# Set as default
+sdk use java 26-ea
+
+# Verify
+java --version
+```
+
+#### Step 2: Update Build Configuration
+
+**Maven:**
+```xml
+<properties>
+    <maven.compiler.release>26</maven.compiler.release>
+</properties>
+
+<build>
+    <plugins>
+        <plugin>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+                <compilerArgs>
+                    <arg>--enable-preview</arg>
+                </compilerArgs>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+#### Step 3: Update Message Types
+
+Convert to sealed types:
+```java
+// Before
+interface Msg {}
+class Foo implements Msg {}
+class Bar implements Msg {}
+
+// After
+sealed interface Msg permits Foo, Bar {}
+record Foo() implements Msg {}
+record Bar() implements Msg {}
+```
+
+#### Step 4: Update Pattern Matching
+
+```java
+// Before
+if (msg instanceof Foo) {
+    return handleFoo((Foo) msg);
+} else if (msg instanceof Bar) {
+    return handleBar((Bar) msg);
+}
+
+// After
+return switch (msg) {
+    case Foo f -> handleFoo(f);
+    case Bar b -> handleBar(b);
+};
+```
+
+## Migrating from Erlang/OTP
+
+### Overview
+
+JOTP provides a **Java-native implementation** of Erlang/OTP primitives, not a direct port.
+
+**Key Differences:**
+- **Type Safety:** JOTP uses Java's type system (sealed types, pattern matching)
+- **Message Passing:** Similar semantics, but with typed messages
+- **Supervision:** Same strategies, different API
+- **Processes:** Virtual threads vs. Erlang scheduler
+
+### Module Mapping
+
+| Erlang/OTP | JOTP | Notes |
+|------------|------|-------|
+| `gen_server` | `Proc<S,M>` | Lightweight process with mailbox |
+| `supervisor` | `Supervisor` | Same strategies |
+| `gen_statem` | `StateMachine<S,E,D>` | Sealed state transitions |
+| `gen_event` | `EventManager<E>` | Typed events |
+| `proc_lib` | `ProcLib` | Startup handshake |
+| `sys` | `ProcSys` | Introspection |
+
+### Code Examples
+
+#### gen_server → Proc<S,M>
+
+**Erlang:**
+```erlang
+-module(counter).
+-behaviour(gen_server).
+
+-export([start_link/0, increment/0]).
+-export([init/1, handle_call/3, handle_cast/2]).
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+increment() ->
+    gen_server:cast(?MODULE, increment).
+
+init([]) ->
+    {ok, 0}.
+
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
+
+handle_cast(increment, State) ->
+    {noreply, State + 1}.
+```
+
+**JOTP:**
+```java
+public class Counter {
+    public sealed interface Msg permits Increment, Get {}
+    public record Increment() implements Msg {}
+    public record Get(ProcRef<Integer, Msg> replyTo) implements Msg {}
+
+    public static ProcRef<Integer, Msg> start() {
+        return Supervisor.supervise(
+            "counter",
+            0,
+            (state, msg) -> switch (msg) {
+                case Increment _ -> state + 1;
+                case Get(var replyTo) -> {
+                    replyTo.tell(state);
+                    yield state;
+                }
+            }
+        );
+    }
+
+    public static void increment(ProcRef<Integer, Msg> counter) {
+        counter.tell(new Increment());
+    }
+}
+```
+
+#### supervisor → Supervisor
+
+**Erlang:**
+```erlang
+-module(my_sup).
+-behaviour(supervisor).
+
+-export([start_link/0]).
+-export([init/1]).
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+init([]) ->
+    Children = [
+        #{id => worker1,
+          start => {worker1, start_link, []},
+          restart => permanent,
+          shutdown => 5000,
+          type => worker,
+          modules => [worker1]}
+    ],
+    {ok, {{one_for_one, 5, 60}, Children}}.
+```
+
+**JOTP:**
+```java
+public class MySupervisor {
+    public static Supervisor start() {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        List<ChildSpec<String, String>> children = List.of(
+            new ChildSpec<>(
+                "worker1",
+                Worker1::start,
+                Worker1.initialState()
+            )
+        );
+
+        supervisor.startChildren(children);
+        return supervisor;
+    }
+}
+```
+
+## Best Practices
+
+### 1. Gradual Migration
+
+**Don't rewrite everything at once:**
+
+```java
+// Start with new features in JOTP
+public class NewFeature {
+    private final ProcRef<State, Msg> process;
+
+    public NewFeature() {
+        this.process = Proc.spawn(initialState, handler);
+    }
+}
+
+// Migrate critical paths first
+// Keep legacy code for non-critical paths
+```
+
+### 2. Parallel Development
+
+**Run both systems during transition:**
+
+```java
+// Dual-write pattern
+public void processOrder(Order order) {
+    // Legacy system
+    legacyProcessor.process(order);
+
+    // New JOTP system
+    jotpProcessor.tell(new ProcessOrder(order));
+
+    // Compare results
+    validateResults(order);
+}
+```
+
+### 3. Feature Flags
+
+**Use feature flags for gradual rollout:**
+
+```java
+public class Processor {
+    private final boolean useJotp = featureFlags.isEnabled("jotp_processor");
+
+    public void process(Message msg) {
+        if (useJotp) {
+            jotpProcessor.tell(msg);
+        } else {
+            legacyProcessor.process(msg);
+        }
+    }
+}
+```
+
+## Testing Migration
+
+### Unit Tests
+
+```java
+@Test
+void testMigration() {
+    // Old code
+    var oldProc = OldProcess.create();
+    oldProc.send("test");
+
+    // New code
+    var newProc = Proc.spawn(initialState, handler);
+    newProc.tell("test");
+
+    // Verify same behavior
+    assertEquals(oldProc.getState(), newProc.ask("get", timeout).join());
+}
+```
+
+### Integration Tests
+
+```java
+@Test
+void testMigrationWithSupervision() {
+    var supervisor = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofMinutes(1));
+
+    // Old system
+    var oldSupervisor = OldSupervisor.create();
+
+    // New system
+    var newSupervisor = supervisor;
+    var child = newSupervisor.supervise("worker", state, handler);
+
+    // Test crash recovery
+    child.tell(new Crash());
+    // Verify supervisor restarts child
+}
+```
+
+## Getting Help
+
+**Resources:**
+- [Documentation](../)
+- [GitHub Issues](https://github.com/seanchatmangpt/jotp/issues)
+- [GitHub Discussions](https://github.com/seanchatmangpt/jotp/discussions)
+
+**Common Issues:**
+
+**Q: Compilation errors after upgrade**
+A: Ensure you're using Java 26 with `--enable-preview`. Update all JOTP imports.
+
+**Q: Tests failing after migration**
+A: Check for deprecated method usage. Review breaking changes in this guide.
+
+**Q: Performance degradation**
+A: Verify virtual threads are enabled. Profile with JMH benchmarks.
+
+---
+
+**Need More Help?**
+- Open a GitHub Issue with minimal reproducible example
+- Join our Discord community
+- Check existing [GitHub Discussions](https://github.com/seanchatmangpt/jotp/discussions)

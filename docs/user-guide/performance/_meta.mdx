@@ -1,0 +1,360 @@
+# Performance Tuning Guide
+
+import { QuickStart } from '@/components/quick-start';
+import { PerformanceChecklist } from '@/components/performance-checklist';
+
+**Version:** 1.0.0-SNAPSHOT
+**Last Updated:** 2026-03-15
+
+## Welcome to JOTP Performance Tuning
+
+This comprehensive guide covers all aspects of performance optimization for JOTP applications in production. From virtual thread tuning to memory optimization, from supervision strategies to monitoring and alerting, you'll find proven techniques and baselines for achieving Erlang/OTP-level performance on the JVM.
+
+## Quick Start
+
+<QuickStart
+  steps={[
+    {
+      title: "1. Understand Your Baseline",
+      description: "Review proven performance baselines and establish your own metrics",
+      link: "./overview"
+    },
+    {
+      title: "2. Tune Virtual Threads",
+      description: "Configure thread pool sizing and scheduler parallelism",
+      link: "./virtual-threads"
+    },
+    {
+      title: "3. Optimize Message Throughput",
+      description: "Implement backpressure and mailbox sizing strategies",
+      link: "./message-throughput"
+    },
+    {
+      title: "4. Configure Supervision",
+      description: "Choose restart strategies and backoff algorithms",
+      link: "./supervision-tuning"
+    },
+    {
+      title: "5. Size Your Heap",
+      description: "Calculate memory requirements and select GC strategy",
+      link: "./memory-optimization"
+    },
+    {
+      title: "6. Set Up Monitoring",
+      description: "Deploy Prometheus, Grafana, and alerting",
+      link: "./production-monitoring"
+    }
+  ]}
+/>
+
+## Proven Performance Baselines
+
+JOTP achieves **Erlang/OTP-level performance** through Java 26's virtual threads and lock-free queues:
+
+| Operation | Baseline | Status |
+|-----------|----------|--------|
+| **Message Channel** | 30.1M msg/s | ✅ Verified |
+| **Event Fanout** | 1.1B events/s | ✅ Verified |
+| **Request-Reply** | 78K roundtrip/s | ✅ Verified |
+| **Competing Consumers** | 2.2M consume/s | ✅ Verified |
+| **Supervisor Restart** | sub-15ms cascade | ✅ Verified |
+
+## Performance Guides
+
+### 1. [Performance Overview](./overview)
+**Start here** for a comprehensive overview of JOTP's performance characteristics, proven baselines, and production-grade metrics.
+
+**Topics Covered:**
+- Key performance metrics and baselines
+- Memory footprint analysis
+- Scalability limits (vertical and horizontal)
+- GC pressure and allocation
+- Production performance targets
+- Performance budgets and SLAs
+
+**Who Should Read:** Everyone starting with JOTP performance tuning
+
+### 2. [Tuning Virtual Threads](./virtual-threads)
+Configure virtual thread scheduler, carrier thread pools, and thread pinning prevention for optimal throughput and latency.
+
+**Topics Covered:**
+- Virtual thread scheduler parallelism
+- Carrier thread pool configuration
+- Thread pinning issues and solutions
+- Performance profiles (latency, throughput, memory-constrained)
+- Custom thread pools for blocking I/O
+- Monitoring virtual thread health
+
+**Who Should Read:** Developers deploying JOTP in production
+
+### 3. [Message Throughput Optimization](./message-throughput)
+Master JOTP's mailbox implementation, backpressure strategies, and high-throughput patterns for fan-out, fan-in, and pipeline scenarios.
+
+**Topics Covered:**
+- LinkedTransferQueue internals and configuration
+- High-throughput scenarios (fan-out, fan-in, pipeline)
+- Backpressure strategies (timeout, mailbox-size, credit-based, drop-newest)
+- Mailbox monitoring and alerting
+- Performance tuning examples
+
+**Who Should Read:** Developers building high-throughput message systems
+
+### 4. [Supervision Tuning](./supervision-tuning)
+Optimize supervisor restart strategies, backoff algorithms, and cascade management for production resilience.
+
+**Topics Covered:**
+- Restart strategies (one-for-one, one-for-all, rest-for-one)
+- Backoff strategies (exponential, linear, jittered)
+- Intensity and frequency limits
+- Supervisor tree depth optimization
+- Supervisor metrics and monitoring
+- Troubleshooting restart storms
+
+**Who Should Read:** DevOps engineers and SREs managing fault-tolerant systems
+
+### 5. [Memory Optimization](./memory-optimization)
+Calculate heap sizing, select GC strategies, and implement process isolation for millions of processes.
+
+**Topics Covered:**
+- Memory footprint breakdown (per-process)
+- JVM heap sizing strategies (fixed, dynamic, container-aware)
+- Garbage collection selection (G1GC, ZGC, SerialGC)
+- Memory leak detection and profiling
+- Process isolation strategies
+- Monitoring memory usage
+
+**Who Should Read:** Platform engineers and performance specialists
+
+### 6. [Production Monitoring](./production-monitoring)
+Set up comprehensive observability with OpenTelemetry, Prometheus, Grafana, and alerting for production JOTP applications.
+
+**Topics Covered:**
+- Core JOTP metrics (process, supervisor, message)
+- Metrics collection (Micrometer, OpenTelemetry)
+- Prometheus integration and queries
+- Grafana dashboards (real-time performance, supervisor health)
+- Alerting strategies and threshold configuration
+- Service level objectives (SLOs) and error budgets
+
+**Who Should Read:** SREs and platform engineers running JOTP in production
+
+## Performance Checklist
+
+<PerformanceChecklist
+  categories={[
+    {
+      name: "Pre-Production",
+      items: [
+        "Establish performance baseline with JMH benchmarks",
+        "Calculate heap sizing based on process count and message rate",
+        "Select GC strategy (G1GC for <50K processes, ZGC for >50K)",
+        "Configure virtual thread scheduler parallelism",
+        "Set up Prometheus metrics collection",
+        "Create Grafana dashboards",
+        "Define alert thresholds",
+        "Document runbooks"
+      ]
+    },
+    {
+      name: "Production Deployment",
+      items: [
+        "Verify metrics are flowing to Prometheus",
+        "Validate dashboards are accessible",
+        "Test alert routing (PagerDuty, Slack)",
+        "Set up on-call rotation",
+        "Train team on incident response",
+        "Establish communication channels",
+        "Configure heap dumps on OOM",
+        "Enable JFR for profiling"
+      ]
+    },
+    {
+      name: "Ongoing Operations",
+      items: [
+        "Review alert thresholds weekly",
+        "Update dashboards quarterly",
+        "Conduct incident post-mortems",
+        "Refine SLOs based on data",
+        "Optimize monitoring overhead",
+        "Archive historical data",
+        "Profile performance monthly",
+        "Review GC logs regularly"
+      ]
+    }
+  ]}
+/>
+
+## Common Performance Issues
+
+### Issue: High Message Latency
+
+**Symptoms:** P99 latency > 1ms, mailbox depth increasing
+
+**Quick Fix:**
+```bash
+# Scale up consumer processes
+# Optimize message handlers
+# Check for blocking operations
+# Review GC pause times
+```
+
+**See:** [Message Throughput Optimization](./message-throughput#high-message-latency)
+
+### Issue: High Crash Rate
+
+**Symptoms:** Crash rate > 10%, restart rate increasing
+
+**Quick Fix:**
+```bash
+# Identify crash patterns
+# Fix root causes
+# Adjust supervisor strategy
+# Increase intensity limits
+```
+
+**See:** [Supervision Tuning](./supervision-tuning#issue-restart-storm)
+
+### Issue: Mailbox Overflow
+
+**Symptoms:** Mailbox depth > 10,000, message drops increasing
+
+**Quick Fix:**
+```bash
+# Implement backpressure
+# Scale up consumers
+# Check consumer performance
+# Reduce message rate
+```
+
+**See:** [Message Throughput Optimization](./message-throughput#backpressure-strategies)
+
+### Issue: Memory Leaks
+
+**Symptoms:** Heap usage growing, frequent GC cycles
+
+**Quick Fix:**
+```bash
+# Check for unbounded mailboxes
+# Profile with JFR
+# Review state object growth
+# Check event listener leaks
+```
+
+**See:** [Memory Optimization](./memory-optimization#memory-leak-detection)
+
+## Performance Best Practices
+
+### 1. Start with Baseline Measurements
+
+Before optimizing, measure your baseline:
+
+```java
+// Use JMH for microbenchmarks
+@Benchmark
+public void tell_throughput() {
+    countingActor.tell(1);
+}
+
+// Use stress tests for load testing
+MetricsCollector metrics = runStressTest(
+    "Constant Load (10K msg/sec)",
+    new LoadProfile.ConstantLoad(10_000L, Duration.ofSeconds(10)),
+    () -> proc.tell("message")
+);
+```
+
+### 2. Monitor Continuously
+
+Set up comprehensive monitoring before going live:
+
+```java
+// Core metrics
+MeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+Gauge.builder("jotp_mailbox_depth", proc, p -> p.getMailboxSize())
+    .register(registry);
+
+// Prometheus scraping
+// http://localhost:9095/metrics
+```
+
+### 3. Define SLOs Early
+
+Establish service level objectives:
+
+```yaml
+SLOs:
+  - 99.9% of messages delivered within 1ms (P99)
+  - 99.95% of processes available per month
+  - <5 minutes to detect and respond to incidents
+  - <0.1% message drop rate
+```
+
+### 4. Test Failures
+
+Validate fault tolerance:
+
+```java
+// Simulate crashes
+ProcRef<String, Integer> worker = supervisor.supervise("worker", initialState, handler);
+worker.tell(new CrashMessage());  // Force crash
+
+// Verify restart
+ProcStatistics stats = ProcSys.of(worker).getStatistics();
+assertEquals(1, stats.restartCount());
+```
+
+### 5. Profile Regularly
+
+Use profiling tools:
+
+```bash
+# JFR profiling
+java -XX:+FlightRecorder -XX:StartFlightRecording=duration=60s -jar app.jar
+
+# Analyze with JDK Mission Control
+# Look for hot methods, GC pauses, thread contention
+```
+
+## Additional Resources
+
+### Documentation
+
+- [JOTP Architecture Documentation](../explanations/architecture.md)
+- [Supervision and Fault Tolerance](../how-to/supervision-and-fault-tolerance.md)
+- [Building Supervision Trees](../how-to/building-supervision-trees.md)
+- [Performance Tuning](../how-to/performance-tuning.md)
+
+### Tools
+
+- [JMH Benchmark Suite](https://openjdk.org/projects/code-tools/jmh/)
+- [JDK Mission Control](https://openjdk.org/projects/jmc/)
+- [VisualVM](https://visualvm.github.io/)
+- [Prometheus](https://prometheus.io/)
+- [Grafana](https://grafana.com/)
+
+### Benchmarks
+
+- [JMH Benchmark Results](../../validation/performance/benchmark-regression-analysis-report.md)
+- [Stress Test Results](../../validation/atlas-api-test-results.md)
+- [Performance Characteristics](../../performance/performance-characteristics.md)
+
+## Contributing
+
+Found a performance issue or optimization? We welcome contributions!
+
+- Report performance issues on GitHub
+- Submit PRs with benchmark improvements
+- Share your tuning experiences
+- Document new patterns and strategies
+
+## Support
+
+- **GitHub Issues:** [jotp/issues](https://github.com/seanchatmangpt/jotp/issues)
+- **Discussions:** [jotp/discussions](https://github.com/seanchatmangpt/jotp/discussions)
+- **Documentation:** [jotp/docs](https://github.com/seanchatmangpt/jotp/tree/main/docs)
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0-SNAPSHOT
+**Java Version:** OpenJDK 26 with `--enable-preview`

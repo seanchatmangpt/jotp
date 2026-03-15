@@ -37,6 +37,20 @@ A comprehensive side-by-side reference for every major OTP pattern and its Java/
 
 ### Send (Fire-and-Forget)
 
+**Sequence Diagram:**
+
+```
+Erlang/OTP                         Java/JOTP
+────────────────────────────────────────────────────────
+Pid ! {increment, 5}                proc.tell(new Increment(5))
+     │                                     │
+     ▼                                     ▼
+Message copied to mailbox          Message queued (ref copy)
+     │                                     │
+     ▼                                     ▼
+Receiver processes later           Receiver processes later
+```
+
 | | Code |
 |---|---|
 | **Erlang** | `Pid ! {increment, 5}.` |
@@ -44,6 +58,26 @@ A comprehensive side-by-side reference for every major OTP pattern and its Java/
 | **Notes** | `tell()` is non-blocking; Erlang's `!` is also non-blocking |
 
 ### Synchronous Call with Reply
+
+**Sequence Diagram:**
+
+```
+Erlang/OTP                         Java/JOTP
+────────────────────────────────────────────────────────
+gen_server:call(Pid, req, 5000)    proc.ask(req, 5s).get()
+     │                                     │
+     ▼                                     ▼
+Send message + From                  Send msg + CompletableFuture
+     │                                     │
+     ▼                                     ▼
+Block on receive                     Block on future.get()
+     │                                     │
+     ▼                                     ▼
+{reply, Response}                    future.complete(response)
+     │                                     │
+     ▼                                     ▼
+Return Response                      Return Response
+```
 
 | | Code |
 |---|---|
@@ -196,6 +230,31 @@ account.tell(new Reset());
 ---
 
 ## Supervisor Patterns
+
+### Architecture: Supervisor Tree Comparison
+
+```
+Erlang/OTP Supervisor Tree          Java/JOTP Supervisor Tree
+─────────────────────────────────────────────────────────────
+supervisor:start_link/2              new Supervisor(ONE_FOR_ONE, 5, 60s)
+        │                                     │
+        ▼                                     ▼
+    ChildSpec1                          supervise("child1", ...)
+        │                                     │
+        ▼                                     ▼
+    worker_1 (gen_server)              Proc<S, M>
+        │                                     │
+        ▼                                     ▼
+    ChildSpec2                          supervise("child2", ...)
+        │                                     │
+        ▼                                     ▼
+    worker_2 (gen_server)              Proc<S, M>
+
+When worker_1 crashes:
+  ONE_FOR_ONE → Restart only worker_1
+  ONE_FOR_ALL → Restart worker_1 and worker_2
+  REST_FOR_ONE → Restart worker_1 and all after it
+```
 
 ### Child Specification Translation
 
@@ -407,6 +466,33 @@ Result.of(() -> parseInput(raw))
 | Binary pattern matching | Java `instanceof` only | Use sealed records for structure |
 | Process dictionary | `ScopedValue` (Java 26) | Better scoped, not per-process |
 | OTP release management | Not applicable | Use Docker/Kubernetes |
+
+### Migration Strategy: When Direct Equivalents Don't Exist
+
+**Hot Code Loading → Blue-Green Deployment:**
+
+```
+Erlang/OTP                          Java/JOTP
+────────────────────────────────────────────────────────
+Release Handler:                    Kubernetes:
+  - Load new code version              - Deploy new pod
+  - Switch processes to new code       - Switch traffic (service)
+  - Rollback if issues                 - Rollback if issues
+```
+
+**Distributed Processes → Kafka Bridge:**
+
+```
+Erlang/OTP                          Java/JOTP
+────────────────────────────────────────────────────────
+Node A ───Distributed Erlang───► Node B
+                                       │
+                                       ▼
+                            Kafka Topic (message log)
+                                       │
+                                       ▼
+JVM 1 ───JOTP + Kafka Producer──► Kafka ◄───JOTP + Kafka Consumer◄─── JVM 2
+```
 
 ---
 

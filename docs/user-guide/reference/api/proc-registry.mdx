@@ -1,0 +1,496 @@
+---
+title: ProcRegistry API Reference
+description: Global process name table - OTP's register/2, whereis/1, and unregister/1
+sidebar_position: 7
+---
+
+# ProcRegistry API Reference
+
+**Global process name registry** — OTP's `register/2`, `whereis/1`, and `unregister/1` for discovering processes by name.
+
+## Overview
+
+`ProcRegistry` provides a global name-to-process mapping, allowing processes to be discovered by name rather than passing PIDs explicitly through the call stack. Names are automatically de-registered when processes terminate, preventing stale references.
+
+### Key Characteristics
+
+- **Global Scope**: JVM-wide registry (matches OTP's single global name table)
+- **Auto-Cleanup**: Names automatically removed on process termination
+- **Type-Safe Lookup**: Generic `whereis()` returns `Optional<Proc<S,M>>`
+- **Uniqueness**: Each name can only be registered to one living process
+- **No Distribution**: Not distributed across JVMs (use external discovery for clusters)
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `register(Name, Pid)` | `ProcRegistry.register(name, proc)` |
+| `whereis(Name)` | `ProcRegistry.whereis(name)` |
+| `unregister(Name)` | `ProcRegistry.unregister(name)` |
+| `registered()` | `ProcRegistry.registered()` |
+| Automatic cleanup on exit | Auto-deregistration on termination |
+
+## Public API
+
+### Static Methods
+
+#### `register(String name, Proc<?, ?> proc)`
+
+Register `proc` under `name`. The registration is automatically removed when `proc` terminates (normal or abnormal).
+
+```java
+var worker = Proc.spawn(initialState, handler);
+ProcRegistry.register("worker-pool-1", worker);
+
+// Later, in another part of the code:
+var maybeWorker = ProcRegistry.whereis("worker-pool-1");
+maybeWorker.ifPresent(proc -> proc.tell(new WorkItem(data)));
+```
+
+**Parameters:**
+- `name` — Unique name for the process
+- `proc` — Process to register
+
+**Throws:**
+- `IllegalStateException` if `name` is already registered to a living process
+
+**Behavior:**
+- Registration is global (JVM-scoped)
+- Auto-deregistration occurs on process termination
+- Names are not scoped per-supervisor (use `Map<String, Proc>` for scoped namespaces)
+
+---
+
+#### `whereis(String name)`
+
+Look up a process by name. Returns the registered `Proc`, or empty if no process is registered under `name`.
+
+```java
+Optional<Proc<MyState, MyMsg>> maybeProc = ProcRegistry.whereis("cache-service");
+
+maybeProc.ifPresentOrElse(
+    proc -> proc.tell(new CacheRequest(key)),
+    () -> logger.error("Cache service not found")
+);
+```
+
+**Returns:** `Optional<Proc<S,M>>` with the process, or empty if not registered
+
+**Behavior:**
+- Returns empty if name is not registered
+- Returns empty if process has terminated (stale entries are eagerly removed)
+- Type-safe: Casts to `Proc<S,M>` using generics
+
+---
+
+#### `unregister(String name)`
+
+Explicitly remove a name from the registry. The process itself is not stopped.
+
+```java
+ProcRegistry.unregister("old-worker");
+// Process continues running, but is no longer discoverable by name
+```
+
+**Behavior:**
+- Safe to call even if the name is not registered (no-op)
+- Process continues running (only the name is removed)
+- Useful for graceful shutdown scenarios
+
+---
+
+#### `registered()`
+
+Returns the set of all currently registered names.
+
+```java
+Set<String> names = ProcRegistry.registered();
+System.out.println("Registered processes: " + names);
+// Output: [cache-service, worker-pool-1, db-connection]
+```
+
+**Returns:** Immutable snapshot of registered names (not live)
+
+---
+
+#### `reset()`
+
+Clear all registrations. **For use in tests only.**
+
+```java
+@BeforeEach
+void setUp() {
+    ProcRegistry.reset(); // Clean state for each test
+}
+```
+
+## Implementation Details
+
+### Thread Safety
+
+`ProcRegistry` uses `ConcurrentHashMap` for thread-safe operations:
+
+```java
+private static final ConcurrentHashMap<String, Proc<?, ?>> REGISTRY =
+    new ConcurrentHashMap<>();
+```
+
+**Guarantees:**
+- **Thread-safe registration**: Multiple threads can register different names concurrently
+- **Atomic check-and-put**: `putIfAbsent()` prevents race conditions
+- **Safe iteration**: `registered()` returns immutable snapshots
+
+### Auto-Deregistration
+
+Registration automatically removes entries on process termination:
+
+```java
+public static void register(String name, Proc<?, ?> proc) {
+    if (REGISTRY.putIfAbsent(name, proc) != null) {
+        throw new IllegalStateException("Name already registered: " + name);
+    }
+    // Auto-deregister on any termination (mirrors OTP's automatic cleanup)
+    proc.addTerminationCallback(_ -> REGISTRY.remove(name, proc));
+}
+```
+
+**Behavior:**
+- Callback fires on both normal (`stop()`) and abnormal (crash) termination
+- Uses `remove(name, proc)` to prevent race conditions
+- Mirrors OTP's automatic cleanup on process exit
+
+### Stale Entry Detection
+
+`whereis()` eagerly removes dead processes:
+
+```java
+public static <S, M> Optional<Proc<S, M>> whereis(String name) {
+    Proc<S, M> proc = (Proc<S, M>) REGISTRY.get(name);
+    if (proc != null && !proc.thread().isAlive()) {
+        // OTP: dead process is invisible — eagerly remove the stale entry
+        REGISTRY.remove(name, proc);
+        return Optional.empty();
+    }
+    return Optional.ofNullable(proc);
+}
+```
+
+**Benefits:**
+- No stale references to dead processes
+- eventual consistency (cleanup on next lookup)
+- Matches OTP semantics: dead processes are invisible
+
+## Common Usage Patterns
+
+### Service Discovery
+
+```java
+// Register a service during initialization
+var cache = Proc.spawn(cacheState, cacheHandler);
+ProcRegistry.register("cache-service", cache);
+
+// In other parts of the application:
+Optional<Proc<CacheState, CacheMsg>> cache = ProcRegistry.whereis("cache-service");
+cache.ifPresentOrElse(
+    proc -> proc.tell(new CacheGet(key)),
+    () -> logger.error("Cache service unavailable")
+);
+```
+
+### Worker Pool Management
+
+```java
+// Register workers with unique names
+for (int i = 0; i < 10; i++) {
+    var worker = Proc.spawn(initialState, workerHandler);
+    ProcRegistry.register("worker-" + i, worker);
+}
+
+// Dispatch work to any available worker
+var workers = ProcRegistry.registered().stream()
+    .filter(name -> name.startsWith("worker-"))
+    .map(name -> ProcRegistry.whereis(name).orElseThrow())
+    .toList();
+
+var worker = workers.get(ThreadLocalRandom.current().nextInt(workers.size()));
+worker.tell(new WorkItem(data));
+```
+
+### Named Singletons
+
+```java
+// Singleton database connection pool
+var dbPool = Proc.spawn(dbState, dbHandler);
+ProcRegistry.register("db-pool", dbPool);
+
+// Anywhere in the application:
+ProcRegistry.whereis("db-pool").ifPresent(pool ->
+    pool.tell(new DbQuery("SELECT * FROM users"))
+);
+```
+
+### Graceful Shutdown
+
+```java
+// Unregister before shutdown to prevent new lookups
+ProcRegistry.unregister("service-name");
+service.tell(new Shutdown());
+service.stop();
+```
+
+## Best Practices
+
+### 1. Use Descriptive Names
+
+```java
+// Good: Descriptive, hierarchical names
+ProcRegistry.register("user-service:cache", cache);
+ProcRegistry.register("user-service:worker-pool-1", workers);
+
+// Bad: Ambiguous names
+ProcRegistry.register("service1", service);
+ProcRegistry.register("process2", proc);
+```
+
+### 2. Handle Missing Registrations
+
+```java
+// Good: Explicit handling of missing processes
+var proc = ProcRegistry.whereis("cache-service");
+if (proc.isEmpty()) {
+    logger.warn("Cache service not found, using fallback");
+    return fallbackCache.get(key);
+}
+proc.get().tell(new CacheGet(key));
+
+// Bad: Assuming registration exists
+ProcRegistry.whereis("cache-service").get().tell(new CacheGet(key));
+// Throws NoSuchElementException if not registered!
+```
+
+### 3. Unregister During Shutdown
+
+```java
+// Good: Unregister before stopping
+ProcRegistry.unregister("worker");
+worker.tell(new DrainQueue());
+worker.stop();
+
+// Bad: Just stopping (name remains briefly in registry)
+worker.stop(); // Race: other threads might find the name before cleanup
+```
+
+### 4. Use Names for Services, Not for Transient Processes
+
+```java
+// Good: Long-lived service
+ProcRegistry.register("database-pool", dbPool);
+
+// Bad: Short-lived task
+var task = Proc.spawn(taskState, taskHandler);
+ProcRegistry.register("temp-task-" + id, task); // Unnecessary overhead
+```
+
+### 5. Consider Scoped Namespaces for Complex Systems
+
+```java
+// For per-supervisor scoping, use local maps instead of global registry
+class MySupervisor {
+    private final Map<String, Proc<?, ?>> localRegistry = new ConcurrentHashMap<>();
+
+    void spawnChild(String name, Proc<?, ?> proc) {
+        localRegistry.put(name, proc);
+    }
+}
+```
+
+## Gotchas
+
+### 1. Name Collisions
+
+```java
+// Risk: Name already registered
+var proc1 = Proc.spawn(state1, handler1);
+ProcRegistry.register("worker", proc1);
+
+var proc2 = Proc.spawn(state2, handler2);
+ProcRegistry.register("worker", proc2); // Throws IllegalStateException!
+```
+
+**Solution:** Use unique names or unregister first:
+
+```java
+ProcRegistry.unregister("worker"); // Remove old registration
+ProcRegistry.register("worker", proc2); // Now safe
+```
+
+### 2. Global Namespace Pollution
+
+```java
+// Risk: All tests share the same registry
+@Test
+void test1() {
+    ProcRegistry.register("test-service", service);
+}
+
+@Test
+void test2() {
+    // "test-service" might still be registered from test1!
+    var maybeService = ProcRegistry.whereis("test-service");
+}
+```
+
+**Solution:** Always call `ProcRegistry.reset()` in test setup:
+
+```java
+@BeforeEach
+void setUp() {
+    ProcRegistry.reset();
+}
+```
+
+### 3. Not Distributed Across JVMs
+
+```java
+// Risk: Registry is local to JVM, not distributed
+ProcRegistry.register("cluster-service", service);
+// Other JVM instances cannot see this registration!
+```
+
+**Solution:** Use external service discovery for distributed systems:
+
+```java
+// Use Consul, etcd, or ZooKeeper for distributed discovery
+serviceDiscovery.register("cluster-service", host, port);
+```
+
+### 4. Race Conditions During Startup
+
+```java
+// Risk: Service not yet registered
+var cache = ProcRegistry.whereis("cache-service");
+cache.ifPresentOrElse(
+    proc -> proc.tell(new CacheGet(key)),
+    () -> throw new ServiceNotReadyException()
+);
+```
+
+**Solution:** Use `ProcLib.startLink()` for initialization handshakes:
+
+```java
+var result = ProcLib.startLink(initialState,
+    state -> {
+        ProcRegistry.register("cache-service", self);
+        ProcLib.initAck();
+        return state;
+    },
+    handler
+);
+```
+
+### 5. Memory Leaks from Forgotten Registrations
+
+```java
+// Risk: Process stopped but name remains in registry
+var proc = Proc.spawn(state, handler);
+ProcRegistry.register("worker", proc);
+
+proc.stop(); // Registry still has "worker" entry!
+```
+
+**Note:** This is actually handled by auto-deregistration, but for manual cleanup:
+
+```java
+proc.stop();
+// Auto-deregistration will happen, but to be explicit:
+ProcRegistry.unregister("worker");
+```
+
+## Performance Considerations
+
+### When to Use ProcRegistry
+
+- **Service discovery**: Long-lived services with stable names
+- **Singleton processes**: Global resources like connection pools
+- **Worker pools**: Named groups of workers
+
+### When NOT to Use ProcRegistry
+
+- **Transient tasks**: Short-lived processes (overhead)
+- **Local references**: When you have the `Proc` reference already
+- **Distributed systems**: Use external service discovery (Consul, etcd)
+- **Scoped namespaces**: Use `Map<String, Proc>` for per-supervisor scoping
+
+### Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `register()` | ~100-200ns | ConcurrentHashMap.putIfAbsent() |
+| `whereis()` | ~50-100ns | ConcurrentHashMap.get() + Optional wrapper |
+| `unregister()` | ~50-100ns | ConcurrentHashMap.remove() |
+| `registered()` | ~1-5μs | Set.copyOf() creates snapshot |
+
+### Scaling Limits
+
+- **Registrations**: Limited by heap ( ConcurrentHashMap overhead)
+- **Name length**: Practical limit ~100 chars (use reasonable names)
+- **Lookup rate**: Millions per second (lock-free reads)
+
+## Production Usage
+
+### Service Discovery Patterns
+
+```java
+// Register service with health check
+var service = Proc.spawn(serviceState, serviceHandler);
+ProcRegistry.register("api-service", service);
+
+// Health check endpoint
+@GetMapping("/health")
+public Map<String, Boolean> health() {
+    var isHealthy = ProcRegistry.whereis("api-service")
+        .map(proc -> proc.thread().isAlive())
+        .orElse(false);
+    return Map.of("api-service", isHealthy);
+}
+```
+
+### Integration with Supervision Trees
+
+```java
+// Supervisor registers children with predictable names
+for (int i = 0; i < 5; i++) {
+    var child = supervisor.spawnChild(spec);
+    String childName = "supervisor-" + supervisorId + "-child-" + i;
+    ProcRegistry.register(childName, child);
+}
+```
+
+### Monitoring and Observability
+
+```java
+// Registry statistics
+var registeredNames = ProcRegistry.registered();
+var liveProcesses = registeredNames.stream()
+    .map(ProcRegistry::whereis)
+    .filter(Optional::isPresent)
+    .count();
+
+metrics.gauge("registry.registered", registeredNames.size());
+metrics.gauge("registry.live", liveProcesses);
+```
+
+## Related Classes
+
+- **[`Proc<S,M>`](proc.md)** — Lightweight process with virtual-thread mailbox
+- **[`ProcLib`](proc-lib.md)** — Startup handshake (init_ack pattern)
+- **[`Supervisor`](supervisor.md)** — Hierarchical process supervision
+- **[`ProcRef`](../proc_ref.md)** — Stable handle that survives supervisor restarts
+
+## See Also
+
+- [JOTP Architecture](../architecture.md)
+- [Proc API](proc.md)
+- [Supervisor API](supervisor.md)
+- [OTP Design Principles](https://erlang.org/doc/design_principles/des_princ.html)
+- [Erlang register/2 Documentation](https://erlang.org/doc/man/erlang.html#register-2)

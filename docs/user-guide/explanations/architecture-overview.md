@@ -96,6 +96,70 @@ Each process is a simple loop:
 3. Update state
 4. Repeat
 
+### Complete System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         JOTP System Architecture                │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    Application Layer                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  Account     │  │   Order      │  │  Payment     │          │
+│  │  Service     │  │   Service    │  │  Service     │          │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
+└─────────┼──────────────────┼──────────────────┼────────────────┘
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             │
+┌────────────────────────────┼────────────────────────────────────┐
+│                    Process Layer (JOTP)                         │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                 Root Supervisor                          │  │
+│  │          Strategy: ONE_FOR_ONE, MaxR: 5, MaxT: 60s      │  │
+│  └──┬─────────┬─────────┬─────────┬─────────┬─────────┬─────┘  │
+│     │         │         │         │         │         │          │
+│  ┌──┴──┐  ┌──┴──┐  ┌──┴──┐  ┌──┴──┐  ┌──┴──┐  ┌──┴──┐       │
+│  │Proc1│  │Proc2│  │Proc3│  │Proc4│  │Proc5│  │ProcN│       │
+│  │<S,M>│  │<S,M>│  │<S,M>│  │<S,M>│  │<S,M>│  │<S,M>│       │
+│  └─────┘  └─────┘  └─────┘  └─────┘  └─────┘  └─────┘       │
+│     │         │         │         │         │         │          │
+│     └─────────┴─────────┴─────────┴─────────┴─────────┘         │
+│                           │                                     │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              LinkedTransferQueue Mailboxes               │  │
+│  │    MPMC, FIFO, Lock-free, Unbounded                     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────┼────────────────────────────────────┘
+                             │
+┌────────────────────────────┼────────────────────────────────────┐
+│               Virtual Thread Scheduler (JVM)                    │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │          ForkJoinPool (Carrier Threads = CPU cores)      │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │  │
+│  │  │Carrier  │ │Carrier  │ │Carrier  │ │Carrier  │         │  │
+│  │  │Thread 1 │ │Thread 2 │ │Thread 3 │ │Thread N │         │  │
+│  │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘         │  │
+│  │       └────────────┴────────────┴────────────┘            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└────────────────────────────┼────────────────────────────────────┘
+                             │
+┌────────────────────────────┼────────────────────────────────────┐
+│                   Operating System Layer                        │
+│              CPU 1    CPU 2    CPU 3    CPU N                   │
+└─────────────────────────────────────────────────────────────────┘
+
+Key Components:
+• Proc<S,M>: Lightweight process with virtual thread
+• Supervisor: Hierarchical restart strategies
+• LinkedTransferQueue: Lock-free MPMC mailbox
+• ForkJoinPool: Virtual thread scheduler
+• Sealed Types: Compile-time message safety
+```
+
+### Pattern 2: Supervision Hierarchies
+
 ### Pattern 2: Supervision Hierarchies
 
 ```
@@ -203,6 +267,26 @@ The build fails if these patterns appear in production code, ensuring code quali
 | Code Generation | ✅ Complete | 72 templates + RefactorEngine |
 | Performance Tuning | 📋 Planned | Virtual thread optimization |
 | Distributed JOTP | 📋 Planned | Multi-node message passing |
+
+### Performance Benchmarks
+
+**From PhD Thesis §5:**
+
+| Metric | JOTP (Java 26) | Erlang/OTP | Akka |
+|--------|----------------|------------|------|
+| Message throughput | 30.1M msg/s | ~2M msg/s | ~5M msg/s |
+| Event fanout (1B) | 1.1B deliveries/s | ~50M/s | ~100M/s |
+| Round-trip latency | 78K rt/s | ~100K/s | ~50K/s |
+| Cascade failure (1000-deep) | 11ms | ~10ms | ~100ms |
+
+**Breaking Point Analysis (PhD thesis §6):**
+
+| Scenario | Limit | Finding |
+|----------|-------|---------|
+| Mailbox overflow | 4M messages (512MB) | Queue before memory pressure |
+| Handler saturation | 1000 handlers, 4.6M msg/s | No degradation at scale |
+| Cascade failure | 1000-deep chain | 11.35 μs/hop propagation |
+| Correlation table | 1M pending (190MB) | 190 bytes/entry overhead |
 
 ## What Makes JOTP Different
 

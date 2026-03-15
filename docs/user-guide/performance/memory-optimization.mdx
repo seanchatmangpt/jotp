@@ -1,0 +1,481 @@
+# Memory Optimization
+
+import { MemoryChart } from '@/components/memory-chart';
+import { HeapCalculator } from '@/components/heap-calculator';
+
+**Version:** 1.0.0-SNAPSHOT
+**Last Updated:** 2026-03-15
+**Component:** JVM Memory Management
+
+## Executive Summary
+
+JOTP processes are lightweight (~1.2KB per process), but millions of processes require careful heap sizing and GC tuning. This guide covers memory optimization, heap sizing, GC selection, and process isolation strategies for production deployments.
+
+## Memory Footprint Breakdown
+
+### Per-Process Memory
+
+<MemoryChart
+  title="Single Process Memory Layout"
+  data={[
+    { component: "Virtual Thread Stack", size: 1024 },
+    { component: "Mailbox Queue", size: 200 },
+    { component: "State Object", size: 64 },
+    { component: "Metadata", size: 48 },
+    { component: "CompletionFutures", size: 100 }
+  ]}
+/>
+
+**Total: ~1,436 bytes per process (minimal state)**
+
+### Memory Growth Calculator
+
+<HeapCalculator
+  scenarios={[
+    {
+      name: "Microservice",
+      processes: 1000,
+      messageRate: 100000,
+      avgMessageSize: 256,
+      p99Latency: 1,
+      minHeap: 230,
+      recommendedHeap: 1024
+    },
+    {
+      name: "Event Pipeline",
+      processes: 10000,
+      messageRate: 1000000,
+      avgMessageSize: 1024,
+      p99Latency: 5,
+      minHeap: 5872,
+      recommendedHeap: 24576
+    },
+    {
+      name: "Trading System",
+      processes: 100000,
+      messageRate: 10000000,
+      avgMessageSize: 128,
+      p99Latency: 0.5,
+      minHeap: 8256,
+      recommendedHeap: 32768
+    }
+  ]}
+/>
+
+**Formula:**
+```java
+heap_min = (process_count × 1.2KB) +
+           (message_rate × avg_message_size × latency_p99) × 4
+```
+
+**Recommended:** Add 4× headroom for GC breathing room.
+
+## JVM Heap Sizing
+
+### Fixed Heap (Latency-Optimized)
+
+**Use Case:** Real-time systems, trading platforms
+
+```bash
+# No resize pauses, predictable latency
+-Xms8g -Xmx8g -XX:SoftMaxHeapSize=7g
+```
+
+**Pros:**
+- No heap resize pauses
+- Predictable GC behavior
+- Consistent latency
+
+**Cons:**
+- Wasted memory if underutilized
+- Inflexible for load spikes
+
+**When to Use:**
+- Latency-critical systems
+- Predictable workloads
+- Sufficient memory available
+
+### Dynamic Heap (Throughput-Optimized)
+
+**Use Case:** Batch processing, event pipelines
+
+```bash
+# Grows/shrinks based on workload, higher throughput
+-Xms4g -Xmx16g
+```
+
+**Pros:**
+- Adapts to workload
+- Better memory utilization
+- Higher throughput
+
+**Cons:**
+- Occasional resize pauses
+- Less predictable latency
+- Potential for fragmentation
+
+**When to Use:**
+- Throughput-critical systems
+- Variable workloads
+- Memory-constrained environments
+
+### Container-Aware Heap
+
+**Use Case:** Kubernetes, Docker deployments
+
+```bash
+# Respect container memory limits (Java 8u191+)
+-XX:MaxRAMPercentage=75.0
+# For 8GB container: Uses 6GB heap
+```
+
+**Pros:**
+- Automatic sizing
+- Container-friendly
+- Prevents OOM kills
+
+**Cons:**
+- Less precise control
+- Depends on container limits
+- May need tuning
+
+**When to Use:**
+- Containerized deployments
+- Dynamic resource allocation
+- Cloud-native platforms
+
+## Garbage Collection Selection
+
+### G1GC (Default for <50K Processes)
+
+**Configuration:**
+```bash
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=50
+-XX:G1HeapRegionSize=32m
+-XX:+UseStringDeduplication
+```
+
+**Characteristics:**
+
+| Property | Value |
+|----------|-------|
+| **Pause Time Target** | 50 ms (configurable) |
+| **Process Limit** | <50K processes |
+| **Message Rate** | <10M msg/s |
+| **Throughput** | High (90%+) |
+| **Footprint** | Medium |
+
+**When to Use:**
+- Process count <50K
+- Mixed workloads (CPU + I/O)
+- Need balance between latency and throughput
+- Default choice for most scenarios
+
+**Tuning Guidelines:**
+```bash
+# Reduce pause time (increases GC overhead)
+-XX:MaxGCPauseMillis=20
+
+# Increase pause time (reduces GC overhead)
+-XX:MaxGCPauseMillis=100
+
+# Adjust region size (must be power of 2, 1MB-32MB)
+-XX:G1HeapRegionSize=16m   # Smaller regions for better parallelism
+-XX:G1HeapRegionSize=32m   # Larger regions for less fragmentation
+```
+
+### ZGC (Required for >50K Processes)
+
+**Configuration:**
+```bash
+-XX:+UseZGC
+-XX:+ZGenerational  # Generational ZGC (Java 21+)
+-XX:SoftMaxHeapSize=12g  # Leave headroom before hard limit
+```
+
+**Characteristics:**
+
+| Property | Value |
+|----------|-------|
+| **Pause Time Target** | <1 ms |
+| **Process Limit** | >100K processes |
+| **Message Rate** | >10M msg/s |
+| **Throughput** | Medium (85%+) |
+| **Footprint** | High (10% overhead) |
+
+**When to Use:**
+- Process count >50K
+- Low-latency requirements (<1 ms GC pauses)
+- High allocation rates
+- Large heaps (>16 GB)
+
+**Tuning Guidelines:**
+```bash
+# Enable concurrent relocation (Java 21+)
+-XX:+ZGenerational
+
+# Set soft heap limit (start GC before hard limit)
+-Xms16g -Xmx32g -XX:SoftMaxHeapSize=28g
+
+# Tune ZGC threads (auto by default)
+-XX:ZWorkerThreads=8
+-XX:ZCollectionThreads=2
+```
+
+### SerialGC (Memory-Constrained)
+
+**Configuration:**
+```bash
+-XX:+UseSerialGC
+-Xms256m -Xmx512m
+```
+
+**Characteristics:**
+
+| Property | Value |
+|----------|-------|
+| **Pause Time** | 10-100 ms (single-threaded) |
+| **Process Limit** | <5K processes |
+| **Message Rate** | <1M msg/s |
+| **Throughput** | Low (70%+) |
+| **Footprint** | Low (minimal overhead) |
+
+**When to Use:**
+- Small heap (<1 GB)
+- Containerized deployments
+- Low memory environments
+- Development/testing
+
+## Memory Leak Detection
+
+### Common Memory Leaks
+
+**1. Unbounded Mailbox Growth**
+```java
+// Bad: Producer sends faster than consumer processes
+for (int i = 0; i < 1_000_000; i++) {
+    consumer.tell(new LargeMessage(1024));  // 1MB each
+}
+// Consumer processes at 1K msg/s
+// Result: 1GB mailbox growth over time
+```
+
+**Solution:**
+```java
+// Monitor mailbox size
+ProcStatistics stats = ProcSys.of(consumer).getStatistics();
+if (stats.mailboxSize() > 1000) {
+    // Implement backpressure
+    throw new ServiceUnavailableException("Consumer overloaded");
+}
+```
+
+**2. State Object Growth**
+```java
+// Bad: State grows unbounded
+record State(List<Event> events) {}
+
+State handle(State state, Event event) {
+    List<Event> newEvents = new ArrayList<>(state.events());
+    newEvents.add(event);  // Grows forever
+    return new State(newEvents);
+}
+```
+
+**Solution:**
+```java
+// Good: State is bounded
+record State(Deque<Event> recentEvents) {}  // Max 1000 events
+
+State handle(State state, Event event) {
+    Deque<Event> newEvents = new ArrayDeque<>(state.recentEvents());
+    newEvents.addLast(event);
+    if (newEvents.size() > 1000) {
+        newEvents.removeFirst();  // Drop oldest
+    }
+    return new State(newEvents);
+}
+```
+
+**3. Event Listener Leaks**
+```java
+// Bad: Listeners never unsubscribed
+EventManager<Event> eventManager = new EventManager<>();
+eventManager.subscribe(listener);  // Never unsubscribed
+```
+
+**Solution:**
+```java
+// Good: Auto-closeable listeners
+try (Subscription sub = eventManager.subscribe(listener)) {
+    // Listener automatically unsubscribed on close
+}
+```
+
+### Memory Profiling
+
+**Using JFR:**
+```bash
+# Enable JFR with allocation profiling
+java -XX:+FlightRecorder \
+     -XX:StartFlightRecording=duration=60s,filename=profile.jfr \
+     -XX:FlightRecorderOptions=stackdepth=256 \
+     -jar app.jar
+
+# Analyze with JDK Mission Control
+# Look for:
+# - Allocation rate by class
+# - Live object histogram
+# - GC root chains
+```
+
+**Using VisualVM:**
+```bash
+# Heap dump analysis
+jcmd <pid> GC.heap_dump /tmp/heap.hprof
+
+# Open in VisualVM or Eclipse MAT
+# Look for:
+# - Large LinkedTransferQueue instances
+# - Many Envelope objects
+# - Large state objects
+```
+
+## Process Isolation Strategies
+
+### Memory-Per-Process Limits
+
+**Strategy:** Allocate fixed memory per process
+
+```java
+// Estimate memory per process
+int processMemoryBytes = 1_436;  // 1.4KB baseline
+int stateMemoryBytes = state.estimatedSize();
+int messageMemoryBytes = avgMessageSize * avgMailboxSize;
+
+int totalPerProcess = processMemoryBytes + stateMemoryBytes + messageMemoryBytes;
+
+// Calculate max processes for heap
+int maxProcesses = (heapSizeBytes * 0.7) / totalPerProcess;
+```
+
+**Example:**
+```java
+// 8GB heap, 256B state, 10 messages in mailbox
+int heapSize = 8 * 1024 * 1024 * 1024;  // 8GB
+int stateSize = 256;
+int mailboxMemory = 256 * 10;  // 10 messages × 256B
+int totalPerProcess = 1436 + 256 + 2560;  // ~4KB
+
+int maxProcesses = (heapSize * 0.7) / totalPerProcess;  // ~1.4M processes
+```
+
+### Partitioned Memory
+
+**Strategy:** Divide heap among supervisor trees
+
+```java
+// Root supervisor for each partition
+Supervisor partition1 = Supervisor.oneForOne(...);
+Supervisor partition2 = Supervisor.oneForOne(...);
+Supervisor partition3 = Supervisor.oneForOne(...);
+
+// Each partition gets 1/3 of heap
+// Partition 1: 2.6GB heap → ~650K processes
+// Partition 2: 2.6GB heap → ~650K processes
+// Partition 3: 2.6GB heap → ~650K processes
+```
+
+**Pros:**
+- Isolated failures
+- Predictable memory usage
+- Easier capacity planning
+
+**Cons:**
+- Less flexible allocation
+- Potential memory waste
+- More complex setup
+
+## Monitoring Memory Usage
+
+### Key Metrics
+
+```java
+// JVM heap metrics
+MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+MemoryUsage heapUsage = memoryMXBean.getHeapMemoryUsage();
+
+long usedHeap = heapUsage.getUsed();
+long maxHeap = heapUsage.getMax();
+double heapUtilization = (double) usedHeap / maxHeap;
+
+// JOTP process metrics
+long totalProcesses = ProcRegistry.global().size();
+long totalMailboxMemory = estimateMailboxMemory();
+long totalStateMemory = estimateStateMemory();
+
+long totalJotpMemory = totalProcesses * 1436 + totalMailboxMemory + totalStateMemory;
+```
+
+### Alert Thresholds
+
+| Metric | Warning | Critical | Action |
+|--------|---------|----------|--------|
+| **Heap Utilization** | >75% | >90% | Increase heap |
+| **Process Count** | >1M | >5M | Scale horizontally |
+| **Mailbox Memory** | >1GB | >5GB | Implement backpressure |
+| **GC Time** | >10% | >30% | Tune GC or increase heap |
+
+## Performance Tuning Examples
+
+### Memory-Constrained Configuration
+
+**Use Case:** Containerized deployment, <512MB heap
+
+```bash
+java \
+  --enable-preview \
+  -XX:+UseSerialGC \
+  -Xms128m -Xmx512m \
+  -XX:MaxRAMPercentage=75.0 \
+  -Djdk.virtualThreadScheduler.parallelism=2 \
+  -XX:TieredStopAtLevel=1 \
+  -XX:ReservedCodeCacheSize=64m \
+  -jar your-service.jar
+```
+
+**Characteristics:**
+- P99 latency: <500 ms
+- GC pauses: <100 ms
+- Heap: Fixed (512 MB)
+- Throughput: Low
+
+### High-Memory Configuration
+
+**Use Case:** In-memory analytics, >100GB heap
+
+```bash
+java \
+  --enable-preview \
+  -XX:+UseZGC \
+  -XX:+ZGenerational \
+  -Xms64g -Xmx128g \
+  -XX:SoftMaxHeapSize=112g \
+  -XX:ZWorkerThreads=16 \
+  -XX:ZCollectionThreads=4 \
+  -XX:+AlwaysPreTouch \
+  -jar your-service.jar
+```
+
+**Characteristics:**
+- P99 latency: <5 ms
+- GC pauses: <2 ms
+- Heap: Dynamic (64-128 GB)
+- Throughput: High
+
+## Next Steps
+
+Continue exploring performance optimization:
+
+- [**Production Monitoring**](./production-monitoring.md) - Metrics, alerts, profiling
