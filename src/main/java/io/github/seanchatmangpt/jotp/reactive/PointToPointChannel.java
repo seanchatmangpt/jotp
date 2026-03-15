@@ -72,13 +72,18 @@ public final class PointToPointChannel<T> implements MessageChannel<T> {
     /**
      * Stop accepting new messages, drain the queue, then shut down the consumer thread.
      *
-     * @throws InterruptedException if interrupted while waiting for the consumer to finish
+     * <p>If the current thread is interrupted while waiting, the interrupt flag is restored and the
+     * method returns normally.
      */
     @Override
-    public void stop() throws InterruptedException {
+    public void stop() {
         stopped = true;
         consumerThread.interrupt();
-        consumerThread.join();
+        try {
+            consumerThread.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** Current number of messages waiting to be processed. */

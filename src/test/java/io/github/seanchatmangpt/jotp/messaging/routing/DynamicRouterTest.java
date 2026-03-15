@@ -215,7 +215,7 @@ class DynamicRouterTest implements WithAssertions {
             List<String> receivedMessages = new ArrayList<>();
 
             // Create and register a simple message handler process
-            ProcRef<String, String> handlerRef =
+            ProcRef<List<String>, String> handlerRef =
                     Proc.spawn(
                             "message-handler",
                             () -> receivedMessages,
@@ -248,7 +248,7 @@ class DynamicRouterTest implements WithAssertions {
             List<String> orderMessages = new ArrayList<>();
             List<String> paymentMessages = new ArrayList<>();
 
-            ProcRef<String, String> orderRef =
+            ProcRef<List<String>, String> orderRef =
                     Proc.spawn(
                             "order-service",
                             () -> orderMessages,
@@ -257,7 +257,7 @@ class DynamicRouterTest implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> paymentRef =
+            ProcRef<List<String>, String> paymentRef =
                     Proc.spawn(
                             "payment-service",
                             () -> paymentMessages,

@@ -32,7 +32,7 @@ class MessageExpirationTest implements WithAssertions {
     // Test message type
     sealed interface NotificationMsg permits NotificationMsg.Alert {
         record Alert(String alertId, String severity) implements NotificationMsg {
-            Alert {
+            public Alert {
                 if (alertId == null || alertId.isBlank()) {
                     throw new IllegalArgumentException("alertId required");
                 }
@@ -143,7 +143,7 @@ class MessageExpirationTest implements WithAssertions {
         var lowerBound = before.plusMillis(2000);
         var upperBound = after.plusMillis(2000).plusMillis(100); // Allow 100ms skew
 
-        assertThat(expiresAt).isGreaterThanOrEqualTo(lowerBound).isLessThanOrEqualTo(upperBound);
+        assertThat(expiresAt).isAfterOrEqualTo(lowerBound).isBeforeOrEqualTo(upperBound);
     }
 
     // -------------------------------------------------------

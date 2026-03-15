@@ -100,7 +100,8 @@ class EnterpriseCompositionIT implements WithAssertions {
                         .set("server.host", "localhost")
                         .set("cache.enabled", true)
                         .set("timeout.seconds", 30L)
-                        .set("rate", 1.5);
+                        .set("rate", 1.5)
+                        .build();
 
         assertThat(config.environment()).isEqualTo("production");
         assertThat(config.getInt("server.port", 0)).isEqualTo(8080);
@@ -823,14 +824,13 @@ class EnterpriseCompositionIT implements WithAssertions {
     }
 
     private IngressState handleIngress(IngressState state, IngressMsg msg) {
-        switch (msg) {
+        return switch (msg) {
             case IngressMsg.Ingest(var data) -> {
                 state.metrics.counter("ingress.received").increment();
                 state.bus.publish("telemetry.ingress", data);
-                return new IngressState(state.bus, state.metrics, state.processed + 1);
+                yield new IngressState(state.bus, state.metrics, state.processed + 1);
             }
-        }
-        return state;
+        };
     }
 
     // Event types

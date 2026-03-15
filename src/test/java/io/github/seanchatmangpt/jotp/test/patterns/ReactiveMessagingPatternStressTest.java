@@ -108,12 +108,12 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        org.acme.ProcRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        org.acme.ProcRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════

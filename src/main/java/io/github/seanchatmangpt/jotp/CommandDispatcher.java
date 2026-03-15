@@ -116,8 +116,10 @@ public final class CommandDispatcher {
         return this;
     }
 
-    /** Register a handler using a simple function. */
-    public <C extends Command, T> CommandDispatcher register(
+    /**
+     * Register a handler using a simple function that returns a plain value (not CommandResult).
+     */
+    public <C extends Command, T> CommandDispatcher registerFn(
             Class<C> commandType, Function<C, T> handler) {
         handlers.put(
                 commandType,

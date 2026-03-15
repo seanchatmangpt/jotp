@@ -84,11 +84,11 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
 
             // State machine for session lifecycle
             var sessionSm =
-                    new StateMachine<>(
+                    new StateMachine<SessionState, String, SessionData>(
                             new SessionState.Initialized(),
                             SessionData.init(sessionId),
                             (state, event, data) -> {
-                                if (event instanceof String cmd) {
+                                if (event instanceof StateMachine.SMEvent.User(String cmd)) {
                                     return switch (cmd) {
                                         case "configure" -> {
                                             if (state instanceof SessionState.Initialized) {
@@ -506,12 +506,13 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
                             processed,
                             (Map<String, AtomicInteger> state, AtlasMsg msg) -> {
                                 switch (msg) {
-                                    case AtlasMsg.Sample _ -> state.get("Sample").incrementAndGet();
-                                    case AtlasMsg.SessionEvent _ ->
+                                    case AtlasMsg.SampleMsg _ ->
+                                            state.get("Sample").incrementAndGet();
+                                    case AtlasMsg.SessionEventMsg _ ->
                                             state.get("SessionEvent").incrementAndGet();
-                                    case AtlasMsg.LapEvent _ ->
+                                    case AtlasMsg.LapEventMsg _ ->
                                             state.get("LapEvent").incrementAndGet();
-                                    case AtlasMsg.StrategyCmd _ ->
+                                    case AtlasMsg.StrategyCmdMsg _ ->
                                             state.get("StrategyCmd").incrementAndGet();
                                 }
                                 return state;
@@ -521,18 +522,19 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
 
             // Send all message types
             canonicalProcessor.tell(
-                    new AtlasMsg.Sample(
+                    new AtlasMsg.SampleMsg(
                             sessionId,
-                            new ParameterId("P1"),
-                            new Timestamp(0),
-                            (short) 100,
-                            new Good()));
+                            new Sample(
+                                    new ParameterId("P1"),
+                                    new Timestamp(0),
+                                    (short) 100,
+                                    new Good())));
             canonicalProcessor.tell(
-                    new AtlasMsg.SessionEvent(sessionId, new SessionState.GoLive()));
+                    new AtlasMsg.SessionEventMsg(sessionId, new SessionState.GoLive()));
             canonicalProcessor.tell(
-                    new AtlasMsg.LapEvent(sessionId, new LapNumber(1), new Timestamp(1000)));
+                    new AtlasMsg.LapEventMsg(sessionId, new LapNumber(1), new Timestamp(1000)));
             canonicalProcessor.tell(
-                    new AtlasMsg.StrategyCmd(
+                    new AtlasMsg.StrategyCmdMsg(
                             sessionId, new RaceState("test"), new CompletableFuture<>()));
 
             await().atMost(Duration.ofSeconds(2))
@@ -554,34 +556,35 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
             java.util.function.Function<AtlasMsg, String> classifier =
                     msg ->
                             switch (msg) {
-                                case AtlasMsg.Sample _ -> "sample";
-                                case AtlasMsg.SessionEvent _ -> "session";
-                                case AtlasMsg.LapEvent _ -> "lap";
-                                case AtlasMsg.StrategyCmd _ -> "strategy";
+                                case AtlasMsg.SampleMsg _ -> "sample";
+                                case AtlasMsg.SessionEventMsg _ -> "session";
+                                case AtlasMsg.LapEventMsg _ -> "lap";
+                                case AtlasMsg.StrategyCmdMsg _ -> "strategy";
                             };
 
             assertThat(
                             classifier.apply(
-                                    new AtlasMsg.Sample(
+                                    new AtlasMsg.SampleMsg(
                                             sessionId,
-                                            new ParameterId("P"),
-                                            new Timestamp(0),
-                                            (short) 1,
-                                            new Good())))
+                                            new Sample(
+                                                    new ParameterId("P"),
+                                                    new Timestamp(0),
+                                                    (short) 1,
+                                                    new Good()))))
                     .isEqualTo("sample");
             assertThat(
                             classifier.apply(
-                                    new AtlasMsg.SessionEvent(
+                                    new AtlasMsg.SessionEventMsg(
                                             sessionId, new SessionState.GoLive())))
                     .isEqualTo("session");
             assertThat(
                             classifier.apply(
-                                    new AtlasMsg.LapEvent(
+                                    new AtlasMsg.LapEventMsg(
                                             sessionId, new LapNumber(1), new Timestamp(0))))
                     .isEqualTo("lap");
             assertThat(
                             classifier.apply(
-                                    new AtlasMsg.StrategyCmd(
+                                    new AtlasMsg.StrategyCmdMsg(
                                             sessionId,
                                             new RaceState("x"),
                                             new CompletableFuture<>())))
@@ -630,17 +633,18 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
                             SagaState.init(sessionId),
                             (SagaState s, AtlasMsg msg) -> {
                                 switch (msg) {
-                                    case AtlasMsg.Sample sample -> {
+                                    case AtlasMsg.SampleMsg sample -> {
                                         if (!s.active()) return s;
                                         var newData = new HashMap<>(s.parameterData());
                                         newData.computeIfAbsent(
-                                                        sample.param(), k -> new ArrayList<>())
-                                                .add(sample.rawValue());
+                                                        sample.sample().parameterId(),
+                                                        k -> new ArrayList<>())
+                                                .add(sample.sample().rawValue());
                                         bus.notify(msg);
                                         return new SagaState(
                                                 s.id(), s.state(), s.laps(), newData, s.active());
                                     }
-                                    case AtlasMsg.LapEvent lap -> {
+                                    case AtlasMsg.LapEventMsg lap -> {
                                         if (!s.active()) return s;
                                         var newLaps = new ArrayList<>(s.laps());
                                         newLaps.add(lap.lap());
@@ -652,7 +656,7 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
                                                 s.parameterData(),
                                                 s.active());
                                     }
-                                    case AtlasMsg.SessionEvent event -> {
+                                    case AtlasMsg.SessionEventMsg event -> {
                                         bus.notify(msg);
                                         return new SagaState(
                                                 s.id(),
@@ -661,7 +665,7 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
                                                 s.parameterData(),
                                                 s.active());
                                     }
-                                    case AtlasMsg.StrategyCmd cmd -> {
+                                    case AtlasMsg.StrategyCmdMsg cmd -> {
                                         bus.notify(msg);
                                         cmd.replyTo().complete(new Recommendation("CONTINUE", 0.9));
                                         return s;
@@ -670,32 +674,35 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
                             });
 
             // Execute session lifecycle
-            sagaManager.tell(new AtlasMsg.SessionEvent(sessionId, new SessionState.Configured()));
-            sagaManager.tell(new AtlasMsg.SessionEvent(sessionId, new SessionState.GoLive()));
-            sagaManager.tell(new AtlasMsg.SessionEvent(sessionId, new SessionState.Recording()));
+            sagaManager.tell(
+                    new AtlasMsg.SessionEventMsg(sessionId, new SessionState.Configured()));
+            sagaManager.tell(new AtlasMsg.SessionEventMsg(sessionId, new SessionState.GoLive()));
+            sagaManager.tell(new AtlasMsg.SessionEventMsg(sessionId, new SessionState.Recording()));
 
             // Record samples
             for (int i = 0; i < 50; i++) {
                 sagaManager.tell(
-                        new AtlasMsg.Sample(
+                        new AtlasMsg.SampleMsg(
                                 sessionId,
-                                new ParameterId("BRAKE_" + (i % 4)),
-                                new Timestamp(i),
-                                (short) (50 + i),
-                                new Good()));
+                                new Sample(
+                                        new ParameterId("BRAKE_" + (i % 4)),
+                                        new Timestamp(i),
+                                        (short) (50 + i),
+                                        new Good())));
             }
 
             // Record laps
             for (int i = 1; i <= 5; i++) {
                 sagaManager.tell(
-                        new AtlasMsg.LapEvent(
+                        new AtlasMsg.LapEventMsg(
                                 sessionId, new LapNumber(i), new Timestamp(i * 1000)));
             }
 
             // Strategy request
             var replyFuture = new CompletableFuture<Recommendation>();
             sagaManager.tell(
-                    new AtlasMsg.StrategyCmd(sessionId, new RaceState("GREEN_FLAG"), replyFuture));
+                    new AtlasMsg.StrategyCmdMsg(
+                            sessionId, new RaceState("GREEN_FLAG"), replyFuture));
 
             // Expected bus count: 50 samples + 5 laps + 3 events (Configured, GoLive, Recording) +
             // 1 strategy = 59
@@ -707,7 +714,7 @@ class AtlasOrchestrationPatternsIT implements WithAssertions {
 
             var finalState =
                     sagaManager
-                            .ask(new AtlasMsg.SessionEvent(sessionId, new SessionState.Closed()))
+                            .ask(new AtlasMsg.SessionEventMsg(sessionId, new SessionState.Closed()))
                             .get(2, TimeUnit.SECONDS);
             assertThat(finalState.laps()).hasSize(5);
             assertThat(finalState.parameterData()).hasSize(4); // 4 brake sensors

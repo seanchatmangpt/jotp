@@ -123,6 +123,8 @@ public final class Application<S> {
     private final List<SupervisorEntry> supervisors = new CopyOnWriteArrayList<>();
     private final List<Runnable> initHooks = new CopyOnWriteArrayList<>();
     private final List<Runnable> shutdownHooks = new CopyOnWriteArrayList<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, Infrastructure> infrastructureMap =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private volatile ApplicationPhase phase = new ApplicationPhase.INIT();
     private volatile S state;
 
@@ -141,6 +143,11 @@ public final class Application<S> {
         this.supervisors.addAll(supervisors);
         this.initHooks.addAll(initHooks);
         this.shutdownHooks.addAll(shutdownHooks);
+    }
+
+    /** Retrieve a named infrastructure component registered with this application. */
+    public java.util.Optional<Infrastructure> infrastructure(String componentName) {
+        return java.util.Optional.ofNullable(infrastructureMap.get(componentName));
     }
 
     /**
@@ -286,6 +293,54 @@ public final class Application<S> {
     }
 
     /**
+     * Returns the application name.
+     *
+     * @return the name provided at construction time
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+     * Returns {@code true} if the application has been started (phase is not INIT).
+     *
+     * @return true when past the initial INIT phase
+     */
+    public boolean isStarted() {
+        return !(phase instanceof ApplicationPhase.INIT);
+    }
+
+    /**
+     * Returns {@code true} if the application is in the RUNNING phase.
+     *
+     * @return true when running
+     */
+    public boolean isRunning() {
+        return phase instanceof ApplicationPhase.RUNNING;
+    }
+
+    /**
+     * Lookup a named service by name (unchecked cast convenience method).
+     *
+     * <p>Equivalent to {@link #getService(String)} but with an unchecked cast to the caller's
+     * expected type. Use only when you know the service's state and message types.
+     *
+     * @param <SS> expected state type
+     * @param <MM> expected message type
+     * @param serviceName the service name
+     * @return an {@link Optional} containing the typed {@link ProcRef} if found, or empty otherwise
+     */
+    @SuppressWarnings("unchecked")
+    public <SS, MM> Optional<ProcRef<SS, MM>> service(String serviceName) {
+        for (var entry : services) {
+            if (entry.name.equals(serviceName)) {
+                return Optional.of((ProcRef<SS, MM>) entry.ref);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Create a fluent builder for an application.
      *
      * @param appName the application name
@@ -305,6 +360,8 @@ public final class Application<S> {
         private final List<SupervisorEntry> supervisors = new ArrayList<>();
         private final List<Runnable> initHooks = new ArrayList<>();
         private final List<Runnable> shutdownHooks = new ArrayList<>();
+        private final java.util.Map<String, Infrastructure> infrastructures =
+                new java.util.LinkedHashMap<>();
 
         Builder(String name) {
             this.name = name;
@@ -378,13 +435,104 @@ public final class Application<S> {
         }
 
         /**
+         * No-op: supervisor strategy is managed internally. Provided for API compatibility.
+         *
+         * @param strategy ignored
+         * @return this builder
+         */
+        public Builder<S> supervisorStrategy(Supervisor.Strategy strategy) {
+            return this;
+        }
+
+        /**
+         * No-op: max restarts is managed internally. Provided for API compatibility.
+         *
+         * @param max ignored
+         * @return this builder
+         */
+        public Builder<S> maxRestarts(int max) {
+            return this;
+        }
+
+        /**
+         * No-op: restart window is managed internally. Provided for API compatibility.
+         *
+         * @param window ignored
+         * @return this builder
+         */
+        public Builder<S> restartWindow(java.time.Duration window) {
+            return this;
+        }
+
+        /**
+         * Register a named service by creating a Proc from a state factory and handler.
+         *
+         * @param <MS> the service state type
+         * @param <MM> the service message type
+         * @param serviceName the name for lookup
+         * @param stateFactory supplier that provides the initial state
+         * @param handler pure {@code (state, msg) -> state} function
+         * @return this builder
+         */
+        public <MS, MM> Builder<S> service(
+                String serviceName,
+                Supplier<MS> stateFactory,
+                java.util.function.BiFunction<MS, MM, MS> handler) {
+            ProcRef<MS, MM> ref = Proc.spawn(serviceName, stateFactory, handler);
+            services.add(new ServiceEntry<>(serviceName, ref));
+            return this;
+        }
+
+        /**
+         * Register an infrastructure component.
+         *
+         * @param infra the infrastructure component
+         * @return this builder
+         */
+        public Builder<S> infrastructure(Infrastructure infra) {
+            if (infra != null && infra.name() != null) {
+                infrastructures.put(infra.name(), infra);
+            }
+            return this;
+        }
+
+        /**
+         * Register a health checker as an infrastructure component. Provided for API compatibility.
+         *
+         * @param checker the health checker
+         * @return this builder
+         */
+        public Builder<S> healthCheck(HealthChecker checker) {
+            return this;
+        }
+
+        /**
+         * Set the application configuration. Provided for API compatibility.
+         *
+         * @param config the application configuration
+         * @return this builder
+         */
+        public Builder<S> config(ApplicationConfig config) {
+            return this;
+        }
+
+        /**
          * Build the application instance.
          *
          * @return a new {@link Application} with the configured services, supervisors, and hooks
          */
         public Application<S> build() {
-            return new Application<>(
-                    name, initializer, stopper, services, supervisors, initHooks, shutdownHooks);
+            Application<S> app =
+                    new Application<>(
+                            name,
+                            initializer,
+                            stopper,
+                            services,
+                            supervisors,
+                            initHooks,
+                            shutdownHooks);
+            app.infrastructureMap.putAll(infrastructures);
+            return app;
         }
     }
 

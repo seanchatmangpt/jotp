@@ -126,13 +126,6 @@ public final class HealthChecker implements Application.Infrastructure {
             return this;
         }
 
-        /** Add a health check. */
-        public Builder check(String name, Check check, Duration timeout) {
-            this.checks.put(name, check);
-            this.timeouts.put(name, timeout);
-            return this;
-        }
-
         /** Add a simple boolean health check. */
         public Builder check(String name, SimpleCheck check, Duration timeout) {
             this.checks.put(
@@ -319,9 +312,10 @@ public final class HealthChecker implements Application.Infrastructure {
         return name;
     }
 
-    public boolean check() {
+    public Status check() {
         Map<String, CheckResult> results = checkAll();
-        return determineOverallStatus(results) != HealthStatus.UNHEALTHY;
+        HealthStatus overall = determineOverallStatus(results);
+        return new Status(overall, results, java.time.Instant.now());
     }
 
     public Duration interval() {

@@ -119,7 +119,7 @@ public class JotpIntrospectionExtension implements TestInstancePostProcessor, Pa
     /** Get permitted subclasses of sealed Transition. */
     public static Class<?>[] getTransitionVariants(Class<?> sealedTransition) {
         if (sealedTransition.isSealed()) {
-            return sealedTransition.permittedSubclasses();
+            return sealedTransition.getPermittedSubclasses();
         }
         return new Class<?>[0];
     }

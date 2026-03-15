@@ -95,13 +95,14 @@ public final class Splitter {
      * automatically receives a {@link PartMetadata} with a unique correlation ID and sequence
      * number.
      *
-     * @param <T> the message type
+     * @param <T> the input message type
+     * @param <U> the output part type
      * @param message the message to split
      * @param splitter function that returns a list of message parts from the input
      * @return list of {@link MessagePart} records with correlation IDs and sequence numbers
      * @throws IllegalArgumentException if the splitter returns an empty list or null
      */
-    public static <T> List<MessagePart<T>> split(T message, Function<T, List<T>> splitter) {
+    public static <T, U> List<MessagePart<U>> split(T message, Function<T, List<U>> splitter) {
         return split(message, splitter, UUID.randomUUID());
     }
 
@@ -112,30 +113,31 @@ public final class Splitter {
      * existing context or for testing). The correlation ID is the same for all resulting parts,
      * enabling reassembly downstream.
      *
-     * @param <T> the message type
+     * @param <T> the input message type
+     * @param <U> the output part type
      * @param message the message to split
      * @param splitter function that returns a list of message parts from the input
      * @param correlationId UUID to link all resulting parts together
      * @return list of {@link MessagePart} records with the specified correlation ID
      * @throws IllegalArgumentException if the splitter returns an empty list or null
      */
-    public static <T> List<MessagePart<T>> split(
-            T message, Function<T, List<T>> splitter, UUID correlationId) {
+    public static <T, U> List<MessagePart<U>> split(
+            T message, Function<T, List<U>> splitter, UUID correlationId) {
         Objects.requireNonNull(message, "message cannot be null");
         Objects.requireNonNull(splitter, "splitter function cannot be null");
         Objects.requireNonNull(correlationId, "correlationId cannot be null");
 
-        List<T> parts = splitter.apply(message);
+        List<U> parts = splitter.apply(message);
 
         if (parts == null || parts.isEmpty()) {
             throw new IllegalArgumentException("splitter must return a non-empty list of parts");
         }
 
         int totalParts = parts.size();
-        List<MessagePart<T>> result = new ArrayList<>(totalParts);
+        List<MessagePart<U>> result = new ArrayList<>(totalParts);
 
         for (int i = 0; i < parts.size(); i++) {
-            T part = parts.get(i);
+            U part = parts.get(i);
             int sequenceNumber = i + 1; // 1-indexed
             PartMetadata metadata = new PartMetadata(correlationId, sequenceNumber, totalParts);
             result.add(new MessagePart<>(part, metadata));

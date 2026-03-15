@@ -362,6 +362,96 @@ public final class CircuitBreaker<R, V, E extends Exception> {
         }
     }
 
+    /** Alias for {@link #getState()} for fluent API compatibility. */
+    public State state() {
+        return getState();
+    }
+
+    /** Error type representing circuit breaker rejection or execution failure. */
+    public static final class CircuitError extends Exception {
+        private final boolean circuitOpen;
+
+        public CircuitError(String message, boolean circuitOpen) {
+            super(message);
+            this.circuitOpen = circuitOpen;
+        }
+
+        public boolean isCircuitOpen() {
+            return circuitOpen;
+        }
+    }
+
+    /**
+     * Execute a supplier through the circuit breaker.
+     *
+     * <p>Convenience overload for no-input calls: the supplier is wrapped as a handler that ignores
+     * its (null) request argument.
+     *
+     * @param supplier the computation to guard
+     * @return {@code Result.ok(value)} on success, or {@code Result.err(CircuitError)} on failure
+     *     or circuit open
+     */
+    @SuppressWarnings("unchecked")
+    public <V> Result<V, CircuitError> execute(java.util.function.Supplier<V> supplier) {
+        CircuitBreakerResult<V, Exception> cbResult =
+                ((CircuitBreaker<Object, V, Exception>) this)
+                        .execute(null, ignored -> supplier.get());
+        return switch (cbResult) {
+            case CircuitBreakerResult.Success<V, Exception>(var value) -> Result.ok(value);
+            case CircuitBreakerResult.Failure<V, Exception>(var error) ->
+                    Result.err(new CircuitError(error.getMessage(), false));
+            case CircuitBreakerResult.CircuitOpen<V, Exception> ignored ->
+                    Result.err(new CircuitError("circuit is open", true));
+        };
+    }
+
+    /**
+     * Builder for constructing a {@link CircuitBreaker} with named configuration.
+     *
+     * @param name circuit breaker identifier
+     * @return a new builder
+     */
+    public static Builder builder(String name) {
+        return new Builder(name);
+    }
+
+    /** Fluent builder for CircuitBreaker. */
+    public static final class Builder {
+        private final String name;
+        private int failureThreshold = 5;
+        private Duration timeout = Duration.ofSeconds(30);
+        private Duration resetTimeout = Duration.ofSeconds(60);
+        private int halfOpenRequests = 1;
+
+        private Builder(String name) {
+            this.name = Objects.requireNonNull(name, "name cannot be null");
+        }
+
+        public Builder failureThreshold(int threshold) {
+            this.failureThreshold = threshold;
+            return this;
+        }
+
+        public Builder timeout(Duration timeout) {
+            this.timeout = Objects.requireNonNull(timeout);
+            return this;
+        }
+
+        public Builder resetTimeout(Duration resetTimeout) {
+            this.resetTimeout = Objects.requireNonNull(resetTimeout);
+            return this;
+        }
+
+        public Builder halfOpenRequests(int requests) {
+            this.halfOpenRequests = requests;
+            return this;
+        }
+
+        public <R, V, E extends Exception> CircuitBreaker<R, V, E> build() {
+            return CircuitBreaker.create(name, failureThreshold, timeout, resetTimeout);
+        }
+    }
+
     /**
      * Return a string representation of the circuit breaker state.
      *

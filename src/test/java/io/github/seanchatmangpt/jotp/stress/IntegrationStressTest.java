@@ -34,7 +34,7 @@ class IntegrationStressTest extends StressTestBase {
     @DisplayName("Supervisor + Proc + EventManager (10 workers, 100 msg/sec each)")
     void testSupervisorWithEventManager() {
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 20, Duration.ofSeconds(60));
-        EventManager<String> eventManager = new EventManager<>();
+        EventManager<String> eventManager = EventManager.start();
         AtomicInteger totalEventsProcessed = new AtomicInteger();
 
         try {
@@ -90,7 +90,11 @@ class IntegrationStressTest extends StressTestBase {
             assertEquals(0.0, metrics.getErrorRate(), 0.1, "Error rate should be near 0%");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             eventManager.stop();
             cleanup();
         }
@@ -146,7 +150,11 @@ class IntegrationStressTest extends StressTestBase {
             assertTrue(metrics.getOperationCount() > 100, "Should handle >100 message slots");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -198,7 +206,11 @@ class IntegrationStressTest extends StressTestBase {
             assertEquals(0.0, metrics.getErrorRate(), 0.1, "Error rate should be near 0%");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -258,7 +270,11 @@ class IntegrationStressTest extends StressTestBase {
                             + " ms");
 
         } finally {
-            rootSupervisor.shutdown();
+            try {
+                rootSupervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -274,7 +290,7 @@ class IntegrationStressTest extends StressTestBase {
     @Test
     @DisplayName("EventManager mixed handlers (sync + async, various payloads)")
     void testEventManagerMixedHandlers() {
-        EventManager<String> eventManager = new EventManager<>();
+        EventManager<String> eventManager = EventManager.start();
         AtomicInteger syncHandlerCount = new AtomicInteger();
         AtomicInteger asyncHandlerCount = new AtomicInteger();
 
@@ -327,7 +343,7 @@ class IntegrationStressTest extends StressTestBase {
     @DisplayName("Memory pressure (5 minute sustained load)")
     void testMemoryPressure() {
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 30, Duration.ofSeconds(60));
-        EventManager<Integer> eventManager = new EventManager<>();
+        EventManager<Integer> eventManager = EventManager.start();
         AtomicInteger eventCount = new AtomicInteger();
 
         try {
@@ -365,7 +381,11 @@ class IntegrationStressTest extends StressTestBase {
             assertTrue(metrics.getOperationCount() > 200, "Should handle >200 events");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             eventManager.stop();
             cleanup();
         }

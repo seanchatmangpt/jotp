@@ -42,12 +42,12 @@ class ReactiveMessagingEndpointPatternsTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        org.acme.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        org.acme.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @Nested

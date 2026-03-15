@@ -138,7 +138,7 @@ public class ProcessFixtureExtension
     /** Get permitted subclasses of sealed class. */
     public static Class<?>[] getPermittedSubclasses(Class<?> sealed) {
         if (sealed.isSealed()) {
-            return sealed.permittedSubclasses();
+            return sealed.getPermittedSubclasses();
         }
         return new Class<?>[0];
     }

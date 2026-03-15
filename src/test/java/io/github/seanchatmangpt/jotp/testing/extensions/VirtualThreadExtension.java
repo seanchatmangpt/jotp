@@ -44,8 +44,8 @@ public class VirtualThreadExtension implements InvocationInterceptor {
 
     @Override
     public void interceptTestMethod(
-            Invocation invocation,
-            ReflectiveInvocationContext<?> invocationContext,
+            Invocation<Void> invocation,
+            ReflectiveInvocationContext<java.lang.reflect.Method> invocationContext,
             ExtensionContext extensionContext)
             throws Throwable {
         var method = invocationContext.getExecutable();

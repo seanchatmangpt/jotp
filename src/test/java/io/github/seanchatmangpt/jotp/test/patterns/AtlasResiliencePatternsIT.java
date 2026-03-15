@@ -20,8 +20,11 @@ import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.DeadLetterEntry;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.LapNumber;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.ParameterId;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.QueryState;
+import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.RaceState;
+import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Recommendation;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Sample;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.SessionId;
+import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.SessionState;
 import io.github.seanchatmangpt.jotp.test.patterns.AtlasDomain.Timestamp;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -61,12 +64,12 @@ class AtlasResiliencePatternsIT implements WithAssertions {
 
     @BeforeEach
     void setUp() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     @AfterEach
     void tearDown() {
-        io.github.seanchatmangpt.jotp.ProcessRegistry.reset();
+        io.github.seanchatmangpt.jotp.ProcRegistry.reset();
     }
 
     // Domain types imported from AtlasDomain - see AtlasDomain class for definitions
@@ -560,16 +563,22 @@ class AtlasResiliencePatternsIT implements WithAssertions {
                                         }
                                         case SessionEventMsg event -> {
                                             boolean newRecording =
-                                                    "RECORDING".equals(event.state());
+                                                    event.state() instanceof SessionState.Recording;
                                             return new SessionData(
                                                     s.id(),
-                                                    event.state(),
+                                                    event.state().getClass().getSimpleName(),
                                                     s.laps(),
                                                     s.totalSamples(),
                                                     newRecording);
                                         }
                                         case StrategyCmdMsg cmd -> {
-                                            cmd.replyTo().complete("ACK:" + cmd.state());
+                                            @SuppressWarnings("unchecked")
+                                            var rawFuture =
+                                                    (java.util.concurrent.CompletableFuture<Object>)
+                                                            (java.util.concurrent.CompletableFuture<
+                                                                            ?>)
+                                                                    cmd.replyTo();
+                                            rawFuture.complete("ACK:" + cmd.state().description());
                                             return s;
                                         }
                                     }
@@ -586,7 +595,7 @@ class AtlasResiliencePatternsIT implements WithAssertions {
                     ProcRef<Integer, SampleMsg> engine,
                     ProcRef<Integer, SampleMsg> tire,
                     ProcRef<Integer, SampleMsg> chassis,
-                    ProcRef<List<DeadLetterEntry>, DeadLetterEntry> deadLetter) {}
+                    ProcRef<List<DeadLetterEntry>, Object> deadLetter) {}
 
             var router =
                     sup.supervise(
@@ -654,9 +663,9 @@ class AtlasResiliencePatternsIT implements WithAssertions {
             // ═════════════════════════════════════════════════════════════════════════════════
 
             // Session lifecycle
-            sessionManager.tell(new SessionEventMsg(sessionId, "CONFIGURED"));
-            sessionManager.tell(new SessionEventMsg(sessionId, "GOLIVE"));
-            sessionManager.tell(new SessionEventMsg(sessionId, "RECORDING"));
+            sessionManager.tell(new SessionEventMsg(sessionId, new SessionState.Configured()));
+            sessionManager.tell(new SessionEventMsg(sessionId, new SessionState.GoLive()));
+            sessionManager.tell(new SessionEventMsg(sessionId, new SessionState.Recording()));
 
             // Send telemetry samples (100 samples across 4 parameter types)
             for (int lap = 1; lap <= 5; lap++) {
@@ -730,7 +739,12 @@ class AtlasResiliencePatternsIT implements WithAssertions {
 
             // Strategy request
             var strategyReply = new CompletableFuture<String>();
-            sessionManager.tell(new StrategyCmdMsg(sessionId, "FUEL_CHECK", strategyReply));
+            @SuppressWarnings("unchecked")
+            var strategyFuture =
+                    (java.util.concurrent.CompletableFuture<Recommendation>)
+                            (java.util.concurrent.CompletableFuture<?>) strategyReply;
+            sessionManager.tell(
+                    new StrategyCmdMsg(sessionId, new RaceState("FUEL_CHECK"), strategyFuture));
 
             // ═════════════════════════════════════════════════════════════════════════════════
             // VERIFICATION

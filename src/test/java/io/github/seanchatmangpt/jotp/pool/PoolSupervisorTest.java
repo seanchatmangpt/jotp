@@ -54,7 +54,7 @@ class PoolSupervisorTest {
     @DisplayName("Pool executes submitted tasks and returns results")
     void testTaskExecution() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -72,7 +72,7 @@ class PoolSupervisorTest {
     @DisplayName("Pool submits multiple tasks concurrently")
     void testMultipleTasks() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 3, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 3, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -102,7 +102,7 @@ class PoolSupervisorTest {
     @DisplayName("Round-robin distributes tasks across workers")
     void testRoundRobinDistribution() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 4, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 4, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -139,7 +139,7 @@ class PoolSupervisorTest {
     @DisplayName("Task timeout returns TimeoutException")
     void testTaskTimeout() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(10))
                         .build();
 
@@ -147,7 +147,11 @@ class PoolSupervisorTest {
             CompletableFuture<Integer> result =
                     pool.ask(
                             () -> {
-                                Thread.sleep(2000); // Simulate slow task
+                                try {
+                                    Thread.sleep(2000); // Simulate slow task
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
                                 return 42;
                             },
                             Duration.ofMillis(500) // Short timeout
@@ -165,7 +169,7 @@ class PoolSupervisorTest {
     @DisplayName("Task completes successfully before timeout")
     void testTaskCompletesBeforeTimeout() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -173,7 +177,11 @@ class PoolSupervisorTest {
             CompletableFuture<Integer> result =
                     pool.ask(
                             () -> {
-                                Thread.sleep(100);
+                                try {
+                                    Thread.sleep(100);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
                                 return 99;
                             },
                             Duration.ofSeconds(2));
@@ -193,7 +201,7 @@ class PoolSupervisorTest {
     @DisplayName("Task exceptions are propagated to caller")
     void testTaskException() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -222,7 +230,7 @@ class PoolSupervisorTest {
     @DisplayName("Worker crash triggers supervisor restart")
     void testWorkerCrashRecovery() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withRestartLimits(10, Duration.ofSeconds(60))
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
@@ -253,7 +261,7 @@ class PoolSupervisorTest {
                     .hasRootCauseInstanceOf(RuntimeException.class);
 
             // Third task should succeed (worker restarted)
-            awaitAtMost(Duration.ofSeconds(5))
+            await().atMost(Duration.ofSeconds(5))
                     .pollInSameThread()
                     .until(
                             () -> {
@@ -285,7 +293,7 @@ class PoolSupervisorTest {
     @DisplayName("Graceful shutdown prevents new task submission")
     void testShutdownPreventsNewTasks() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -306,7 +314,7 @@ class PoolSupervisorTest {
     @DisplayName("isRunning() returns false after shutdown")
     void testIsRunningAfterShutdown() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -325,7 +333,7 @@ class PoolSupervisorTest {
     @DisplayName("getStats() returns correct completed task count")
     void testStatsCompletedTasks() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -336,7 +344,8 @@ class PoolSupervisorTest {
             // Submit and complete 5 tasks
             List<CompletableFuture<Integer>> futures = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
-                futures.add(pool.ask(() -> i, Duration.ofSeconds(2)));
+                final int taskId = i;
+                futures.add(pool.ask(() -> taskId, Duration.ofSeconds(2)));
             }
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
@@ -353,7 +362,7 @@ class PoolSupervisorTest {
     @DisplayName("getStats() tracks active workers")
     void testStatsActiveWorkers() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 3, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 3, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -371,7 +380,7 @@ class PoolSupervisorTest {
     @DisplayName("getStats() calculates average response time")
     void testStatsAverageResponseTime() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -379,11 +388,16 @@ class PoolSupervisorTest {
             // Submit slow tasks to accumulate response time
             List<CompletableFuture<Integer>> futures = new ArrayList<>();
             for (int i = 0; i < 3; i++) {
+                final int taskId = i;
                 futures.add(
                         pool.ask(
                                 () -> {
-                                    Thread.sleep(50);
-                                    return i;
+                                    try {
+                                        Thread.sleep(50);
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                    }
+                                    return taskId;
                                 },
                                 Duration.ofSeconds(2)));
             }
@@ -403,7 +417,7 @@ class PoolSupervisorTest {
     @DisplayName("PoolStats.toString() provides formatted output")
     void testPoolStatsToString() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 4, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 4, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -429,7 +443,7 @@ class PoolSupervisorTest {
     @DisplayName("Builder configures restart strategy")
     void testBuilderRestartStrategy() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withRestartStrategy(
                                 io.github.seanchatmangpt.jotp.Supervisor.Strategy.ONE_FOR_ONE)
                         .withTimeout(Duration.ofSeconds(5))
@@ -446,7 +460,7 @@ class PoolSupervisorTest {
     @DisplayName("Builder configures restart limits")
     void testBuilderRestartLimits() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withRestartLimits(3, Duration.ofSeconds(30))
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
@@ -462,7 +476,7 @@ class PoolSupervisorTest {
     @DisplayName("Builder configures task timeout")
     void testBuilderTaskTimeout() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 2, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 2, () -> 0)
                         .withTimeout(Duration.ofSeconds(3))
                         .build();
 
@@ -482,7 +496,7 @@ class PoolSupervisorTest {
     @DisplayName("Pool name and worker count are accessible")
     void testPoolIdentity() throws Exception {
         var pool =
-                PoolSupervisor.builder("my-pool", 5, () -> 0)
+                PoolSupervisor.<Integer>builder("my-pool", 5, () -> 0)
                         .withTimeout(Duration.ofSeconds(5))
                         .build();
 
@@ -502,7 +516,7 @@ class PoolSupervisorTest {
     @DisplayName("Pool handles high concurrency (50+ concurrent submissions)")
     void testHighConcurrency() throws Exception {
         var pool =
-                PoolSupervisor.builder("test-pool", 4, () -> 0)
+                PoolSupervisor.<Integer>builder("test-pool", 4, () -> 0)
                         .withTimeout(Duration.ofSeconds(10))
                         .build();
 

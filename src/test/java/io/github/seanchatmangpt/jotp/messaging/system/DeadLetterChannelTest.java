@@ -29,7 +29,7 @@ class DeadLetterChannelTest implements WithAssertions {
     // Message type for testing
     sealed interface OrderMsg permits OrderMsg.Order, OrderMsg.Invalid {
         record Order(String id, double amount) implements OrderMsg {
-            Order {
+            public Order {
                 if (id == null || id.isBlank()) {
                     throw new IllegalArgumentException("id required");
                 }
@@ -261,7 +261,7 @@ class DeadLetterChannelTest implements WithAssertions {
 
         assertThat(dead.message()).isEqualTo(msg);
         assertThat(dead.reason()).isEqualTo("Test reason");
-        assertThat(dead.arrivedAt()).isGreaterThanOrEqualTo(before).isLessThanOrEqualTo(after);
+        assertThat(dead.arrivedAt()).isAfterOrEqualTo(before).isBeforeOrEqualTo(after);
     }
 
     // -------------------------------------------------------

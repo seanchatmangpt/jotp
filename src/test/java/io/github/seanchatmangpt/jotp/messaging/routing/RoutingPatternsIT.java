@@ -39,7 +39,7 @@ class RoutingPatternsIT implements WithAssertions {
         void dynamicRouterRoutesOrderCorrectly() {
             List<String> orderProcessorMessages = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> orderProcessorRef =
+            ProcRef<List<String>, String> orderProcessorRef =
                     Proc.spawn(
                             "order-processor",
                             () -> orderProcessorMessages,
@@ -67,7 +67,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> standardOrders = new CopyOnWriteArrayList<>();
             List<String> expressOrders = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> standardRef =
+            ProcRef<List<String>, String> standardRef =
                     Proc.spawn(
                             "standard-processor",
                             () -> standardOrders,
@@ -76,7 +76,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> expressRef =
+            ProcRef<List<String>, String> expressRef =
                     Proc.spawn(
                             "express-processor",
                             () -> expressOrders,
@@ -115,7 +115,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> notifications = new CopyOnWriteArrayList<>();
             List<String> analytics = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> auditRef =
+            ProcRef<List<String>, String> auditRef =
                     Proc.spawn(
                             "audit",
                             () -> auditLog,
@@ -124,7 +124,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> notificationRef =
+            ProcRef<List<String>, String> notificationRef =
                     Proc.spawn(
                             "notification",
                             () -> notifications,
@@ -133,7 +133,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> analyticsRef =
+            ProcRef<List<String>, String> analyticsRef =
                     Proc.spawn(
                             "analytics",
                             () -> analytics,
@@ -164,7 +164,7 @@ class RoutingPatternsIT implements WithAssertions {
         void broadcastsMultipleEventsSequentially() {
             List<String> events = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> ref =
+            ProcRef<List<String>, String> ref =
                     Proc.spawn(
                             "event-sink",
                             () -> events,
@@ -193,7 +193,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> sink2 = new CopyOnWriteArrayList<>();
             List<String> sink3 = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> ref1 =
+            ProcRef<List<String>, String> ref1 =
                     Proc.spawn(
                             "sink-1",
                             () -> sink1,
@@ -202,7 +202,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> ref2 =
+            ProcRef<List<String>, String> ref2 =
                     Proc.spawn(
                             "sink-2",
                             () -> sink2,
@@ -211,7 +211,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> ref3 =
+            ProcRef<List<String>, String> ref3 =
                     Proc.spawn(
                             "sink-3",
                             () -> sink3,
@@ -253,7 +253,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> handlerExecutions = new ArrayList<>();
             List<String> serviceMessages = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> serviceRef =
+            ProcRef<List<String>, String> serviceRef =
                     Proc.spawn(
                             "service",
                             () -> serviceMessages,
@@ -279,7 +279,7 @@ class RoutingPatternsIT implements WithAssertions {
         void realWorldOrderFlow() {
             // Order processor (receives via dynamic router)
             List<String> orderQueue = new CopyOnWriteArrayList<>();
-            ProcRef<String, String> orderProcessorRef =
+            ProcRef<List<String>, String> orderProcessorRef =
                     Proc.spawn(
                             "order-processor",
                             () -> orderQueue,
@@ -292,7 +292,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> audit = new CopyOnWriteArrayList<>();
             List<String> notification = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> auditRef =
+            ProcRef<List<String>, String> auditRef =
                     Proc.spawn(
                             "audit-service",
                             () -> audit,
@@ -301,7 +301,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> notificationRef =
+            ProcRef<List<String>, String> notificationRef =
                     Proc.spawn(
                             "notification-service",
                             () -> notification,
@@ -348,7 +348,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> recipient1 = new CopyOnWriteArrayList<>();
             List<String> recipient2 = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> ref1 =
+            ProcRef<List<String>, String> ref1 =
                     Proc.spawn(
                             "recipient-1",
                             () -> recipient1,
@@ -357,7 +357,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> ref2 =
+            ProcRef<List<String>, String> ref2 =
                     Proc.spawn(
                             "recipient-2",
                             () -> recipient2,
@@ -391,7 +391,7 @@ class RoutingPatternsIT implements WithAssertions {
             List<String> serviceA = new CopyOnWriteArrayList<>();
             List<String> serviceB = new CopyOnWriteArrayList<>();
 
-            ProcRef<String, String> refA =
+            ProcRef<List<String>, String> refA =
                     Proc.spawn(
                             "service-a",
                             () -> serviceA,
@@ -400,7 +400,7 @@ class RoutingPatternsIT implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> refB =
+            ProcRef<List<String>, String> refB =
                     Proc.spawn(
                             "service-b",
                             () -> serviceB,

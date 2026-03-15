@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * OTP {@code gen_event} — event manager that decouples event producers from consumers.
@@ -341,6 +342,19 @@ public final class EventManager<E> {
      */
     public void addHandler(Handler<E> handler) {
         proc.tell(new Msg.Add<>(handler));
+    }
+
+    /**
+     * Register a named event handler given as a {@link Consumer} lambda — convenience overload.
+     *
+     * <p>The {@code name} parameter is informational only (not tracked for removal). Use {@link
+     * #addHandler(Handler)} and keep a reference if you need to remove the handler later.
+     *
+     * @param name informational name (not used for lookup)
+     * @param consumer lambda that handles each event
+     */
+    public void addHandler(String name, Consumer<E> consumer) {
+        addHandler(event -> consumer.accept(event));
     }
 
     /**

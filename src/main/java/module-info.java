@@ -97,6 +97,7 @@
  */
 module io.github.seanchatmangpt.jotp {
     requires java.management;
+    requires jdk.management;
 
     // Local exports
     exports io.github.seanchatmangpt.jotp;

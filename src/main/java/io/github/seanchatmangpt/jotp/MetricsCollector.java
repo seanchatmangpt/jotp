@@ -369,7 +369,12 @@ public final class MetricsCollector implements Application.Infrastructure {
 
     /** Get or create a gauge without supplier (manual updates). */
     public Gauge gauge(String name) {
-        return gauge(name, null);
+        return gauge(name, (Supplier<Double>) null);
+    }
+
+    /** Get or create a gauge backed by an {@code IntSupplier}. */
+    public Gauge gauge(String name, java.util.function.IntSupplier supplier) {
+        return gauge(name, () -> (double) supplier.getAsInt());
     }
 
     /** Get or create a histogram. */

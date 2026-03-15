@@ -309,7 +309,9 @@ class EnterpriseCapacityBenchmark extends StressTestBase {
 
     private long getTotalGcTime() {
         return ManagementFactory.getGarbageCollectorMXBeans().stream()
-                .mapToLong(com.sun.management.GarbageCollectorMXBean::getCollectionTime)
+                .filter(gc -> gc instanceof com.sun.management.GarbageCollectorMXBean)
+                .mapToLong(
+                        gc -> ((com.sun.management.GarbageCollectorMXBean) gc).getCollectionTime())
                 .sum();
     }
 

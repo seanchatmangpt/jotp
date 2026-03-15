@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -56,6 +57,18 @@ public final class ProcRef<S, M> {
      */
     public CompletableFuture<S> ask(M msg) {
         return delegate.ask(msg);
+    }
+
+    /**
+     * Timed request-reply — mirrors OTP's {@code gen_server:call(Pid, Msg, Timeout)}.
+     *
+     * @param msg the message to send
+     * @param timeout maximum time to wait for a response
+     * @return future completing with process state, or timing out with {@link
+     *     java.util.concurrent.TimeoutException}
+     */
+    public CompletableFuture<S> ask(M msg, Duration timeout) {
+        return delegate.ask(msg, timeout);
     }
 
     /**

@@ -66,7 +66,7 @@ class ResequencerTest {
     @DisplayName("should handle gaps with timeout expiry")
     void testTimeoutWithGap() throws ExecutionException, InterruptedException {
         // Arrange
-        var reseq = Resequencer.create(1L, Duration.ofMillis(500), 10);
+        Resequencer<String> reseq = Resequencer.create(1L, Duration.ofMillis(500), 10);
         var msg1 = new Resequencer.SequencedMessage<>(1L, "first");
         var msg3 = new Resequencer.SequencedMessage<>(3L, "third"); // Gap: seq 2 missing
 
@@ -96,7 +96,7 @@ class ResequencerTest {
     @DisplayName("should reject messages when buffer is at capacity")
     void testCapacityLimit() throws ExecutionException, InterruptedException {
         // Arrange
-        var reseq = Resequencer.create(1L, Duration.ofMillis(1000), 2);
+        Resequencer<String> reseq = Resequencer.create(1L, Duration.ofMillis(1000), 2);
 
         try {
             // Act - Fill buffer with out-of-order messages
@@ -159,8 +159,8 @@ class ResequencerTest {
     @DisplayName("should preserve message type through resequencing")
     void testTypePreservation() throws ExecutionException, InterruptedException {
         // Arrange
-        var reseq = Resequencer.create(1L);
         record Order(long id, String item) {}
+        Resequencer<Order> reseq = Resequencer.create(1L);
 
         try {
             var order1 = new Order(101, "Book");
@@ -185,7 +185,7 @@ class ResequencerTest {
     @DisplayName("should handle large sequence number gaps")
     void testLargeSequenceGap() throws ExecutionException, InterruptedException {
         // Arrange
-        var reseq = Resequencer.create(1L, Duration.ofMillis(200), 100);
+        Resequencer<String> reseq = Resequencer.create(1L, Duration.ofMillis(200), 100);
 
         try {
             var msg1 = new Resequencer.SequencedMessage<>(1L, "seq-1");

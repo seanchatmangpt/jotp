@@ -103,8 +103,12 @@ class IdempotentReceiverTest {
                 r2 -> {
                     assertThat(r2.isDuplicate()).isTrue();
                     assertThat(r2.result()).isNull(); // Null result for duplicates
+                    return null;
                 },
-                error -> fail("Second receive should succeed"));
+                error -> {
+                    fail("Second receive should succeed");
+                    return null;
+                });
 
         // Handler should NOT be called again
         assertThat(handlerInvokeCount.get()).isEqualTo(1);

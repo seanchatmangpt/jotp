@@ -49,14 +49,15 @@ class StateMachineStressTest extends StressTestBase {
     @DisplayName("Constant event load (1K events/sec for 5 seconds)")
     void testConstantEventLoad() {
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, LockData>(
                         new Locked(),
                         new LockData("", "1234"),
                         (state, event, data) ->
                                 switch (state) {
                                     case Locked() ->
                                             switch (event) {
-                                                case PushButton(var b) -> {
+                                                case StateMachine.SMEvent.User(
+                                                                PushButton(var b)) -> {
                                                     var entered = data.entered() + b;
                                                     yield entered.equals(data.code())
                                                             ? Transition.nextState(
@@ -69,7 +70,7 @@ class StateMachineStressTest extends StressTestBase {
                                             };
                                     case Open() ->
                                             switch (event) {
-                                                case Lock() ->
+                                                case StateMachine.SMEvent.User(Lock()) ->
                                                         Transition.nextState(
                                                                 new Locked(), data.withEntered(""));
                                                 default -> Transition.keepState(data);
@@ -96,7 +97,11 @@ class StateMachineStressTest extends StressTestBase {
             assertEquals(0.0, metrics.getErrorRate(), 0.01, "Error rate should be near 0%");
 
         } finally {
-            sm.stop();
+            try {
+                sm.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -110,14 +115,15 @@ class StateMachineStressTest extends StressTestBase {
     @DisplayName("Ramp event load (1K→10K events/sec over 10 seconds)")
     void testRampEventLoad() {
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, LockData>(
                         new Locked(),
                         new LockData("", "1234"),
                         (state, event, data) ->
                                 switch (state) {
                                     case Locked() ->
                                             switch (event) {
-                                                case PushButton(var b) -> {
+                                                case StateMachine.SMEvent.User(
+                                                                PushButton(var b)) -> {
                                                     var entered = data.entered() + b;
                                                     yield entered.length() >= 4
                                                             ? Transition.keepState(
@@ -129,7 +135,7 @@ class StateMachineStressTest extends StressTestBase {
                                             };
                                     case Open() ->
                                             switch (event) {
-                                                case Lock() ->
+                                                case StateMachine.SMEvent.User(Lock()) ->
                                                         Transition.nextState(
                                                                 new Locked(), data.withEntered(""));
                                                 default -> Transition.keepState(data);
@@ -151,7 +157,11 @@ class StateMachineStressTest extends StressTestBase {
             assertEquals(0.0, metrics.getErrorRate(), 0.01, "Error rate should be near 0%");
 
         } finally {
-            sm.stop();
+            try {
+                sm.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -167,7 +177,7 @@ class StateMachineStressTest extends StressTestBase {
         AtomicInteger eventCount = new AtomicInteger();
 
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, LockData>(
                         new Locked(),
                         new LockData("", "1234"),
                         (state, event, data) -> {
@@ -175,14 +185,14 @@ class StateMachineStressTest extends StressTestBase {
                             return switch (state) {
                                 case Locked() ->
                                         switch (event) {
-                                            case PushButton(var b) ->
+                                            case StateMachine.SMEvent.User(PushButton(var b)) ->
                                                     Transition.keepState(
                                                             data.withEntered(data.entered() + b));
                                             default -> Transition.keepState(data);
                                         };
                                 case Open() ->
                                         switch (event) {
-                                            case Lock() ->
+                                            case StateMachine.SMEvent.User(Lock()) ->
                                                     Transition.nextState(
                                                             new Locked(), data.withEntered(""));
                                             default -> Transition.keepState(data);
@@ -208,7 +218,11 @@ class StateMachineStressTest extends StressTestBase {
                     "Error rate should be <5%, was " + metrics.getErrorRate() + "%");
 
         } finally {
-            sm.stop();
+            try {
+                sm.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -225,26 +239,28 @@ class StateMachineStressTest extends StressTestBase {
         AtomicInteger keepStateCount = new AtomicInteger();
 
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, LockData>(
                         new Locked(),
                         new LockData("", "1234"),
                         (state, event, data) ->
                                 switch (state) {
                                     case Locked() ->
                                             switch (event) {
-                                                case Lock() -> {
+                                                case StateMachine.SMEvent.User(Lock()) -> {
                                                     transitionCount.incrementAndGet();
                                                     yield Transition.nextState(new Open(), data);
                                                 }
-                                                case PushButton(var b) -> {
+                                                case StateMachine.SMEvent.User(
+                                                                PushButton(var b)) -> {
                                                     keepStateCount.incrementAndGet();
                                                     yield Transition.keepState(
                                                             data.withEntered(data.entered() + b));
                                                 }
+                                                default -> Transition.keepState(data);
                                             };
                                     case Open() ->
                                             switch (event) {
-                                                case Lock() -> {
+                                                case StateMachine.SMEvent.User(Lock()) -> {
                                                     transitionCount.incrementAndGet();
                                                     yield Transition.nextState(
                                                             new Locked(), data.withEntered(""));
@@ -281,7 +297,11 @@ class StateMachineStressTest extends StressTestBase {
             assertTrue(metrics.getOperationCount() > 1000, "Should send >1000 events");
 
         } finally {
-            sm.stop();
+            try {
+                sm.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -305,14 +325,14 @@ class StateMachineStressTest extends StressTestBase {
         }
 
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, ComplexData>(
                         new Locked(),
                         new ComplexData("a", "b", "c", "d"),
                         (state, event, data) ->
                                 switch (state) {
                                     case Locked() ->
                                             switch (event) {
-                                                case PushButton(var b) ->
+                                                case StateMachine.SMEvent.User(PushButton(var b)) ->
                                                         Transition.keepState(
                                                                 data.withField1(String.valueOf(b))
                                                                         .withField2(
@@ -321,7 +341,7 @@ class StateMachineStressTest extends StressTestBase {
                                             };
                                     case Open() ->
                                             switch (event) {
-                                                case Lock() ->
+                                                case StateMachine.SMEvent.User(Lock()) ->
                                                         Transition.nextState(
                                                                 new Locked(),
                                                                 data.withField1("")
@@ -352,7 +372,11 @@ class StateMachineStressTest extends StressTestBase {
                     "Heap growth should be <100MB, was " + metrics.getHeapGrowthMb() + "MB");
 
         } finally {
-            sm.stop();
+            try {
+                sm.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -366,24 +390,25 @@ class StateMachineStressTest extends StressTestBase {
     @DisplayName("Request-reply latency (call() blocking)")
     void testCallLatency() {
         var sm =
-                new StateMachine<>(
+                new StateMachine<LockState, LockEvent, LockData>(
                         new Locked(),
                         new LockData("", "1234"),
                         (state, event, data) ->
                                 switch (state) {
                                     case Locked() ->
                                             switch (event) {
-                                                case Lock() ->
+                                                case StateMachine.SMEvent.User(Lock()) ->
                                                         Transition.nextState(
                                                                 new Open(), data.withEntered(""));
-                                                case PushButton(var b) ->
+                                                case StateMachine.SMEvent.User(PushButton(var b)) ->
                                                         Transition.keepState(
                                                                 data.withEntered(
                                                                         data.entered() + b));
+                                                default -> Transition.keepState(data);
                                             };
                                     case Open() ->
                                             switch (event) {
-                                                case Lock() ->
+                                                case StateMachine.SMEvent.User(Lock()) ->
                                                         Transition.nextState(
                                                                 new Locked(), data.withEntered(""));
                                                 default -> Transition.keepState(data);
@@ -414,7 +439,11 @@ class StateMachineStressTest extends StressTestBase {
                             + " ms");
 
         } finally {
-            sm.stop();
+            try {
+                sm.stop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }

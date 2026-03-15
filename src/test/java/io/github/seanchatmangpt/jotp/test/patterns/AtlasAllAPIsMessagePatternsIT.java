@@ -134,11 +134,14 @@ class AtlasAllAPIsMessagePatternsIT implements WithAssertions {
             var store =
                     new Proc<>(
                             SampleStore.initial(),
-                            (SampleStore s, Sample msg) -> {
-                                samplesProcessed.incrementAndGet();
-                                var newList = new ArrayList<>(s.samples());
-                                newList.add(msg);
-                                return new SampleStore(newList);
+                            (SampleStore s, Object msg) -> {
+                                if (msg instanceof Sample sample) {
+                                    samplesProcessed.incrementAndGet();
+                                    var newList = new ArrayList<>(s.samples());
+                                    newList.add(sample);
+                                    return new SampleStore(newList);
+                                }
+                                return s;
                             });
 
             // Connect bus to store
@@ -1183,9 +1186,10 @@ class AtlasAllAPIsMessagePatternsIT implements WithAssertions {
                                                     s.filesPerSession(),
                                                     newDisplays);
                                         }
+                                        default -> s;
                                     };
                                 }
-                                yield s;
+                                return s;
                             });
 
             // Send correlated events from all three APIs

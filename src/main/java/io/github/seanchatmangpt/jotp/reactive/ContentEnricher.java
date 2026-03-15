@@ -86,6 +86,18 @@ public final class ContentEnricher<T, R, U> implements MessageChannel<T> {
     }
 
     /**
+     * Overload for enrichers that need no external resource but do have an error channel.
+     *
+     * <p>The enricher BiFunction receives {@code null} as its second (resource) argument.
+     */
+    public static <T, U> ContentEnricher<T, Void, U> of(
+            BiFunction<T, Void, U> enricher,
+            MessageChannel<U> downstream,
+            MessageChannel<T> errorChannel) {
+        return new ContentEnricher<>(null, enricher, downstream, errorChannel);
+    }
+
+    /**
      * Enriches {@code message} using the configured enricher and forwards the result downstream. On
      * any exception, the original message is sent to the error channel.
      */

@@ -144,6 +144,15 @@ public final class ApiGateway {
             return this;
         }
 
+        /** Add a route matching any HTTP method. */
+        public Builder route(
+                String pattern, Function<Request, CompletableFuture<Response>> handler) {
+            // Register under GET and POST for broad compatibility
+            routes.add(new Route(pattern, Method.GET, handler));
+            routes.add(new Route(pattern, Method.POST, handler));
+            return this;
+        }
+
         public Builder authenticator(Function<Request, AuthResult> a) {
             this.authenticator = a;
             return this;

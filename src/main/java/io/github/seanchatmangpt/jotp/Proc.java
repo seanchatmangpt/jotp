@@ -10,6 +10,7 @@ import java.util.concurrent.TransferQueue;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Lightweight process with a virtual-thread mailbox — Java 26 equivalent of an Erlang process.
@@ -94,7 +95,7 @@ public final class Proc<S, M> {
     final LongAdder messagesOut = new LongAdder();
 
     /** The last unhandled exception; set before crash callbacks fire. */
-    private volatile Throwable lastError = null;
+    public volatile Throwable lastError = null;
 
     /** Callbacks fired on abnormal termination (exception, not graceful {@link #stop()}). */
     private final List<Runnable> crashCallbacks = new CopyOnWriteArrayList<>();
@@ -119,6 +120,25 @@ public final class Proc<S, M> {
      */
     public static <S, M> Proc<S, M> spawn(S initial, BiFunction<S, M, S> handler) {
         return new Proc<>(initial, handler);
+    }
+
+    /**
+     * Named spawn: create, register in {@link ProcRegistry}, and return a stable {@link ProcRef}.
+     *
+     * <p>Mirrors the common test/OTP pattern of spawning a named process and obtaining a handle.
+     *
+     * @param name registration name in {@link ProcRegistry}
+     * @param stateFactory supplier providing the initial state
+     * @param handler {@code (state, message) -> nextState} — pure function
+     * @param <S> state type
+     * @param <M> message type
+     * @return a {@link ProcRef} for the new process, registered under {@code name}
+     */
+    public static <S, M> ProcRef<S, M> spawn(
+            String name, Supplier<S> stateFactory, BiFunction<S, M, S> handler) {
+        Proc<S, M> proc = new Proc<>(stateFactory.get(), handler);
+        ProcRegistry.register(name, proc);
+        return new ProcRef<>(proc);
     }
 
     /**

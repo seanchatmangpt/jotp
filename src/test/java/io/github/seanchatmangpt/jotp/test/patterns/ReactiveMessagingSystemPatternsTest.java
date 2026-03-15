@@ -191,7 +191,7 @@ class ReactiveMessagingSystemPatternsTest implements WithAssertions {
             var enricher =
                     ContentEnricher.of(
                             resources,
-                            (orderId, res) ->
+                            (OrderId orderId, Resources res) ->
                                     new EnrichedOrder(
                                             orderId.id(),
                                             res.names().getOrDefault(orderId.id(), "Unknown"),
@@ -525,8 +525,9 @@ class ReactiveMessagingSystemPatternsTest implements WithAssertions {
                     sub.pause();
                     for (int i = 0; i < 10; i++) sub.send(cycle * 10 + i);
                     sub.resume();
+                    final int expectedSize = (cycle + 1) * 10;
                     await().atMost(Duration.ofSeconds(2))
-                            .until(() -> received.size() == (cycle + 1) * 10);
+                            .until(() -> received.size() == expectedSize);
                 }
 
                 assertThat(received).hasSize(30);
@@ -720,7 +721,7 @@ class ReactiveMessagingSystemPatternsTest implements WithAssertions {
             var enricher =
                     ContentEnricher.of(
                             customerDb,
-                            (order, db) ->
+                            (Order order, Map<String, String> db) ->
                                     new EnrichedOrder(
                                             order.seq(),
                                             order.type(),

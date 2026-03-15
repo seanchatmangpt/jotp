@@ -84,7 +84,11 @@ class ChaosTest extends StressTestBase {
                             + "%");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -142,7 +146,11 @@ class ChaosTest extends StressTestBase {
                     "Error rate should be <5%, was " + metrics.getErrorRate() + "%");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -194,7 +202,11 @@ class ChaosTest extends StressTestBase {
                     "Overall error rate should be 0% (exceptions handled)");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -246,7 +258,11 @@ class ChaosTest extends StressTestBase {
                     "Heap growth should be <500MB, was " + metrics.getHeapGrowthMb() + "MB");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -259,7 +275,7 @@ class ChaosTest extends StressTestBase {
     @Test
     @DisplayName("Event delivery guarantee (no silent message loss)")
     void testEventDeliveryGuarantee() {
-        EventManager<Integer> eventManager = new EventManager<>();
+        EventManager<Integer> eventManager = EventManager.start();
         AtomicInteger expectedCount = new AtomicInteger(0);
         AtomicInteger deliveredCount = new AtomicInteger(0);
 
@@ -350,7 +366,11 @@ class ChaosTest extends StressTestBase {
                             + " ms");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }
@@ -406,7 +426,11 @@ class ChaosTest extends StressTestBase {
                     "Error rate should be <20%, was " + metrics.getErrorRate() + "%");
 
         } finally {
-            supervisor.shutdown();
+            try {
+                supervisor.shutdown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             cleanup();
         }
     }

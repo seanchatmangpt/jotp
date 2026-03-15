@@ -150,7 +150,7 @@ class RecipientListRouterTest implements WithAssertions {
             List<String> messages2 = new ArrayList<>();
             List<String> messages3 = new ArrayList<>();
 
-            ProcRef<String, String> ref1 =
+            ProcRef<List<String>, String> ref1 =
                     Proc.spawn(
                             "recipient-1",
                             () -> messages1,
@@ -159,7 +159,7 @@ class RecipientListRouterTest implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> ref2 =
+            ProcRef<List<String>, String> ref2 =
                     Proc.spawn(
                             "recipient-2",
                             () -> messages2,
@@ -168,7 +168,7 @@ class RecipientListRouterTest implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> ref3 =
+            ProcRef<List<String>, String> ref3 =
                     Proc.spawn(
                             "recipient-3",
                             () -> messages3,
@@ -309,7 +309,7 @@ class RecipientListRouterTest implements WithAssertions {
             List<String> notificationServiceMessages = new ArrayList<>();
             List<String> auditServiceMessages = new ArrayList<>();
 
-            ProcRef<String, String> orderRef =
+            ProcRef<List<String>, String> orderRef =
                     Proc.spawn(
                             "order-processor",
                             () -> orderServiceMessages,
@@ -318,7 +318,7 @@ class RecipientListRouterTest implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> notificationRef =
+            ProcRef<List<String>, String> notificationRef =
                     Proc.spawn(
                             "notification-service",
                             () -> notificationServiceMessages,
@@ -327,7 +327,7 @@ class RecipientListRouterTest implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> auditRef =
+            ProcRef<List<String>, String> auditRef =
                     Proc.spawn(
                             "audit-service",
                             () -> auditServiceMessages,
@@ -359,7 +359,7 @@ class RecipientListRouterTest implements WithAssertions {
             List<String> recipient1Messages = new ArrayList<>();
             List<String> recipient2Messages = new ArrayList<>();
 
-            ProcRef<String, String> ref1 =
+            ProcRef<List<String>, String> ref1 =
                     Proc.spawn(
                             "recipient-1",
                             () -> recipient1Messages,
@@ -368,7 +368,7 @@ class RecipientListRouterTest implements WithAssertions {
                                 return state;
                             });
 
-            ProcRef<String, String> ref2 =
+            ProcRef<List<String>, String> ref2 =
                     Proc.spawn(
                             "recipient-2",
                             () -> recipient2Messages,
