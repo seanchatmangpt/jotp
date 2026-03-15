@@ -3,9 +3,10 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.DtrContext;
-import io.github.seanchatmangpt.dtr.DtrExtension;
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrExtension;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -75,8 +76,7 @@ class JotpLivingDocTest {
         var value = counter.ask(new CountMsg.Get()).get(2, TimeUnit.SECONDS);
         assertThat(value).isEqualTo(3);
 
-        ctx.sayKeyValue("Messages sent", "3 × Inc");
-        ctx.sayKeyValue("State after delivery", String.valueOf(value));
+        ctx.sayKeyValue(Map.of("Messages sent", "3 × Inc", "State after delivery", String.valueOf(value)));
         ctx.sayNote(
                 "`tell()` is fire-and-forget; `ask()` returns a `CompletableFuture<S>` resolved"
                         + " after the message is processed.");
@@ -100,8 +100,8 @@ class JotpLivingDocTest {
                 "`Supervisor` implements OTP's three restart strategies. `ONE_FOR_ONE` restarts"
                         + " only the child that crashed; siblings continue unaffected.");
         ctx.sayTable(
-                new String[] {"Strategy", "Scope"},
                 new String[][] {
+                    {"Strategy", "Scope"},
                     {"ONE_FOR_ONE", "Restart the crashed child only"},
                     {"ONE_FOR_ALL", "Restart all children"},
                     {"REST_FOR_ONE", "Restart crashed child + all children registered after it"},
@@ -133,8 +133,7 @@ class JotpLivingDocTest {
         crasher.tell(new WorkMsg.Crash());
         await().atMost(Duration.ofSeconds(3)).until(() -> crasher.proc().lastError() != null);
 
-        ctx.sayKeyValue("Crashed child", "crasher");
-        ctx.sayKeyValue("Sibling state", "unaffected — continued receiving messages");
+        ctx.sayKeyValue(Map.of("Crashed child", "crasher", "Sibling state", "unaffected — continued receiving messages"));
         ctx.sayNote(
                 "The supervisor detects the crash via the linked virtual thread and spawns a"
                         + " fresh process with the same initial state and handler.");
@@ -222,8 +221,7 @@ class JotpLivingDocTest {
                 .until(() -> fsm.state() instanceof DoorState.Closed);
         assertThat(fsm.state()).isInstanceOf(DoorState.Closed.class);
 
-        ctx.sayKeyValue("Events processed", "Knock (ignored), OpenDoor, CloseDoor");
-        ctx.sayKeyValue("Final state", fsm.state().getClass().getSimpleName());
+        ctx.sayKeyValue(Map.of("Events processed", "Knock (ignored), OpenDoor, CloseDoor", "Final state", fsm.state().getClass().getSimpleName()));
         ctx.sayNote(
                 "Unhandled events return `Transition.keepState()` — the machine stays in the"
                         + " current state without error.");
@@ -266,9 +264,7 @@ class JotpLivingDocTest {
         assertThat(((Result.Ok<String, Exception>) result).value()).isEqualTo("ok");
         assertThat(attempts.get()).isEqualTo(3);
 
-        ctx.sayKeyValue("Max attempts", "3");
-        ctx.sayKeyValue("Attempts needed", String.valueOf(attempts.get()));
-        ctx.sayKeyValue("Result", "Ok(\"ok\")");
+        ctx.sayKeyValue(Map.of("Max attempts", "3", "Attempts needed", String.valueOf(attempts.get()), "Result", "Ok(\"ok\")"));
         ctx.sayNote(
                 "Each attempt runs in an isolated virtual thread — mirroring Erlang's"
                         + " \"let it crash\" model where a fresh process is spawned rather than"
@@ -314,8 +310,7 @@ class JotpLivingDocTest {
         assertThat(received.get(0)).isInstanceOf(AppEvent.UserCreated.class);
         assertThat(received.get(1)).isInstanceOf(AppEvent.OrderPlaced.class);
 
-        ctx.sayKeyValue("Events published", "UserCreated, OrderPlaced");
-        ctx.sayKeyValue("Events received by handler", String.valueOf(received.size()));
+        ctx.sayKeyValue(Map.of("Events published", "UserCreated, OrderPlaced", "Events received by handler", String.valueOf(received.size())));
         ctx.sayNote(
                 "`notify()` is fire-and-forget; `syncNotify()` blocks until all handlers have"
                         + " processed the event — equivalent to OTP's `gen_event:sync_notify/2`.");
