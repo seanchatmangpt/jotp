@@ -268,14 +268,15 @@ public final class FactoryMethodPatterns {
 
         // Create state machine using factory (NOT: new StateMachine(...))
         StateMachine<LockState, LockEvent, LockData> sm =
-                StateMachine.create(
+                StateMachine.of(
                         new LockState.Locked(),
                         new LockData("", "1234"),
                         (state, event, data) ->
                                 switch (state) {
                                     case LockState.Locked _ ->
                                             switch (event) {
-                                                case LockEvent.PushButton(var b) -> {
+                                                case StateMachine.SMEvent.User(
+                                                                LockEvent.PushButton(var b)) -> {
                                                     var entered = data.entered() + b;
                                                     yield entered.equals(data.code())
                                                             ? StateMachine.Transition.nextState(
@@ -288,7 +289,7 @@ public final class FactoryMethodPatterns {
                                             };
                                     case LockState.Open _ ->
                                             switch (event) {
-                                                case LockEvent.Lock _ ->
+                                                case StateMachine.SMEvent.User(LockEvent.Lock _) ->
                                                         StateMachine.Transition.nextState(
                                                                 new LockState.Locked(), data);
                                                 default -> StateMachine.Transition.keepState(data);
@@ -378,18 +379,14 @@ public final class FactoryMethodPatterns {
      * }</pre>
      */
     public static void exampleParallelAll() {
-        List<Supplier<String>> tasks =
-                List.of(() -> "result1", () -> "result2", () -> "result3");
+        List<Supplier<String>> tasks = List.of(() -> "result1", () -> "result2", () -> "result3");
 
         // Run all tasks in parallel
         Result<List<String>, Exception> result = Parallel.all(tasks);
 
         switch (result) {
             case Result.Ok(var results) -> results.forEach(r -> System.out.println("Got: " + r));
-            case Result.Success(var results) ->
-                    results.forEach(r -> System.out.println("Got: " + r));
             case Result.Err(var ex) -> System.err.println("Failed: " + ex);
-            case Result.Failure(var ex) -> System.err.println("Failed: " + ex);
         }
     }
 
@@ -419,9 +416,7 @@ public final class FactoryMethodPatterns {
 
         switch (result) {
             case Result.Ok(var value) -> System.out.println("Success: " + value);
-            case Result.Success(var value) -> System.out.println("Success: " + value);
             case Result.Err(var ex) -> System.err.println("Failed: " + ex);
-            case Result.Failure(var ex) -> System.err.println("Failed: " + ex);
         }
     }
 
@@ -485,7 +480,8 @@ public final class FactoryMethodPatterns {
                         new IntegrationCounter(0),
                         (state, msg) ->
                                 switch (msg) {
-                                    case CounterMsg.Increment _ -> new Counter(state.value() + 1);
+                                    case IntegrationCounterMsg.Increment _ ->
+                                            new IntegrationCounter(state.value() + 1);
                                     default -> state;
                                 });
 

@@ -200,7 +200,7 @@ public final class ProcessManager<C> {
                     return switch (state) {
                         case WorkflowState.Idle _ ->
                                 switch (event) {
-                                    case WorkflowEvent.StartWorkflow _ ->
+                                    case StateMachine.SMEvent.User(WorkflowEvent.StartWorkflow _) ->
                                             Transition.nextState(
                                                     new WorkflowState.Running(0), data);
                                     default -> Transition.keepState(data);
@@ -208,7 +208,8 @@ public final class ProcessManager<C> {
 
                         case WorkflowState.Running running ->
                                 switch (event) {
-                                    case WorkflowEvent.StepCompleted completed -> {
+                                    case StateMachine.SMEvent.User(
+                                                    WorkflowEvent.StepCompleted completed) -> {
                                         data.context.recordStep(
                                                 completed.stepName(), completed.output());
                                         if (running.currentStepIndex() < steps.size() - 1) {
@@ -223,7 +224,8 @@ public final class ProcessManager<C> {
                                                     new WorkflowState.Complete(), data);
                                         }
                                     }
-                                    case WorkflowEvent.StepFailed failed -> {
+                                    case StateMachine.SMEvent.User(
+                                                    WorkflowEvent.StepFailed failed) -> {
                                         data.context.setError(failed.error());
                                         data.rollbackInProgress = true;
                                         yield Transition.nextState(
@@ -236,7 +238,8 @@ public final class ProcessManager<C> {
 
                         case WorkflowState.RollingBack rolling ->
                                 switch (event) {
-                                    case WorkflowEvent.RollbackStarted _ -> {
+                                    case StateMachine.SMEvent.User(
+                                                    WorkflowEvent.RollbackStarted _) -> {
                                         if (rolling.fromStepIndex() > 0) {
                                             data.currentStepIndex = rolling.fromStepIndex() - 1;
                                             yield Transition.nextState(
@@ -249,7 +252,7 @@ public final class ProcessManager<C> {
                                                     data);
                                         }
                                     }
-                                    case WorkflowEvent.WorkflowDone _ ->
+                                    case StateMachine.SMEvent.User(WorkflowEvent.WorkflowDone _) ->
                                             Transition.nextState(
                                                     new WorkflowState.Failed("Rollback complete"),
                                                     data);
@@ -262,7 +265,7 @@ public final class ProcessManager<C> {
                 };
 
         this.stateMachine =
-                new StateMachine<>(new WorkflowState.Idle(), workflowData, transitionFn);
+                StateMachine.create(new WorkflowState.Idle(), workflowData, transitionFn).start();
         ProcRegistry.register(
                 managerId, (Proc<WorkflowState, WorkflowEvent>) (Object) stateMachine);
 

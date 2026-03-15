@@ -411,18 +411,7 @@ public class MultiTenantSaaSPlatform {
                                     + " (response time: "
                                     + response.processingTimeMs()
                                     + "ms)");
-            case Result.Success<TenantResponse, String>(var response) ->
-                    System.out.println(
-                            "  ["
-                                    + context
-                                    + "] "
-                                    + response.status()
-                                    + " (response time: "
-                                    + response.processingTimeMs()
-                                    + "ms)");
             case Result.Err<TenantResponse, String>(var error) ->
-                    System.out.println("  [" + context + "] Error: " + error);
-            case Result.Failure<TenantResponse, String>(var error) ->
                     System.out.println("  [" + context + "] Error: " + error);
         }
     }

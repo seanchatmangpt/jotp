@@ -106,19 +106,10 @@ public class ScatterGather<Req, Rep, S, M> {
                                                             return switch (reply.result()) {
                                                                 case Result.Ok<Rep, String> ok ->
                                                                         ok.value();
-                                                                case Result.Success<Rep, String>
-                                                                                success ->
-                                                                        success.value();
                                                                 case Result.Err<Rep, String> err ->
                                                                         throw new RuntimeException(
                                                                                 "Recipient error: "
                                                                                         + err
-                                                                                                .error());
-                                                                case Result.Failure<Rep, String>
-                                                                                failure ->
-                                                                        throw new RuntimeException(
-                                                                                "Recipient error: "
-                                                                                        + failure
                                                                                                 .error());
                                                             };
                                                         } catch (Exception e) {
