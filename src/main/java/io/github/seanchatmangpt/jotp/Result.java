@@ -86,21 +86,6 @@ public sealed interface Result<S, F> permits Result.Ok, Result.Err {
     /** Failed result carrying an error — Erlang's {@code {error, Reason}}. */
     record Err<S, F>(F error) implements Result<S, F> {}
 
-    // Success/Failure are type aliases — not separate sealed variants.
-    // They are kept as nested interfaces for Javadoc / import convenience,
-    // but callers must use Ok/Err as the canonical pattern-match targets.
-    /**
-     * @deprecated Use {@link Ok} for pattern matching; {@link #success} factory for construction.
-     */
-    @Deprecated
-    interface Success<S, F> {}
-
-    /**
-     * @deprecated Use {@link Err} for pattern matching; {@link #failure} factory for construction.
-     */
-    @Deprecated
-    interface Failure<S, F> {}
-
     /**
      * Create a successful result.
      *

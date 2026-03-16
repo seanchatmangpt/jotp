@@ -1,0 +1,511 @@
+---
+title: EventManager API Reference
+description: Complete API reference for EventManager pub/sub messaging
+sidebar_position: 3
+---
+
+# EventManager API Reference
+
+Complete API reference for JOTP's `EventManager<E>` typed pub-sub event bus.
+
+## Overview
+
+`EventManager<E>` provides type-safe event broadcasting with:
+- **Typed events**: Sealed interfaces ensure exhaustive matching
+- **Fault isolation**: Handler crashes don't affect the bus
+- **Loose coupling**: Publishers don't know about subscribers
+- **Filtering**: Subscribe to specific event types
+
+## Core API
+
+### Factory Methods
+
+#### `spawn(String id)`
+
+Creates a new event manager.
+
+```java
+EventManager<DomainEvent> eventBus = EventManager.spawn("events");
+```
+
+**Parameters:**
+- `id`: Unique event manager identifier
+
+**Returns:** New `EventManager<E>` instance
+
+### Publishing
+
+#### `publish(E event)`
+
+Publishes an event to all subscribers.
+
+```java
+eventBus.publish(new OrderCreated("ORD-123", new BigDecimal("99.99")));
+```
+
+**Parameters:**
+- `event`: Event to publish
+
+**Behavior:**
+- Delivers to all matching subscribers asynchronously
+- Non-blocking (returns immediately)
+- Subscriber crashes don't affect other subscribers or bus
+
+### Subscribing
+
+#### `subscribe(String id, Function<E, SubscriberState> handler)`
+
+Subscribes to all event types.
+
+```java
+Proc<SubscriberState, DomainEvent> subscription = eventBus.subscribe(
+    "order-logger",
+    event -> {
+        logger.info("Event: {}", event);
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+**Parameters:**
+- `id`: Unique subscription identifier
+- `handler`: Function handling events
+
+**Returns:** `Proc<SubscriberState, E>` subscription process
+
+**Handler returns:**
+- `SubscriberState.KEEP` - Continue subscription
+- `SubscriberState.UNSUBSCRIBE` - Cancel subscription
+
+#### `subscribeConditional(String id, Predicate<E> filter, Function<E, SubscriberState> handler)`
+
+Subscribes with conditional filtering.
+
+```java
+eventBus.subscribeConditional(
+    "high-value-handler",
+    event -> event instanceof OrderCreated(var _, var amount)
+             && amount.compareTo(new BigDecimal("1000")) > 0,
+    event -> {
+        handleHighValueOrder((OrderCreated) event);
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+**Parameters:**
+- `id`: Unique subscription identifier
+- `filter`: Predicate for event filtering
+- `handler`: Function handling matching events
+
+### Unsubscribing
+
+#### `unsubscribe(String subscriptionId)`
+
+Removes a subscription.
+
+```java
+eventBus.unsubscribe("order-logger");
+```
+
+**Behavior:**
+- Stops subscriber process
+- Removes from subscription list
+- No more events delivered
+
+### Lifecycle
+
+#### `stop()`
+
+Stops the event manager.
+
+```java
+eventBus.stop();
+```
+
+**Behavior:**
+- Stops all subscribers
+- Clears event queue
+- Terminates event manager process
+
+#### `isAlive()`
+
+Checks if event manager is running.
+
+```java
+if (eventBus.isAlive()) {
+    eventBus.publish(event);
+}
+```
+
+**Returns:** `boolean`
+
+## Event Types
+
+### Defining Events
+
+```java
+public sealed interface DomainEvent
+    permits DomainEvent.OrderCreated,
+           DomainEvent.PaymentProcessed,
+           DomainEvent.ShipmentDispatched {
+
+    record OrderCreated(String orderId, BigDecimal amount)
+        implements DomainEvent {}
+
+    record PaymentProcessed(String orderId, String transactionId)
+        implements DomainEvent {}
+
+    record ShipmentDispatched(String orderId, String trackingNumber)
+        implements DomainEvent {}
+}
+```
+
+### Pattern Matching Handlers
+
+```java
+eventBus.subscribe(
+    "handler",
+    event -> switch(event) {
+        case OrderCreated(var orderId, var amount) -> {
+            logger.info("Order {} created for ${}", orderId, amount);
+            return SubscriberState.KEEP;
+        }
+        case PaymentProcessed(var orderId, var txnId) -> {
+            logger.info("Payment {} processed for order {}", txnId, orderId);
+            return SubscriberState.KEEP;
+        }
+        case ShipmentDispatched(var orderId, var tracking) -> {
+            logger.info("Order {} shipped with tracking {}", orderId, tracking);
+            return SubscriberState.KEEP;
+        }
+    }
+);
+```
+
+## Subscriber State
+
+### SubscriberState.KEEP
+
+Continue subscription.
+
+```java
+eventBus.subscribe(
+    "handler",
+    event -> {
+        handleEvent(event);
+        return SubscriberState.KEEP;  // Stay subscribed
+    }
+);
+```
+
+### SubscriberState.UNSUBSCRIBE
+
+Cancel subscription.
+
+```java
+eventBus.subscribe(
+    "one-time-handler",
+    event -> {
+        if (event instanceof ShutdownEvent) {
+            return SubscriberState.UNSUBSCRIBE;  // Unsubscribe after shutdown
+        }
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+## Advanced Patterns
+
+### Event Transformation
+
+```java
+// Transform events before handling
+eventBus.subscribe(
+    "enricher",
+    event -> {
+        EnrichedEvent enriched = enrichWithMetadata(event);
+        anotherBus.publish(enriched);
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+### Event Aggregation
+
+```java
+// Aggregate events over time
+eventBus.subscribe(
+    "aggregator",
+    event -> {
+        List<DomainEvent> batch = accumulator.add(event);
+        if (batch.size() >= 100) {
+            processBatch(batch);
+            accumulator.clear();
+        }
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+### CQRS with Event Sourcing
+
+```java
+// Write side: Command publishes events
+commandHandler.execute(cmd).forEach(eventBus::publish);
+
+// Read side: Projections subscribe to events
+eventBus.subscribe(
+    "read-model",
+    event -> {
+        readModelUpdater.handle(event);
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+### Saga Orchestration
+
+```java
+// Saga coordinator subscribes to events
+eventBus.subscribe(
+    "payment-saga",
+    event -> switch(event) {
+        case OrderCreated(var orderId, var amount) -> {
+            paymentService.charge(orderId, amount);
+            return SubscriberState.KEEP;
+        }
+        case PaymentProcessed(var orderId, _) -> {
+            shippingService.dispatch(orderId);
+            return SubscriberState.KEEP;
+        }
+        case PaymentFailed(var orderId, var reason) -> {
+            // Compensating transaction
+            orderService.cancel(orderId);
+            return SubscriberState.KEEP;
+        }
+    }
+);
+```
+
+## Fault Isolation
+
+### Handler Crashes
+
+```java
+// This crash won't affect other subscribers or the bus
+eventBus.subscribe(
+    "risky-handler",
+    event -> {
+        if (event instanceof BadEvent) {
+            throw new RuntimeException("Oops!");  // Only this handler dies
+        }
+        return SubscriberState.KEEP;
+    }
+);
+
+// Other subscribers continue receiving events
+eventBus.subscribe(
+    "healthy-handler",
+    event -> {
+        // Still receives events
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+### Monitoring Handler Failures
+
+```java
+eventBus.subscribe(
+    "failure-monitor",
+    event -> {
+        try {
+            handleEvent(event);
+        } catch (Exception e) {
+            metrics.increment("handler.failures");
+            // Return KEEP to continue subscription
+            return SubscriberState.KEEP;
+        }
+    }
+);
+```
+
+## Testing
+
+### Verifying Publication
+
+```java
+@Test
+void testEventPublication() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    List<TestEvent> captured = new ArrayList<>();
+    bus.subscribe("capturer", event -> {
+        captured.add(event);
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    await().atMost(1, SECONDS).until(() ->
+        captured.size() == 1
+    );
+    assertThat(captured.get(0).data()).isEqualTo("data");
+}
+```
+
+### Testing Multiple Subscribers
+
+```java
+@Test
+void testMultipleSubscribers() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    AtomicInteger count1 = new AtomicInteger(0);
+    AtomicInteger count2 = new AtomicInteger(0);
+
+    bus.subscribe("sub1", event -> {
+        count1.incrementAndGet();
+        return SubscriberState.KEEP;
+    });
+
+    bus.subscribe("sub2", event -> {
+        count2.incrementAndGet();
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    await().until(() -> count1.get() == 1 && count2.get() == 1);
+}
+```
+
+### Testing Fault Isolation
+
+```java
+@Test
+void testFaultIsolation() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    AtomicInteger healthyCount = new AtomicInteger(0);
+
+    bus.subscribe("crasher", event -> {
+        throw new RuntimeException("Crash!");
+    });
+
+    bus.subscribe("healthy", event -> {
+        healthyCount.incrementAndGet();
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    // Healthy handler still receives events
+    await().until(() -> healthyCount.get() == 1);
+}
+```
+
+## Performance Considerations
+
+### Throughput
+
+```
+Event publishing:
+- Without handlers: ~10M events/sec
+- With single handler: ~5M events/sec
+- With multiple handlers: ~1M events/sec
+```
+
+### Latency
+
+```
+Publish → Handler:
+- Average: <1μs
+- P99: <10μs
+```
+
+### Memory Usage
+
+```
+Per-subscription overhead:
+- Subscription process: ~2 KB
+- Event queue: ~1 KB
+- Total: ~3 KB per subscriber
+```
+
+## Best Practices
+
+### DO:
+- Use sealed interfaces for event types
+- Make events immutable (records)
+- Keep handlers fast and non-blocking
+- Use descriptive subscription IDs
+- Offload work if handler is slow
+
+### DON'T:
+- Throw exceptions in handlers (return Result instead)
+- Block in handlers (spawn worker if needed)
+- Assume event delivery order
+- Publish null events
+- Forget to unsubscribe for temporary handlers
+
+## Thread Safety
+
+### Safe Operations
+- `publish()` - Thread-safe
+- `subscribe()` - Thread-safe
+- `unsubscribe()` - Thread-safe
+- `stop()` - Thread-safe
+
+### Concurrent Publishing
+
+```java
+// Multiple threads can publish safely
+ExecutorService executor = Executors.newFixedThreadPool(10);
+for (int i = 0; i < 1000; i++) {
+    executor.submit(() -> {
+        eventBus.publish(new TestEvent("data"));
+    });
+}
+```
+
+## Error Handling
+
+### Invalid Events
+
+```java
+// Event type doesn't match bus type
+EventManager<OrderEvent> orderBus = EventManager.spawn("orders");
+PaymentEvent payment = new PaymentEvent(...);
+orderBus.publish(payment);  // Compile error! Type safety
+```
+
+### Handler Exceptions
+
+```java
+// Exceptions in handlers don't crash the bus
+eventBus.subscribe(
+    "handler",
+    event -> {
+        throw new RuntimeException("Oops!");  // Handler dies, bus continues
+    }
+);
+```
+
+### Missing Subscribers
+
+```java
+// Publishing with no subscribers is safe
+eventBus.publish(event);  // No-op, no error
+```
+
+## Related Tests
+- `EventManagerTest.java` - Core functionality
+- `EventManagerGenEventTest.java` - Generic event types
+- `EventSourcingAuditLogTest.java` - Event sourcing patterns
+
+## See Also
+- [Use Event Bus](../how-to/use-event-bus.mdx) - Usage guide
+- [Event-Driven Architecture](../tutorials/event-driven-architecture.mdx) - Tutorial
+- [Proc API](./proc-api.mdx) - Process reference

@@ -1,6 +1,8 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -11,6 +13,11 @@ import org.junit.jupiter.api.Test;
  * validation contracts.
  */
 class TelemetryChannelTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── SqlRaceParameter ─────────────────────────────────────────────────────
 

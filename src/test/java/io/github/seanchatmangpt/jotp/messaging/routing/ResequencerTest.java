@@ -2,6 +2,9 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.AfterEach;
@@ -9,13 +12,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("Resequencer Tests")
+/**
+ * Tests for the Resequencer pattern with DTR documentation.
+ *
+ * <p>The Resequencer pattern (EIP) reorders messages that arrive out of sequence. Messages are held
+ * in a buffer until all preceding messages arrive, then released in order.
+ */
+@DtrTest
+@DisplayName("Resequencer Pattern (EIP)")
 class ResequencerTest {
 
     private Resequencer<String> resequencer;
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         resequencer = Resequencer.create(1L);
     }
 
@@ -26,7 +37,36 @@ class ResequencerTest {
 
     @Test
     @DisplayName("should deliver messages in order when they arrive in sequence")
-    void testInOrderSequence() throws ExecutionException, InterruptedException {
+    void testInOrderSequence(DtrContext ctx) throws ExecutionException, InterruptedException {
+        ctx.sayNextSection("Resequencer Pattern");
+        ctx.say(
+                "The Resequencer pattern reorders messages that arrive out of sequence. Messages are"
+                        + " held in a buffer until all preceding messages arrive, then released in order.");
+        ctx.sayCode(
+                """
+                var resequencer = Resequencer.create(1L);
+
+                var msg1 = new Resequencer.SequencedMessage<>(1L, "first");
+                var msg2 = new Resequencer.SequencedMessage<>(2L, "second");
+                var msg3 = new Resequencer.SequencedMessage<>(3L, "third");
+
+                assertThat(resequencer.offer(msg1).get()).contains("first");
+                assertThat(resequencer.offer(msg2).get()).contains("second");
+                assertThat(resequencer.offer(msg3).get()).contains("third");
+                """,
+                "java");
+        ctx.sayMermaid(
+                """
+                graph LR
+                    A[Msg 3] --> B[Resequencer]
+                    C[Msg 1] --> B
+                    D[Msg 2] --> B
+                    B -->|buffer| E[Wait for 1]
+                    B -->|deliver| F[1, 2, 3 in order]
+                """);
+        ctx.sayNote(
+                "Use when message order matters but the transport doesn't guarantee ordering, such as"
+                        + " with UDP or parallel processing pipelines.");
         // Arrange
         var msg1 = new Resequencer.SequencedMessage<>(1L, "first");
         var msg2 = new Resequencer.SequencedMessage<>(2L, "second");
@@ -45,7 +85,23 @@ class ResequencerTest {
 
     @Test
     @DisplayName("should buffer out-of-order messages and deliver when sequence is complete")
-    void testOutOfOrderSequence() throws ExecutionException, InterruptedException {
+    void testOutOfOrderSequence(DtrContext ctx) throws ExecutionException, InterruptedException {
+        ctx.sayNextSection("Resequencer: Out-of-Order Handling");
+        ctx.say(
+                "When messages arrive out of order, the resequencer buffers them until the expected"
+                        + " sequence number arrives.");
+        ctx.sayCode(
+                """
+                // Messages arrive: 3, 1, 2
+                var result3 = resequencer.offer(msg3).get();
+                var result1 = resequencer.offer(msg1).get();
+                var result2 = resequencer.offer(msg2).get();
+
+                assertThat(result3).isEmpty();  // Buffered, waiting for seq 1
+                assertThat(result1).contains("first");  // Delivered
+                assertThat(result2).contains("second");  // Now seq 2 is next
+                """,
+                "java");
         // Arrange
         var msg3 = new Resequencer.SequencedMessage<>(3L, "third");
         var msg1 = new Resequencer.SequencedMessage<>(1L, "first");

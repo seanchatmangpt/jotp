@@ -1,0 +1,232 @@
+---
+title: Distributed Actors
+description: Build distributed systems with location-transparent actors
+sidebar_position: 5
+---
+
+# Distributed Actors
+
+Learn how to build distributed systems using JOTP's location-transparent actor messaging.
+
+## Quick Start
+
+### Start a Node
+
+```java
+DistributedNode node = DistributedNode.spawn(
+    "node-1",
+    DistributedNodeConfig.builder()
+        .port(2551)
+        .build()
+);
+```
+
+### Register Process
+
+```java
+ProcRef<String, String> ref = Proc.spawn("my-service", state, handler);
+node.register("my-service", ref);
+```
+
+### Send Remote Messages
+
+```java
+DistributedNode remote = DistributedNode.connect("host:2551");
+ProcRef<String, String> remoteRef = node.lookup("node-1", "my-service");
+remoteRef.send("Hello from afar!");
+```
+
+## Architecture
+
+```
+Node 1 (port 2551)              Node 2 (port 2552)
+┌──────────────────┐            ┌──────────────────┐
+│  ProcRegistry    │            │  ProcRegistry    │
+│  ┌────────────┐  │            │  ┌────────────┐  │
+│  │ Service-A  │◄─┼────────────┼──│ Service-B  │  │
+│  └────────────┘  │            │  └────────────┘  │
+└──────────────────┘            └──────────────────┘
+        ▲                                 │
+        │                                 │
+        └─────────────┬───────────────────┘
+                      │
+              Location Transparency
+```
+
+## Configuration
+
+### Node Discovery
+
+```java
+DistributedNodeConfig config = DistributedNodeConfig.builder()
+    .port(2551)
+    .seedNodes(List.of("host1:2551", "host2:2551"))
+    .heartbeatInterval(Duration.ofSeconds(5))
+    .build();
+```
+
+### Message Serialization
+
+```java
+// Messages must be serializable
+public sealed interface RemoteMessage
+    permits RemoteMessage.Ping,
+           RemoteMessage.Pong,
+           RemoteMessage.Data
+    implements java.io.Serializable {
+
+    record Ping(String from) implements RemoteMessage {}
+    record Pong(String from) implements RemoteMessage {}
+    record Data(byte[] payload) implements RemoteMessage {}
+}
+```
+
+## Patterns
+
+### 1. Remote Service Call
+
+```java
+// Client
+ProcRef<Request, Response> remoteService = node.lookup("node-2", "calculator");
+Response response = remoteService.ask(new Request.Add(5, 3))
+    .timeout(Duration.ofSeconds(5))
+    .block();
+```
+
+### 2. Distributed Data Replication
+
+```java
+// Node 1
+eventBus.subscribe("replicator", event -> {
+    nodes.forEach(n -> n.send("replicator", event));
+    return SubscriberState.KEEP;
+});
+
+// Node 2
+eventBus.subscribe("replica-target", event -> {
+    localState.apply(event);
+    return SubscriberState.KEEP;
+});
+```
+
+### 3. Cluster-Aware Supervision
+
+```java
+// Supervisor on different node
+Supervisor remoteSupervisor = Supervisor.spawn(
+    "backup-supervisor",
+    Strategy.ONE_FOR_ONE,
+    childSpecs
+);
+
+// Primary delegates to backup
+primarySupervisor.monitor(remoteSupervisor);
+```
+
+## Failure Detection
+
+### Heartbeat Monitoring
+
+```java
+DistributedNode node = DistributedNode.spawn(
+    "node-1",
+    DistributedNodeConfig.builder()
+        .heartbeatInterval(Duration.ofSeconds(5))
+        .heartbeatTimeout(Duration.ofSeconds(15))
+        .build()
+);
+
+// Handle node down events
+node.getEventBus().subscribe(
+    "failure-handler",
+    event -> switch(event) {
+        case NodeDown(var nodeId) -> {
+            logger.warn("Node {} is down", nodeId);
+            redistributeWork(nodeId);
+            return SubscriberState.KEEP;
+        }
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+### Automatic Reconnection
+
+```java
+DistributedNode node = DistributedNode.spawn(
+    "node-1",
+    DistributedNodeConfig.builder()
+        .autoReconnect(true)
+        .reconnectInterval(Duration.ofSeconds(10))
+        .maxReconnectAttempts(10)
+        .build()
+);
+```
+
+## Testing Distributed Systems
+
+### Multi-Node Testing
+
+```java
+@Test
+void testDistributedMessaging() throws Exception {
+    // Start two nodes
+    DistributedNode node1 = DistributedNode.spawn("node-1", 2551);
+    DistributedNode node2 = DistributedNode.spawn("node-2", 2552);
+
+    // Register service on node2
+    ProcRef<String, String> service = Proc.spawn("echo", state, handler);
+    node2.register("echo", service);
+
+    // Call from node1
+    ProcRef<String, String> remote = node1.lookup("localhost:2552", "echo");
+    remote.send("Hello");
+
+    await().atMost(5, SECONDS).until(() ->
+        service.getState().equals("Hello")
+    );
+}
+```
+
+### Failure Simulation
+
+```java
+@Test
+void testNodeFailureRecovery() {
+    DistributedNode node1 = DistributedNode.spawn("node-1", 2551);
+    DistributedNode node2 = DistributedNode.spawn("node-2", 2552);
+
+    // Stop node2
+    node2.stop();
+
+    // Verify failover
+    await().atMost(10, SECONDS).until(() ->
+        node1.isNodeDown("node-2")
+    );
+}
+```
+
+## Best Practices
+
+### DO:
+- Use location-transparent messaging
+- Implement failure detection
+- Design for network partitions
+- Serialize all remote messages
+- Monitor cluster health
+
+### DON'T:
+- Assume delivery guarantees
+- Block on remote calls without timeouts
+- Share mutable state across nodes
+- Forget to handle network failures
+- Use distributed actors for local-only operations
+
+## Related Tests
+- `DistributedNodeTest.java` - Node lifecycle
+- `DistributedActorBridgeTest.java` - Remote messaging
+- `IntegrationStressTest.java` - Distributed stress testing
+
+## See Also
+- [Distributed Systems Guide](../explanation/distributed-systems.mdx) - Deep dive
+- [Proc API](../reference/proc-api.mdx) - Process reference

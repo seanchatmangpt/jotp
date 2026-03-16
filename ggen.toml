@@ -1,7 +1,7 @@
 [project]
-name = "java-maven-template"
+name = "jotp"
 version = "1.0.0"
-description = "Exhaustive Java 26 code generation templates for universal codebase migration"
+description = "Exhaustive Java 26 code generation templates for JOTP framework"
 
 # ggen v5: Ontology configuration
 [ontology]

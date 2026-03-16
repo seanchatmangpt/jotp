@@ -2,7 +2,7 @@
 # ==========================================================================
 # deploy.sh — Cloud Deployment Script
 # ==========================================================================
-# Deploys the Java Maven Template application to the configured cloud provider.
+# Deploys the JOTP application to the configured cloud provider.
 # Defaults to Oracle Cloud Infrastructure (OCI) Always Free tier.
 #
 # Usage:
@@ -44,7 +44,7 @@ log_error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 show_help() {
     cat << 'EOF'
-Java Maven Template - Cloud Deployment
+JOTP - Cloud Deployment
 
 Usage:
   ./deploy.sh [COMMAND]

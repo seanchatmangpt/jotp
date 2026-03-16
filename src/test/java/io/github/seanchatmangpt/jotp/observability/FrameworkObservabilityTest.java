@@ -18,14 +18,14 @@ package io.github.seanchatmangpt.jotp.observability;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;
 import io.github.seanchatmangpt.jotp.ProcRegistry;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.Supervisor;
-import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.observability.FrameworkEventBus.FrameworkEvent;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +54,7 @@ import org.junit.jupiter.api.Timeout;
  * </ul>
  *
  * <p>Test approach:
+ *
  * <ul>
  *   <li>Enable observability via system property before each test
  *   <li>Use counting consumers to verify events are published
@@ -66,6 +66,7 @@ import org.junit.jupiter.api.Timeout;
  * @see FrameworkEventBus
  * @see FrameworkEvent
  */
+@DtrTest
 @DisplayName("Framework Observability: P0/P1/P2 event publishing and delivery")
 @Timeout(30)
 class FrameworkObservabilityTest implements WithAssertions {
@@ -86,26 +87,28 @@ class FrameworkObservabilityTest implements WithAssertions {
         subscriberError = new AtomicReference<>();
 
         // Subscribe to count all events
-        eventBus.subscribe(event -> {
-            eventCount.incrementAndGet();
-            var eventType = event.getClass().getSimpleName();
-            eventsByType.computeIfAbsent(eventType, k -> new ArrayList<>()).add(event);
-        });
+        eventBus.subscribe(
+                event -> {
+                    eventCount.incrementAndGet();
+                    var eventType = event.getClass().getSimpleName();
+                    eventsByType.computeIfAbsent(eventType, k -> new ArrayList<>()).add(event);
+                });
 
         // Subscribe to catch errors
-        eventBus.subscribe(event -> {
-            try {
-                // Simulate potential error in one subscriber
-                if (event instanceof FrameworkEvent.ProcessCreated) {
-                    var pc = (FrameworkEvent.ProcessCreated) event;
-                    if (pc.processId().equals("error-test")) {
-                        throw new RuntimeException("Simulated subscriber error");
+        eventBus.subscribe(
+                event -> {
+                    try {
+                        // Simulate potential error in one subscriber
+                        if (event instanceof FrameworkEvent.ProcessCreated) {
+                            var pc = (FrameworkEvent.ProcessCreated) event;
+                            if (pc.processId().equals("error-test")) {
+                                throw new RuntimeException("Simulated subscriber error");
+                            }
+                        }
+                    } catch (Throwable t) {
+                        subscriberError.set(t);
                     }
-                }
-            } catch (Throwable t) {
-                subscriberError.set(t);
-            }
-        });
+                });
     }
 
     @AfterEach
@@ -130,23 +133,21 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("ProcessCreated event published when process spawns")
         void processCreated_publishedWhenProcessSpawns() {
             // Act
-            var proc = Proc.spawn(
-                () -> "initial",
-                (state, msg) -> state
-            );
+            var proc = Proc.spawn(() -> "initial", (state, msg) -> state);
 
             // Assert - wait for async event delivery
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(eventCount.get()).isGreaterThan(0);
-                    var events = eventsByType.get("ProcessCreated");
-                    assertThat(events).isNotNull().isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(eventCount.get()).isGreaterThan(0);
+                                var events = eventsByType.get("ProcessCreated");
+                                assertThat(events).isNotNull().isNotEmpty();
 
-                    var event = (FrameworkEvent.ProcessCreated) events.get(0);
-                    assertThat(event.processId()).isNotNull();
-                    assertThat(event.processType()).isNotNull();
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = (FrameworkEvent.ProcessCreated) events.get(0);
+                                assertThat(event.processId()).isNotNull();
+                                assertThat(event.processType()).isNotNull();
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             proc.stop();
@@ -156,22 +157,20 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("ProcessCreated event contains correct process metadata")
         void processCreated_containsCorrectMetadata() {
             // Act
-            var proc = Proc.spawn(
-                () -> "initial",
-                (state, msg) -> state
-            );
+            var proc = Proc.spawn(() -> "initial", (state, msg) -> state);
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    var events = eventsByType.get("ProcessCreated");
-                    assertThat(events).isNotNull();
+                    .untilAsserted(
+                            () -> {
+                                var events = eventsByType.get("ProcessCreated");
+                                assertThat(events).isNotNull();
 
-                    var event = (FrameworkEvent.ProcessCreated) events.get(0);
-                    assertThat(event.processId()).isNotEmpty();
-                    assertThat(event.processType()).isNotEmpty();
-                    assertThat(event.timestamp()).isNotNull();
-                });
+                                var event = (FrameworkEvent.ProcessCreated) events.get(0);
+                                assertThat(event.processId()).isNotEmpty();
+                                assertThat(event.processType()).isNotEmpty();
+                                assertThat(event.timestamp()).isNotNull();
+                            });
 
             // Cleanup
             proc.stop();
@@ -187,18 +186,23 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    var events = eventsByType.get("ProcessCreated");
-                    assertThat(events).hasSizeGreaterThanOrEqualTo(3);
+                    .untilAsserted(
+                            () -> {
+                                var events = eventsByType.get("ProcessCreated");
+                                assertThat(events).hasSizeGreaterThanOrEqualTo(3);
 
-                    // Verify all have unique process IDs
-                    var processIds = events.stream()
-                        .map(e -> ((FrameworkEvent.ProcessCreated) e).processId())
-                        .distinct()
-                        .toList();
+                                // Verify all have unique process IDs
+                                var processIds =
+                                        events.stream()
+                                                .map(
+                                                        e ->
+                                                                ((FrameworkEvent.ProcessCreated) e)
+                                                                        .processId())
+                                                .distinct()
+                                                .toList();
 
-                    assertThat(processIds).hasSizeGreaterThanOrEqualTo(3);
-                });
+                                assertThat(processIds).hasSizeGreaterThanOrEqualTo(3);
+                            });
 
             // Cleanup
             proc1.stop();
@@ -215,10 +219,7 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("ProcessTerminated event published with abnormal=false for graceful stop")
         void processTerminated_gracefulStop() {
             // Arrange
-            var proc = Proc.spawn(
-                () -> "initial",
-                (state, msg) -> state
-            );
+            var proc = Proc.spawn(() -> "initial", (state, msg) -> state);
 
             // Clear creation events
             eventsByType.remove("ProcessCreated");
@@ -228,31 +229,32 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    var events = eventsByType.get("ProcessTerminated");
-                    assertThat(events).isNotNull().isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                var events = eventsByType.get("ProcessTerminated");
+                                assertThat(events).isNotNull().isNotEmpty();
 
-                    var event = (FrameworkEvent.ProcessTerminated) events.get(0);
-                    assertThat(event.processId()).isNotNull();
-                    assertThat(event.abnormal()).isFalse();
-                    assertThat(event.reason()).isNotNull();
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = (FrameworkEvent.ProcessTerminated) events.get(0);
+                                assertThat(event.processId()).isNotNull();
+                                assertThat(event.abnormal()).isFalse();
+                                assertThat(event.reason()).isNotNull();
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
         }
 
         @Test
         @DisplayName("ProcessTerminated event published with abnormal=true for crash")
         void processTerminated_crash() {
             // Arrange
-            var proc = Proc.spawn(
-                () -> "initial",
-                (state, msg) -> {
-                    if ("crash".equals(msg)) {
-                        throw new RuntimeException("Intentional crash");
-                    }
-                    return state;
-                }
-            );
+            var proc =
+                    Proc.spawn(
+                            () -> "initial",
+                            (state, msg) -> {
+                                if ("crash".equals(msg)) {
+                                    throw new RuntimeException("Intentional crash");
+                                }
+                                return state;
+                            });
 
             // Clear creation events
             eventsByType.remove("ProcessCreated");
@@ -262,25 +264,23 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    var events = eventsByType.get("ProcessTerminated");
-                    assertThat(events).isNotNull().isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                var events = eventsByType.get("ProcessTerminated");
+                                assertThat(events).isNotNull().isNotEmpty();
 
-                    var event = (FrameworkEvent.ProcessTerminated) events.get(0);
-                    assertThat(event.processId()).isNotNull();
-                    assertThat(event.abnormal()).isTrue();
-                    assertThat(event.reason()).isNotNull();
-                });
+                                var event = (FrameworkEvent.ProcessTerminated) events.get(0);
+                                assertThat(event.processId()).isNotNull();
+                                assertThat(event.abnormal()).isTrue();
+                                assertThat(event.reason()).isNotNull();
+                            });
         }
 
         @Test
         @DisplayName("ProcessTerminated event contains processType")
         void processTerminated_containsProcessType() {
             // Arrange
-            var proc = Proc.spawn(
-                () -> "initial",
-                (state, msg) -> state
-            );
+            var proc = Proc.spawn(() -> "initial", (state, msg) -> state);
 
             eventsByType.remove("ProcessCreated");
 
@@ -289,13 +289,14 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    var events = eventsByType.get("ProcessTerminated");
-                    assertThat(events).isNotNull().isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                var events = eventsByType.get("ProcessTerminated");
+                                assertThat(events).isNotNull().isNotEmpty();
 
-                    var event = (FrameworkEvent.ProcessTerminated) events.get(0);
-                    assertThat(event.processType()).isNotNull();
-                });
+                                var event = (FrameworkEvent.ProcessTerminated) events.get(0);
+                                assertThat(event.processType()).isNotNull();
+                            });
         }
     }
 
@@ -308,33 +309,34 @@ class FrameworkObservabilityTest implements WithAssertions {
         void supervisorChildCrashed_childCrashes() throws Exception {
             // Arrange
             var crashReason = new AtomicReference<Throwable>();
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.SupervisorChildCrashed) {
-                    var scc = (FrameworkEvent.SupervisorChildCrashed) event;
-                    crashReason.set(scc.reason());
-                }
-            });
-
-            var childSpec = Supervisor.ChildSpec.builder()
-                .id("crashy-child")
-                .start(() -> {
-                    return Proc.spawn(
-                        () -> "initial",
-                        (state, msg) -> {
-                            if ("crash".equals(msg)) {
-                                throw new RuntimeException("Child crash");
-                            }
-                            return state;
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.SupervisorChildCrashed) {
+                            var scc = (FrameworkEvent.SupervisorChildCrashed) event;
+                            crashReason.set(scc.reason());
                         }
-                    ).ref();
-                })
-                .restartType(Supervisor.RestartType.PERMANENT)
-                .build();
+                    });
 
-            var supervisor = Supervisor.create(
-                Supervisor.Strategy.ONE_FOR_ONE,
-                List.of(childSpec)
-            );
+            var childSpec =
+                    Supervisor.ChildSpec.builder()
+                            .id("crashy-child")
+                            .start(
+                                    () -> {
+                                        return Proc.spawn(
+                                                        () -> "initial",
+                                                        (state, msg) -> {
+                                                            if ("crash".equals(msg)) {
+                                                                throw new RuntimeException(
+                                                                        "Child crash");
+                                                            }
+                                                            return state;
+                                                        })
+                                                .ref();
+                                    })
+                            .restartType(Supervisor.RestartType.PERMANENT)
+                            .build();
+
+            var supervisor = Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, List.of(childSpec));
 
             // Act
             var childRef = ProcRegistry.whereis("crashy-child");
@@ -346,19 +348,20 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(3))
-                .untilAsserted(() -> {
-                    assertThat(crashReason.get()).isNotNull();
-                    assertThat(crashReason.get().getMessage()).contains("Child crash");
+                    .untilAsserted(
+                            () -> {
+                                assertThat(crashReason.get()).isNotNull();
+                                assertThat(crashReason.get().getMessage()).contains("Child crash");
 
-                    var events = eventsByType.get("SupervisorChildCrashed");
-                    assertThat(events).isNotNull().isNotEmpty();
+                                var events = eventsByType.get("SupervisorChildCrashed");
+                                assertThat(events).isNotNull().isNotEmpty();
 
-                    var event = (FrameworkEvent.SupervisorChildCrashed) events.get(0);
-                    assertThat(event.supervisorId()).isNotNull();
-                    assertThat(event.childId()).isEqualTo("crashy-child");
-                    assertThat(event.reason()).isNotNull();
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = (FrameworkEvent.SupervisorChildCrashed) events.get(0);
+                                assertThat(event.supervisorId()).isNotNull();
+                                assertThat(event.childId()).isEqualTo("crashy-child");
+                                assertThat(event.reason()).isNotNull();
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             supervisor.shutdown();
@@ -371,34 +374,34 @@ class FrameworkObservabilityTest implements WithAssertions {
             var supervisorId = new AtomicReference<String>();
             var childId = new AtomicReference<String>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.SupervisorChildCrashed) {
-                    var scc = (FrameworkEvent.SupervisorChildCrashed) event;
-                    supervisorId.set(scc.supervisorId());
-                    childId.set(scc.childId());
-                }
-            });
-
-            var childSpec = Supervisor.ChildSpec.builder()
-                .id("test-child")
-                .start(() -> {
-                    return Proc.spawn(
-                        () -> "initial",
-                        (state, msg) -> {
-                            if ("boom".equals(msg)) {
-                                throw new RuntimeException("Boom");
-                            }
-                            return state;
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.SupervisorChildCrashed) {
+                            var scc = (FrameworkEvent.SupervisorChildCrashed) event;
+                            supervisorId.set(scc.supervisorId());
+                            childId.set(scc.childId());
                         }
-                    ).ref();
-                })
-                .restartType(Supervisor.RestartType.PERMANENT)
-                .build();
+                    });
 
-            var supervisor = Supervisor.create(
-                Supervisor.Strategy.ONE_FOR_ONE,
-                List.of(childSpec)
-            );
+            var childSpec =
+                    Supervisor.ChildSpec.builder()
+                            .id("test-child")
+                            .start(
+                                    () -> {
+                                        return Proc.spawn(
+                                                        () -> "initial",
+                                                        (state, msg) -> {
+                                                            if ("boom".equals(msg)) {
+                                                                throw new RuntimeException("Boom");
+                                                            }
+                                                            return state;
+                                                        })
+                                                .ref();
+                                    })
+                            .restartType(Supervisor.RestartType.PERMANENT)
+                            .build();
+
+            var supervisor = Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, List.of(childSpec));
 
             // Act
             var childRef = ProcRegistry.whereis("test-child");
@@ -406,10 +409,11 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(3))
-                .untilAsserted(() -> {
-                    assertThat(supervisorId.get()).isNotNull();
-                    assertThat(childId.get()).isEqualTo("test-child");
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(supervisorId.get()).isNotNull();
+                                assertThat(childId.get()).isEqualTo("test-child");
+                            });
 
             // Cleanup
             supervisor.shutdown();
@@ -426,32 +430,33 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var restartEvent = new AtomicReference<FrameworkEvent.SupervisorRestartAttempted>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.SupervisorRestartAttempted) {
-                    restartEvent.set((FrameworkEvent.SupervisorRestartAttempted) event);
-                }
-            });
-
-            var childSpec = Supervisor.ChildSpec.builder()
-                .id("restart-child")
-                .start(() -> {
-                    return Proc.spawn(
-                        () -> "initial",
-                        (state, msg) -> {
-                            if ("crash".equals(msg)) {
-                                throw new RuntimeException("Crash for restart");
-                            }
-                            return state;
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.SupervisorRestartAttempted) {
+                            restartEvent.set((FrameworkEvent.SupervisorRestartAttempted) event);
                         }
-                    ).ref();
-                })
-                .restartType(Supervisor.RestartType.PERMANENT)
-                .build();
+                    });
 
-            var supervisor = Supervisor.create(
-                Supervisor.Strategy.ONE_FOR_ONE,
-                List.of(childSpec)
-            );
+            var childSpec =
+                    Supervisor.ChildSpec.builder()
+                            .id("restart-child")
+                            .start(
+                                    () -> {
+                                        return Proc.spawn(
+                                                        () -> "initial",
+                                                        (state, msg) -> {
+                                                            if ("crash".equals(msg)) {
+                                                                throw new RuntimeException(
+                                                                        "Crash for restart");
+                                                            }
+                                                            return state;
+                                                        })
+                                                .ref();
+                                    })
+                            .restartType(Supervisor.RestartType.PERMANENT)
+                            .build();
+
+            var supervisor = Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, List.of(childSpec));
 
             // Act
             var childRef = ProcRegistry.whereis("restart-child");
@@ -459,16 +464,18 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(3))
-                .untilAsserted(() -> {
-                    assertThat(restartEvent.get()).isNotNull();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(restartEvent.get()).isNotNull();
 
-                    var event = restartEvent.get();
-                    assertThat(event.supervisorId()).isNotNull();
-                    assertThat(event.childId()).isEqualTo("restart-child");
-                    assertThat(event.strategy()).isEqualTo(Supervisor.Strategy.ONE_FOR_ONE);
-                    assertThat(event.crashCount()).isGreaterThan(0);
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = restartEvent.get();
+                                assertThat(event.supervisorId()).isNotNull();
+                                assertThat(event.childId()).isEqualTo("restart-child");
+                                assertThat(event.strategy())
+                                        .isEqualTo(Supervisor.Strategy.ONE_FOR_ONE);
+                                assertThat(event.crashCount()).isGreaterThan(0);
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             supervisor.shutdown();
@@ -480,50 +487,51 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var crashCounts = new ArrayList<Integer>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.SupervisorRestartAttempted) {
-                    var sra = (FrameworkEvent.SupervisorRestartAttempted) event;
-                    crashCounts.add(sra.crashCount());
-                }
-            });
-
-            var childSpec = Supervisor.ChildSpec.builder()
-                .id("multi-crash-child")
-                .start(() -> {
-                    return Proc.spawn(
-                        () -> "initial",
-                        (state, msg) -> {
-                            if ("crash".equals(msg)) {
-                                throw new RuntimeException("Repeated crash");
-                            }
-                            return state;
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.SupervisorRestartAttempted) {
+                            var sra = (FrameworkEvent.SupervisorRestartAttempted) event;
+                            crashCounts.add(sra.crashCount());
                         }
-                    ).ref();
-                })
-                .restartType(Supervisor.RestartType.PERMANENT)
-                .build();
+                    });
 
-            var supervisor = Supervisor.create(
-                Supervisor.Strategy.ONE_FOR_ONE,
-                List.of(childSpec)
-            );
+            var childSpec =
+                    Supervisor.ChildSpec.builder()
+                            .id("multi-crash-child")
+                            .start(
+                                    () -> {
+                                        return Proc.spawn(
+                                                        () -> "initial",
+                                                        (state, msg) -> {
+                                                            if ("crash".equals(msg)) {
+                                                                throw new RuntimeException(
+                                                                        "Repeated crash");
+                                                            }
+                                                            return state;
+                                                        })
+                                                .ref();
+                                    })
+                            .restartType(Supervisor.RestartType.PERMANENT)
+                            .build();
+
+            var supervisor = Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, List.of(childSpec));
 
             // Act - trigger multiple crashes
             var childRef = ProcRegistry.whereis("multi-crash-child");
             childRef.proc().tell("crash");
 
-            await().atMost(Duration.ofSeconds(2))
-                .until(() -> crashCounts.size() >= 1);
+            await().atMost(Duration.ofSeconds(2)).until(() -> crashCounts.size() >= 1);
 
             childRef.proc().tell("crash");
 
             // Assert
             await().atMost(Duration.ofSeconds(3))
-                .untilAsserted(() -> {
-                    assertThat(crashCounts).hasSizeGreaterThanOrEqualTo(2);
-                    // Crash count should increase
-                    assertThat(crashCounts.get(1)).isGreaterThan(crashCounts.get(0));
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(crashCounts).hasSizeGreaterThanOrEqualTo(2);
+                                // Crash count should increase
+                                assertThat(crashCounts.get(1)).isGreaterThan(crashCounts.get(0));
+                            });
 
             // Cleanup
             supervisor.shutdown();
@@ -538,37 +546,43 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("SupervisorMaxRestartsExceeded event when intensity exceeded")
         void supervisorMaxRestartsExceeded_intensityExceeded() throws Exception {
             // Arrange
-            var maxRestartsEvent = new AtomicReference<FrameworkEvent.SupervisorMaxRestartsExceeded>();
+            var maxRestartsEvent =
+                    new AtomicReference<FrameworkEvent.SupervisorMaxRestartsExceeded>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.SupervisorMaxRestartsExceeded) {
-                    maxRestartsEvent.set((FrameworkEvent.SupervisorMaxRestartsExceeded) event);
-                }
-            });
-
-            var childSpec = Supervisor.ChildSpec.builder()
-                .id("rapid-crash-child")
-                .start(() -> {
-                    return Proc.spawn(
-                        () -> "initial",
-                        (state, msg) -> {
-                            if ("crash".equals(msg)) {
-                                throw new RuntimeException("Rapid crash");
-                            }
-                            return state;
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.SupervisorMaxRestartsExceeded) {
+                            maxRestartsEvent.set(
+                                    (FrameworkEvent.SupervisorMaxRestartsExceeded) event);
                         }
-                    ).ref();
-                })
-                .restartType(Supervisor.RestartType.PERMANENT)
-                .build();
+                    });
+
+            var childSpec =
+                    Supervisor.ChildSpec.builder()
+                            .id("rapid-crash-child")
+                            .start(
+                                    () -> {
+                                        return Proc.spawn(
+                                                        () -> "initial",
+                                                        (state, msg) -> {
+                                                            if ("crash".equals(msg)) {
+                                                                throw new RuntimeException(
+                                                                        "Rapid crash");
+                                                            }
+                                                            return state;
+                                                        })
+                                                .ref();
+                                    })
+                            .restartType(Supervisor.RestartType.PERMANENT)
+                            .build();
 
             // Create supervisor with low intensity threshold
-            var supervisor = Supervisor.create(
-                Supervisor.Strategy.ONE_FOR_ONE,
-                2, // maxRestarts
-                Duration.ofSeconds(5), // period
-                List.of(childSpec)
-            );
+            var supervisor =
+                    Supervisor.create(
+                            Supervisor.Strategy.ONE_FOR_ONE,
+                            2, // maxRestarts
+                            Duration.ofSeconds(5), // period
+                            List.of(childSpec));
 
             // Act - trigger rapid crashes
             var childRef = ProcRegistry.whereis("rapid-crash-child");
@@ -578,15 +592,16 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(5))
-                .untilAsserted(() -> {
-                    assertThat(maxRestartsEvent.get()).isNotNull();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(maxRestartsEvent.get()).isNotNull();
 
-                    var event = maxRestartsEvent.get();
-                    assertThat(event.supervisorId()).isNotNull();
-                    assertThat(event.maxRestarts()).isEqualTo(2);
-                    assertThat(event.actualRestarts()).isGreaterThanOrEqualTo(2);
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = maxRestartsEvent.get();
+                                assertThat(event.supervisorId()).isNotNull();
+                                assertThat(event.maxRestarts()).isEqualTo(2);
+                                assertThat(event.actualRestarts()).isGreaterThanOrEqualTo(2);
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             supervisor.shutdown();
@@ -596,36 +611,42 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("SupervisorMaxRestartsExceeded includes duration window")
         void supervisorMaxRestartsExceeded_includesDurationWindow() throws Exception {
             // Arrange
-            var maxRestartsEvent = new AtomicReference<FrameworkEvent.SupervisorMaxRestartsExceeded>();
+            var maxRestartsEvent =
+                    new AtomicReference<FrameworkEvent.SupervisorMaxRestartsExceeded>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.SupervisorMaxRestartsExceeded) {
-                    maxRestartsEvent.set((FrameworkEvent.SupervisorMaxRestartsExceeded) event);
-                }
-            });
-
-            var childSpec = Supervisor.ChildSpec.builder()
-                .id("window-child")
-                .start(() -> {
-                    return Proc.spawn(
-                        () -> "initial",
-                        (state, msg) -> {
-                            if ("crash".equals(msg)) {
-                                throw new RuntimeException("Window crash");
-                            }
-                            return state;
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.SupervisorMaxRestartsExceeded) {
+                            maxRestartsEvent.set(
+                                    (FrameworkEvent.SupervisorMaxRestartsExceeded) event);
                         }
-                    ).ref();
-                })
-                .restartType(Supervisor.RestartType.PERMANENT)
-                .build();
+                    });
 
-            var supervisor = Supervisor.create(
-                Supervisor.Strategy.ONE_FOR_ONE,
-                2,
-                Duration.ofSeconds(3),
-                List.of(childSpec)
-            );
+            var childSpec =
+                    Supervisor.ChildSpec.builder()
+                            .id("window-child")
+                            .start(
+                                    () -> {
+                                        return Proc.spawn(
+                                                        () -> "initial",
+                                                        (state, msg) -> {
+                                                            if ("crash".equals(msg)) {
+                                                                throw new RuntimeException(
+                                                                        "Window crash");
+                                                            }
+                                                            return state;
+                                                        })
+                                                .ref();
+                                    })
+                            .restartType(Supervisor.RestartType.PERMANENT)
+                            .build();
+
+            var supervisor =
+                    Supervisor.create(
+                            Supervisor.Strategy.ONE_FOR_ONE,
+                            2,
+                            Duration.ofSeconds(3),
+                            List.of(childSpec));
 
             // Act
             var childRef = ProcRegistry.whereis("window-child");
@@ -635,12 +656,14 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(5))
-                .untilAsserted(() -> {
-                    assertThat(maxRestartsEvent.get()).isNotNull();
-                    var event = maxRestartsEvent.get();
-                    assertThat(event.window()).isNotNull();
-                    assertThat(event.window().toJavaDuration()).isEqualTo(Duration.ofSeconds(3));
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(maxRestartsEvent.get()).isNotNull();
+                                var event = maxRestartsEvent.get();
+                                assertThat(event.window()).isNotNull();
+                                assertThat(event.window().toJavaDuration())
+                                        .isEqualTo(Duration.ofSeconds(3));
+                            });
 
             // Cleanup
             supervisor.shutdown();
@@ -659,49 +682,53 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("StateMachineTransition event published on state change")
         void stateMachineTransition_publishedOnChange() {
             // Arrange
-            sealed interface State {}
+            interface State {}
             record Idle() implements State {}
             record Active() implements State {}
 
-            sealed interface Event {}
+            interface Event {}
             record Start() implements Event {}
             record Stop() implements Event {}
 
             var transitionEvents = new ArrayList<FrameworkEvent.StateMachineTransition>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.StateMachineTransition) {
-                    transitionEvents.add((FrameworkEvent.StateMachineTransition) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.StateMachineTransition) {
+                            transitionEvents.add((FrameworkEvent.StateMachineTransition) event);
+                        }
+                    });
 
             // Act
-            var sm = StateMachine.builder()
-                .initialState(new Idle())
-                .stateClass(State.class)
-                .eventClass(Event.class)
-                .transitionFn((state, event, data) -> {
-                    if (state instanceof Idle && event instanceof Start) {
-                        return StateMachine.Transition.nextState(new Active());
-                    }
-                    return StateMachine.Transition.keepState();
-                })
-                .build();
+            var sm =
+                    StateMachine.builder()
+                            .initialState(new Idle())
+                            .stateClass(State.class)
+                            .eventClass(Event.class)
+                            .transitionFn(
+                                    (state, event, data) -> {
+                                        if (state instanceof Idle && event instanceof Start) {
+                                            return StateMachine.Transition.nextState(new Active());
+                                        }
+                                        return StateMachine.Transition.keepState();
+                                    })
+                            .build();
 
             sm.tell(new Start());
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(transitionEvents).isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(transitionEvents).isNotEmpty();
 
-                    var event = transitionEvents.get(0);
-                    assertThat(event.machineId()).isNotNull();
-                    assertThat(event.fromState()).contains("Idle");
-                    assertThat(event.toState()).contains("Active");
-                    assertThat(event.eventType()).contains("Start");
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = transitionEvents.get(0);
+                                assertThat(event.machineId()).isNotNull();
+                                assertThat(event.fromState()).contains("Idle");
+                                assertThat(event.toState()).contains("Active");
+                                assertThat(event.eventType()).contains("Start");
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             sm.stop();
@@ -711,44 +738,48 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("StateMachineTransition captures all transition metadata")
         void stateMachineTransition_capturesMetadata() {
             // Arrange
-            sealed interface State {}
+            interface State {}
             record A() implements State {}
             record B() implements State {}
 
-            sealed interface Event {}
+            interface Event {}
             record GoToB() implements Event {}
 
             var lastEvent = new AtomicReference<FrameworkEvent.StateMachineTransition>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.StateMachineTransition) {
-                    lastEvent.set((FrameworkEvent.StateMachineTransition) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.StateMachineTransition) {
+                            lastEvent.set((FrameworkEvent.StateMachineTransition) event);
+                        }
+                    });
 
             // Act
-            var sm = StateMachine.builder()
-                .initialState(new A())
-                .stateClass(State.class)
-                .eventClass(Event.class)
-                .transitionFn((state, event, data) -> {
-                    return StateMachine.Transition.nextState(new B());
-                })
-                .build();
+            var sm =
+                    StateMachine.builder()
+                            .initialState(new A())
+                            .stateClass(State.class)
+                            .eventClass(Event.class)
+                            .transitionFn(
+                                    (state, event, data) -> {
+                                        return StateMachine.Transition.nextState(new B());
+                                    })
+                            .build();
 
             sm.tell(new GoToB());
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(lastEvent.get()).isNotNull();
-                    var event = lastEvent.get();
-                    assertThat(event.machineId()).isNotEmpty();
-                    assertThat(event.fromState()).isNotEmpty();
-                    assertThat(event.toState()).isNotEmpty();
-                    assertThat(event.eventType()).isNotEmpty();
-                    assertThat(event.timestamp()).isNotNull();
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(lastEvent.get()).isNotNull();
+                                var event = lastEvent.get();
+                                assertThat(event.machineId()).isNotEmpty();
+                                assertThat(event.fromState()).isNotEmpty();
+                                assertThat(event.toState()).isNotEmpty();
+                                assertThat(event.eventType()).isNotEmpty();
+                                assertThat(event.timestamp()).isNotNull();
+                            });
 
             // Cleanup
             sm.stop();
@@ -763,43 +794,49 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("StateMachineTimeout event when timeout scheduled")
         void stateMachineTimeout_scheduled() {
             // Arrange
-            sealed interface State {}
+            interface State {}
             record Waiting() implements State {}
 
-            sealed interface Event {}
+            interface Event {}
             record Timeout() implements Event {}
 
             var timeoutEvents = new ArrayList<FrameworkEvent.StateMachineTimeout>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.StateMachineTimeout) {
-                    timeoutEvents.add((FrameworkEvent.StateMachineTimeout) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.StateMachineTimeout) {
+                            timeoutEvents.add((FrameworkEvent.StateMachineTimeout) event);
+                        }
+                    });
 
             // Act
-            var sm = StateMachine.builder()
-                .initialState(new Waiting())
-                .stateClass(State.class)
-                .eventClass(Event.class)
-                .transitionFn((state, event, data) -> {
-                    return StateMachine.Transition.keepState()
-                        .withActions(StateMachine.Action.setStateTimeout(Duration.ofMillis(100)));
-                })
-                .build();
+            var sm =
+                    StateMachine.builder()
+                            .initialState(new Waiting())
+                            .stateClass(State.class)
+                            .eventClass(Event.class)
+                            .transitionFn(
+                                    (state, event, data) -> {
+                                        return StateMachine.Transition.keepState()
+                                                .withActions(
+                                                        StateMachine.Action.setStateTimeout(
+                                                                Duration.ofMillis(100)));
+                                    })
+                            .build();
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(timeoutEvents).isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(timeoutEvents).isNotEmpty();
 
-                    var event = timeoutEvents.get(0);
-                    assertThat(event.machineId()).isNotNull();
-                    assertThat(event.state()).contains("Waiting");
-                    assertThat(event.timeoutType()).isEqualTo("state_timeout");
-                    assertThat(event.delayMs()).isGreaterThan(0);
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = timeoutEvents.get(0);
+                                assertThat(event.machineId()).isNotNull();
+                                assertThat(event.state()).contains("Waiting");
+                                assertThat(event.timeoutType()).isEqualTo("state_timeout");
+                                assertThat(event.delayMs()).isGreaterThan(0);
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             sm.stop();
@@ -809,39 +846,45 @@ class FrameworkObservabilityTest implements WithAssertions {
         @DisplayName("StateMachineTimeout includes timeout type and delay")
         void stateMachineTimeout_includesTypeAndDelay() {
             // Arrange
-            sealed interface State {}
+            interface State {}
             record Processing() implements State {}
 
-            sealed interface Event {}
+            interface Event {}
             record Complete() implements Event {}
 
             var lastTimeout = new AtomicReference<FrameworkEvent.StateMachineTimeout>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.StateMachineTimeout) {
-                    lastTimeout.set((FrameworkEvent.StateMachineTimeout) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.StateMachineTimeout) {
+                            lastTimeout.set((FrameworkEvent.StateMachineTimeout) event);
+                        }
+                    });
 
             // Act
-            var sm = StateMachine.builder()
-                .initialState(new Processing())
-                .stateClass(State.class)
-                .eventClass(Event.class)
-                .transitionFn((state, event, data) -> {
-                    return StateMachine.Transition.keepState()
-                        .withActions(StateMachine.Action.setStateTimeout(Duration.ofMillis(500)));
-                })
-                .build();
+            var sm =
+                    StateMachine.builder()
+                            .initialState(new Processing())
+                            .stateClass(State.class)
+                            .eventClass(Event.class)
+                            .transitionFn(
+                                    (state, event, data) -> {
+                                        return StateMachine.Transition.keepState()
+                                                .withActions(
+                                                        StateMachine.Action.setStateTimeout(
+                                                                Duration.ofMillis(500)));
+                                    })
+                            .build();
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(lastTimeout.get()).isNotNull();
-                    var event = lastTimeout.get();
-                    assertThat(event.timeoutType()).isEqualTo("state_timeout");
-                    assertThat(event.delayMs()).isEqualTo(500);
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(lastTimeout.get()).isNotNull();
+                                var event = lastTimeout.get();
+                                assertThat(event.timeoutType()).isEqualTo("state_timeout");
+                                assertThat(event.delayMs()).isEqualTo(500);
+                            });
 
             // Cleanup
             sm.stop();
@@ -858,32 +901,35 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var failureEvents = new ArrayList<FrameworkEvent.ParallelTaskFailed>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.ParallelTaskFailed) {
-                    failureEvents.add((FrameworkEvent.ParallelTaskFailed) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.ParallelTaskFailed) {
+                            failureEvents.add((FrameworkEvent.ParallelTaskFailed) event);
+                        }
+                    });
 
             // Act
-            var result = Parallel.execute(
-                List.of(
-                    () -> "success",
-                    () -> { throw new RuntimeException("Task failure"); },
-                    () -> "another success"
-                )
-            );
+            var result =
+                    Parallel.execute(
+                            List.of(
+                                    () -> "success",
+                                    () -> {
+                                        throw new RuntimeException("Task failure");
+                                    },
+                                    () -> "another success"));
 
             // Assert - result should be failure
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(failureEvents).isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(failureEvents).isNotEmpty();
 
-                    var event = failureEvents.get(0);
-                    assertThat(event.parallelId()).isNotNull();
-                    assertThat(event.reason()).isNotNull();
-                    assertThat(event.reason().getMessage()).contains("Task failure");
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = failureEvents.get(0);
+                                assertThat(event.parallelId()).isNotNull();
+                                assertThat(event.reason()).isNotNull();
+                                assertThat(event.reason().getMessage()).contains("Task failure");
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
         }
 
         @Test
@@ -892,31 +938,35 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var lastFailure = new AtomicReference<FrameworkEvent.ParallelTaskFailed>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.ParallelTaskFailed) {
-                    lastFailure.set((FrameworkEvent.ParallelTaskFailed) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.ParallelTaskFailed) {
+                            lastFailure.set((FrameworkEvent.ParallelTaskFailed) event);
+                        }
+                    });
 
             var expectedException = new IllegalStateException("Expected failure");
 
             // Act
             Parallel.execute(
-                List.of(
-                    () -> "ok",
-                    () -> { throw expectedException; }
-                )
-            );
+                    List.of(
+                            () -> "ok",
+                            () -> {
+                                throw expectedException;
+                            }));
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(lastFailure.get()).isNotNull();
-                    var event = lastFailure.get();
-                    assertThat(event.reason()).isInstanceOf(IllegalStateException.class);
-                    assertThat(event.reason().getMessage()).isEqualTo("Expected failure");
-                    assertThat(event.parallelId()).isNotEmpty();
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(lastFailure.get()).isNotNull();
+                                var event = lastFailure.get();
+                                assertThat(event.reason())
+                                        .isInstanceOf(IllegalStateException.class);
+                                assertThat(event.reason().getMessage())
+                                        .isEqualTo("Expected failure");
+                                assertThat(event.parallelId()).isNotEmpty();
+                            });
         }
     }
 
@@ -934,32 +984,35 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var monitorEvents = new ArrayList<FrameworkEvent.ProcessMonitorRegistered>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.ProcessMonitorRegistered) {
-                    monitorEvents.add((FrameworkEvent.ProcessMonitorRegistered) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.ProcessMonitorRegistered) {
+                            monitorEvents.add((FrameworkEvent.ProcessMonitorRegistered) event);
+                        }
+                    });
 
-            var targetProc = Proc.spawn(
-                () -> "target",
-                (state, msg) -> state
-            );
+            var targetProc = Proc.spawn(() -> "target", (state, msg) -> state);
 
             // Act
-            var monitor = ProcMonitor.monitor(targetProc.ref(), down -> {
-                // Handle DOWN message
-            });
+            var monitor =
+                    ProcMonitor.monitor(
+                            targetProc.ref(),
+                            down -> {
+                                // Handle DOWN message
+                            });
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(monitorEvents).isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(monitorEvents).isNotEmpty();
 
-                    var event = monitorEvents.get(0);
-                    assertThat(event.monitorId()).isNotNull();
-                    assertThat(event.monitoredProcessId()).isEqualTo(targetProc.ref().pid());
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = monitorEvents.get(0);
+                                assertThat(event.monitorId()).isNotNull();
+                                assertThat(event.monitoredProcessId())
+                                        .isEqualTo(targetProc.ref().pid());
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             ProcSys.demonitor(targetProc.ref());
@@ -972,11 +1025,12 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var lastEvent = new AtomicReference<FrameworkEvent.ProcessMonitorRegistered>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.ProcessMonitorRegistered) {
-                    lastEvent.set((FrameworkEvent.ProcessMonitorRegistered) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.ProcessMonitorRegistered) {
+                            lastEvent.set((FrameworkEvent.ProcessMonitorRegistered) event);
+                        }
+                    });
 
             var targetProc = Proc.spawn(() -> "t", (s, m) -> s);
 
@@ -985,12 +1039,14 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(lastEvent.get()).isNotNull();
-                    var event = lastEvent.get();
-                    assertThat(event.monitorId()).isNotEmpty();
-                    assertThat(event.monitoredProcessId()).isEqualTo(targetProc.ref().pid());
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(lastEvent.get()).isNotNull();
+                                var event = lastEvent.get();
+                                assertThat(event.monitorId()).isNotEmpty();
+                                assertThat(event.monitoredProcessId())
+                                        .isEqualTo(targetProc.ref().pid());
+                            });
 
             // Cleanup
             ProcSys.demonitor(targetProc.ref());
@@ -1008,37 +1064,33 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var conflictEvents = new ArrayList<FrameworkEvent.RegistryConflict>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.RegistryConflict) {
-                    conflictEvents.add((FrameworkEvent.RegistryConflict) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.RegistryConflict) {
+                            conflictEvents.add((FrameworkEvent.RegistryConflict) event);
+                        }
+                    });
 
             // Act - register first process
-            var proc1 = Proc.spawn(
-                () -> "first",
-                (state, msg) -> state
-            );
+            var proc1 = Proc.spawn(() -> "first", (state, msg) -> state);
             ProcRegistry.register("shared-name", proc1.ref());
 
             // Try to register second process with same name
-            var proc2 = Proc.spawn(
-                () -> "second",
-                (state, msg) -> state
-            );
+            var proc2 = Proc.spawn(() -> "second", (state, msg) -> state);
             ProcRegistry.register("shared-name", proc2.ref());
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(conflictEvents).isNotEmpty();
+                    .untilAsserted(
+                            () -> {
+                                assertThat(conflictEvents).isNotEmpty();
 
-                    var event = conflictEvents.get(0);
-                    assertThat(event.processName()).isEqualTo("shared-name");
-                    assertThat(event.existingProcessId()).isEqualTo(proc1.ref().pid());
-                    assertThat(event.newProcessId()).isEqualTo(proc2.ref().pid());
-                    assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
-                });
+                                var event = conflictEvents.get(0);
+                                assertThat(event.processName()).isEqualTo("shared-name");
+                                assertThat(event.existingProcessId()).isEqualTo(proc1.ref().pid());
+                                assertThat(event.newProcessId()).isEqualTo(proc2.ref().pid());
+                                assertThat(event.timestamp()).isBeforeOrEqualTo(Instant.now());
+                            });
 
             // Cleanup
             ProcRegistry.unregister("shared-name");
@@ -1052,11 +1104,12 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var lastConflict = new AtomicReference<FrameworkEvent.RegistryConflict>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.RegistryConflict) {
-                    lastConflict.set((FrameworkEvent.RegistryConflict) event);
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.RegistryConflict) {
+                            lastConflict.set((FrameworkEvent.RegistryConflict) event);
+                        }
+                    });
 
             // Act
             var p1 = Proc.spawn(() -> "a", (s, m) -> s);
@@ -1067,13 +1120,14 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(lastConflict.get()).isNotNull();
-                    var event = lastConflict.get();
-                    assertThat(event.processName()).isEqualTo("dup");
-                    assertThat(event.existingProcessId()).isEqualTo(p1.ref().pid());
-                    assertThat(event.newProcessId()).isEqualTo(p2.ref().pid());
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(lastConflict.get()).isNotNull();
+                                var event = lastConflict.get();
+                                assertThat(event.processName()).isEqualTo("dup");
+                                assertThat(event.existingProcessId()).isEqualTo(p1.ref().pid());
+                                assertThat(event.newProcessId()).isEqualTo(p2.ref().pid());
+                            });
 
             // Cleanup
             ProcRegistry.unregister("dup");
@@ -1096,9 +1150,10 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange - This test uses the error-throwing subscriber registered in setUp()
             var normalSubscriberCount = new AtomicInteger(0);
 
-            eventBus.subscribe(event -> {
-                normalSubscriberCount.incrementAndGet();
-            });
+            eventBus.subscribe(
+                    event -> {
+                        normalSubscriberCount.incrementAndGet();
+                    });
 
             var proc = Proc.spawn(() -> "test", (s, m) -> s);
 
@@ -1108,14 +1163,16 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    // Error should have been caught
-                    assertThat(subscriberError.get()).isNotNull();
-                    assertThat(subscriberError.get().getMessage()).contains("Simulated subscriber error");
+                    .untilAsserted(
+                            () -> {
+                                // Error should have been caught
+                                assertThat(subscriberError.get()).isNotNull();
+                                assertThat(subscriberError.get().getMessage())
+                                        .contains("Simulated subscriber error");
 
-                    // But normal subscriber should still receive events
-                    assertThat(normalSubscriberCount.get()).isGreaterThan(0);
-                });
+                                // But normal subscriber should still receive events
+                                assertThat(normalSubscriberCount.get()).isGreaterThan(0);
+                            });
 
             // Cleanup
             proc.stop();
@@ -1129,11 +1186,12 @@ class FrameworkObservabilityTest implements WithAssertions {
             var syncDeliveryTime = new AtomicReference<Long>();
             var asyncDeliveryTime = new AtomicReference<Long>();
 
-            eventBus.subscribe(event -> {
-                if (event instanceof FrameworkEvent.ProcessCreated) {
-                    asyncDeliveryTime.set(System.nanoTime());
-                }
-            });
+            eventBus.subscribe(
+                    event -> {
+                        if (event instanceof FrameworkEvent.ProcessCreated) {
+                            asyncDeliveryTime.set(System.nanoTime());
+                        }
+                    });
 
             // Act
             syncDeliveryTime.set(System.nanoTime());
@@ -1141,11 +1199,13 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(asyncDeliveryTime.get()).isNotNull();
-                    // Async delivery should happen after sync call
-                    assertThat(asyncDeliveryTime.get()).isGreaterThanOrEqualTo(syncDeliveryTime.get());
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(asyncDeliveryTime.get()).isNotNull();
+                                // Async delivery should happen after sync call
+                                assertThat(asyncDeliveryTime.get())
+                                        .isGreaterThanOrEqualTo(syncDeliveryTime.get());
+                            });
 
             // Cleanup
             proc.stop();
@@ -1168,16 +1228,17 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    // All subscribers should receive the event
-                    assertThat(sub1Count.get()).isGreaterThan(0);
-                    assertThat(sub2Count.get()).isGreaterThan(0);
-                    assertThat(sub3Count.get()).isGreaterThan(0);
+                    .untilAsserted(
+                            () -> {
+                                // All subscribers should receive the event
+                                assertThat(sub1Count.get()).isGreaterThan(0);
+                                assertThat(sub2Count.get()).isGreaterThan(0);
+                                assertThat(sub3Count.get()).isGreaterThan(0);
 
-                    // All should have received the same number of events
-                    assertThat(sub1Count.get()).isEqualTo(sub2Count.get());
-                    assertThat(sub2Count.get()).isEqualTo(sub3Count.get());
-                });
+                                // All should have received the same number of events
+                                assertThat(sub1Count.get()).isEqualTo(sub2Count.get());
+                                assertThat(sub2Count.get()).isEqualTo(sub3Count.get());
+                            });
 
             // Cleanup
             proc.stop();
@@ -1194,9 +1255,10 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var eventOrder = new ArrayList<String>();
 
-            eventBus.subscribe(event -> {
-                eventOrder.add(event.getClass().getSimpleName());
-            });
+            eventBus.subscribe(
+                    event -> {
+                        eventOrder.add(event.getClass().getSimpleName());
+                    });
 
             // Act - create and stop a process
             var proc = Proc.spawn(() -> "order-test", (s, m) -> s);
@@ -1204,9 +1266,11 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(eventOrder).containsSequence("ProcessCreated", "ProcessTerminated");
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(eventOrder)
+                                        .containsSequence("ProcessCreated", "ProcessTerminated");
+                            });
         }
 
         @Test
@@ -1215,9 +1279,10 @@ class FrameworkObservabilityTest implements WithAssertions {
             // Arrange
             var timestamps = new ArrayList<Instant>();
 
-            eventBus.subscribe(event -> {
-                timestamps.add(event.timestamp());
-            });
+            eventBus.subscribe(
+                    event -> {
+                        timestamps.add(event.timestamp());
+                    });
 
             // Act - trigger various events
             var proc = Proc.spawn(() -> "ts-test", (s, m) -> s);
@@ -1226,12 +1291,16 @@ class FrameworkObservabilityTest implements WithAssertions {
 
             // Assert
             await().atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(timestamps).isNotEmpty();
-                    assertThat(timestamps).allSatisfy(ts ->
-                        assertThat(ts).isNotNull().isBeforeOrEqualTo(Instant.now())
-                    );
-                });
+                    .untilAsserted(
+                            () -> {
+                                assertThat(timestamps).isNotEmpty();
+                                assertThat(timestamps)
+                                        .allSatisfy(
+                                                ts ->
+                                                        assertThat(ts)
+                                                                .isNotNull()
+                                                                .isBeforeOrEqualTo(Instant.now()));
+                            });
         }
     }
 

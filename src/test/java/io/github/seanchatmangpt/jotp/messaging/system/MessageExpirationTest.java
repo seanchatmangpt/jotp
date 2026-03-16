@@ -2,10 +2,12 @@ package io.github.seanchatmangpt.jotp.messaging.system;
 
 import static java.time.Instant.*;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -28,6 +30,11 @@ import org.junit.jupiter.api.Timeout;
  */
 @Timeout(10)
 class MessageExpirationTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // Test message type
     sealed interface NotificationMsg permits NotificationMsg.Alert {

@@ -3,6 +3,8 @@ package io.github.seanchatmangpt.jotp.test;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import java.time.Duration;
@@ -37,7 +39,11 @@ import org.junit.jupiter.api.Timeout;
  *   <li><b>ask(timeout) precision</b> — the timeout must fire within a reasonable jitter window
  *       even under JVM load.
  * </ol>
+ *
+ * <p><strong>DTR Documentation:</strong> This test class provides living documentation of Proc
+ * mailbox behavior under stress. Run with DTR to see breaking points and performance boundaries.
  */
+@DtrTest
 @Timeout(30)
 class ProcStressTest implements WithAssertions {
 
@@ -69,7 +75,13 @@ class ProcStressTest implements WithAssertions {
      * OutOfMemoryError} at some depth — this test reveals the practical limit.
      */
     @Test
-    void mailboxTsunami_100k_messagesAllProcessed() throws Exception {
+    void mailboxTsunami_100k_messagesAllProcessed(DtrContext ctx) throws Exception {
+        ctx.say("Proc mailbox stress test: 100K message tsunami");
+        ctx.say("Tests unbounded LinkedTransferQueue capacity and processing correctness.");
+        ctx.say("");
+        ctx.say("Breaking point under investigation:");
+        ctx.say("- Can the mailbox handle 100K messages without memory issues?");
+        ctx.say("- Does every message get processed exactly once?");
         int count = 100_000;
         var proc = new Proc<>(0, ProcStressTest::handle);
 
@@ -84,6 +96,14 @@ class ProcStressTest implements WithAssertions {
         var stats = ProcSys.statistics(proc);
         assertThat(stats.messagesIn()).isGreaterThanOrEqualTo(count);
         assertThat(stats.queueDepth()).isZero();
+
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Messages enqueued", String.valueOf(count),
+                        "Final state", String.valueOf(finalState),
+                        "Messages in (stats)", String.valueOf(stats.messagesIn()),
+                        "Queue depth (final)", String.valueOf(stats.queueDepth()),
+                        "Result", "PASS - All messages processed"));
 
         proc.stop();
     }
@@ -264,7 +284,11 @@ class ProcStressTest implements WithAssertions {
      * <p>Prints actual throughput to stdout — useful for regression detection over time.
      */
     @Test
-    void throughput_atLeast50k_messagesPerSecond() throws Exception {
+    void throughput_atLeast50k_messagesPerSecond(DtrContext ctx) throws Exception {
+        ctx.say("Proc throughput characterization test");
+        ctx.say("Measures raw message processing ceiling on virtual threads.");
+        ctx.say("");
+        ctx.say("Expected: >10K msg/s (conservative floor; real systems see 100K-500K)");
         int count = 50_000;
         var proc = new Proc<>(0L, (Long state, Msg msg) -> state + 1);
 
@@ -282,6 +306,14 @@ class ProcStressTest implements WithAssertions {
         assertThat(msgPerSec)
                 .as("message throughput (msg/s)")
                 .isGreaterThan(10_000); // conservative floor; real systems see 100k-500k
+
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Messages processed", String.valueOf(count),
+                        "Elapsed time", String.format("%d ms", elapsedMs),
+                        "Throughput", String.format("%,.0f msg/s", msgPerSec),
+                        "Floor threshold", "10,000 msg/s",
+                        "Result", msgPerSec > 10_000 ? "PASS" : "FAIL"));
 
         proc.stop();
     }

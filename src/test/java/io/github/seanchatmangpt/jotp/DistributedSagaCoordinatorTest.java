@@ -3,9 +3,12 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -43,8 +46,14 @@ import org.junit.jupiter.api.Test;
  * @see DistributedSagaCoordinator.SagaTransition
  * @see DistributedSagaCoordinator.CompensationAction
  */
+@DtrTest
 @DisplayName("DistributedSagaCoordinator: Saga Orchestration with Compensation")
 class DistributedSagaCoordinatorTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // Test Domain Model: Order Saga
@@ -201,7 +210,11 @@ class DistributedSagaCoordinatorTest {
 
     @Test
     @DisplayName("Simple saga: PlaceOrder transition to PaymentProcessing state")
-    void testBasicOrderTransition() {
+    void testBasicOrderTransition(DtrContext ctx) {
+        ctx.say(
+                "Saga state machine: Transitions are defined by pure functions (state, event) -> SagaTransition.");
+        ctx.say(
+                "SagaTransition.nextStep() moves to the next state while logging compensation actions.");
         DistributedSagaCoordinator<OrderState, OrderEvent, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-1",
@@ -247,7 +260,10 @@ class DistributedSagaCoordinatorTest {
 
     @Test
     @DisplayName("Compensation: rollback completed steps on failure")
-    void testCompensationOnFailure() {
+    void testCompensationOnFailure(DtrContext ctx) {
+        ctx.say(
+                "Saga compensation: When a step fails, all completed steps are rolled back in reverse order.");
+        ctx.say("Each step can register a CompensationAction to undo its effects.");
         var paymentService = new PaymentService(false);
         var inventoryService = new InventoryService(true); // Will fail
         var shippingService = new ShippingService(false);
@@ -297,7 +313,10 @@ class DistributedSagaCoordinatorTest {
     @DisplayName(
             "State transitions: Init → PaymentProcessing → InventoryReserving → Shipping →"
                     + " Completed")
-    void testMultiStepSagaTransitions() {
+    void testMultiStepSagaTransitions(DtrContext ctx) {
+        ctx.say(
+                "Multi-step saga: Each successful transition moves the saga forward through sealed state variants.");
+        ctx.say("The final state (Completed) sets isRunning=false, indicating saga completion.");
         DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-3",
@@ -477,7 +496,9 @@ class DistributedSagaCoordinatorTest {
 
     @Test
     @DisplayName("Multiple compensation actions execute in reverse order (LIFO)")
-    void testCompensationReverseOrder() {
+    void testCompensationReverseOrder(DtrContext ctx) {
+        ctx.say("Compensation ordering: Actions are executed in LIFO order (last-in, first-out).");
+        ctx.say("This ensures dependencies are unwound correctly: step-3 -> step-2 -> step-1.");
         DistributedSagaCoordinator<OrderState, Object, OrderData> coordinator =
                 new DistributedSagaCoordinator<>(
                         "order-saga-8",

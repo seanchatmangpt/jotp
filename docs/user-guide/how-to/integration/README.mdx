@@ -1,0 +1,299 @@
+# Integration How-To Guides
+
+<date>2026-03-15</date>
+
+## Overview
+
+Comprehensive guides for integrating JOTP with popular technologies and frameworks. These guides help you adopt JOTP gradually while maintaining compatibility with your existing technology stack.
+
+## Available Integrations
+
+### [Integrating with Spring Boot](./spring-boot.mdx)
+
+Learn how to gradually migrate from Spring Boot to JOTP's autonomous agent architecture.
+
+**Key Topics:**
+- Dual-write pattern for A/B testing
+- Spring configuration with JOTP beans
+- State machine for business logic
+- Supervision tree integration
+- REST endpoint bridges
+- Production monitoring
+
+**Best For:**
+- Existing Spring Boot applications
+- Gradual migration scenarios
+- Enterprise Java systems
+
+### [Connecting to Databases](./database-integration.mdx)
+
+Master database integration patterns with JDBC, connection pooling, and async operations.
+
+**Key Topics:**
+- HikariCP connection pooling
+- Connection per process patterns
+- Transaction management
+- Saga pattern with databases
+- Circuit breaker for failures
+- Pool monitoring
+
+**Best For:**
+- Data-intensive applications
+- Transaction processing systems
+- Read/write splitting
+
+### [Implementing REST APIs](./rest-apis.mdx)
+
+Build high-performance REST APIs using JOTP for async request handling.
+
+**Key Topics:**
+- Helidon and Undertow integration
+- Request routing with JOTP
+- Async request processing
+- Worker process pools
+- Rate limiting per user
+- Fault-tolerant HTTP servers
+
+**Best For:**
+- Microservices architectures
+- High-throughput APIs
+- Async processing systems
+
+### [Using with Apache Kafka](./kafka-integration.mdx)
+
+Build event-driven architectures with Kafka for message streaming.
+
+**Key Topics:**
+- Consumer processes per partition
+- Producer processes for events
+- Event sourcing patterns
+- CQRS implementation
+- Consumer group supervision
+- Exactly-once semantics
+
+**Best For:**
+- Event-driven systems
+- Stream processing applications
+- Microservice communication
+
+### [Monitoring with Micrometer](./micrometer-monitoring.mdx)
+
+Implement production-grade monitoring with Micrometer, Prometheus, and Grafana.
+
+**Key Topics:**
+- Process lifecycle metrics
+- Message processing metrics
+- Supervisor metrics
+- State machine metrics
+- Prometheus configuration
+- Grafana dashboards
+- Alert rules
+
+**Best For:**
+- Production deployments
+- Performance optimization
+- Operational visibility
+
+### [Testing JOTP Applications](./testing-jotp-applications.mdx)
+
+Comprehensive testing strategies for concurrent and distributed systems.
+
+**Key Topics:**
+- Unit testing processes
+- Integration testing
+- Property-based testing
+- Stress testing
+- TestContainers usage
+- Mocking strategies
+- Test utilities
+
+**Best For:**
+- Quality assurance
+- Regression prevention
+- Confidence in deployments
+
+## Integration Patterns
+
+### Pattern 1: Side-by-Side Migration
+
+Run JOTP alongside existing systems:
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│   Legacy System │ ─── │   JOTP System   │
+└─────────────────┘     └─────────────────┘
+        │                       │
+        └───────────┬───────────┘
+                    ▼
+            ┌──────────────┐
+            │ Data Store   │
+            └──────────────┘
+```
+
+**Use Cases:**
+- Gradual migration
+- A/B testing
+- Risk mitigation
+
+### Pattern 2: Gateway Pattern
+
+Use JOTP as an orchestration layer:
+
+```
+┌──────────────────────────────────────────┐
+│            API Gateway                   │
+├──────────────────────────────────────────┤
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+│  │ Route 1 │  │ Route 2 │  │ Route 3 │  │
+│  └────┬────┘  └────┬────┘  └────┬────┘  │
+└───────┼────────────┼────────────┼────────┘
+        │            │            │
+    ┌───▼────┐  ┌───▼────┐  ┌───▼────┐
+    │ JOTP   │  │ Legacy │  │ JOTP   │
+    │ Agent  │  │ System │  │ Agent  │
+    └────────┘  └────────┘  └────────┘
+```
+
+**Use Cases:**
+- Hybrid architectures
+- Gradual feature rollout
+- Service composition
+
+### Pattern 3: Event Bridge
+
+Connect systems via events:
+
+```
+┌────────────┐                 ┌────────────┐
+│  Legacy    │   Events ────▶ │   JOTP     │
+│  System    │                 │   System   │
+└────────────┘                 └────────────┘
+       ▲                             ▼
+       │      Events                 │
+       └─────────────────────────────┘
+```
+
+**Use Cases:**
+- Loose coupling
+- Async communication
+- System decoupling
+
+## Choosing the Right Integration
+
+### By Use Case
+
+| Use Case | Recommended Integration |
+|----------|------------------------|
+| **Web Applications** | Spring Boot + REST APIs |
+| **Data Processing** | Database + Kafka |
+| **Event Processing** | Kafka + Monitoring |
+| **Microservices** | REST APIs + Kafka + Testing |
+| **Enterprise Systems** | Spring Boot + Database + Monitoring |
+
+### By Team Expertise
+
+| Background | Start With |
+|------------|-----------|
+| **Spring Developers** | Spring Boot Integration |
+| **Backend Engineers** | Database + REST APIs |
+| **Data Engineers** | Kafka + Event Sourcing |
+| **DevOps Engineers** | Monitoring + Testing |
+| **Platform Engineers** | All integrations |
+
+## Migration Roadmap
+
+### Phase 1: Assessment (Weeks 1-2)
+
+1. Identify integration points
+2. Review existing architecture
+3. Choose pilot integration
+4. Set up monitoring
+
+### Phase 2: Pilot (Weeks 3-4)
+
+1. Implement chosen integration guide
+2. Run in development environment
+3. Test with synthetic load
+4. Verify metrics collection
+
+### Phase 3: Production Trial (Weeks 5-6)
+
+1. Deploy to staging
+2. Run A/B tests
+3. Monitor performance
+4. Gather feedback
+
+### Phase 4: Rollout (Weeks 7-8)
+
+1. Gradual traffic increase
+2. Monitor production metrics
+3. Address issues
+4. Full cutover
+
+### Phase 5: Expansion (Weeks 9+)
+
+1. Add more integrations
+2. Build on success
+3. Optimize performance
+4. Share learnings
+
+## Best Practices
+
+### Integration Principles
+
+1. **Start Small**: Begin with a single integration point
+2. **Measure Everything**: Use metrics to guide decisions
+3. **Fail Fast**: Use feature flags for quick rollback
+4. **Parallel Run**: Run old and new systems together
+5. **Monitor Continuously**: Track key metrics in production
+6. **Test Thoroughly**: Use integration tests and chaos testing
+7. **Document Decisions**: Keep integration rationale documented
+8. **Share Knowledge**: Train team on integration patterns
+
+### Common Pitfalls
+
+1. **Big Bang Migration**: Migrate everything at once
+2. **Skipping Testing**: Assume integration works without tests
+3. **Ignoring Metrics**: Deploy without monitoring
+4. **Poor Error Handling**: Don't handle integration failures
+5. **Tight Coupling**: Create hard dependencies between systems
+6. **No Rollback Plan**: Can't revert if issues arise
+7. **Insufficient Capacity**: Don't scale for migration load
+8. **Skipping Documentation**: Don't document integration choices
+
+## Getting Help
+
+### Resources
+
+- **Examples**: `/src/main/java/io/github/seanchatmangpt/jotp/examples/`
+- **Tests**: `/src/test/java/io/github/seanchatmangpt/jotp/`
+- **Architecture**: `/docs/ARCHITECTURE.md`
+- **Book**: `/book/src/` for comprehensive guides
+
+### Community
+
+- **Issues**: GitHub Issues for bug reports
+- **Discussions**: GitHub Discussions for questions
+- **Examples**: Working examples in repository
+- **Patterns**: Enterprise patterns in `/docs/user-guide/how-to/enterprise/`
+
+## Quick Start
+
+1. **Choose Your Integration**: Select based on your tech stack
+2. **Read the Guide**: Follow step-by-step instructions
+3. **Run Examples**: Try provided code samples
+4. **Test Locally**: Use development environment
+5. **Deploy to Staging**: Verify in staging environment
+6. **Monitor Production**: Use metrics to ensure success
+7. **Iterate**: Improve based on learnings
+
+## Next Steps
+
+1. Choose your first integration based on your current tech stack
+2. Read through the complete integration guide
+3. Try the examples in a development environment
+4. Set up monitoring using the Micrometer guide
+5. Implement testing using the Testing guide
+6. Deploy to production with confidence
+
+Happy integrating!

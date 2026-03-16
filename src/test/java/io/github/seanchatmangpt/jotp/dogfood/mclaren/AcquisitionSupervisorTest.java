@@ -4,12 +4,14 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,6 +24,11 @@ import org.junit.jupiter.api.Test;
  * <p>Awaitility is used for all async assertions to avoid brittle {@code Thread.sleep} patterns.
  */
 class AcquisitionSupervisorTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

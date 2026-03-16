@@ -1,4 +1,4 @@
-# Java Maven Template - Azure Outputs
+# JOTP - Azure Outputs
 
 output "resource_group_name" {
   description = "Resource group name"

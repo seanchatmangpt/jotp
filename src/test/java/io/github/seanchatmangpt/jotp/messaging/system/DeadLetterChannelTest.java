@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -25,6 +26,11 @@ import org.junit.jupiter.api.Timeout;
  */
 @Timeout(10)
 class DeadLetterChannelTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // Message type for testing
     sealed interface OrderMsg permits OrderMsg.Order, OrderMsg.Invalid {

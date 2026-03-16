@@ -332,7 +332,7 @@ This execution attempt created:
 - **Benchmark Code:** `src/test/java/io/github/seanchatmangpt/jotp/benchmark/ObservabilityPrecisionBenchmark.java`
 - **Framework Implementation:** `src/main/java/io/github/seanchatmangpt/jotp/observability/FrameworkEventBus.java`
 - **Existing Results:** `benchmark-results/jmh-results.json`
-- **Architecture:** `.claude/ARCHITECTURE.md`
+- **Architecture:** `docs/architecture/README.md`
 - **Thesis:** `docs/phd-thesis-otp-java26.md`
 
 ## Conclusion

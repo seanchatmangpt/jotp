@@ -248,7 +248,7 @@ The combination of proven performance, substantial cost savings, and access to J
 **Documentation:**
 - Detailed Results: `docs/phd-thesis-chapter6-empirical-results.md`
 - Stress Test Summary: `docs/stress-test-results.md`
-- Architecture Guide: `.claude/ARCHITECTURE.md`
+- Architecture Guide: `docs/architecture/README.md`
 
 ---
 

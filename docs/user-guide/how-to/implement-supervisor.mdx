@@ -1,0 +1,136 @@
+---
+title: Implement a Supervisor
+description: Create fault-tolerant supervision trees with restart strategies
+sidebar_position: 2
+---
+
+# Implement a Supervisor
+
+Learn how to implement supervisors that automatically detect failures and restart child processes according to configurable strategies.
+
+## Quick Start
+
+### Basic Supervisor
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "payment-supervisor",
+    Supervisor.Strategy.ONE_FOR_ONE,
+    List.of(
+        ChildSpec.of(
+            "worker-1",
+            () -> PaymentProc.spawn("worker-1", config),
+            Supervisor.RestartStrategy.PERMANENT,
+            Duration.ofSeconds(5)
+        )
+    )
+);
+```
+
+## Restart Strategies
+
+### ONE_FOR_ONE (Default)
+Only the crashed child is restarted.
+```
+Child-2 crashes → Only Child-2 restarts
+```
+**Use when**: Children are independent
+
+### ONE_FOR_ALL
+All children are terminated and restarted when one crashes.
+```
+Child-2 crashes → All children restart
+```
+**Use when**: Children share state/resources
+
+### REST_FOR_ONE
+The crashed child and all children started after it are restarted.
+```
+Child-2 crashes → Child-2, Child-3 restart
+```
+**Use when**: Children have initialization order dependencies
+
+## Child Specification
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .id("database-connection")
+    .start(() -> DatabaseProc.spawn(config))
+    .restart(Supervisor.RestartStrategy.PERMANENT)
+    .shutdown(Duration.ofSeconds(10))
+    .build();
+```
+
+### Restart Strategies
+
+- **PERMANENT**: Always restart (default for workers)
+- **TEMPORARY**: Never restart (for one-off tasks)
+- **TRANSIENT**: Restart only on abnormal exit
+
+## Advanced Patterns
+
+### Dynamic Child Addition
+
+```java
+supervisor.startChild(
+    ChildSpec.of(
+        "new-worker-" + id,
+        () -> WorkerProc.spawn(id),
+        Supervisor.RestartStrategy.PERMANENT,
+        Duration.ofSeconds(5)
+    )
+);
+```
+
+### Custom Intensity/Period
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .strategy(Supervisor.Strategy.ONE_FOR_ONE)
+    .intensity(5)      // Max 5 restarts
+    .period(Duration.ofSeconds(60))  // Within 60 seconds
+    .build();
+```
+
+### Monitoring Children
+
+```java
+supervisor.getChildren().forEach(childId -> {
+    Optional<ProcRef<?,?>> child = supervisor.findChild(childId);
+    child.ifPresent(ref -> logger.info("Child {} is alive", childId));
+});
+```
+
+## Testing Supervisors
+
+```java
+@Test
+void testSupervisorRestartsCrashedChild() {
+    Supervisor sup = spawnSupervisor();
+    sup.findChild("worker").ifPresent(ref -> {
+        ref.send(WorkerMessage.crash());
+    });
+
+    await().atMost(5, SECONDS).until(() -> {
+        Optional<ProcRef<?,?>> restarted = sup.findChild("worker");
+        return restarted.isPresent();
+    });
+}
+```
+
+## Best Practices
+
+- Use **ONE_FOR_ONE** for independent workers
+- Use **ONE_FOR_ALL** for shared resource dependencies
+- Set appropriate intensity/period to prevent restart storms
+- Use permanent restart for critical services
+- Add monitoring and alerting for supervisor events
+
+## Related Tests
+- `SupervisorTest.java` - All restart strategies
+- `CrashRecoveryTest.java` - Automatic recovery
+- `SupervisorStormStressTest.java` - Stress testing
+
+## See Also
+- [Building a Supervisor Tree](../tutorials/building-a-supervisor-tree.mdx) - Tutorial
+- [Supervision Trees](../explanation/supervision-trees.mdx) - Deep dive

@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp.doctest;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.MessageBus;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
  *
  * <p>HTML output: {@code target/site/doctester/MessageBusDocIT.html}.
  */
+@DtrTest
 @ExtendWith(DocTestExtension.class)
 @Timeout(10)
 class MessageBusDocIT implements WithAssertions {
@@ -43,7 +46,10 @@ class MessageBusDocIT implements WithAssertions {
             bus.onStop(null);
             """)
     @Test
-    void publish_subscribe_basicDelivery() throws Exception {
+    void publish_subscribe_basicDelivery(DtrContext ctx) throws Exception {
+        ctx.say("MessageBus provides topic-based pub/sub messaging for JOTP applications");
+        ctx.say("Each subscriber runs in its own virtual thread for non-blocking delivery");
+
         record Order(String id, double amount) {}
 
         MessageBus bus = MessageBus.create();
@@ -54,6 +60,8 @@ class MessageBusDocIT implements WithAssertions {
 
         Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> received.size() == 1);
         assertThat(received.get(0)).isInstanceOf(Order.class);
+
+        ctx.say("Message delivered successfully via async virtual-thread dispatch");
     }
 
     @DocNote(
@@ -92,7 +100,10 @@ class MessageBusDocIT implements WithAssertions {
             await().atMost(2, SECONDS).until(() -> topics.size() == 2);
             """)
     @Test
-    void wildcard_subscription_matchesPrefix() throws Exception {
+    void wildcard_subscription_matchesPrefix(DtrContext ctx) throws Exception {
+        ctx.say("Wildcard subscriptions enable flexible topic routing patterns");
+        ctx.say("Pattern 'telemetry.*' matches single-level hierarchy under telemetry");
+
         MessageBus bus = MessageBus.create();
         List<String> topics = new CopyOnWriteArrayList<>();
 
@@ -103,6 +114,8 @@ class MessageBusDocIT implements WithAssertions {
 
         Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> topics.size() == 2);
         assertThat(topics).containsExactlyInAnyOrder("telemetry.speed", "telemetry.rpm");
+
+        ctx.say("Wildcard matching correctly filtered non-matching topics");
     }
 
     // ── Synchronous publish ──────────────────────────────────────────────────────
@@ -190,7 +203,10 @@ class MessageBusDocIT implements WithAssertions {
             "A subscriber that always throws will increment the 'failed' counter but will NOT "
                     + "prevent other subscribers on the same topic from receiving the message.")
     @Test
-    void deadLetter_countsFailed_doesNotBlockOtherSubscribers() throws Exception {
+    void deadLetter_countsFailed_doesNotBlockOtherSubscribers(DtrContext ctx) throws Exception {
+        ctx.say("Dead letter handling prevents silent message loss on handler failures");
+        ctx.say("Failed deliveries are routed to DeadLetterHandler for inspection/retry");
+
         List<Object> dlq = new CopyOnWriteArrayList<>();
         MessageBus bus =
                 MessageBus.builder()
@@ -213,5 +229,7 @@ class MessageBusDocIT implements WithAssertions {
         MessageBus.Stats stats = bus.stats();
         assertThat(stats.failed()).isGreaterThanOrEqualTo(1);
         assertThat(good).hasSize(1);
+
+        ctx.say("One subscriber failure did not block other subscribers from receiving");
     }
 }

@@ -1,0 +1,403 @@
+---
+title: Virtual Threads
+description: How JOTP leverages Java 21+ virtual threads for lightweight concurrency
+sidebar_position: 4
+---
+
+# Virtual Threads
+
+Learn how JOTP leverages Java 21+ virtual threads to implement Erlang-style lightweight processes on the JVM.
+
+## What are Virtual Threads?
+
+**Virtual threads** are lightweight threads introduced in Java 21 (Loom project) that:
+- Don't map 1:1 to OS threads
+- Scheduled on a pool of carrier threads (platform threads)
+- Have very small memory footprint (~1 KB vs 1 MB for platform threads)
+- Can number in the millions per JVM
+
+## Traditional Threads vs Virtual Threads
+
+### Platform Threads (Traditional)
+
+```
+Application Thread
+        ↓
+    OS Thread
+        ↓
+   Kernel Thread
+```
+
+**Characteristics:**
+- 1:1 mapping with OS threads
+- ~1 MB stack memory per thread
+- Limited to thousands of threads
+- Expensive context switching (kernel-level)
+
+### Virtual Threads (JOTP)
+
+```
+Application Thread (Virtual)
+        ↓
+   Carrier Thread (Platform)
+        ↓
+   JVM Scheduler
+```
+
+**Characteristics:**
+- M:N mapping (many virtual to few carrier)
+- ~1 KB stack memory per thread
+- Millions of threads possible
+- Cheap context switching (user-level)
+
+## JOTP Process Implementation
+
+### Proc<S,M> as Virtual Thread
+
+```java
+public final class Proc<S, M> {
+    private final String id;
+    private final LinkedTransferQueue<M> mailbox;
+    private volatile S state;
+    private final Thread virtualThread;
+
+    private Proc(String id, S initialState, BiFunction<S, M, S> handler) {
+        this.id = id;
+        this.state = initialState;
+        this.mailbox = new LinkedTransferQueue<>();
+        this.virtualThread = Thread.ofVirtual().start(() -> {
+            runLoop(handler);
+        });
+    }
+
+    private void runLoop(BiFunction<S, M, S> handler) {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                M msg = mailbox.take();  // Blocking: carrier released
+                state = handler.apply(state, msg);  // Process message
+            } catch (InterruptedException e) {
+                break;  // Graceful shutdown
+            }
+        }
+    }
+}
+```
+
+## Key Benefits
+
+### 1. Scalability
+
+```java
+// Create 1 million processes
+List<Proc<?, ?>> processes = new ArrayList<>();
+for (int i = 0; i < 1_000_000; i++) {
+    processes.add(Proc.spawn(
+        "proc-" + i,
+        initialState,
+        handler
+    ));
+}
+// Possible with virtual threads, impossible with platform threads
+```
+
+### 2. Blocking Operations
+
+```java
+// Blocking in message handler is OK
+State handle(State state, Message msg) {
+    // Virtual thread parks, carrier thread released
+    String data = httpClient.get(url).block();  // Blocking I/O
+    return state.withData(data);
+}
+// System continues processing other processes
+```
+
+### 3. Low Latency
+
+```java
+// Fast message passing
+proc1.send(message);  // Enqueue in mailbox
+// Virtual thread resumes, processes message
+// Context switch cost: ~1μs (vs ~10μs for platform threads)
+```
+
+## Performance Characteristics
+
+### Memory Usage
+
+| Threads | Stack Memory | Total Memory |
+|---------|--------------|--------------|
+| 1,000 platform | 1 MB each | ~1 GB |
+| 1,000 virtual | 1 KB each | ~1 MB |
+| 1,000,000 virtual | 1 KB each | ~1 GB |
+
+### Context Switching
+
+```
+Platform thread: ~10-20μs (kernel-level)
+Virtual thread: ~0.1-1μs (user-level)
+```
+
+### Throughput
+
+```
+Message passing: ~10M messages/sec (local)
+Process spawning: ~1M processes/sec
+```
+
+## Best Practices
+
+### DO: Use Blocking Operations
+
+```java
+State handle(State state, Message msg) {
+    // Blocking I/O is fine with virtual threads
+    Connection conn = dataSource.getConnection();  // Blocks
+    String data = conn.query("SELECT * FROM table");  // Blocks
+    return state.withData(data);
+}
+```
+
+### DON'T: Synchronize on Shared State
+
+```java
+// Bad: Contended lock
+State handle(State state, Message msg) {
+    synchronized (sharedLock) {  // Virtual thread pinned to carrier
+        return updateSharedState(state, msg);
+    }
+}
+
+// Good: Process-local state
+State handle(State state, Message msg) {
+    // No synchronization needed
+    return state.update(msg);
+}
+```
+
+### DO: Use Structured Concurrency
+
+```java
+// Scoped operations
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    Supplier<Result1> task1 = scope.fork(() -> compute1());
+    Supplier<Result2> task2 = scope.fork(() -> compute2());
+
+    scope.join().throwIfFailed();
+
+    return combine(task1.get(), task2.get());
+}
+```
+
+### DON'T: Create Virtual Threads Manually
+
+```java
+// Bad: Manual thread creation
+Thread vt = Thread.ofVirtual().start(() -> {
+    // Process messages
+});
+
+// Good: Use Proc abstraction
+Proc<State, Message> proc = Proc.spawn("id", state, handler);
+```
+
+## Pinning Issues
+
+### What is Pinning?
+
+When a virtual thread is blocked on a **synchronized** block or JNI call, it becomes "pinned" to its carrier thread, preventing the carrier from running other virtual threads.
+
+### Common Pinning Scenarios
+
+```java
+// 1. Synchronized block
+synchronized (lock) {
+    blockingOperation();  // Pinned!
+}
+
+// 2. Native methods
+native void nativeMethod();
+nativeMethod();  // Pinned!
+
+// 3. Class loading
+Class.forName(className);  // Can pin
+```
+
+### Avoiding Pinning
+
+```java
+// Use ReentrantLock instead of synchronized
+private final ReentrantLock lock = new ReentrantLock();
+
+State handle(State state, Message msg) {
+    lock.lock();
+    try {
+        blockingOperation();  // Not pinned!
+        return state;
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+## Monitoring Virtual Threads
+
+### JFR (Java Flight Recorder)
+
+```bash
+# Record virtual thread events
+java -XX:StartFlightRecording=filename=jfr.jfr \
+     -Djdk.virtualThreadScheduler.parallelism=4 \
+     -jar app.jar
+```
+
+### JMX Monitoring
+
+```java
+MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+ObjectName name = new ObjectName("java.lang:type=Threading");
+
+// Get thread counts
+int peakThreadCount = (Integer) mbs.getAttribute(name, "PeakThreadCount");
+int threadCount = (Integer) mbs.getAttribute(name, "ThreadCount");
+```
+
+### Debugging
+
+```bash
+# Enable virtual thread logging
+java -Djdk.tracePinnedThreads=full -jar app.jar
+```
+
+## Comparison with Alternatives
+
+### vs Async/Reactive (CompletableFuture)
+
+```java
+// Async/Reactive: Complex callback chains
+public CompletableFuture<State> handleAsync(State state, Message msg) {
+    return httpClient.get(url)
+        .thenCompose(data -> database.save(data))
+        .thenApply(result -> state.withResult(result))
+        .exceptionally(e -> handleError(e));
+}
+
+// Virtual threads: Synchronous-style code
+public State handle(State state, Message msg) {
+    String data = httpClient.get(url).block();  // Blocking
+    database.save(data);  // Blocking
+    return state.withResult();
+}
+```
+
+### vs Project Loom (Early Access)
+
+JOTP uses **stable Java 21+ virtual threads**, not experimental Loom APIs:
+- Standard JDK feature (since Java 21)
+- Guaranteed stability
+- No risk of API changes
+- Production-ready
+
+### vs Kotlin Coroutines
+
+```kotlin
+// Kotlin coroutines
+suspend fun handle(state: State, msg: Message): State {
+    val data = httpClient.get(url)  // Suspension point
+    return state.copy(data = data)
+}
+
+// JOTP virtual threads
+State handle(State state, Message msg) {
+    String data = httpClient.get(url).block();  // Blocking
+    return new State(data);
+}
+```
+
+**JOTP advantages:**
+- Pure Java (no Kotlin dependency)
+- Works with any JVM language
+- Simpler mental model (no suspension points)
+
+## Performance Tuning
+
+### Carrier Thread Pool Size
+
+```bash
+# Default: Number of CPU cores
+java -Djdk.virtualThreadScheduler.parallelism=8 -jar app.jar
+
+# For I/O-heavy workloads: Increase carriers
+java -Djdk.virtualThreadScheduler.parallelism=32 -jar app.jar
+```
+
+### Memory Settings
+
+```bash
+# Increase heap for millions of processes
+java -Xmx8g -jar app.jar
+
+# Enable GC for large heaps
+java -XX:+UseG1GC -Xmx8g -jar app.jar
+```
+
+## Testing with Virtual Threads
+
+### High Concurrency Test
+
+```java
+@Test
+void testMillionProcesses() {
+    List<Proc<Integer, String>> processes = new ArrayList<>();
+
+    // Spawn 1 million processes
+    for (int i = 0; i < 1_000_000; i++) {
+        processes.add(Proc.spawn(
+            "proc-" + i,
+            0,
+            (state, msg) -> state + 1
+        ));
+    }
+
+    // Send message to all
+    processes.forEach(p -> p.send("increment"));
+
+    // Verify all processed
+    await().atMost(30, SECONDS).until(() ->
+        processes.stream().allMatch(p -> p.getState() == 1)
+    );
+}
+```
+
+### Blocking Operation Test
+
+```java
+@Test
+void testBlockingInHandler() {
+    Proc<String, String> proc = Proc.spawn(
+        "blocking-proc",
+        "initial",
+        (state, msg) -> {
+            // Blocking operation - fine with virtual threads
+            Thread.sleep(1000);
+            return "processed";
+        }
+    );
+
+    proc.send("msg");
+
+    // Other processes continue running
+    // System doesn't block
+}
+```
+
+## Related Tests
+- `BaselinePerformanceBenchmark.java` - Performance validation
+- `VirtualThreadPatternsTest.java` - Virtual thread patterns
+- `ObservabilityThroughputBenchmark.java` - Throughput testing
+- `ProcTest.java` - Process lifecycle
+
+## See Also
+- [OTP in Java](./otp-in-java.mdx) - How OTP maps to Java
+- [Create a Process](../how-to/create-process.mdx) - Using Proc
+- [Performance Guide](../explanation/performance.mdx) - Performance tuning

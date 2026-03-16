@@ -1,13 +1,20 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.Set;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** Dogfood: tests for OntologyMigrationEngine — ontology-driven migration analysis. */
 @DisplayName("OntologyMigrationEngine")
 class OntologyMigrationEngineTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @Test
     @DisplayName("allRules returns all 15 built-in ontology rules")

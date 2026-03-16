@@ -5,7 +5,61 @@ import java.time.Duration;
 /**
  * Configuration for backpressure handling.
  *
- * <p>Immutable record defining timeout behavior, success rate thresholds, and policy.
+ * <p>Immutable record defining timeout behavior, success rate thresholds, retry policies, and
+ * monitoring settings for adaptive backpressure coordination.
+ *
+ * <h2>Key Parameters:</h2>
+ *
+ * <ul>
+ *   <li><b>initialTimeout</b>: Starting timeout for requests. Increased on failures, decreased on
+ *       successes. Typical values: 100-500ms
+ *   <li><b>maxTimeout</b>: Maximum timeout cap. Prevents excessive waiting when service is
+ *       unresponsive. Typical values: 5-30s
+ *   <li><b>windowSize</b>: Number of recent requests to track for success rate calculation. Larger
+ *       windows = smoother but slower adaptation. Typical values: 50-200
+ *   <li><b>successRateThreshold</b>: Minimum success rate (0.0-1.0) to remain healthy. Below this,
+ *       trigger backpressure. Typical values: 0.90-0.99
+ *   <li><b>policy</b>: Strategy for handling timeouts (strict, adaptive, circuit-break)
+ * </ul>
+ *
+ * <h2>Timeout Adaptation:</h2>
+ *
+ * <pre>
+ * Failure detected: timeout = min(timeout * multiplier, maxTimeout)
+ * Success detected: timeout = max(timeout * decay_factor, initialTimeout)
+ * </pre>
+ *
+ * <h2>Usage Example:</h2>
+ *
+ * <pre>{@code
+ * BackpressureConfig config = BackpressureConfig.builder("external-api")
+ *     .initialTimeout(Duration.ofMillis(500))
+ *     .maxTimeout(Duration.ofSeconds(30))
+ *     .windowSize(100)
+ *     .successRateThreshold(0.95)
+ *     .policy(new BackpressurePolicy.Adaptive(0.95, 100))
+ *     .metricsEnabled(true)
+ *     .build();
+ * }</pre>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(windowSize) for tracking request results
+ *   <li>Latency: O(1) for timeout calculation, O(windowSize) for success rate
+ *   <li>Throughput: No blocking, fail-fast on circuit open
+ * </ul>
+ *
+ * @see Backpressure
+ * @see BackpressurePolicy
+ * @since 1.0
+ * @param serviceName Name of the service being protected
+ * @param initialTimeout Starting timeout for requests
+ * @param maxTimeout Maximum timeout cap
+ * @param windowSize Number of recent requests to track
+ * @param successRateThreshold Minimum success rate to remain healthy (0.0-1.0)
+ * @param policy Strategy for handling timeouts
+ * @param metricsEnabled Whether to emit metrics
  */
 public record BackpressureConfig(
         String serviceName,

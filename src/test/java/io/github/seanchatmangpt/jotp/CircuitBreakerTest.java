@@ -2,7 +2,10 @@ package io.github.seanchatmangpt.jotp;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +21,7 @@ import org.junit.jupiter.api.Timeout;
  * time window tracking - Pattern matching on sealed CircuitBreakerResult types - Request
  * suppression in OPEN state - Automatic recovery via HALF_OPEN probes
  */
+@DtrTest
 @DisplayName("CircuitBreaker: Enterprise Fault Tolerance")
 @Timeout(value = 30, unit = TimeUnit.SECONDS)
 class CircuitBreakerTest {
@@ -27,6 +31,7 @@ class CircuitBreakerTest {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         callCount = new AtomicInteger(0);
         breaker =
                 CircuitBreaker.create(
@@ -39,7 +44,29 @@ class CircuitBreakerTest {
 
     @Test
     @DisplayName("CLOSED state: successful request returns Success")
-    void testClosedStateSuccessfulRequest() {
+    void testClosedStateSuccessfulRequest(DtrContext ctx) {
+        ctx.sayNextSection("CircuitBreaker: CLOSED State - Normal Operation");
+        ctx.say(
+                "In CLOSED state, the circuit breaker allows all requests to pass through. "
+                        + "This is the normal operating state where the service is healthy. "
+                        + "Failures are tracked but don't block requests until the threshold is reached.");
+
+        // CROSS-REFERENCE: Link to Supervisor (fault tolerance foundation)
+        ctx.say("See Supervisor documentation for fault tolerance patterns.");
+
+        ctx.sayCode(
+                """
+            var breaker = CircuitBreaker.create("test-service", 3, Duration.ofSeconds(10), Duration.ofMillis(500));
+            var result = breaker.execute("request-1", request -> {
+                callCount.incrementAndGet();
+                return "response-1";
+            });
+
+            // In CLOSED state: requests execute normally
+            // Success returns CircuitBreakerResult.Success<T>
+            """,
+                "java");
+
         // When
         var result =
                 breaker.execute(
@@ -62,11 +89,39 @@ class CircuitBreakerTest {
                     default -> fail("Expected Success");
                 };
         assertThat(matched).isEqualTo("response-1");
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "State",
+                        "CLOSED",
+                        "Requests Executed",
+                        String.valueOf(callCount.get()),
+                        "Result Type",
+                        "Success",
+                        "Response Value",
+                        String.valueOf(matched)));
     }
 
     @Test
     @DisplayName("CLOSED state: single failure is recorded but circuit stays closed")
-    void testClosedStateWithSingleFailure() {
+    void testClosedStateWithSingleFailure(DtrContext ctx) {
+        ctx.say(
+                "In CLOSED state, failures are tracked but requests still pass through. "
+                        + "The circuit only opens when the failure threshold is reached. "
+                        + "This allows for transient failures without blocking legitimate requests.");
+
+        ctx.sayCode(
+                """
+            var result = breaker.execute("request-1", request -> {
+                throw new RuntimeException("Service error");
+            });
+
+            // Failure is recorded but circuit stays CLOSED
+            // Next request still executes
+            var nextResult = breaker.execute("request-2", request -> "success");
+            """,
+                "java");
+
         // When
         var result =
                 breaker.execute(
@@ -83,6 +138,15 @@ class CircuitBreakerTest {
         // Next request should still pass through
         var nextResult = breaker.execute("request-2", request -> "success");
         assertThat(nextResult).isInstanceOf(CircuitBreaker.CircuitBreakerResult.Success.class);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "State After Failure",
+                        "CLOSED",
+                        "Failure Count",
+                        String.valueOf(breaker.getFailureCount()),
+                        "Next Request Result",
+                        "Success (still allowed)"));
     }
 
     @Test
@@ -108,7 +172,27 @@ class CircuitBreakerTest {
 
     @Test
     @DisplayName("OPEN state: transitions after maxFailures exceeded")
-    void testTransitionToOpenAfterThreshold() {
+    void testTransitionToOpenAfterThreshold(DtrContext ctx) {
+        ctx.sayNextSection("OPEN State: Failure Threshold Triggered");
+        ctx.say(
+                "When failures reach the threshold (maxFailures), the circuit transitions to OPEN state. "
+                        + "This is the fail-fast mechanism that prevents cascading failures by blocking requests "
+                        + "to a known-unhealthy service.");
+
+        ctx.sayCode(
+                """
+            // Fail 3 times (threshold = 3)
+            for (int i = 0; i < 3; i++) {
+                breaker.execute("request-" + i, request -> {
+                    throw new RuntimeException("failure");
+                });
+            }
+
+            // Circuit transitions to OPEN
+            assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+            """,
+                "java");
+
         // When: fail 3 times (threshold = 3)
         for (int i = 0; i < 3; i++) {
             breaker.execute(
@@ -120,11 +204,40 @@ class CircuitBreakerTest {
 
         // Then: circuit should be OPEN
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Threshold Reached",
+                        "3 failures",
+                        "New State",
+                        "OPEN",
+                        "Request Behavior",
+                        "Fail-fast (rejected)"));
     }
 
     @Test
     @DisplayName("OPEN state: rejects requests immediately (fail-fast)")
-    void testOpenStateRejectsFast() {
+    void testOpenStateRejectsFast(DtrContext ctx) {
+        ctx.say(
+                "In OPEN state, the circuit breaker rejects requests immediately without executing them. "
+                        + "This fail-fast behavior protects the system from waiting on timeouts for "
+                        + "known-unhealthy services. Returns CircuitOpen result instead of executing.");
+
+        ctx.sayCode(
+                """
+            breaker.open(); // Force circuit to OPEN
+
+            var result = breaker.execute("request", request -> {
+                callCount.incrementAndGet(); // Never runs
+                return "success";
+            });
+
+            // Result is CircuitOpen - operation never executed
+            assertThat(callCount.get()).isEqualTo(0);
+            assertThat(result).isInstanceOf(CircuitBreakerResult.CircuitOpen.class);
+            """,
+                "java");
+
         // Given: open the circuit
         breaker.open();
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
@@ -141,6 +254,17 @@ class CircuitBreakerTest {
         // Then: operation is not invoked (fail-fast), result is CircuitOpen
         assertThat(callCount.get()).isEqualTo(0);
         assertThat(result).isInstanceOf(CircuitBreaker.CircuitBreakerResult.CircuitOpen.class);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "State",
+                        "OPEN",
+                        "Operation Invoked",
+                        "No (fail-fast)",
+                        "Result Type",
+                        "CircuitOpen",
+                        "Latency Impact",
+                        "< 1ms (no remote call)"));
     }
 
     @Test
@@ -165,7 +289,57 @@ class CircuitBreakerTest {
 
     @Test
     @DisplayName("HALF_OPEN state: transitions after resetTimeout expires")
-    void testTransitionToHalfOpenAfterTimeout() throws InterruptedException {
+    void testTransitionToHalfOpenAfterTimeout(DtrContext ctx) throws InterruptedException {
+        ctx.sayNextSection("HALF_OPEN State: Automatic Recovery");
+        ctx.say(
+                "After resetTimeout expires, the circuit transitions to HALF_OPEN state to test "
+                        + "if the service has recovered. A single probe request is allowed - success closes "
+                        + "the circuit, failure reopens it.");
+
+        ctx.sayMermaid(
+                """
+                stateDiagram-v2
+                    [*] --> CLOSED
+                    CLOSED --> OPEN: failures >= threshold
+                    OPEN --> HALF_OPEN: after resetTimeout
+                    HALF_OPEN --> CLOSED: probe succeeds
+                    HALF_OPEN --> OPEN: probe fails
+                    CLOSED --> CLOSED: reset()
+
+                    note right of CLOSED
+                        Normal operation
+                        All requests pass through
+                        Failures tracked
+                    end note
+
+                    note right of OPEN
+                        Fail-fast mode
+                        All requests rejected
+                        No calls to service
+                    end note
+
+                    note right of HALF_OPEN
+                        Recovery probe
+                        One request allowed
+                        Success → CLOSED
+                        Failure → OPEN
+                    end note
+                """);
+
+        ctx.sayCode(
+                """
+            breaker.open();
+            Thread.sleep(600); // Wait for resetTimeout
+
+            // First request after timeout triggers HALF_OPEN probe
+            var result = breaker.execute("probe", request -> "probe-response");
+
+            // Success closes the circuit
+            assertThat(result).isInstanceOf(CircuitBreakerResult.Success.class);
+            assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+            """,
+                "java");
+
         // Given: open the circuit
         breaker.open();
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
@@ -179,11 +353,41 @@ class CircuitBreakerTest {
         // Then: should transition to HALF_OPEN and allow the request
         assertThat(result).isInstanceOf(CircuitBreaker.CircuitBreakerResult.Success.class);
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Initial State",
+                        "OPEN",
+                        "After Timeout",
+                        "HALF_OPEN",
+                        "Probe Result",
+                        "Success",
+                        "Final State",
+                        "CLOSED"));
     }
 
     @Test
     @DisplayName("HALF_OPEN state: success closes the circuit")
-    void testHalfOpenSuccessClosesCircuit() throws InterruptedException {
+    void testHalfOpenSuccessClosesCircuit(DtrContext ctx) throws InterruptedException {
+        ctx.say(
+                "When the probe request in HALF_OPEN state succeeds, the circuit closes. "
+                        + "Failure count is reset to 0, and normal operation resumes. "
+                        + "This automatic recovery enables self-healing systems.");
+
+        ctx.sayCode(
+                """
+            breaker.open();
+            Thread.sleep(600); // Transition to HALF_OPEN
+
+            // Successful probe closes the circuit
+            var result = breaker.execute("probe", request -> "success");
+
+            assertThat(result).isInstanceOf(CircuitBreakerResult.Success.class);
+            assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+            assertThat(breaker.getFailureCount()).isEqualTo(0); // Reset
+            """,
+                "java");
+
         // Given: circuit is OPEN
         breaker.open();
         Thread.sleep(600);
@@ -195,11 +399,42 @@ class CircuitBreakerTest {
         assertThat(result).isInstanceOf(CircuitBreaker.CircuitBreakerResult.Success.class);
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(breaker.getFailureCount()).isEqualTo(0);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Probe Result",
+                        "Success",
+                        "New State",
+                        "CLOSED",
+                        "Failure Count",
+                        "0 (reset)",
+                        "Recovery Mode",
+                        "Complete"));
     }
 
     @Test
     @DisplayName("HALF_OPEN state: failure reopens the circuit")
-    void testHalfOpenFailureReopensCircuit() throws InterruptedException {
+    void testHalfOpenFailureReopensCircuit(DtrContext ctx) throws InterruptedException {
+        ctx.sayWarning(
+                "HALF_OPEN Probe Failure: When the probe request fails, the circuit reopens immediately. "
+                        + "The resetTimeout starts again, preventing rapid oscillation between states. "
+                        + "This backoff mechanism gives the service time to recover fully.");
+
+        ctx.sayCode(
+                """
+            breaker.open();
+            Thread.sleep(600); // Transition to HALF_OPEN
+
+            // Failed probe reopens the circuit
+            var result = breaker.execute("probe", request -> {
+                throw new RuntimeException("probe failed");
+            });
+
+            assertThat(result).isInstanceOf(CircuitBreakerResult.Failure.class);
+            assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+            """,
+                "java");
+
         // Given: circuit is OPEN
         breaker.open();
         Thread.sleep(600);
@@ -215,6 +450,17 @@ class CircuitBreakerTest {
         // Then: circuit should reopen
         assertThat(result).isInstanceOf(CircuitBreaker.CircuitBreakerResult.Failure.class);
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Probe Result",
+                        "Failure",
+                        "New State",
+                        "OPEN (reopened)",
+                        "Next Retry",
+                        "After resetTimeout",
+                        "Oscillation Prevention",
+                        "Backoff timer"));
     }
 
     // ============================================================================
@@ -385,7 +631,18 @@ class CircuitBreakerTest {
     @Test
     @DisplayName(
             "Recovery cycle: CLOSED → failures → OPEN → timeout → HALF_OPEN → success → CLOSED")
-    void testFullRecoveryCycle() throws InterruptedException {
+    void testFullRecoveryCycle(DtrContext ctx) throws InterruptedException {
+        ctx.sayNextSection("Complete Recovery Cycle");
+        ctx.say(
+                "The full lifecycle demonstrates automatic recovery: CLOSED accumulates failures, "
+                        + "OPEN blocks requests, HALF_OPEN probes for recovery, and success returns to CLOSED.");
+
+        ctx.sayTable(
+                new String[][] {
+                    {"State", "Behavior", "Requests", "Failures"},
+                    {"CLOSED", "Normal operation", "All pass through", "Tracked"}
+                });
+
         // 1. CLOSED: fail 3 times to open
         for (int i = 0; i < 3; i++) {
             breaker.execute(
@@ -411,6 +668,19 @@ class CircuitBreakerTest {
         // 5. Back to CLOSED
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(breaker.getFailureCount()).isEqualTo(0);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Step 1",
+                        "CLOSED → OPEN (3 failures)",
+                        "Step 2",
+                        "OPEN: request rejected",
+                        "Step 3",
+                        "Wait 600ms for timeout",
+                        "Step 4",
+                        "HALF_OPEN: probe succeeds",
+                        "Step 5",
+                        "CLOSED: recovery complete"));
     }
 
     // ============================================================================
@@ -419,7 +689,30 @@ class CircuitBreakerTest {
 
     @Test
     @DisplayName("Supervisor semantics: maxFailures and window mirror Supervisor restart limits")
-    void testSupervisorSemantics() throws InterruptedException {
+    void testSupervisorSemantics(DtrContext ctx) throws InterruptedException {
+        ctx.sayNextSection("Integration with Supervisor Semantics");
+        ctx.say(
+                "CircuitBreaker mirrors OTP Supervisor restart semantics: maxFailures corresponds "
+                        + "to Supervisor's max restart intensity, and the failure window corresponds to "
+                        + "the Supervisor's time period. Both provide fault containment with automatic recovery.");
+
+        ctx.sayCode(
+                """
+            // Supervisor-like: 5 failures per 1 second triggers OPEN
+            breaker = CircuitBreaker.create("api-call", 5, Duration.ofSeconds(1), Duration.ofMillis(500));
+
+            // Simulate rapid failures
+            for (int i = 0; i < 5; i++) {
+                breaker.execute("request", r -> {
+                    throw new RuntimeException("transient error");
+                });
+            }
+
+            // Circuit opens (>= threshold)
+            assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+            """,
+                "java");
+
         // Create a circuit breaker with Supervisor-like semantics:
         // 5 failures per 60 seconds triggers OPEN
         breaker =
@@ -436,6 +729,22 @@ class CircuitBreakerTest {
 
         // Circuit opens when failures reach maxFailures (>= semantics)
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "maxFailures",
+                        "5 (like Supervisor intensity)",
+                        "Window",
+                        "1 second (like Supervisor period)",
+                        "Threshold Triggered",
+                        "Yes (5 failures)",
+                        "State",
+                        "OPEN"));
+
+        ctx.sayNote(
+                "CircuitBreaker complements Supervisor by preventing cascading failures at the "
+                        + "service call level, while Supervisor handles process-level crashes. "
+                        + "Use both for comprehensive fault tolerance.");
     }
 
     @Test
@@ -449,5 +758,66 @@ class CircuitBreakerTest {
     @DisplayName("getName(): returns the circuit breaker name")
     void testGetName() {
         assertThat(breaker.getName()).isEqualTo("test-service");
+    }
+
+    // ============================================================================
+    // LATENCY AND PERFORMANCE TESTS
+    // ============================================================================
+
+    @Test
+    @DisplayName("Latency impact: OPEN state provides instant fail-fast")
+    void testLatencyImpactOpenState(DtrContext ctx) {
+        ctx.sayNextSection("Performance: Fail-Fast Latency Savings");
+        ctx.say(
+                "OPEN state provides instant fail-fast, avoiding network timeouts. "
+                        + "This is critical for preventing cascading timeouts and thread pool exhaustion.");
+
+        ctx.sayTable(
+                new String[][] {
+                    {"Scenario", "Operation", "Latency", "Thread Usage"},
+                    {
+                        "Healthy Service (CLOSED)",
+                        "Remote call executes",
+                        "~50-200ms (network)",
+                        "Blocked on I/O"
+                    }
+                });
+
+        ctx.sayCode(
+                """
+            breaker.open(); // Simulate unhealthy service
+
+            long start = System.nanoTime();
+            var result = breaker.execute("request", r -> "never executes");
+            long latencyMs = (System.nanoTime() - start) / 1_000_000;
+
+            // Result: CircuitOpen, latency: < 1ms
+            assertThat(result).isInstanceOf(CircuitBreakerResult.CircuitOpen.class);
+            assertThat(latencyMs).isLessThan(10); // Should be < 10ms
+            """,
+                "java");
+
+        // Given: circuit is OPEN
+        breaker.open();
+
+        // When: measure latency
+        long start = System.nanoTime();
+        var result = breaker.execute("request", r -> "never executes");
+        long latencyMs = (System.nanoTime() - start) / 1_000_000;
+
+        // Then: instant fail-fast
+        assertThat(result).isInstanceOf(CircuitBreaker.CircuitBreakerResult.CircuitOpen.class);
+        assertThat(latencyMs).isLessThan(10); // Should be < 10ms
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Latency",
+                        latencyMs + "ms",
+                        "Result Type",
+                        "CircuitOpen",
+                        "Remote Call Executed",
+                        "No",
+                        "Thread Blocked",
+                        "No"));
     }
 }

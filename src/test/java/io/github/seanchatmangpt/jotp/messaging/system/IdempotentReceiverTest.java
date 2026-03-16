@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.messaging.system;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +25,7 @@ class IdempotentReceiverTest {
 
     @BeforeEach
     void setup() {
+        ApplicationController.reset();
         receiver = IdempotentReceiver.create(100);
     }
 

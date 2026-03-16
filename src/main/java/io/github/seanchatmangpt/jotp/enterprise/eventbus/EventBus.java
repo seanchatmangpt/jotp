@@ -11,14 +11,115 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Typed event bus with delivery guarantees, batching, and deduplication.
+ * Enterprise-grade typed event bus with delivery guarantees, batching, and deduplication.
  *
- * <p>Provides pub-sub messaging with configurable delivery semantics: - FireAndForget: No retries -
- * AtLeastOnce: Retry with backoff - ExactlyOnce: Deduplication window - Partitioned: Per-partition
- * ordering
+ * <p>Provides publish-subscribe messaging with configurable delivery semantics, supporting multiple
+ * delivery policies, automatic retries, dead letter queueing, and partitioned event delivery. Built
+ * on JOTP's process-based architecture for fault tolerance and observability.
  *
- * <p>State Machine: - RUNNING: Accepting and delivering events - DEGRADED: Some subscribers failing
- * (collecting in DLQ) - PAUSED: Manual pause (backpressure)
+ * <h2>Problem Solved:</h2>
+ *
+ * In distributed systems, services need to communicate asynchronously without tight coupling:
+ *
+ * <ul>
+ *   <li><b>Decoupling</b>: Producers don't need to know consumers
+ *   <li><b>Reliability</b>: Guaranteed delivery despite failures
+ *   <li><b>Scalability</b>: Broadcast to multiple consumers efficiently
+ *   <li><b>Observability</b>: Track delivery, failures, and retries
+ * </ul>
+ *
+ * <h2>Delivery Policies:</h2>
+ *
+ * <ul>
+ *   <li><b>FireAndForget</b>: No delivery guarantee. Events may be lost. Fastest option
+ *   <li><b>AtLeastOnce</b>: Retry on failure with configurable max retries. Events may duplicate
+ *   <li><b>ExactlyOnce</b>: Deduplication window ensures no duplicates. Higher latency
+ *   <li><b>Partitioned</b>: Events with same key delivered in order. Per-partition sequencing
+ * </ul>
+ *
+ * <h2>State Machine:</h2>
+ *
+ * <ul>
+ *   <li><b>RUNNING</b>: Accepting and delivering events normally
+ *   <li><b>DEGRADED</b>: Some subscribers failing (collecting in DLQ for retry)
+ *   <li><b>PAUSED</b>: Manual pause for backpressure or maintenance
+ * </ul>
+ *
+ * <h2>Behavior:</h2>
+ *
+ * <ol>
+ *   <li>Publisher sends event via {@link #publish(Object)}
+ *   <li>Event assigned unique ID and timestamp
+ *   <li>Delivered to all matching subscribers
+ *   <li>On failure: retry based on policy or queue to DLQ
+ *   <li>Emit {@link BusEvent} for observability
+ * </ol>
+ *
+ * <h2>Enterprise Value:</h2>
+ *
+ * <ul>
+ *   <li><b>Fault isolation</b>: Subscriber crashes don't kill the bus
+ *   <li><b>Delivery guarantees</b>: Configurable reliability vs latency tradeoffs
+ *   <li><b>Dead letter queue</b>: Failed events preserved for manual recovery
+ *   <li><b>Batching</b>: Efficient delivery of high-volume events
+ * </ul>
+ *
+ * <h2>Thread Safety:</h2>
+ *
+ * <ul>
+ *   <li>Thread-safe: Uses {@link CopyOnWriteArrayList} for listeners and subscribers
+ *   <li>Process-based coordinator ensures serialized state updates
+ *   <li>Non-blocking publish (async delivery to subscribers)
+ * </ul>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(subscribers + deadLetterQueue + batchSize)
+ *   <li>Latency: O(subscribers) for publish, O(1) for subscribe/unsubscribe
+ *   <li>Throughput: Batching improves throughput at cost of latency
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Uses {@link io.github.seanchatmangpt.jotp.Proc} for coordinator state management
+ *   <li>Emits {@link BusEvent} for monitoring via {@link
+ *       io.github.seanchatmangpt.jotp.EventManager}
+ *   <li>Subscriber failures isolated via process mailbox semantics
+ * </ul>
+ *
+ * @example
+ *     <pre>{@code
+ * // Create event bus with at-least-once delivery
+ * EventBusConfig config = EventBusConfig.builder()
+ *     .policy(new EventBusPolicy.AtLeastOnce(3))
+ *     .batchSize(10)
+ *     .deadLetterQueueEnabled(true)
+ *     .build();
+ *
+ * EventBus bus = EventBus.create(config);
+ *
+ * // Subscribe to events
+ * bus.subscribe("payment-handler", event -> {
+ *     if (event instanceof PaymentEvent e) {
+ *         processPayment(e);
+ *     }
+ * });
+ *
+ * // Publish event
+ * PublishResult result = bus.publish(new PaymentEvent(amount, customer));
+ * if (result.status() == PublishResult.Status.ACCEPTED) {
+ *     log.info("Event published: {}", result.eventId());
+ * }
+ * }</pre>
+ *
+ * @see EventBusConfig
+ * @see EventBusPolicy
+ * @see BusEvent
+ * @see io.github.seanchatmangpt.jotp.Proc
+ * @see io.github.seanchatmangpt.jotp.EventManager
+ * @since 1.0
  */
 public class EventBus {
     private final EventBusConfig config;

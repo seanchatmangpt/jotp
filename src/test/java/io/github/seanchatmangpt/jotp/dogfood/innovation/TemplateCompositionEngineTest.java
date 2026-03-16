@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.TemplateCompositionEngine.CompositionResult;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.TemplateCompositionEngine.FeatureRecipe;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.TemplateCompositionEngine.TemplateRef;
@@ -28,6 +29,7 @@ class TemplateCompositionEngineTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         engine = new TemplateCompositionEngine(TEMPLATES_ROOT);
     }
 

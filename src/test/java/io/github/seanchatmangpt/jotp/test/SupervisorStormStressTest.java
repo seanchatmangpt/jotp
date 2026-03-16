@@ -3,6 +3,8 @@ package io.github.seanchatmangpt.jotp.test;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
@@ -41,7 +43,12 @@ import org.junit.jupiter.api.Timeout;
  *   <li><b>Property: N crashes within window → supervisor dies exactly at maxRestarts+1</b> — the
  *       fundamental correctness invariant for the restart limit.
  * </ol>
+ *
+ * <p><strong>DTR Documentation:</strong> This test class provides living documentation of
+ * Supervisor restart window boundaries. Run with DTR to see off-by-one validation and cascade
+ * behavior.
  */
+@DtrTest
 @Timeout(30)
 class SupervisorStormStressTest implements WithAssertions {
 
@@ -87,7 +94,15 @@ class SupervisorStormStressTest implements WithAssertions {
      * would kill the supervisor at crash 3 (if the count starts at 1 instead of 0).
      */
     @Test
-    void restartBoundary_exactlyMaxRestartsAllowed_oneMoreKillsSupervisor() throws Exception {
+    void restartBoundary_exactlyMaxRestartsAllowed_oneMoreKillsSupervisor(DtrContext ctx)
+            throws Exception {
+        ctx.say("Supervisor restart boundary test: off-by-one detection");
+        ctx.say("Tests the exact boundary of maxRestarts enforcement.");
+        ctx.say("");
+        ctx.say("Breaking point under investigation:");
+        ctx.say("- Crashes 1-3 within window: child restarted (within budget)");
+        ctx.say("- Crash 4 within window: supervisor terminates (over budget)");
+        ctx.say("- Off-by-one bugs would allow crash 4 to restart or kill at crash 3");
         int maxRestarts = 3;
         var supervisor =
                 new Supervisor("test-sv", Strategy.ONE_FOR_ONE, maxRestarts, Duration.ofSeconds(2));
@@ -110,6 +125,14 @@ class SupervisorStormStressTest implements WithAssertions {
         assertThat(supervisor.isRunning())
                 .as("supervisor must have terminated after exceeding maxRestarts")
                 .isFalse();
+
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "maxRestarts", String.valueOf(maxRestarts),
+                        "Crashes survived", String.valueOf(maxRestarts),
+                        "Final crash", String.valueOf(maxRestarts + 1),
+                        "Supervisor status", "TERMINATED",
+                        "Result", "PASS - Off-by-one boundary correct"));
     }
 
     // ── 2. Window expiry — restart budget resets after window ─────────────

@@ -1,0 +1,909 @@
+# Production Deployment
+
+import { Callout } from '@/components/docs/callout';
+import { Tabs } from '@/components/docs/tabs';
+import { CodeBlock } from '@/components/docs/code-block';
+
+**Prerequisites:**
+- [Tutorial: Performance Tuning](/user-guide/tutorials/advanced/performance-tuning)
+- [How-To: Performance Tuning](/user-guide/how-to/performance-tuning)
+- Understanding of DevOps and monitoring
+
+## Overview
+
+This tutorial covers production deployment strategies for JOTP applications, including monitoring, observability, scaling, and disaster recovery.
+
+## Learning Objectives
+
+By the end of this tutorial, you will:
+- Implement production-grade monitoring
+- Set up observability with metrics and tracing
+- Configure horizontal and vertical scaling
+- Plan disaster recovery strategies
+- Apply production deployment patterns
+
+## Production Architecture
+
+### Multi-Zone Deployment
+
+```mermaid
+graph TB
+    subgraph ["Layer: Load Balancer"]
+        LB[Application Load Balancer<br/>Multi-zone DNS]
+    end
+
+    subgraph ["Zone: US-East-1a"]
+        N1[Node 1<br/>JOTP Instance]
+        N2[Node 2<br/>JOTP Instance]
+    end
+
+    subgraph ["Zone: US-East-1b"]
+        N3[Node 3<br/>JOTP Instance]
+        N4[Node 4<br/>JOTP Instance]
+    end
+
+    subgraph ["Zone: US-East-1c"]
+        N5[Node 5<br/>JOTP Instance]
+        N6[Node 6<br/>JOTP Instance]
+    end
+
+    subgraph ["Monitoring"]
+        PM[Prometheus<br/>Metrics Collection]
+        G[Graphana<br/>Dashboards]
+        A[AlertManager<br/>Alerting]
+    end
+
+    subgraph ["Logging"]
+        ELK[ELK Stack<br/>Centralized Logging]
+    end
+
+    LB --> N1
+    LB --> N2
+    LB --> N3
+    LB --> N4
+    LB --> N5
+    LB --> N6
+
+    N1 -.metrics.-> PM
+    N2 -.metrics.-> PM
+    N3 -.metrics.-> PM
+    N4 -.metrics.-> PM
+    N5 -.metrics.-> PM
+    N6 -.metrics.-> PM
+
+    PM --> G
+    PM --> A
+
+    N1 -.logs.-> ELK
+    N2 -.logs.-> ELK
+    N3 -.logs.-> ELK
+
+    style LB fill:#ff9,stroke:#333,stroke-width:4px
+    style PM fill:#9f9,stroke:#333,stroke-width:3px
+    style ELK fill:#99f,stroke:#333,stroke-width:3px
+```
+
+---
+
+## Part 1: Monitoring and Observability
+
+### Prometheus Metrics Integration
+
+```java
+package io.github.seanchatmangpt.jotp.examples.production;
+
+import io.github.seanchatmangpt.jotp.*;
+import io.prometheus.client.CollectorRegistry;
+import io.prometheus.client.Counter;
+import io.prometheus.client.Histogram;
+import io.prometheus.client.Gauge;
+import io.prometheus.client.exporter.HTTPServer;
+import java.io.IOException;
+
+/**
+ * ProductionMonitoring - Prometheus metrics integration for
+ * production observability of JOTP applications.
+ */
+public class ProductionMonitoring {
+
+    // ── Metrics Registry ─────────────────────────────────────────────────────
+
+    private static final CollectorRegistry registry = new CollectorRegistry(true);
+
+    // ── Process Metrics ──────────────────────────────────────────────────────
+
+    private static final Counter messagesProcessed = Counter.build()
+        .name("jotp_messages_processed_total")
+        .help("Total messages processed")
+        .labelNames("process_type", "process_id")
+        .register(registry);
+
+    private static final Counter messagesFailed = Counter.build()
+        .name("jotp_messages_failed_total")
+        .help("Total messages failed")
+        .labelNames("process_type", "process_id", "error_type")
+        .register(registry);
+
+    private static final Histogram messageLatency = Histogram.build()
+        .name("jotp_message_latency_seconds")
+        .help("Message processing latency")
+        .labelNames("process_type", "process_id")
+        .buckets(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+        .register(registry);
+
+    // ── Supervisor Metrics ──────────────────────────────────────────────────
+
+    private static final Counter childRestarts = Counter.build()
+        .name("jotp_supervisor_child_restarts_total")
+        .help("Total child process restarts")
+        .labelNames("supervisor_id", "child_id")
+        .register(registry);
+
+    private static final Gauge activeChildren = Gauge.build()
+        .name("jotp_supervisor_active_children")
+        .help("Number of active child processes")
+        .labelNames("supervisor_id")
+        .register(registry);
+
+    // ── System Metrics ───────────────────────────────────────────────────────
+
+    private static final Gauge processCount = Gauge.build()
+        .name("jotp_process_count")
+        .help("Total number of processes")
+        .register(registry);
+
+    private static final Gauge virtualThreadCount = Gauge.build()
+        .name("jotp_virtual_thread_count")
+        .help("Number of virtual threads")
+        .register(registry);
+
+    // ── Instrumented Process ────────────────────────────────────────────────
+
+    public static Proc<Long, String> createInstrumentedProcess(
+        String processId,
+        String processType
+    ) {
+        return new Proc<>(
+            0L,
+            (state, msg) -> {
+                var start = System.nanoTime();
+
+                try {
+                    // Process message
+                    var newState = state + 1;
+
+                    // Record success metrics
+                    messagesProcessed.labels(processType, processId).inc();
+                    messageLatency.labels(processType, processId)
+                        .observe((System.nanoTime() - start) / 1e9);
+
+                    return newState;
+                } catch (Exception e) {
+                    // Record failure metrics
+                    messagesFailed.labels(processType, processId, e.getClass().getSimpleName()).inc();
+                    messageLatency.labels(processType, processId)
+                        .observe((System.nanoTime() - start) / 1e9);
+                    throw e;
+                }
+            }
+        );
+    }
+
+    // ── Instrumented Supervisor ──────────────────────────────────────────────
+
+    public static Supervisor createInstrumentedSupervisor(
+        String supervisorId,
+        Supervisor.Strategy strategy,
+        int maxRestarts,
+        java.time.Duration restartWindow
+    ) {
+        var supervisor = new Supervisor(strategy, maxRestarts, restartWindow);
+
+        // Add metrics listener
+        supervisor.addHealthListener(event -> {
+            if (event instanceof SupervisorEvent.ChildRestarted restart) {
+                childRestarts.labels(supervisorId, restart.childId()).inc();
+            }
+
+            if (event instanceof SupervisorEvent.ChildStarted) {
+                activeChildren.labels(supervisorId).inc();
+            }
+
+            if (event instanceof SupervisorEvent.ChildStopped) {
+                activeChildren.labels(supervisorId).dec();
+            }
+        });
+
+        return supervisor;
+    }
+
+    // ── Metrics Server ───────────────────────────────────────────────────────
+
+    private static HTTPServer metricsServer;
+
+    public static void startMetricsServer(int port) throws IOException {
+        metricsServer = new HTTPServer(port, registry);
+        System.out.println("[METRICS] Prometheus metrics server started on port " + port);
+    }
+
+    public static void stopMetricsServer() {
+        if (metricsServer != null) {
+            metricsServer.stop();
+        }
+    }
+
+    // ── Usage Example ────────────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        // Start metrics server
+        startMetricsServer(9090);
+
+        // Create instrumented supervisor
+        var supervisor = createInstrumentedSupervisor(
+            "main-supervisor",
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            java.time.Duration.ofSeconds(60)
+        );
+
+        // Spawn instrumented processes
+        for (int i = 0; i < 10; i++) {
+            var processId = "worker-" + i;
+            supervisor.supervise(
+                processId,
+                0L,
+                createInstrumentedProcess(processId, "worker")
+            );
+        }
+
+        // Update process count gauge
+        processCount.set(10);
+        virtualThreadCount.set(Thread.activeCount());
+
+        System.out.println("[PRODUCTION] Monitoring ready");
+        System.out.println("[PRODUCTION] Metrics available at http://localhost:9090/metrics");
+
+        // Keep running
+        Thread.sleep(java.time.Duration.ofMinutes(5).toMillis());
+
+        // Cleanup
+        supervisor.shutdown();
+        stopMetricsServer();
+    }
+}
+```
+
+### Prometheus Configuration
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'jotp'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['localhost:9093']
+
+rule_files:
+  - 'alerts.yml'
+```
+
+### Alert Rules
+
+```yaml
+# alerts.yml
+groups:
+  - name: jotp_alerts
+    interval: 30s
+    rules:
+      - alert: HighMessageFailureRate
+        expr: |
+          rate(jotp_messages_failed_total[5m]) /
+          rate(jotp_messages_processed_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High message failure rate detected"
+          description: "Message failure rate is above 5% for 5 minutes"
+
+      - alert: SupervisorRestartStorm
+        expr: |
+          rate(jotp_supervisor_child_restarts_total[1m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Supervisor restart storm detected"
+          description: "More than 10 child restarts per minute"
+
+      - alert: HighProcessCount
+        expr: jotp_process_count > 100000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High process count"
+          description: "Process count exceeds 100,000"
+```
+
+---
+
+## Part 2: Distributed Tracing
+
+### OpenTelemetry Integration
+
+```java
+package io.github.seanchatmangpt.jotp.examples.production;
+
+import io.github.seanchatmangpt.jotp.*;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.extension.trace.propagation.JaegerPropagator;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * DistributedTracing - OpenTelemetry integration for distributed
+ * tracing of JOTP message flows.
+ */
+public class DistributedTracing {
+
+    private static final Tracer tracer;
+
+    static {
+        // Initialize OpenTelemetry
+        var openTelemetry = OpenTelemetry.noop();  // Replace with real initialization
+
+        tracer = openTelemetry.getTracer("jotp", "1.0.0");
+    }
+
+    // ── Traced Process ───────────────────────────────────────────────────────
+
+    public static <S, M> Proc<S, M> createTracedProcess(
+        String processName,
+        S initialState,
+        java.util.function.BiFunction<S, M, S> handler
+    ) {
+        return new Proc<>(
+            initialState,
+            (state, msg) -> {
+                var spanName = processName + "." + msg.getClass().getSimpleName();
+
+                var span = tracer.spanBuilder(spanName)
+                    .setParent(Context.current())
+                    .startSpan();
+
+                try (var scope = span.makeCurrent()) {
+                    // Add message attributes
+                    span.setAttribute("jotp.process", processName);
+                    span.setAttribute("jotp.message_type", msg.getClass().getSimpleName());
+
+                    // Process message
+                    var newState = handler.apply(state, msg);
+
+                    span.setStatus(io.opentelemetry.api.trace.StatusCode.OK);
+
+                    return newState;
+                } catch (Exception e) {
+                    span.recordException(e);
+                    span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, e.getMessage());
+                    throw e;
+                } finally {
+                    span.end();
+                }
+            }
+        );
+    }
+
+    // ── Traced State Machine ─────────────────────────────────────────────────
+
+    public static <S, E, D> StateMachine<S, E, D> createTracedStateMachine(
+        String machineName,
+        StateMachine<S, E, D> machine
+    ) {
+        // Wrap state machine to trace transitions
+        return machine;  // Simplified - actual implementation would wrap transitions
+    }
+
+    // ── Usage Example ────────────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        // Create traced process
+        var process = createTracedProcess(
+            "order-processor",
+            0,
+            (state, msg) -> {
+                System.out.println("Processing: " + msg);
+                return state + 1;
+            }
+        );
+
+        // Process messages with tracing
+        for (int i = 0; i < 100; i++) {
+            process.tell("message-" + i);
+        }
+
+        Thread.sleep(1000);
+
+        process.stop();
+    }
+}
+```
+
+<Callout type="info">
+**Pro Tip: Trace Sampling**
+
+For high-throughput systems (>10K TPS), use probability-based sampling:
+
+```java
+var sampler = io.opentelemetry.sdk.trace.Sampler.traceIdRatioBased(0.01);  // 1% sampling
+```
+
+This reduces tracing overhead while maintaining visibility.
+</Callout>
+
+---
+
+## Part 3: Health Checks and Readiness
+
+### Kubernetes Health Probes
+
+```java
+package io.github.seanchatmangpt.jotp.examples.production;
+
+import io.github.seanchatmangpt.jotp.*;
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpHandler;
+
+/**
+ * HealthCheckServer - Kubernetes health check endpoints for
+ * JOTP applications.
+ */
+public class HealthCheckServer {
+
+    private HttpServer server;
+    private Supervisor mainSupervisor;
+
+    public HealthCheckServer(int port, Supervisor supervisor) throws Exception {
+        this.mainSupervisor = supervisor;
+        this.server = HttpServer.create(new java.net.InetSocketAddress(port), 0);
+
+        // Liveness probe
+        server.createContext("/health/live", exchange -> {
+            var response = "OK";
+            exchange.sendResponseHeaders(200, response.length());
+            exchange.getResponseBody().write(response.getBytes());
+            exchange.close();
+        });
+
+        // Readiness probe
+        server.createContext("/health/ready", exchange -> {
+            if (isReady()) {
+                var response = "Ready";
+                exchange.sendResponseHeaders(200, response.length());
+                exchange.getResponseBody().write(response.getBytes());
+            } else {
+                var response = "Not Ready";
+                exchange.sendResponseHeaders(503, response.length());
+                exchange.getResponseBody().write(response.getBytes());
+            }
+            exchange.close();
+        });
+
+        // Startup probe
+        server.createContext("/health/startup", exchange -> {
+            if (isStarted()) {
+                var response = "Started";
+                exchange.sendResponseHeaders(200, response.length());
+                exchange.getResponseBody().write(response.getBytes());
+            } else {
+                var response = "Starting";
+                exchange.sendResponseHeaders(503, response.length());
+                exchange.getResponseBody().write(response.getBytes());
+            }
+            exchange.close();
+        });
+
+        server.start();
+        System.out.println("[HEALTH] Health check server started on port " + port);
+    }
+
+    private boolean isReady() {
+        // Check if supervisor is running
+        if (mainSupervisor == null || !mainSupervisor.isRunning()) {
+            return false;
+        }
+
+        // Check if minimum children are ready
+        // (custom logic based on your application)
+
+        return true;
+    }
+
+    private boolean isStarted() {
+        // Check if application has completed startup
+        return mainSupervisor != null && mainSupervisor.isRunning();
+    }
+
+    public void stop() {
+        server.stop(0);
+    }
+
+    // ── Usage Example ────────────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            java.time.Duration.ofSeconds(60)
+        );
+
+        var healthServer = new HealthCheckServer(8080, supervisor);
+
+        System.out.println("[PRODUCTION] Health checks ready");
+        System.out.println("[PRODUCTION] /health/live  - Liveness probe");
+        System.out.println("[PRODUCTION] /health/ready - Readiness probe");
+        System.out.println("[PRODUCTION] /health/startup - Startup probe");
+
+        Thread.sleep(java.time.Duration.ofMinutes(5).toMillis());
+
+        healthServer.stop();
+        supervisor.shutdown();
+    }
+}
+```
+
+### Kubernetes Deployment Configuration
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp
+  template:
+    metadata:
+      labels:
+        app: jotp
+    spec:
+      containers:
+      - name: jotp
+        image: jotp-application:1.0.0
+        ports:
+        - containerPort: 8080
+          name: health
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: JAVA_OPTS
+          value: "-Xms2g -Xmx4g -XX:+UseZGC"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger:4317"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+```
+
+---
+
+## Part 4: Disaster Recovery
+
+### Backup and Restore Strategy
+
+```java
+package io.github.seanchatmangpt.jotp.examples.production;
+
+import io.github.seanchatmangpt.jotp.*;
+import java.io.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * DisasterRecovery - Backup and restore procedures for JOTP
+ * process state and supervision trees.
+ */
+public class DisasterRecovery {
+
+    // ── State Snapshot ────────────────────────────────────────────────────────
+
+    public static class StateSnapshot<S> {
+        private final String supervisorId;
+        private final String processId;
+        private final S state;
+        private final long timestamp;
+
+        public StateSnapshot(String supervisorId, String processId, S state) {
+            this.supervisorId = supervisorId;
+            this.processId = processId;
+            this.state = state;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        public String toJson() {
+            return """
+                {
+                  "supervisorId": "%s",
+                  "processId": "%s",
+                  "state": "%s",
+                  "timestamp": %d
+                }
+                """.formatted(supervisorId, processId, state, timestamp);
+        }
+
+        @SuppressWarnings("unchecked")
+        public static <S> StateSnapshot<S> fromJson(String json) {
+            // Parse JSON and reconstruct snapshot
+            // (simplified - use proper JSON library in production)
+            return null;
+        }
+    }
+
+    // ── Backup Manager ───────────────────────────────────────────────────────
+
+    public static class BackupManager {
+        private final String backupDirectory;
+
+        public BackupManager(String backupDirectory) {
+            this.backupDirectory = backupDirectory;
+            new File(backupDirectory).mkdirs();
+        }
+
+        public void backupSupervisor(Supervisor supervisor, String backupId) throws Exception {
+            var timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            var filename = "%s/%s-%s.json".formatted(backupDirectory, backupId, timestamp);
+
+            try (var writer = new FileWriter(filename)) {
+                // Collect state from all children
+                var snapshot = captureSupervisorState(supervisor, backupId);
+                writer.write(snapshot);
+            }
+
+            System.out.println("[BACKUP] Supervisor backed up to: " + filename);
+        }
+
+        private String captureSupervisorState(Supervisor supervisor, String backupId) {
+            var builder = new StringBuilder();
+            builder.append("{\n");
+            builder.append("  \"backupId\": \"").append(backupId).append("\",\n");
+            builder.append("  \"timestamp\": \"").append(LocalDateTime.now()).append("\",\n");
+            builder.append("  \"children\": [\n");
+
+            // Collect child process states
+            // (implementation depends on supervisor API)
+
+            builder.append("  ]\n");
+            builder.append("}");
+
+            return builder.toString();
+        }
+
+        public void restoreSupervisor(String backupFile) throws Exception {
+            try (var reader = new FileReader(backupFile)) {
+                var json = reader.readLine();
+
+                // Parse and restore supervisor state
+                // (implementation depends on serialization strategy)
+
+                System.out.println("[RESTORE] Supervisor restored from: " + backupFile);
+            }
+        }
+    }
+
+    // ── Automated Backup Scheduler ───────────────────────────────────────────
+
+    public static class BackupScheduler {
+        private final BackupManager backupManager;
+        private final Supervisor supervisor;
+
+        public BackupScheduler(BackupManager backupManager, Supervisor supervisor) {
+            this.backupManager = backupManager;
+            this.supervisor = supervisor;
+        }
+
+        public void startScheduledBackups(int intervalMinutes) {
+            var scheduler = java.util.concurrent.Executors.newScheduledThreadPool(1);
+
+            scheduler.scheduleAtFixedRate(
+                () -> {
+                    try {
+                        var backupId = "backup-" + System.currentTimeMillis();
+                        backupManager.backupSupervisor(supervisor, backupId);
+                    } catch (Exception e) {
+                        System.err.println("[BACKUP] Failed: " + e.getMessage());
+                    }
+                },
+                intervalMinutes,
+                intervalMinutes,
+                java.util.concurrent.TimeUnit.MINUTES
+            );
+        }
+    }
+
+    // ── Usage Example ────────────────────────────────────────────────────────
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            java.time.Duration.ofSeconds(60)
+        );
+
+        // Add children
+        supervisor.supervise("worker-1", 0, (state, msg) -> state + 1);
+        supervisor.supervise("worker-2", 0, (state, msg) -> state + 1);
+
+        // Create backup manager
+        var backupManager = new BackupManager("/tmp/jotp-backups");
+
+        // Perform manual backup
+        backupManager.backupSupervisor(supervisor, "manual-backup-1");
+
+        // Start scheduled backups (every 5 minutes)
+        var scheduler = new BackupScheduler(backupManager, supervisor);
+        scheduler.startScheduledBackups(5);
+
+        System.out.println("[PRODUCTION] Disaster recovery configured");
+        System.out.println("[PRODUCTION] Backups stored in: /tmp/jotp-backups");
+
+        Thread.sleep(java.time.Duration.ofMinutes(10).toMillis());
+
+        supervisor.shutdown();
+    }
+}
+```
+
+---
+
+## Part 5: Scaling Strategies
+
+### Horizontal Pod Autoscaling
+
+```yaml
+# hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jotp-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jotp-application
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: jotp_messages_processed_per_second
+      target:
+        type: AverageValue
+        averageValue: "25000"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
+```
+
+<Callout type="info">
+**Pro Tip: Scaling Thresholds**
+
+Based on production benchmarks:
+- **CPU**: Scale at 70% utilization (leaves headroom for spikes)
+- **Memory**: Scale at 80% utilization (avoid GC pressure)
+- **Throughput**: Scale when >25K ops/sec per pod (conservative)
+- **Latency**: Scale when p99 >50ms for 5 minutes
+
+Adjust based on your SLA requirements.
+</Callout>
+
+---
+
+## Production Checklist
+
+### Pre-Launch Checklist
+
+<Callout type="info">
+**Production Readiness Checklist**
+
+- [ ] **Monitoring**: Prometheus + Grafana configured
+- [ ] **Alerting**: Critical alerts configured and tested
+- [ ] **Logging**: Centralized logging (ELK/Loki) operational
+- [ ] **Tracing**: Distributed tracing enabled
+- [ ] **Health Checks**: Liveness/readiness probes tested
+- [ ] **Disaster Recovery**: Backup/restore procedures tested
+- [ ] **Scaling**: HPA policies configured
+- [ ] **Security**: TLS, authentication, authorization configured
+- [ ] **Performance**: Load testing completed
+- [ ] **Documentation**: Runbooks and escalation procedures
+- [ ] **Capacity**: Capacity plan validated
+- [ ] **Compliance**: Audit logging enabled
+</Callout>
+
+---
+
+## Further Reading
+
+- **[Infrastructure Testing Guide](/docs/infrastructure/testing/TESTING_GUIDE_INDEX.md)** - Testing procedures
+- **[Performance Regression Analysis](/docs/validation/performance/benchmark-regression-analysis-report.md)** - Performance baseline
+- **[Enterprise Capacity Benchmark](/src/test/java/io/github/seanchatmangpt/jotp/stress/EnterpriseCapacityBenchmark.java)** - Capacity planning
+- **Kubernetes Documentation**: https://kubernetes.io/docs/
+- **Prometheus Best Practices**: https://prometheus.io/docs/practices/
+
+---
+
+## Summary
+
+You've completed the Advanced JOTP Tutorials! You now have production-grade knowledge for:
+
+1. **Building Complex Supervision Trees** - Multi-level hierarchies, dynamic children
+2. **Distributed JOTP Systems** - Multi-node deployment, gRPC bridges, consensus
+3. **State Machine Workflows** - Hierarchical machines, guards, sagas
+4. **Event-Driven Architectures** - CQRS, event sourcing, projections
+5. **Performance Tuning** - Benchmarking, JVM tuning, capacity planning
+6. **Production Deployment** - Monitoring, observability, scaling, disaster recovery
+
+For more information, refer to the [API Documentation](/docs/api/) and [How-To Guides](/user-guide/how-to/).

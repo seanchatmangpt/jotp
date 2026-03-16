@@ -1,4 +1,4 @@
-# Java Maven Template - AWS Variables
+# JOTP - AWS Variables
 
 variable "aws_region" {
   type        = string
@@ -8,7 +8,7 @@ variable "aws_region" {
 
 variable "app_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Application name"
 }
 

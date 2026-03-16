@@ -60,7 +60,7 @@ class PatternPropertyTest {
 
     @Property(tries = 1000)
     void resultSuccessIsNeverFailure(@ForAll @NotBlank String value) {
-        assertThat(Result.success(value)).isInstanceOf(Result.Success.class);
+        assertThat(Result.success(value)).isInstanceOf(Result.Ok.class);
     }
 
     @Property(tries = 1000)

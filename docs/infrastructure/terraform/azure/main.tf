@@ -1,4 +1,4 @@
-# Java Maven Template - Azure Terraform Configuration
+# JOTP - Azure Terraform Configuration
 # Requires: Terraform >= 1.6.0, Azure service principal credentials
 
 terraform {
@@ -16,7 +16,7 @@ terraform {
   #   resource_group_name  = "terraform-state-rg"
   #   storage_account_name = "tfstateaccount"
   #   container_name       = "tfstate"
-  #   key                  = "java-maven-template.tfstate"
+  #   key                  = "jotp.tfstate"
   # }
 }
 
@@ -35,7 +35,7 @@ resource "azurerm_resource_group" "main" {
   location = var.location
 
   tags = {
-    Project     = "java-maven-template"
+    Project     = "jotp"
     Environment = var.environment
     ManagedBy   = "terraform"
   }

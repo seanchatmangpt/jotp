@@ -11,12 +11,104 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * Backpressure coordinator for timeout-based flow control.
  *
- * <p>Prevents queue explosion when downstream services are slow or failing. Implements circuit
- * breaker patterns and adaptive timeout adjustment based on success rates.
+ * <p>Prevents queue explosion and resource exhaustion when downstream services are slow or failing.
+ * Implements adaptive timeout adjustment, circuit breaker patterns, and success rate monitoring to
+ * maintain system stability under load.
  *
- * <p>State Machine: - HEALTHY: All requests completing within timeout - WARNING: Some timeouts but
- * service still responding (adjust timeout upward) - CIRCUIT_OPEN: Too many timeouts, reject
- * requests
+ * <h2>Problem Solved:</h2>
+ *
+ * When a downstream service slows down or fails, naive systems continue sending requests, causing:
+ *
+ * <ul>
+ *   <li>Unbounded queue growth → memory exhaustion
+ *   <li>Thread pool exhaustion → system hang
+ *   <li>Cascading failures → upstream services also fail
+ * </ul>
+ *
+ * <h2>State Machine:</h2>
+ *
+ * <ul>
+ *   <li><b>HEALTHY</b>: All requests completing within timeout, success rate ≥ threshold
+ *   <li><b>WARNING</b>: Some timeouts but service still responding, auto-adjust timeout upward
+ *   <li><b>CIRCUIT_OPEN</b>: Too many consecutive failures, reject new requests immediately
+ * </ul>
+ *
+ * <h2>Behavior:</h2>
+ *
+ * <ol>
+ *   <li>Track request results in sliding window (success/failure)
+ *   <li>Calculate success rate: successful requests / total requests in window
+ *   <li>Adapt timeout: increase on failures, decrease on successes
+ *   <li>Fail-fast: when success rate drops below threshold, stop accepting requests
+ * </ol>
+ *
+ * <h2>Enterprise Value:</h2>
+ *
+ * <ul>
+ *   <li><b>Prevents cascading failures</b>: Stop sending requests to failing services immediately
+ *   <li><b>Adaptive timeouts</b>: Automatically adjust to changing network conditions
+ *   <li><b>Resource protection</b>: Bounded queue and thread pool usage
+ *   <li><b>Faster recovery</b>: Don't waste resources on requests that will timeout
+ * </ul>
+ *
+ * <h2>Thread Safety:</h2>
+ *
+ * <ul>
+ *   <li>Thread-safe: Uses {@link CopyOnWriteArrayList} for listeners
+ *   <li>Process-based coordinator ensures serialized state updates
+ *   <li>Lock-free request execution path
+ * </ul>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(windowSize) for tracking request results
+ *   <li>Latency: O(1) for request execution, O(windowSize) for state updates
+ *   <li>Throughput: No blocking in healthy state, fail-fast in circuit-open state
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Uses {@link Proc} for state management (message-based coordination)
+ *   <li>Emits {@link BackpressureEvent} via {@link io.github.seanchatmangpt.jotp.EventManager}
+ *   <li>Compatible with {@link
+ *       io.github.seanchatmangpt.jotp.enterprise.circuitbreaker.CircuitBreakerPattern}
+ * </ul>
+ *
+ * @example
+ *     <pre>{@code
+ * // Create backpressure coordinator
+ * BackpressureConfig config = BackpressureConfig.builder("payment-service")
+ *     .initialTimeout(Duration.ofMillis(500))
+ *     .maxTimeout(Duration.ofSeconds(30))
+ *     .windowSize(100)
+ *     .successRateThreshold(0.95)
+ *     .policy(new BackpressurePolicy.Adaptive(0.95, 100))
+ *     .build();
+ *
+ * Backpressure backpressure = Backpressure.create(config);
+ *
+ * // Execute with backpressure
+ * Result<PaymentResponse> result = backpressure.execute(
+ *     timeout -> paymentService.charge(amount),
+ *     Duration.ofSeconds(5)
+ * );
+ *
+ * if (result instanceof Result.Success<PaymentResponse> s) {
+ *     return s.value();
+ * } else {
+ *     // Handle backpressure rejection or timeout
+ *     log.warn("Payment failed: backpressure active");
+ *     return fallbackPayment();
+ * }
+ * }</pre>
+ *
+ * @see BackpressureConfig
+ * @see BackpressurePolicy
+ * @see io.github.seanchatmangpt.jotp.Proc
+ * @see io.github.seanchatmangpt.jotp.enterprise.circuitbreaker.CircuitBreakerPattern
+ * @since 1.0
  */
 public class Backpressure {
     private final BackpressureConfig config;

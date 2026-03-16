@@ -64,6 +64,7 @@ class EventSourcingAuditLogTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         log =
                 EventSourcingAuditLog.<LockState, LockEvent, LockData>builder()
                         .entityId(ENTITY_ID)

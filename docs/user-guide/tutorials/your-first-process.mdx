@@ -1,0 +1,68 @@
+---
+title: Your First Process
+description: Create and run your first JOTP process with message passing
+sidebar_position: 2
+---
+
+# Your First Process
+
+In this tutorial, you'll build a simple counter process that demonstrates the core concepts of JOTP's lightweight concurrency model.
+
+## What You'll Build
+
+A stateful counter process that:
+- Receives increment and decrement messages
+- Maintains internal state
+- Responds with current value
+
+## Core Concepts
+
+- **Proc<S,M>**: Lightweight process with state S and message type M
+- **Message Handler**: Pure function `(S, M) -> S`
+- **Virtual Threads**: Why JOTP processes are so lightweight
+- **Mailbox**: FIFO message queue for each process
+
+## Implementation Steps
+
+### 1. Define Message Types
+```java
+public sealed interface CounterMessage
+    permits CounterMessage.Increment,
+           CounterMessage.Decrement,
+           CounterMessage.GetValue {
+    record Increment() implements CounterMessage {}
+    record Decrement() implements CounterMessage {}
+    record GetValue(ProcRef<Integer, CounterMessage> replyTo) implements CounterMessage {}
+}
+```
+
+### 2. Create the Process
+- State type: `Integer`
+- Message type: `CounterMessage`
+- Handler function with pattern matching
+
+### 3. Spawn and Interact
+- Using `Proc.spawn()`
+- Sending messages with `send()`
+- Request-response patterns with `ask()`
+
+## Testing Your Process
+
+- Unit testing with JUnit 5
+- Using `ApplicationController` for test isolation
+- Asserting on process state
+
+## Common Pitfalls
+
+- Blocking in message handlers
+- Mutable state in messages
+- Forgetting to trap exits
+
+## Related Tests
+- `ProcTest.java` - Complete process lifecycle tests
+- `GenServerTest.java` - Request-response patterns
+- `ProcTest.java#testIncrementDecrement` - Similar counter example
+
+## Next Steps
+- [Building a Supervisor Tree](./building-a-supervisor-tree.mdx)
+- [How to Create a Process](../how-to/create-process.mdx)

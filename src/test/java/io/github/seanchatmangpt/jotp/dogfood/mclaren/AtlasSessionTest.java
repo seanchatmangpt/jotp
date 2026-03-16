@@ -1,9 +1,11 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -23,6 +25,11 @@ import org.junit.jupiter.api.Test;
 class AtlasSessionTest implements WithAssertions {
 
     private SqlRaceSession session;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @AfterEach
     void tearDown() throws InterruptedException {

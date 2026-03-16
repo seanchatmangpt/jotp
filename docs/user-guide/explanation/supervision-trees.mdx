@@ -1,0 +1,424 @@
+---
+title: Supervision Trees
+description: Architectural patterns for fault-tolerant process hierarchies
+sidebar_position: 2
+---
+
+# Supervision Trees
+
+Learn how to design and implement supervision trees that provide automatic fault recovery and failure isolation in your applications.
+
+## What is a Supervision Tree?
+
+A **supervision tree** is a hierarchical structure where:
+- **Supervisors** manage child processes
+- **Children** perform actual work
+- **Failures** trigger automatic restarts
+- **Isolation** prevents cascading failures
+
+## Tree Structure
+
+```
+ApplicationSupervisor (ONE_FOR_ONE)
+├── DatabaseConnectionPool (PERMANENT)
+├── CacheManager (PERMANENT)
+├── PaymentService (ONE_FOR_ALL)
+│   ├── PaymentWorker-1 (TEMPORARY)
+│   ├── PaymentWorker-2 (TEMPORARY)
+│   └── PaymentWorker-3 (TEMPORARY)
+└── EventLogger (PERMANENT)
+```
+
+## Design Principles
+
+### 1. Failure Domains
+
+Group related processes under one supervisor when they:
+- Share resources (database connections, cache)
+- Have initialization dependencies
+- Should restart together for consistency
+
+### 2. Restart Strategies
+
+Choose based on failure characteristics:
+
+| Strategy | When to Use | Example |
+|----------|-------------|---------|
+| ONE_FOR_ONE | Independent workers | HTTP request handlers |
+| ONE_FOR_ALL | Shared resources | Database connection pool |
+| REST_FOR_ONE | Ordered dependencies | Pipeline stages |
+
+### 3. Restart Intensity
+
+Prevent restart storms:
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "sup",
+    Strategy.ONE_FOR_ONE,
+    Supervisor.Config.builder()
+        .intensity(5)        // Max 5 restarts
+        .period(Duration.ofSeconds(60))  // In 60 seconds
+        .build()
+);
+```
+
+If exceeded → Supervisor gives up and terminates
+
+## Architecture Patterns
+
+### Pattern 1: Worker Pool
+
+```
+PoolSupervisor (ONE_FOR_ONE)
+├── Worker-1
+├── Worker-2
+├── Worker-3
+└── Worker-4
+```
+
+**Use case**: Parallel task processing
+```java
+Supervisor pool = Supervisor.spawn(
+    "worker-pool",
+    Strategy.ONE_FOR_ONE,
+    IntStream.range(0, 4)
+        .mapToObj(i -> ChildSpec.of(
+            "worker-" + i,
+            () -> WorkerProc.spawn(i),
+            RestartStrategy.PERMANENT,
+            Duration.ofSeconds(5)
+        ))
+        .toList()
+);
+```
+
+### Pattern 2: Resource Manager
+
+```
+ResourceSupervisor (ONE_FOR_ALL)
+├── Connection-1
+├── Connection-2
+└── Connection-3
+```
+
+**Use case**: Shared resource with single point of failure
+```java
+Supervisor dbSup = Supervisor.spawn(
+    "db-supervisor",
+    Strategy.ONE_FOR_ALL,
+    List.of(
+        ChildSpec.of("db-pool", () -> DbPool.spawn(config))
+    )
+);
+```
+
+### Pattern 3: Pipeline
+
+```
+PipelineSupervisor (REST_FOR_ONE)
+├── IngestionStage
+├── ProcessingStage
+└── OutputStage
+```
+
+**Use case**: Ordered processing stages
+```java
+Supervisor pipeline = Supervisor.spawn(
+    "pipeline",
+    Strategy.REST_FOR_ONE,
+    List.of(
+        ChildSpec.of("ingest", () -> IngestProc.spawn()),
+        ChildSpec.of("process", () -> ProcessProc.spawn()),
+        ChildSpec.of("output", () -> OutputProc.spawn())
+    )
+);
+```
+
+### Pattern 4: Application Tree
+
+```
+ApplicationSupervisor (ONE_FOR_ONE)
+├── ConfigSupervisor (ONE_FOR_ALL)
+│   └── ConfigManager
+├── ServiceSupervisor (ONE_FOR_ONE)
+│   ├── Service-1
+│   └── Service-2
+└── MonitoringSupervisor (ONE_FOR_ALL)
+    ├── HealthChecker
+    └── MetricsCollector
+```
+
+**Use case**: Complete application
+```java
+Supervisor appSup = Supervisor.spawn(
+    "application",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        configSupervisorSpec(),
+        serviceSupervisorSpec(),
+        monitoringSupervisorSpec()
+    )
+);
+```
+
+## Child Lifecycle
+
+### Restart Strategies
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| PERMANENT | Always restart | Critical services |
+| TRANSIENT | Restart only on abnormal exit | Workers that may complete |
+| TEMPORARY | Never restart | One-off tasks |
+
+### Example: Different Strategies
+
+```java
+List<ChildSpec> children = List.of(
+    // Permanent: Always restart (API server)
+    ChildSpec.of(
+        "api-server",
+        () -> ApiServer.spawn(),
+        RestartStrategy.PERMANENT,
+        Duration.ofSeconds(10)
+    ),
+
+    // Transient: Restart only on crash (job worker)
+    ChildSpec.of(
+        "job-worker",
+        () -> JobWorker.spawn(),
+        RestartStrategy.TRANSIENT,
+        Duration.ofSeconds(5)
+    ),
+
+    // Temporary: Never restart (one-time migration)
+    ChildSpec.of(
+        "migration",
+        () -> MigrationProc.spawn(),
+        RestartStrategy.TEMPORARY,
+        Duration.ofSeconds(30)
+    )
+);
+```
+
+## Failure Detection
+
+### Process Linking
+
+```java
+// Bidirectional: Both processes crash if one does
+ProcLink.link(parentProc, childProc);
+```
+
+### Process Monitoring
+
+```java
+// Unidirectional: Monitor notified when process dies
+ProcMonitor.monitor(monitoredProc, supervisorRef);
+```
+
+### Exit Signal Handling
+
+```java
+sealed interface ExitReason permits ExitReason.Normal, ExitReason.Crash {}
+record Normal(String reason) implements ExitReason {}
+record Crash(Exception exception) implements ExitReason {}
+
+// In supervisor
+State handle(State state, Message msg) {
+    if (msg instanceof ExitSignal exit) {
+        logger.warn("Child {} died: {}", exit.childId(), exit.reason());
+        return restartChild(state, exit.childId());
+    }
+    return state;
+}
+```
+
+## Advanced Patterns
+
+### Dynamic Children
+
+```java
+// Add child at runtime
+supervisor.startChild(
+    ChildSpec.of(
+        "worker-" + id,
+        () -> WorkerProc.spawn(id),
+        RestartStrategy.PERMANENT,
+        Duration.ofSeconds(5)
+    )
+);
+
+// Remove child
+supervisor.terminateChild("worker-1");
+```
+
+### Supervision Depth
+
+Keep trees shallow (3-4 levels max):
+```
+Level 1: Application Supervisor
+Level 2: Service Supervisors
+Level 3: Worker Pools / Managers
+Level 4: Individual Workers
+```
+
+**Why shallow?**
+- Faster failure detection
+- Simpler debugging
+- Less overhead
+
+### Cross-Supervisor Communication
+
+```java
+// Supervisors can communicate
+ProcRef<ServiceState, ServiceMsg> service1 =
+    supervisor1.findChild("service-1").orElseThrow();
+
+ProcRef<ServiceState, ServiceMsg> service2 =
+    supervisor2.findChild("service-2").orElseThrow();
+
+// Send messages across trees
+service1.send(new ServiceMessage.Notify(service2, data));
+```
+
+## Testing Supervision Trees
+
+### Unit Test: Single Supervisor
+
+```java
+@Test
+void testSupervisorRestartsChild() {
+    Supervisor sup = Supervisor.spawn("test", Strategy.ONE_FOR_ONE, specs);
+
+    // Crash child
+    sup.findChild("worker").ifPresent(ref ->
+        ref.send(WorkerMessage.crash())
+    );
+
+    // Verify restart
+    await().until(() ->
+        sup.getAliveChildren().contains("worker")
+    );
+}
+```
+
+### Integration Test: Full Tree
+
+```java
+@Test
+void testApplicationTree() {
+    Supervisor appSup = spawnApplicationTree();
+
+    // Crash middle-level supervisor
+    crashSupervisor(appSup, "service-supervisor");
+
+    // Verify recovery
+    await().until(() ->
+        appSup.getAliveChildren().contains("service-supervisor")
+    );
+}
+```
+
+### Stress Test: Storm
+
+```java
+@Test
+void testRestartStorm() {
+    Supervisor sup = Supervisor.spawn("storm", Strategy.ONE_FOR_ONE, specs);
+
+    // Crash all children rapidly
+    for (int i = 0; i < 100; i++) {
+        crashRandomChild(sup);
+    }
+
+    // Supervisor should give up after intensity exceeded
+    await().until(() -> sup.isTerminated());
+}
+```
+
+## Best Practices
+
+### DO:
+- Group related processes under one supervisor
+- Use appropriate restart strategies
+- Set intensity/period to prevent restart storms
+- Keep trees shallow (3-4 levels)
+- Monitor supervisor events
+- Test failure scenarios
+
+### DON'T:
+- Create deep trees (>5 levels)
+- Use ONE_FOR_ALL for independent workers
+- Forget to handle permanent failures
+- Ignore supervisor termination
+- Mix restart strategies without clear reason
+
+## Common Pitfalls
+
+### 1. Too Many Children
+
+```java
+// Bad: 10,000 children under one supervisor
+Supervisor sup = Supervisor.spawn(...);
+for (int i = 0; i < 10_000; i++) {
+    sup.startChild(workerSpec(i));
+}
+
+// Good: Use multiple supervisors
+Supervisor poolSup1 = Supervisor.spawn(...); // 1,000 workers
+Supervisor poolSup2 = Supervisor.spawn(...); // 1,000 workers
+// ... etc
+```
+
+### 2. Wrong Restart Strategy
+
+```java
+// Bad: ONE_FOR_ALL for independent workers
+Supervisor bad = Supervisor.spawn(
+    "workers",
+    Strategy.ONE_FOR_ALL,  // One crash restarts all!
+    workerSpecs
+);
+
+// Good: ONE_FOR_ONE for independent workers
+Supervisor good = Supervisor.spawn(
+    "workers",
+    Strategy.ONE_FOR_ONE,  // Only crashed worker restarts
+    workerSpecs
+);
+```
+
+### 3. No Intensity Limit
+
+```java
+// Bad: Will restart forever in crash loop
+Supervisor bad = Supervisor.spawn(
+    "sup",
+    Strategy.ONE_FOR_ONE,
+    Supervisor.Config.builder()
+        .intensity(Integer.MAX_VALUE)  // No limit!
+        .build()
+);
+
+// Good: Reasonable limits
+Supervisor good = Supervisor.spawn(
+    "sup",
+    Strategy.ONE_FOR_ONE,
+    Supervisor.Config.builder()
+        .intensity(5)
+        .period(Duration.ofSeconds(60))
+        .build()
+);
+```
+
+## Related Tests
+- `SupervisorTest.java` - All strategies and behaviors
+- `CrashRecoveryTest.java` - Automatic recovery
+- `SupervisorStormStressTest.java` - Storm testing
+- `SupervisorStressTest.java` - Performance under load
+
+## See Also
+- [Implement a Supervisor](../how-to/implement-supervisor.mdx) - How-to guide
+- [Let It Crash Philosophy](./let-it-crash-philosophy.mdx) - Philosophy
+- [Fault Tolerance](./fault-tolerance.mdx) - Broader context

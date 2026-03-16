@@ -1,0 +1,800 @@
+---
+title: "Migrating from Project Reactor"
+description: "Comprehensive guide for Project Reactor developers moving to JOTP"
+---
+
+import { Tabs, Tab } from 'nextra/components'
+import { Callout } from 'nextra/components'
+
+# Migrating from Project Reactor to JOTP
+
+A comprehensive guide for Project Reactor developers moving to JOTP (Java 26 implementation of OTP primitives).
+
+<Callout type="warning">
+  This migration represents a significant shift from reactive streams programming
+  to message-passing concurrency. While both are asynchronous, the programming
+  models differ substantially.
+</Callout>
+
+## Overview
+
+JOTP brings Erlang/OTP's battle-tested concurrency patterns to the JVM using Java 26's virtual threads. While Project Reactor focuses on reactive streams and functional composition, JOTP emphasizes message-passing concurrency and fault tolerance.
+
+**Key Differences:**
+- **Message Passing:** Explicit messaging vs reactive streams
+- **Fault Tolerance:** Supervision trees vs reactive error handling
+- **Concurrency:** Virtual threads vs event loop scheduling
+- **State:** Immutable records vs reactive state containers
+- **Backpressure:** Explicit handling vs automatic propagation
+
+---
+
+## Concept Mapping
+
+### Core Concepts
+
+| Project Reactor | JOTP | Notes |
+|----------------|------|-------|
+| `Mono<T>` | `CompletableFuture<T>` | Single async result |
+| `Flux<T>` | Event stream process | Multiple events |
+| `Scheduler` | Virtual threads | Execution context |
+| `subscribeOn()` | Process context | Thread switching |
+| `publishOn()` | N/A | No equivalent concept |
+| `Sinks.Many<T>` | `EventManager<E>` | Broadcast pattern |
+
+### Operators
+
+| Reactor Operator | JOTP Equivalent | Notes |
+|-----------------|-----------------|-------|
+| `map()` | `thenApply()` | Transform value |
+| `flatMap()` | `thenCompose()` | Async transform |
+| `filter()` | Pattern matching | Conditional |
+| `switchIfEmpty()` | State machine fallback | Alternative |
+| `retry()` | Supervisor | System-level retry |
+| `timeout()` | ProcTimer | Time-based |
+| `onErrorReturn()` | State machine error state | Fallback value |
+| `doOnNext()` | Side effects in handler | Side effects |
+
+### Error Handling
+
+| Reactor | JOTP | Notes |
+|---------|------|-------|
+| `onErrorResume()` | `exceptionally()` | Recover from error |
+| `onErrorMap()` | N/A | Different error types |
+| `doOnError()` | Side effects | Error logging |
+| `retry()` | Supervisor | Automatic restart |
+| `retryWhen()` | Supervisor with backoff | Custom retry logic |
+
+---
+
+## Mono Migration
+
+### Basic Mono Usage
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public class OrderService {
+        private final OrderRepository repository;
+        private final PaymentService paymentService;
+
+        public Mono<Order> createOrder(OrderRequest request) {
+            return repository.save(new Order(request))
+                .flatMap(order -> paymentService.processPayment(order)
+                    .map(payment -> order.withPayment(payment))
+                );
+        }
+
+        public Mono<Order> getOrder(String id) {
+            return repository.findById(id)
+                .switchIfEmpty(Mono.error(new NotFoundException()));
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface OrderMsg permits CreateOrder, GetOrder, PaymentCompleted {}
+    record CreateOrder(OrderRequest request, CompletableFuture<Order> replyTo) implements OrderMsg {}
+    record GetOrder(String id, CompletableFuture<Order> replyTo) implements OrderMsg {}
+    record PaymentCompleted(Order order) implements OrderMsg {}
+
+    // State
+    record OrderState(Map<String, Order> orders) {}
+
+    // Process creation
+    var orderProcess = Proc.spawn(
+        new OrderState(Map.of()),
+        (state, msg) -> switch (msg) {
+            case CreateOrder(var req, var reply) -> {
+                var order = new Order(req);
+                var updatedOrders = merge(state.orders(), Map.of(order.id(), order));
+
+                // Send payment request asynchronously
+                paymentService.tell(new ProcessPayment(order));
+
+                // Reply immediately (async processing)
+                reply.complete(order);
+                yield new OrderState(updatedOrders);
+            }
+            case GetOrder(var id, var reply) -> {
+                var order = state.orders().get(id);
+                if (order != null) {
+                    reply.complete(order);
+                } else {
+                    reply.completeExceptionally(new NotFoundException());
+                }
+                yield state;
+            }
+            case PaymentCompleted(var order) -> {
+                var updatedOrder = order.withPayment(order.payment());
+                var updatedOrders = merge(state.orders(), Map.of(order.id(), updatedOrder));
+                yield new OrderState(updatedOrders);
+            }
+        }
+    );
+
+    // Usage
+    var future = orderProcess.ask(new CreateOrder(request, null));
+    var order = future.join();
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Message-driven:** Explicit message types instead of chained operators
+2. **State-based:** In-memory state instead of repository pattern
+3. **Bidirectional:** Request-reply via CompletableFuture
+4. **No chaining:** Direct state transformations
+
+### Error Handling in Mono
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public Mono<Payment> processPayment(Order order) {
+        return paymentGateway.charge(order)
+            .onErrorResume(e -> {
+                if (e instanceof PaymentException) {
+                    return Mono.just(Payment.failed(order));
+                }
+                return Mono.error(e);
+            })
+            .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                .filter(throwable -> throwable instanceof PaymentException));
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface PaymentMsg permits ProcessPayment, Retry {}
+    record ProcessPayment(Order order) implements PaymentMsg {}
+    record Retry(Order order, int attempt) implements PaymentMsg {}
+
+    // State
+    record PaymentState(PaymentGateway gateway) {}
+
+    // Process with supervisor for automatic retry
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        3,  // max attempts
+        Duration.ofSeconds(10)
+    );
+
+    var paymentRef = supervisor.supervise(
+        "payment",
+        new PaymentState(gateway),
+        (state, msg) -> switch (msg) {
+            case ProcessPayment(var order) -> {
+                try {
+                    var payment = state.gateway().charge(order);
+                    yield state;  // Send PaymentCompleted message
+                } catch (PaymentException e) {
+                    throw e;  // Supervisor will retry
+                }
+            }
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **System-level retry:** Supervisor handles retries automatically
+2. **No operator chaining:** Direct exception throwing
+3. **Automatic restart:** Fresh state on retry
+4. **No fallback logic:** Separate error state handling
+
+---
+
+## Flux Migration
+
+### Basic Flux Usage
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public class PriceUpdateService {
+        private final Sinks.Many<PriceUpdate> sink = Sinks.many().multicast().onBackpressureBuffer();
+
+        public Flux<PriceUpdate> priceUpdates() {
+            return sink.asFlux();
+        }
+
+        public void publishPrice(PriceUpdate update) {
+            sink.tryEmitNext(update).orThrow();
+        }
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface PriceMsg permits Subscribe, Unsubscribe, BroadcastPrice {}
+    record Subscribe(CompletableFuture<PriceUpdate> subscriber) implements PriceMsg {}
+    record Unsubscribe(CompletableFuture<PriceUpdate> subscriber) implements PriceMsg {}
+    record BroadcastPrice(PriceUpdate update) implements PriceMsg {}
+
+    // State
+    record PriceState(Set<CompletableFuture<PriceUpdate>> subscribers) {}
+
+    // Process creation
+    var priceService = Proc.spawn(
+        new PriceState(Set.of()),
+        (state, msg) -> switch (msg) {
+            case Subscribe(var subscriber) -> {
+                yield new PriceState(merge(state.subscribers(), Set.of(subscriber)));
+            }
+            case Unsubscribe(var subscriber) -> {
+                var updated = new HashSet<>(state.subscribers());
+                updated.remove(subscriber);
+                yield new PriceState(updated);
+            }
+            case BroadcastPrice(var update) -> {
+                // Notify all subscribers
+                for (var subscriber : state.subscribers()) {
+                    subscriber.complete(update);
+                }
+                yield state;
+            }
+        }
+    );
+
+    // Usage
+    // Subscribe
+    var future = new CompletableFuture<PriceUpdate>();
+    priceService.tell(new Subscribe(future));
+    var update = future.get();
+
+    // Publish
+    priceService.tell(new BroadcastPrice(new PriceUpdate("BTC", 50000.0)));
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Explicit subscriber management:** Manual tracking in state
+2. **No backpressure:** Must implement manually if needed
+3. **Pull-based:** Subscriber asks for next value
+4. **Finite streams:** Need explicit completion logic
+
+### Flux Transformation
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public Flux<ProcessedOrder> processOrders(Flux<Order> orders) {
+        return orders
+            .filter(order -> order.getAmount() > 100)
+            .map(order -> order.process())
+            .flatMap(order -> validateOrder(order)
+                .thenReturn(order)
+                .onErrorResume(e -> Mono.empty())
+            )
+            .buffer(Duration.ofSeconds(1))
+            .flatMap(list -> bulkSave(list));
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface ProcessorMsg permits ProcessOrder, FlushBuffer {}
+    record ProcessOrder(Order order, CompletableFuture<ProcessedOrder> replyTo) implements ProcessorMsg {}
+    record FlushBuffer() implements ProcessorMsg {}
+
+    // State
+    record ProcessorState(
+        List<Order> buffer,
+        Instant lastFlush,
+        OrderValidator validator
+    ) {}
+
+    // Process creation
+    var processor = Proc.spawn(
+        new ProcessorState(List.of(), Instant.now(), validator),
+        (state, msg) -> switch (msg) {
+            case ProcessOrder(var order, var reply) -> {
+                // Filter
+                if (order.getAmount() <= 100) {
+                    reply.completeExceptionally(new IllegalArgumentException("Amount too small"));
+                    yield state;
+                }
+
+                // Process
+                var processed = order.process();
+
+                // Validate
+                try {
+                    state.validator().validate(processed);
+
+                    // Add to buffer
+                    var updatedBuffer = new ArrayList<>(state.buffer());
+                    updatedBuffer.add(processed);
+
+                    // Check if should flush
+                    var now = Instant.now();
+                    if (updatedBuffer.size() >= 100 ||
+                        Duration.between(state.lastFlush(), now).compareTo(Duration.ofSeconds(1)) > 0) {
+                        // Flush buffer
+                        bulkSave(updatedBuffer);
+                        yield new ProcessorState(List.of(), now, state.validator());
+                    } else {
+                        yield new ProcessorState(updatedBuffer, state.lastFlush(), state.validator());
+                    }
+                } catch (ValidationException e) {
+                    reply.completeExceptionally(e);
+                    yield state;
+                }
+            }
+            case FlushBuffer _ -> {
+                if (!state.buffer().isEmpty()) {
+                    bulkSave(state.buffer());
+                }
+                yield new ProcessorState(List.of(), Instant.now(), state.validator());
+            }
+        }
+    );
+
+    // Periodic flush
+    ProcTimer.sendInterval(Duration.ofSeconds(1), processor, new FlushBuffer());
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Manual buffering:** Explicit state management
+2. **State-based transformations:** Not chained operators
+3. **Explicit completion:** Must flush buffers manually
+4. **More control:** Can implement custom buffering logic
+
+---
+
+## Schedulers and Threading
+
+### Reactor Schedulers
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public Mono<Order> processOrder(OrderRequest request) {
+        return Mono.fromCallable(() -> {
+                // Blocking operation
+                return orderRepository.save(request);
+            })
+            .subscribeOn(Schedulers.boundedElastic())  // Offload blocking
+            .flatMap(order -> paymentService.processPayment(order)
+                .publishOn(Schedulers.parallel())  // Switch thread
+                .map(payment -> order.withPayment(payment))
+            );
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface OrderMsg permits ProcessOrder, PaymentCompleted {}
+    record ProcessOrder(OrderRequest request, CompletableFuture<Order> replyTo) implements OrderMsg {}
+    record PaymentCompleted(Order order) implements OrderMsg {}
+
+    // State
+    record OrderState(
+        OrderRepository repository,
+        PaymentService paymentService,
+        Executor blockingExecutor
+    ) {}
+
+    // Process creation (all virtual threads)
+    var orderProcess = Proc.spawn(
+        new OrderState(repository, paymentService, blockingExecutor),
+        (state, msg) -> switch (msg) {
+            case ProcessOrder(var req, var reply) -> {
+                // Offload blocking work
+                var orderFuture = CompletableFuture.supplyAsync(
+                    () -> state.repository().save(req),
+                    state.blockingExecutor()
+                );
+
+                // Handle async result
+                orderFuture.thenAccept(order -> {
+                    // Send payment request (non-blocking)
+                    state.paymentService().tell(new ProcessPayment(order));
+                });
+
+                yield state;
+            }
+            case PaymentCompleted(var order) -> {
+                // Update state with completed order
+                yield state;  // Add to orders map if needed
+            }
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **No Schedulers:** Virtual threads handle scheduling
+2. **Explicit blocking:** Offload to dedicated pool
+3. **No thread switching:** Each process has its own virtual thread
+4. **Simpler model:** Less configuration needed
+
+---
+
+## Backpressure
+
+### Reactor Backpressure
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public Flux<Result> processStream(Flux<Data> data) {
+        return data
+            .onBackpressureBuffer(1000)  // Buffer up to 1000 items
+            .flatMap(data -> processData(data)
+                .timeout(Duration.ofSeconds(5))
+                .onErrorResume(e -> Mono.just(Result.failed(data)))
+            , 10)  // Concurrency of 10
+            .doOnNext(result -> metrics.record(result));
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface StreamMsg offers ProcessData, GetResult {}
+    record ProcessData(Data data) implements StreamMsg {}
+    record GetResult(CompletableFuture<Result> replyTo) implements StreamMsg {}
+
+    // State
+    record StreamState(
+        BlockingQueue<Data> buffer,
+        int maxConcurrency,
+        int currentProcessing
+    ) {}
+
+    // Process creation
+    var streamProcessor = Proc.spawn(
+        new StreamState(
+            new LinkedBlockingQueue<>(1000),  // Bounded buffer
+            10,  // Max concurrency
+            0   // Current processing count
+        ),
+        (state, msg) -> switch (msg) {
+            case ProcessData(var data) -> {
+                // Check buffer capacity (backpressure)
+                if (state.buffer().remainingCapacity() == 0) {
+                    // Buffer full - reject or wait
+                    throw new BufferFullException();
+                }
+
+                // Add to buffer
+                state.buffer().offer(data);
+
+                // Process if under concurrency limit
+                if (state.currentProcessing() < state.maxConcurrency()) {
+                    var nextData = state.buffer().poll();
+                    if (nextData != null) {
+                        // Process asynchronously
+                        CompletableFuture.supplyAsync(() -> processData(nextData))
+                            .orTimeout(5, TimeUnit.SECONDS)
+                            .handle((result, e) -> {
+                                if (e != null) {
+                                    return Result.failed(nextData);
+                                }
+                                return result;
+                            })
+                            .thenAccept(result -> {
+                                metrics.record(result);
+                                // Send completion message
+                                streamProcessor.tell(new ProcessingComplete());
+                            });
+                        yield new StreamState(
+                            state.buffer(),
+                            state.maxConcurrency(),
+                            state.currentProcessing() + 1
+                        );
+                    }
+                }
+                yield state;
+            }
+            case ProcessingComplete _ -> {
+                yield new StreamState(
+                    state.buffer(),
+                    state.maxConcurrency(),
+                    state.currentProcessing() - 1
+                );
+            }
+        }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Manual backpressure:** Explicit buffer management
+2. **State-based:** Track processing count in state
+3. **Reject or wait:** Explicit handling of full buffer
+4. **More control:** Custom backpressure strategies
+
+---
+
+## Retry and Error Handling
+
+### Reactor Retry
+
+<Tabs items={['Project Reactor', 'JOTP']}>
+  <Tab>
+    ```java
+    public Mono<Payment> processPaymentWithRetry(Order order) {
+        return paymentGateway.charge(order)
+            .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+                .filter(throwable -> throwable instanceof PaymentException)
+                .doBeforeRetry(signal -> log.warn("Retrying: " + signal.failure()))
+            )
+            .timeout(Duration.ofSeconds(10))
+            .onErrorMap(TimeoutException.class, ex -> new PaymentTimeoutException())
+            .onErrorReturn(Payment.failed(order));
+    }
+    ```
+  </Tab>
+  <Tab>
+    ```java
+    // Message protocol
+    sealed interface PaymentMsg permits ProcessPayment {}
+    record ProcessPayment(Order order) implements PaymentMsg {}
+
+    // State
+    record PaymentState(PaymentGateway gateway) {}
+
+    // Supervisor handles retry automatically
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        3,  // max retries
+        Duration.ofSeconds(10)  // time window
+    );
+
+    var paymentRef = supervisor.supervise(
+        "payment",
+        new PaymentState(gateway),
+        (state, msg) -> switch (msg) {
+            case ProcessPayment(var order) -> {
+                try {
+                    // Timeout handled by caller using ProcTimer or orTimeout
+                    var payment = state.gateway().charge(order);
+                    yield state;
+                } catch (PaymentException e) {
+                    // Log before retry (supervisor will restart)
+                    log.warn("Payment failed, supervisor will retry: " + e.getMessage());
+                    throw e;  // Supervisor restarts process
+                } catch (Exception e) {
+                    // Non-retryable error
+                    throw e;
+                }
+            }
+        }
+    );
+
+    // Usage with timeout
+    var paymentFuture = paymentRef.proc().ask(new ProcessPayment(order))
+        .orTimeout(10, TimeUnit.SECONDS);
+    ```
+  </Tab>
+</Tabs>
+
+**Key Differences:**
+1. **Supervisor retry:** Automatic restart on crash
+2. **No retry operators:** System-level retry logic
+3. **Fresh state:** Each retry starts with clean state
+4. **Timeout external:** Use CompletableFuture.orTimeout
+
+---
+
+## Migration Checklist
+
+### Phase 1: Core Concepts (Week 1-2)
+- [ ] Understand message passing vs reactive streams
+- [ ] Learn virtual threads vs schedulers
+- [ ] Practice CompletableFuture patterns
+- [ ] Understand supervision vs reactive error handling
+
+### Phase 2: Mono Migration (Week 3-4)
+- [ ] Convert Mono<T> to CompletableFuture<T>
+- [ ] Implement message protocols
+- [ ] Replace operators with state transformations
+- [ ] Set up process registry
+
+### Phase 3: Flux Migration (Week 5-6)
+- [ ] Convert Flux<T> to event streams
+- [ ] Implement manual buffering
+- [ ] Add backpressure handling
+- [ ] Set up subscription management
+
+### Phase 4: Error Handling (Week 7-8)
+- [ ] Replace retryWhen with supervisor
+- [ ] Implement timeout handling
+- [ ] Add error state machines
+- [ ] Set up fallback mechanisms
+
+### Phase 5: Advanced Features (Week 9-10)
+- [ ] Remove scheduler dependencies
+- [ ] Implement blocking work offload
+- [ ] Set up parallel processing
+- [ ] Performance testing and optimization
+
+---
+
+## Common Gotchas
+
+### 1. Missing Backpressure
+
+**Problem:** JOTP doesn't have built-in backpressure.
+
+**Solution:** Use bounded queues and track processing state.
+
+```java
+var queue = new LinkedBlockingQueue<Data>(1000);
+
+if (queue.remainingCapacity() == 0) {
+    throw new BusyException();
+}
+```
+
+### 2. Blocking Operations
+
+**Problem:** Blocking in virtual threads can cascade.
+
+**Solution:** Offload blocking work to dedicated pool.
+
+```java
+var future = CompletableFuture.supplyAsync(
+    () -> blockingOperation(),
+    blockingExecutor
+);
+```
+
+### 3. No Operators
+
+**Problem:** Looking for map, filter, flatMap operators.
+
+**Solution:** Use pattern matching and state transformations.
+
+```java
+// Reactor
+flux.map(x -> x * 2).filter(x -> x > 10)
+
+// JOTP
+(state, msg) -> switch (msg) {
+    case Process(var value) -> {
+        var transformed = value * 2;
+        if (transformed > 10) {
+            yield newState;
+        } else {
+            yield state;
+        }
+    }
+};
+```
+
+---
+
+## Best Practices for Migration
+
+### 1. Start with Stateless Processes
+Migrate simple Mono patterns first.
+
+### 2. Use Sealed Types
+Leverage the compiler for message safety.
+
+```java
+sealed interface Message permits A, B, C {}
+record A() implements Message {}
+record B() implements Message {}
+record C() implements Message {}
+```
+
+### 3. Embrace Immutability
+All state should be immutable.
+
+```java
+public record UserState(
+    String id,
+    String name,
+    List<String> roles
+) {}
+```
+
+### 4. Test Supervision
+Verify crash recovery works.
+
+```java
+@Test
+void testSupervisorRestarts() {
+    var sup = Supervisor.create(ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+    var child = sup.supervise("test", state, handler);
+
+    child.proc().thread().interrupt();
+    assertTrue(child.proc().isRunning());
+}
+```
+
+---
+
+## Performance Considerations
+
+### Virtual Thread Advantages
+- **Scalability:** Millions of processes
+- **Memory:** ~1 KB per process
+- **Latency:** Sub-millisecond context switching
+
+### When to Use Reactive Streams
+- Complex stream compositions
+- Built-in backpressure needed
+- Operator chaining preferred
+
+---
+
+## Effort Estimation
+
+| Component | Complexity | Time Estimate |
+|-----------|------------|---------------|
+| Mono to CompletableFuture | Medium | 2-3 weeks |
+| Flux to event streams | High | 3-4 weeks |
+| Error handling | Medium | 2-3 weeks |
+| Backpressure implementation | High | 3-4 weeks |
+| Scheduler removal | Low | 1-2 weeks |
+| **Total** | | **8-11 weeks** |
+
+---
+
+## Rollback Strategy
+
+### Phase 1: Side-by-Side Deployment
+- Run Reactor and JOTP versions in parallel
+- Compare behavior and performance
+- Gradually shift traffic to JOTP
+
+### Phase 2: Feature Flags
+- Use feature flags to switch between implementations
+- Monitor error rates and latency
+- Quick rollback via configuration
+
+### Phase 3: API Compatibility
+- Keep reactive API as facade
+- Delegate to JOTP processes
+- Gradually migrate callers
+
+---
+
+## Further Reading
+
+- [JOTP Architecture Overview](/docs/explanations/architecture-overview)
+- [How-To: Build Supervision Trees](/docs/how-to/build-supervision-trees)
+- [How-To: Process Communication](/docs/how-to/process-communication)
+- [Examples: Reactive Integration](/docs/examples/reactive-integration)
+
+---
+
+**Conclusion:** JOTP provides a fundamentally different approach to concurrency than Project Reactor. While Reactor focuses on reactive streams and operator chaining, JOTP emphasizes message passing and supervision. The migration requires rethinking application architecture, but the benefits in fault tolerance and scalability are significant.

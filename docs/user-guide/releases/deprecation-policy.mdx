@@ -1,0 +1,494 @@
+# Deprecation Policy
+
+This document outlines the deprecation policy and timeline for JOTP releases.
+
+## Overview
+
+JOTP follows a **predictable deprecation policy** to give developers ample time to adapt to changes. Our goal is to balance innovation with stability for production systems.
+
+**Core Principles:**
+1. **Deprecation before removal** - No breaking changes without prior deprecation
+2. **Clear communication** - All deprecations documented and announced
+3. **Migration support** - Migration guides provided for all breaking changes
+4. **Long support windows** - Minimum 6 months for deprecation period
+
+## Deprecation Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    API Lifecycle                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Current ─────► Deprecated ─────► Removed ─────────► End of Life │
+│  (Stable)      (Warning)           (Error)            (No Support)│
+│     │              │                  │                    │       │
+│     │              │                  │                    │       │
+│     ▼              ▼                  ▼                    ▼       │
+│  Fully         Still              Hard               No        │
+│  Supported     Available          Error              Support   │
+│                 (6+ months)        (Breaking)                   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Deprecation Stages
+
+### Stage 1: Current (Stable)
+
+**Characteristics:**
+- Fully supported and maintained
+- Bug fixes and security patches applied
+- Recommended for new projects
+- No deprecation warnings
+
+**Duration:**
+- Until deprecated or superseded
+- Typically 1-2 years for major APIs
+
+**Example:**
+```java
+// Current API - use this
+ProcRef<Integer, String> proc = Proc.spawn(initialState, handler);
+proc.tell(new Increment());
+```
+
+### Stage 2: Deprecated
+
+**Characteristics:**
+- Still functional but marked as deprecated
+- Compiler/runtime warnings generated
+- Migration path clearly documented
+- No new features added
+
+**Duration:**
+- **Minimum 6 months** for minor deprecations
+- **Minimum 12 months** for major deprecations
+- **Until next major version** for breaking changes
+
+**Warnings:**
+```java
+/**
+ * @deprecated Use {@link Proc#spawn(Object, BiFunction)} instead.
+ * This method will be removed in version 2.0.0.
+ *
+ * @see Proc#spawn(Object, BiFunction)
+ * @since 0.1.0
+ */
+@Deprecated(since = "1.0.0", forRemoval = true)
+public static <S, M> Proc<S, M> start(S initialState, BiFunction<S, M, S> handler) {
+    return spawn(initialState, handler);
+}
+```
+
+**Compiler Warnings:**
+```bash
+# javac warning
+warning: [deprecation] start(S,BiFunction) in Proc has been deprecated
+
+# SpotBugs/ESLint
+DEPRECATED: Proc.start() is deprecated and will be removed in 2.0.0.
+Use Proc.spawn() instead. See: https://github.com/seanchatmangpt/jotp/migration
+```
+
+### Stage 3: Removed (Breaking Change)
+
+**Characteristics:**
+- No longer available in API
+- Compilation errors if used
+- Migration required to upgrade
+
+**Timing:**
+- **Major version bump** (e.g., 1.0.0 → 2.0.0)
+- Only after minimum deprecation period
+- Migration guide provided
+
+**Example:**
+```java
+// Version 1.0.0 - Deprecated
+@Deprecated(since = "1.0.0", forRemoval = true)
+public static <S, M> Proc<S, M> start(S initialState, BiFunction<S, M, S> handler) {
+    return spawn(initialState, handler);
+}
+
+// Version 2.0.0 - Removed
+// Method no longer exists - causes compilation error
+```
+
+### Stage 4: End of Life
+
+**Characteristics:**
+- No security patches
+- No bug fixes
+- No support
+- Archived documentation
+
+**Timing:**
+- **2 years after removal** for minor versions
+- **5 years after removal** for major versions
+- Extended support available for enterprise customers
+
+## Deprecation Timeline
+
+### API Deprecations
+
+| API | Deprecated | Removal | Version | Status |
+|-----|------------|---------|---------|--------|
+| `Proc.start()` | 1.0.0 | 2.0.0 | Major | ⚠️ Deprecated |
+| `Proc.send()` | 1.0.0 | 2.0.0 | Major | ⚠️ Deprecated |
+| `Proc.create()` | 1.0.0 | 2.0.0 | Major | ⚠️ Deprecated |
+| `Result.error()` | - | - | - | ✅ Current |
+| `Supervisor.supervise()` (legacy) | 1.0.0 | 2.0.0 | Major | ⚠️ Deprecated |
+
+### Version Support Timeline
+
+| Version | Release | EOL | Current Status |
+|---------|---------|-----|----------------|
+| 1.0.x | Mar 2026 | Dec 2027 | ✅ Supported |
+| 1.1.x | Jun 2026 | Mar 2028 | 🔜 Planned |
+| 1.2.x | Sep 2026 | Jun 2028 | 🔜 Planned |
+| 2.0.0 | 2027 | 2029 | 🔜 Planned |
+
+### Java Version Support
+
+| Java Version | JOTP Support | EOL | Status |
+|--------------|--------------|-----|--------|
+| 21 | ❌ No support | - | Not supported |
+| 22 | ❌ No support | - | Not supported |
+| 23 | ❌ No support | - | Not supported |
+| 24 | ❌ No support | - | Not supported |
+| 25 | ❌ No support | - | Not supported |
+| 26 | ✅ Full support | 2029 | ✅ Current |
+| 27 | 🔜 Planned | 2030 | 🔜 Future |
+
+## Deprecation Criteria
+
+### Automatic Deprecation
+
+APIs are automatically deprecated if:
+
+1. **Security Vulnerability**
+   - Immediate deprecation if CVE found
+   - Removal in next patch version
+
+2. **Better Alternative Available**
+   - Deprecated after 3 months of new API availability
+   - Removed after next major version
+
+3. **Performance Issues**
+   - Deprecated if significantly slower than alternatives
+   - Removal in next minor version
+
+4. **Design Flaws**
+   - Deprecated if API design causes bugs
+   - Removal after next major version
+
+### Manual Deprecation
+
+APIs may be manually deprecated for:
+
+1. **Strategic Direction**
+   - Changing framework philosophy
+   - Minimum 12-month deprecation period
+
+2. **Maintenance Burden**
+   - Complex APIs with low usage
+   - Minimum 6-month deprecation period
+
+3. **Ecosystem Changes**
+   - Java/JVM ecosystem changes
+   - Minimum 6-month deprecation period
+
+## Deprecation Process
+
+### Step 1: Proposal
+
+**Timeline:** T-6 months
+
+**Actions:**
+- Document deprecation rationale
+- Propose alternative API
+- Estimate migration effort
+- Get community feedback
+
+**Example:**
+```markdown
+## Deprecation Proposal: Proc.start()
+
+### Rationale
+- Inconsistent with Erlang/OTP naming
+- Better factory pattern available (Proc.spawn())
+
+### Alternative
+Use `Proc.spawn()` instead:
+```java
+// Old (deprecated)
+var proc = Proc.start(state, handler);
+
+// New (recommended)
+var proc = Proc.spawn(state, handler);
+```
+
+### Migration Effort
+- Low: Simple find-replace
+- Affected code: ~20% of codebase
+- Breaking change: Yes (major version)
+
+### Timeline
+- Proposed: 2025-09-01
+- Deprecated: 2026-03-23 (v1.0.0)
+- Removed: 2027-01-01 (v2.0.0)
+```
+
+### Step 2: Implementation
+
+**Timeline:** T-3 months
+
+**Actions:**
+- Add `@Deprecated` annotations
+- Implement new API
+- Add migration warnings
+- Update documentation
+
+**Code:**
+```java
+/**
+ * @deprecated Use {@link #spawn(Object, BiFunction)} instead.
+ * This method will be removed in version 2.0.0.
+ *
+ * @param initialState Initial process state
+ * @param handler Message handler
+ * @return Process reference
+ * @see #spawn(Object, BiFunction)
+ * @since 0.1.0
+ */
+@Deprecated(since = "1.0.0", forRemoval = true)
+public static <S, M> Proc<S, M> start(S initialState, BiFunction<S, M, S> handler) {
+    // Log deprecation warning
+    Logger.getLogger(Proc.class.getName())
+        .warning("Proc.start() is deprecated and will be removed in 2.0.0. Use Proc.spawn() instead.");
+
+    return spawn(initialState, handler);
+}
+```
+
+### Step 3: Announcement
+
+**Timeline:** T-0 (Release)
+
+**Channels:**
+- Release notes
+- GitHub discussions
+- Blog post
+- Twitter/X announcement
+- Mailing list
+
+**Content:**
+```markdown
+## Deprecation Notice: Proc.start()
+
+The `Proc.start()` method has been deprecated and will be removed in version 2.0.0.
+
+**What's Deprecated:**
+- `Proc.start(S, BiFunction)` - Use `Proc.spawn(S, BiFunction)` instead
+
+**Why:**
+- Consistent with Erlang/OTP naming conventions
+- Better factory method semantics
+
+**Migration:**
+```java
+// Before
+var proc = Proc.start(state, handler);
+
+// After
+var proc = Proc.spawn(state, handler);
+```
+
+**Timeline:**
+- Deprecated: v1.0.0 (2026-03-23)
+- Removed: v2.0.0 (2027-01-01)
+- Support: Security patches until v2.0.0 release
+
+**Help:**
+- Migration Guide: [link]
+- Discussion: [link]
+```
+
+### Step 4: Support Period
+
+**Timeline:** T+0 to T+6/12 months
+
+**Actions:**
+- Answer migration questions
+- Fix bugs in deprecated API
+- Provide migration assistance
+- Track usage metrics
+
+### Step 5: Removal
+
+**Timeline:** Next major version
+
+**Actions:**
+- Remove deprecated code
+- Update documentation
+- Finalize migration guide
+- Update examples
+
+## Emergency Deprecation
+
+**Criteria for Immediate Removal:**
+
+1. **Critical Security Vulnerability**
+   - CVE with CVSS score ≥ 8.0
+   - Exploits in the wild
+   - Removal in next patch version
+
+2. **Legal Issues**
+   - License violation
+   - Patent infringement
+   - Immediate removal required
+
+**Process:**
+```markdown
+## Emergency Deprecation: [API Name]
+
+### Severity: CRITICAL
+
+### Issue
+[Description of security/legal issue]
+
+### Impact
+[Affected versions, usage estimates]
+
+### Action Required
+- Immediate upgrade recommended
+- Migration: [steps]
+- Timeline: [patch release date]
+
+### References
+- CVE: [link]
+- Advisory: [link]
+```
+
+## Migration Support
+
+### Automated Migration
+
+**Find-and-Replace Scripts:**
+```bash
+# Automated migration for Proc.start() → Proc.spawn()
+find . -name "*.java" -type f -exec sed -i.bak \
+  's/Proc\.start(/Proc.spawn(/g' {} \;
+
+# Verify changes
+git diff
+```
+
+**IDE Refactoring:**
+```java
+// IntelliJ IDEA
+// Refactor → Rename → Proc.start → Proc.spawn
+
+// Eclipse
+// Refactor → Rename → Apply to all references
+```
+
+### Migration Guide Template
+
+```markdown
+# Migrating from [Old API] to [New API]
+
+## Overview
+[Brief description of change]
+
+## Breaking Changes
+[List breaking changes]
+
+## Migration Steps
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+## Before and After
+[Code examples]
+
+## Testing
+[Test strategies]
+
+## Rollback
+[Rollback plan]
+```
+
+## Community Feedback
+
+**Deprecation Proposals:**
+- Submit as GitHub Discussion
+- Tag with `deprecation`
+- Include rationale and timeline
+
+**Feedback Channels:**
+- GitHub Discussions
+- GitHub Issues
+- Discord/Slack community
+- Public mailing list
+
+**Voting Process:**
+- Community feedback period: 2 weeks
+- Maintainer decision: Final
+- Appeal process: GitHub Discussion
+
+## Exceptions
+
+**Grandfathered APIs:**
+APIs that won't be deprecated:
+
+1. **Core Primitives**
+   - `Proc<S,M>` - Core abstraction
+   - `Supervisor` - Fault tolerance primitive
+   - `Result<T,E>` - Error handling
+
+2. **Widely Used APIs**
+   - >80% usage in community
+   - No viable alternative
+   - Performance-critical path
+
+3. **Compatibility APIs**
+   - Erlang/OTP compatibility
+   - Java ecosystem integration
+
+## Policy Updates
+
+**Review Schedule:**
+- Annually reviewed by maintainers
+- Community feedback period: 1 month
+- Updates announced via GitHub
+
+**Change Process:**
+1. Propose policy change
+2. Community discussion (2 weeks)
+3. Maintainer vote
+4. Implementation and documentation
+
+## Related Documentation
+
+- [Changelog](./changelog.mdx) - Complete version history
+- [Migration Guides](./migration-guides.mdx) - Version-specific migrations
+- [Release Process](./release-process.mdx) - How releases are made
+- [Contributing](./contributing.mdx) - Contribution guidelines
+
+## Questions?
+
+**Deprecation Questions:**
+- Open a GitHub Discussion
+- Tag with `deprecation`
+- Include API name and use case
+
+**Migration Help:**
+- See [Migration Guides](./migration-guides.mdx)
+- Open GitHub Issue with minimal example
+- Join Discord community
+
+---
+
+**Last Updated:** 2026-03-15
+**Next Review:** 2027-03-15

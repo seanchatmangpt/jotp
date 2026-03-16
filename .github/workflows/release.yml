@@ -336,9 +336,9 @@ jobs:
 
           ### 📚 Documentation
           - **API Documentation**: [https://javadoc.io/doc/io.github.seanchatmangpt/jotp/${{ env.VERSION }}](https://javadoc.io/doc/io.github.seanchatmangpt/jotp/${{ env.VERSION }})
-          - **User Guide**: [https://github.com/seanchatmangpt/jotp/tree/docs](https://github.com/seanchatmangpt/jotp/tree/docs)
-          - **Architecture**: [.claude/ARCHITECTURE.md](./.claude/ARCHITECTURE.md)
-          - **PhD Thesis**: [OTP-Java26 Equivalence](https://github.com/seanchatmangpt/jotp/blob/main/docs/phd-thesis-otp-java26.md)
+          - **User Guide**: [https://github.com/seanchatmangpt/jotp/tree/main/docs](https://github.com/seanchatmangpt/jotp/tree/main/docs)
+          - **Architecture**: [docs/architecture/README.md](https://github.com/seanchatmangpt/jotp/blob/main/docs/architecture/README.md)
+          - **PhD Thesis**: [OTP-Java26 Equivalence](https://github.com/seanchatmangpt/jotp/blob/main/docs/research/phd-thesis/)
 
           ### 🎯 Requirements
           - **Java 26** with `--enable-preview` flag

@@ -3,12 +3,15 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -31,8 +34,14 @@ import org.junit.jupiter.api.Test;
  * @see Application
  * @see ApplicationPhase
  */
+@DtrTest
 @DisplayName("Application: Lifecycle Orchestrator")
 class ApplicationTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     sealed interface TestMessage permits TestMessage.Increment, TestMessage.Get {
         record Increment() implements TestMessage {}
@@ -48,7 +57,15 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Application startup sequence: INIT -> START -> RUNNING")
-    void testStartupSequence() throws Exception {
+    void testStartupSequence(DtrContext ctx) throws Exception {
+        ctx.sayNextSection("Application: OTP Application Lifecycle");
+        ctx.say(
+                """
+                Applications in JOTP mirror Erlang/OTP's application behavior - they are the top-level
+                containers for supervision trees and services. Each application follows a strict lifecycle:
+                INIT (initialization hooks) -> START (services spawn) -> RUNNING (normal operation).
+                """);
+
         record AppState(String name) {}
 
         var phases = new CopyOnWriteArrayList<Application.ApplicationPhase>();
@@ -134,7 +151,14 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Graceful shutdown stops services in reverse order")
-    void testGracefulShutdown() throws Exception {
+    void testGracefulShutdown(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                Graceful shutdown ensures services are stopped in the correct order, allowing
+                cleanup operations to complete before the application fully terminates. Shutdown
+                hooks run after all services have been stopped.
+                """);
+
         record AppState(String name) {}
 
         BiFunction<Integer, TestMessage, Integer> handler =
@@ -272,7 +296,14 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Phase transitions occur in correct order")
-    void testPhaseTransitions() throws Exception {
+    void testPhaseTransitions(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                Application phase transitions follow a deterministic sequence: INIT -> RUNNING -> STOPPED.
+                This mirrors Erlang/OTP's application controller where each phase has well-defined entry
+                and exit conditions.
+                """);
+
         record AppState(String name) {}
 
         var phaseLog = new CopyOnWriteArrayList<Application.ApplicationPhase>();
@@ -302,7 +333,14 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Supervisor integration: application can manage supervised children")
-    void testSupervisorIntegration() throws Exception {
+    void testSupervisorIntegration(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                Applications integrate with the Supervisor pattern to create fault-tolerant process trees.
+                The application registers supervisors and their children as services, enabling lookup
+                by name throughout the application lifecycle.
+                """);
+
         record AppState(String name) {}
 
         var supervisor = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));

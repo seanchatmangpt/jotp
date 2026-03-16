@@ -1,4 +1,4 @@
-# Java Maven Template - GCP Outputs
+# JOTP - GCP Outputs
 
 output "network_id" {
   description = "VPC network ID"

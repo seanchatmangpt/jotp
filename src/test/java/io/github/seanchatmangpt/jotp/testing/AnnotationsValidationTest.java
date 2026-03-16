@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.testing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.testing.annotations.AsyncPatternTest;
 import io.github.seanchatmangpt.jotp.testing.annotations.CorrelationTest;
 import io.github.seanchatmangpt.jotp.testing.annotations.IntegrationPattern;
@@ -17,6 +18,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.concurrent.TimeUnit;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,11 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(10)
 @DisplayName("Annotations Validation")
 class AnnotationsValidationTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Helper ───────────────────────────────────────────────────────────────
 

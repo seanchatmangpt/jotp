@@ -1,4 +1,4 @@
-# Java Maven Template - Azure VM Image Builder
+# JOTP - Azure VM Image Builder
 # Requires: Packer >= 1.9.0, Azure service principal credentials
 
 packer {
@@ -52,7 +52,7 @@ variable "location" {
 
 variable "image_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Name of the managed image"
 }
 
@@ -99,8 +99,8 @@ source "azure-arm" "java-maven" {
 
   # Tags
   azure_tags = {
-    Name        = "java-maven-template"
-    Project     = "java-maven-template"
+    Name        = "jotp"
+    Project     = "jotp"
     JavaVersion = var.java_version
     AppVersion  = var.app_version
     BuiltBy     = "packer"
@@ -132,14 +132,14 @@ build {
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
     inline = [
-      "mkdir -p /opt/java-maven-app",
-      "chmod 755 /opt/java-maven-app",
+      "mkdir -p /opt/jotp-app",
+      "chmod 755 /opt/jotp-app",
     ]
   }
 
   # Copy application JAR
   provisioner "file" {
-    source      = "../../../target/java-maven-template-${var.app_version}.jar"
+    source      = "../../../target/jotp-${var.app_version}.jar"
     destination = "/tmp/app.jar"
     direction   = "upload"
   }
@@ -148,8 +148,8 @@ build {
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
     inline = [
-      "mv /tmp/app.jar /opt/java-maven-app/app.jar",
-      "chmod 644 /opt/java-maven-app/app.jar",
+      "mv /tmp/app.jar /opt/jotp-app/app.jar",
+      "chmod 644 /opt/jotp-app/app.jar",
     ]
   }
 
@@ -157,16 +157,16 @@ build {
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
     inline = [
-      "tee /etc/systemd/system/java-maven-app.service > /dev/null <<'EOF'",
+      "tee /etc/systemd/system/jotp-app.service > /dev/null <<'EOF'",
       "[Unit]",
-      "Description=Java Maven Template Application",
+      "Description=JOTP Application",
       "After=network.target",
       "",
       "[Service]",
       "Type=simple",
       "User=nobody",
-      "WorkingDirectory=/opt/java-maven-app",
-      "ExecStart=/usr/bin/java -jar /opt/java-maven-app/app.jar",
+      "WorkingDirectory=/opt/jotp-app",
+      "ExecStart=/usr/bin/java -jar /opt/jotp-app/app.jar",
       "Restart=on-failure",
       "RestartSec=10",
       "",
@@ -174,7 +174,7 @@ build {
       "WantedBy=multi-user.target",
       "EOF",
       "systemctl daemon-reload",
-      "systemctl enable java-maven-app",
+      "systemctl enable jotp-app",
     ]
   }
 

@@ -3,6 +3,9 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.ProcRegistry;
@@ -11,17 +14,28 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link DynamicRouter} — verifies runtime message routing and handler registration.
+ * Unit tests for {@link DynamicRouter} with DTR documentation.
+ *
+ * <p>The Dynamic Router pattern routes messages to destinations determined at runtime. Unlike
+ * content-based routing, the destination is resolved dynamically based on message content or
+ * external configuration.
  *
  * <p>Tests the dynamic router pattern for late-binding message routing using ProcRegistry.
  */
-@DisplayName("DynamicRouter — runtime destination resolution")
+@DtrTest
+@DisplayName("Dynamic Router Pattern (EIP)")
 class DynamicRouterTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @Nested
     @DisplayName("Constructor")
@@ -69,7 +83,33 @@ class DynamicRouterTest implements WithAssertions {
 
         @Test
         @DisplayName("resolves destination at runtime based on message")
-        void resolvesDestinationAtRuntime() {
+        void resolvesDestinationAtRuntime(DtrContext ctx) {
+            ctx.sayNextSection("Dynamic Router Pattern");
+            ctx.say(
+                    "The Dynamic Router resolves destinations at runtime based on message content."
+                            + " Unlike content-based routing, destinations are looked up dynamically.");
+            ctx.sayCode(
+                    """
+                    DynamicRouter<String> router = new DynamicRouter<>(
+                        msg -> {
+                            if (msg.startsWith("order:")) return "order-service";
+                            if (msg.startsWith("payment:")) return "payment-service";
+                            return "default-service";
+                        }
+                    );
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Message] --> B{Dynamic Router}
+                        B -->|resolve| C[order-service]
+                        B -->|resolve| D[payment-service]
+                        B -->|resolve| E[default-service]
+                    """);
+            ctx.sayNote(
+                    "Use when destinations are determined at runtime, such as tenant-specific routing"
+                            + " or service discovery-based routing.");
             List<String> resolvedDestinations = new ArrayList<>();
             DynamicRouter<String> router =
                     new DynamicRouter<>(
@@ -211,7 +251,27 @@ class DynamicRouterTest implements WithAssertions {
 
         @Test
         @DisplayName("successfully routes to registered process")
-        void successfullyRoutesToRegisteredProcess() {
+        void successfullyRoutesToRegisteredProcess(DtrContext ctx) {
+            ctx.sayNextSection("Dynamic Router: ProcRegistry Integration");
+            ctx.say(
+                    "DynamicRouter integrates with ProcRegistry to route messages to registered"
+                            + " processes by name.");
+            ctx.sayCode(
+                    """
+                    ProcRef<String, String> handlerRef = Proc.spawn(
+                        "message-handler",
+                        () -> receivedMessages,
+                        (state, msg) -> { state.add(msg); return state; }
+                    );
+
+                    DynamicRouter<String> router = new DynamicRouter<>(
+                        msg -> "message-handler"
+                    );
+
+                    boolean result = router.route("first-message");
+                    assertThat(result).isTrue();
+                    """,
+                    "java");
             List<String> receivedMessages = new ArrayList<>();
 
             // Create and register a simple message handler process

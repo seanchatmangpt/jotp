@@ -407,7 +407,7 @@ Jobs run in parallel where possible:
 - [Act Documentation](https://nektosact.com/)
 
 ### Project-Specific
-- [JOTP Architecture](../.claude/ARCHITECTURE.md)
+- [JOTP Architecture](../docs/architecture/README.md)
 - [JOTP README](../README.md)
 - [Maven Publishing Guide](../docs/MAVEN-CENTRAL-PUBLISHING.md)
 

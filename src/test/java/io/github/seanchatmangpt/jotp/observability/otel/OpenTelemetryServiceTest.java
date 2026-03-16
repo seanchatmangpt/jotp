@@ -18,17 +18,48 @@ package io.github.seanchatmangpt.jotp.observability.otel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** Tests for OpenTelemetryService. */
-@DisplayName("OpenTelemetryService Tests")
+@DisplayName("OpenTelemetryService: Distributed Tracing Integration")
 class OpenTelemetryServiceTest {
+
+    @DtrContextField private DtrContext ctx;
 
     @Test
     @DisplayName("Create service with default configuration")
-    void createWithDefaultConfiguration() {
+    void createWithDefaultConfiguration(DtrContext ctx) {
+        ctx.sayNextSection("OpenTelemetry Integration: Zero-Setup Observability");
+        ctx.say(
+                """
+                OpenTelemetryService provides a zero-setup integration point for distributed tracing
+                and metrics export. The factory method creates a fully configured OpenTelemetry SDK
+                with sensible defaults for development and production use.
+
+                Current implementation is a placeholder — actual SDK integration pending.
+                The architecture supports OTLP export to collectors like Grafana, Jaeger, and OTEL
+                backends.
+                """);
+
+        ctx.sayCode(
+                """
+                // Zero-configuration factory method
+                OpenTelemetryService service = OpenTelemetryService.create();
+
+                // Auto-configured with defaults:
+                // - Service name: "jotp-service"
+                // - OTLP endpoint: "http://localhost:4318"
+                // - Metrics: enabled
+                // - Tracing: enabled
+                // - Logging: disabled
+                """,
+                "java");
+
         OpenTelemetryService service = OpenTelemetryService.create();
 
         assertThat(service).isNotNull();
@@ -37,6 +68,33 @@ class OpenTelemetryServiceTest {
         assertThat(service.resource()).isNotNull();
         assertThat(service.meterProvider()).isNotNull();
         assertThat(service.tracerProvider()).isNotNull();
+
+        ctx.sayTable(
+                new String[][] {
+                    {"Component", "Purpose", "Status"},
+                    {"SDK", "OpenTelemetry SDK instance", "Placeholder"},
+                    {"Resource", "Service identity metadata", "Configured"},
+                    {"MeterProvider", "Metrics collection API", "Placeholder"},
+                    {"TracerProvider", "Distributed tracing API", "Placeholder"}
+                });
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Service Name",
+                        service.name(),
+                        "SDK Type",
+                        service.sdk().getClass().getSimpleName(),
+                        "Resource",
+                        service.resource().toString(),
+                        "MeterProvider",
+                        service.meterProvider().toString(),
+                        "TracerProvider",
+                        service.tracerProvider().toString()));
+
+        ctx.sayNote(
+                "The placeholder pattern allows testing lifecycle and configuration without"
+                        + " requiring the full OpenTelemetry SDK dependency. Integration is additive"
+                        + " — no breaking changes when SDK is added.");
     }
 
     @Test
@@ -50,7 +108,34 @@ class OpenTelemetryServiceTest {
 
     @Test
     @DisplayName("Create service with custom configuration")
-    void createWithCustomConfiguration() {
+    void createWithCustomConfiguration(DtrContext ctx) {
+        ctx.sayNextSection("Metrics Export Formats: OTLP Configuration");
+        ctx.say(
+                """
+                OpenTelemetry uses the OpenTelemetry Protocol (OTLP) for exporting telemetry data.
+                Configuration includes endpoint, export intervals, timeouts, and feature flags for
+                metrics/tracing/logging.
+
+                OTLP supports both HTTP (port 4318) and gRPC (port 4317) transports. The default
+                HTTP endpoint is compatible with most collectors including Grafana, Jaeger, and
+                OpenTelemetry Collector.
+                """);
+
+        ctx.sayCode(
+                """
+                // Builder pattern for custom configuration
+                OtelConfiguration config = OtelConfiguration.builder()
+                    .serviceName("test-service")
+                    .otlpEndpoint("http://localhost:4318")
+                    .exportInterval(Duration.ofSeconds(10))
+                    .enableMetrics(true)
+                    .enableTracing(false)
+                    .build();
+
+                OpenTelemetryService service = OpenTelemetryService.create(config);
+                """,
+                "java");
+
         OtelConfiguration config =
                 OtelConfiguration.builder()
                         .serviceName("test-service")
@@ -69,6 +154,39 @@ class OpenTelemetryServiceTest {
         assertThat(service.configuration()).containsEntry("exportInterval", Duration.ofSeconds(10));
         assertThat(service.configuration()).containsEntry("enableMetrics", true);
         assertThat(service.configuration()).containsEntry("enableTracing", false);
+
+        ctx.sayTable(
+                new String[][] {
+                    {"Setting", "Default", "Custom", "Impact"},
+                    {"serviceName", "jotp-service", "test-service", "Resource identity"},
+                    {
+                        "otlpEndpoint",
+                        "http://localhost:4318",
+                        "http://localhost:4318",
+                        "Export destination"
+                    },
+                    {"exportInterval", "60s", "10s", "Batch export frequency"},
+                    {"enableMetrics", "true", "true", "Metrics collection"},
+                    {"enableTracing", "true", "false", "Distributed tracing"}
+                });
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Configuration Type",
+                        "OtelConfiguration",
+                        "Pattern",
+                        "Builder",
+                        "Immutability",
+                        "Record (immutable)",
+                        "Export Format",
+                        "OTLP (protobuf)",
+                        "Transport",
+                        "HTTP/2 or gRPC"));
+
+        ctx.sayNote(
+                "Disable tracing (enableTracing=false) in high-throughput scenarios where span"
+                        + " collection overhead is unacceptable. Metrics-only mode still provides"
+                        + " visibility without performance impact.");
     }
 
     @Test
@@ -83,7 +201,36 @@ class OpenTelemetryServiceTest {
 
     @Test
     @DisplayName("Configuration builder pattern")
-    void configurationBuilderPattern() {
+    void configurationBuilderPattern(DtrContext ctx) {
+        ctx.sayNextSection("Performance Profiling: Export Tuning");
+        ctx.say(
+                """
+                Export tuning is critical for performance profiling in production systems:
+
+                - exportInterval: How often to batch and send telemetry (default: 60s)
+                - exportTimeout: Maximum time to wait for export ACK (default: 30s)
+                - Feature flags: Selectively enable/disable telemetry types
+
+                High-throughput systems may need shorter intervals (10-30s) to avoid memory buildup
+                from buffered spans/metrics. Low-traffic systems can use longer intervals (60-120s)
+                to reduce export overhead.
+                """);
+
+        ctx.sayCode(
+                """
+                // High-throughput configuration: frequent exports, tracing only
+                OtelConfiguration config = OtelConfiguration.builder()
+                    .serviceName("builder-test")
+                    .otlpEndpoint("http://collector:4317")
+                    .exportInterval(Duration.ofSeconds(30))
+                    .exportTimeout(Duration.ofSeconds(60))
+                    .enableMetrics(false)
+                    .enableTracing(true)
+                    .enableLogging(false)
+                    .build();
+                """,
+                "java");
+
         OtelConfiguration config =
                 OtelConfiguration.builder()
                         .serviceName("builder-test")
@@ -102,6 +249,35 @@ class OpenTelemetryServiceTest {
         assertThat(config.enableMetrics()).isFalse();
         assertThat(config.enableTracing()).isTrue();
         assertThat(config.enableLogging()).isFalse();
+
+        ctx.sayTable(
+                new String[][] {
+                    {"Workload Type", "exportInterval", "enableMetrics", "enableTracing"},
+                    {"High-throughput", "10-30s", "false", "true"},
+                    {"Low-traffic", "60-120s", "true", "true"},
+                    {"Metrics-only", "60s", "true", "false"},
+                    {"Tracing-only", "30s", "false", "true"}
+                });
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Export Interval",
+                        "30s",
+                        "Export Timeout",
+                        "60s",
+                        "Metrics Enabled",
+                        "false",
+                        "Tracing Enabled",
+                        "true",
+                        "Logging Enabled",
+                        "false",
+                        "Use Case",
+                        "High-throughput tracing"));
+
+        ctx.sayNote(
+                "gRPC endpoint (4317) is preferred over HTTP (4318) for high-volume scenarios"
+                        + " due to better throughput and lower latency. Use HTTP for compatibility"
+                        + " with older collectors.");
     }
 
     @Test
@@ -134,10 +310,8 @@ class OpenTelemetryServiceTest {
     @DisplayName("OnStop gracefully handles shutdown")
     void onStopGracefullyHandlesShutdown() {
         OpenTelemetryService service = OpenTelemetryService.create();
-        ApplicationMock app = new ApplicationMock();
-
-        // Should not throw
-        service.onStop(app);
+        // OnStop with null application should not throw
+        service.onStop(null);
 
         assertThat(service).isNotNull();
     }
@@ -151,10 +325,5 @@ class OpenTelemetryServiceTest {
         assertThat(service1.name()).isEqualTo("otel-service-1");
         assertThat(service2.name()).isEqualTo("otel-service-2");
         assertThat(service1.sdk()).isNotSameAs(service2.sdk());
-    }
-
-    // Mock Application for testing
-    private static final class ApplicationMock {
-        // Minimal mock for testing
     }
 }

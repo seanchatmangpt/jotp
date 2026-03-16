@@ -2,6 +2,9 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Result;
@@ -15,7 +18,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for Scatter-Gather pattern.
+ * Unit tests for Scatter-Gather pattern with DTR documentation.
+ *
+ * <p>The Scatter-Gather pattern (EIP) broadcasts a message to multiple recipients and collects
+ * responses. Useful for parallel processing and gathering results from multiple services.
  *
  * <p>Verifies:
  *
@@ -29,20 +35,13 @@ import org.junit.jupiter.api.Test;
  *   <li>Fallback recovery on failure
  * </ul>
  */
+@DtrTest
 @DisplayName("Scatter-Gather Orchestration Pattern")
 class ScatterGatherTest {
 
-    /** Echo server state: just a counter. */
-    record ServerState(int echoCount) {}
-
-    /** Echo server message. */
-    record EchoMessage(String requestId, String payload) {}
-
-    private List<ProcRef<ServerState, EchoMessage>> recipients;
-    private List<Proc<ServerState, EchoMessage>> processes;
-
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         recipients = new ArrayList<>();
         processes = new ArrayList<>();
 
@@ -72,7 +71,40 @@ class ScatterGatherTest {
 
     @Test
     @DisplayName("Basic scatter-gather: collect replies from all recipients")
-    void testBasicScatterGather() {
+    void testBasicScatterGather(DtrContext ctx) {
+        ctx.sayNextSection("Scatter-Gather Pattern");
+        ctx.say(
+                "The Scatter-Gather pattern broadcasts a message to multiple recipients and collects"
+                        + " their responses. It's useful for parallel processing and aggregating results"
+                        + " from multiple services.");
+        ctx.sayCode(
+                """
+                var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
+                var result = scatterGather.scatterGather(
+                    message,
+                    recipients,
+                    1000,  // 1 second timeout
+                    reqWithId -> { ... }
+                );
+
+                assertThat(result).isInstanceOf(Result.Ok.class);
+                assertThat(okResult.value()).hasSize(3);  // All 3 recipients responded
+                """,
+                "java");
+        ctx.sayMermaid(
+                """
+                graph LR
+                    A[Scatter] --> B[Recipient 1]
+                    A --> C[Recipient 2]
+                    A --> D[Recipient 3]
+                    B --> E[Gather]
+                    C --> E
+                    D --> E
+                    E --> F[Aggregated Result]
+                """);
+        ctx.sayNote(
+                "Use when you need to query multiple services in parallel, such as getting quotes"
+                        + " from multiple vendors or validating against multiple rules.");
         // Arrange
         var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
         var message = new EchoMessage("req-1", "Hello");
@@ -115,7 +147,26 @@ class ScatterGatherTest {
 
     @Test
     @DisplayName("Scatter-gather timeout: fail-fast when any recipient times out")
-    void testScatterGatherTimeout() throws InterruptedException {
+    void testScatterGatherTimeout(DtrContext ctx) throws InterruptedException {
+        ctx.sayNextSection("Scatter-Gather: Timeout Handling");
+        ctx.say(
+                "Scatter-gather operations fail-fast when any recipient times out, ensuring that slow"
+                        + " services don't block the entire operation.");
+        ctx.sayCode(
+                """
+                var result = scatterGather.scatterGather(
+                    message,
+                    recipients,
+                    500,  // 500ms timeout
+                    reqWithId -> { ... }
+                );
+
+                assertThat(result).isInstanceOf(Result.Err.class);
+                """,
+                "java");
+        ctx.sayNote(
+                "Choose timeout values carefully based on expected response times. Consider using"
+                        + " fallback values for non-critical services.");
         // Arrange: create a slow recipient that doesn't respond quickly
         var slowProc =
                 new Proc<ServerState, EchoMessage>(

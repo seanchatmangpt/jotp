@@ -1,8 +1,10 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.BuildDiagnosticEngine.DiagnosticFix;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,11 @@ import org.junit.jupiter.api.Test;
 /** Tests for {@link BuildDiagnosticEngine} using real-world javac and Maven error output. */
 @DisplayName("BuildDiagnosticEngine")
 class BuildDiagnosticEngineTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── 1) Missing import ───────────────────────────────────────────────────
 

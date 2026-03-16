@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.CategoryScore;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.CodebaseScore;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.ModernizationScorer.Finding;
@@ -18,6 +19,7 @@ class ModernizationScorerTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         scorer = new ModernizationScorer();
     }
 

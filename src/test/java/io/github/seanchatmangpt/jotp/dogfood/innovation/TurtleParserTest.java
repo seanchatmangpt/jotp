@@ -1,9 +1,11 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,11 @@ import org.junit.jupiter.api.io.TempDir;
  */
 @DisplayName("TurtleParser")
 class TurtleParserTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     private static final Path SCHEMA_DIR = Path.of("schema");
 

@@ -3,10 +3,13 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -48,8 +51,14 @@ import org.junit.jupiter.params.provider.EnumSource;
  * @see Proc
  * @see CrashRecovery
  */
+@DtrTest
 @DisplayName("Supervisor: Fault-Tolerant Supervision Tree")
 class SupervisorTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     /**
      * Test message types for Supervisor tests. Use sealed Record hierarchy for type-safe pattern
@@ -74,7 +83,14 @@ class SupervisorTest {
 
     @Test
     @DisplayName("ONE_FOR_ONE: Child crash restarts only that child")
-    void testOneForOneSingleChildCrash() throws Exception {
+    void testOneForOneSingleChildCrash(DtrContext ctx) throws Exception {
+        ctx.sayNextSection("Supervisor: Fault-Tolerant Supervision Tree");
+        ctx.say(
+                """
+                Supervisor implements hierarchical process supervision with configurable restart strategies.
+                ONE_FOR_ONE: Only the crashed child is restarted. Siblings are unaffected.
+                Best for independent workers where one failure shouldn't cascade to healthy processes.
+                """);
         var strategy = Supervisor.Strategy.ONE_FOR_ONE;
         var supervisor = new Supervisor(strategy, 5, Duration.ofSeconds(60));
 
@@ -165,7 +181,13 @@ class SupervisorTest {
 
     @Test
     @DisplayName("ONE_FOR_ALL: Child crash restarts ALL children")
-    void testOneForAllCrashRestartsAll() throws Exception {
+    void testOneForAllCrashRestartsAll(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                ONE_FOR_ALL: When any child crashes, ALL children are restarted.
+                Best for tightly coupled services where partial state is invalid.
+                Example: A connection pool where all connections must share the same configuration.
+                """);
         var strategy = Supervisor.Strategy.ONE_FOR_ALL;
         var supervisor = new Supervisor(strategy, 5, Duration.ofSeconds(60));
 
@@ -234,7 +256,13 @@ class SupervisorTest {
 
     @Test
     @DisplayName("REST_FOR_ONE: Crash restarts child and later children only")
-    void testRestForOneCrashRestartsFromPosition() throws Exception {
+    void testRestForOneCrashRestartsFromPosition(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                REST_FOR_ONE: The crashed child and all children started AFTER it are restarted.
+                Best for hierarchical dependencies where child-N depends on child-1 to child-N-1.
+                Example: Database connection -> session -> transaction handlers (if DB dies, all dependents restart).
+                """);
         var strategy = Supervisor.Strategy.REST_FOR_ONE;
         var supervisor = new Supervisor(strategy, 5, Duration.ofSeconds(60));
 
@@ -301,7 +329,14 @@ class SupervisorTest {
 
     @Test
     @DisplayName("Max restarts exceeded: Supervisor terminates itself")
-    void testMaxRestartsExceededTerminatesSupervisor() throws Exception {
+    void testMaxRestartsExceededTerminatesSupervisor(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                Max restarts throttling prevents infinite restart loops.
+                If a child crashes more than maxRestarts times within the window duration,
+                the supervisor gives up and terminates itself (including all children).
+                This prevents cascading failures from unstable processes.
+                """);
         var strategy = Supervisor.Strategy.ONE_FOR_ONE;
         var maxRestarts = 2;
         var window = Duration.ofSeconds(10);

@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.StressTestScanner.Priority;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.StressTestScanner.StressFinding;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.StressTestScanner.StressPlan;
@@ -9,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,11 @@ class StressTestScannerTest {
     private static final Path OTP_SOURCE = Path.of("src/main/java/org/acme");
 
     private static StressPlan plan;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @BeforeAll
     static void scanOtpSource() throws IOException {

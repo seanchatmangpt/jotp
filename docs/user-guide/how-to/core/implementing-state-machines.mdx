@@ -1,0 +1,657 @@
+# Implementing State Machines
+
+> **Problem:** Complex workflows (order processing, authentication protocols, IoT device lifecycles) have explicit states with valid transitions. Using basic `Proc<S,M>` requires manually tracking state in a single switch statement, leading to "state explosion" and impossible-to-maintain code.
+
+> **Solution:** JOTP's `StateMachine<S,E,D>` provides Erlang/OTP `gen_statem` pattern — separate **State** (where we are), **Event** (what happened), and **Data** (what we know) with compiler-enforced exhaustive transitions.
+
+## When to Use This Pattern
+
+Use `StateMachine<S,E,D>` when you need:
+- **Explicit state modeling** — workflow has clear stages (Idle → Processing → Complete)
+- **Type-safe transitions** — compiler ensures only valid state changes
+- **Guard conditions** — transitions only allowed when conditions met
+- **State-specific behavior** — different logic per state
+- **Timeout handling** — automatic transitions on delays
+- **Complex workflows** — order processing, authentication, connection lifecycles
+
+## Mental Model
+
+A state machine separates three concerns:
+
+```
+State (S)    Event (E)      Data (D)
+"Where we are"  "What happened"  "What we know"
+├─ Idle       ├─ Start        ├─ counter
+├─ Active     ├─ Stop         ├─ timestamp
+└─ Done       ├─ Timeout      └─ metadata
+```
+
+**Transition:** `(State, Event, Data) → (NextState, NewData)`
+
+```java
+Idle + Start → Active
+Active + Complete → Done
+Active + Timeout → Failed
+Done + (any event) → Done  // Terminal state
+```
+
+## Step 1: Define States
+
+Use sealed interfaces for compiler-enforced exhaustiveness:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+
+// States: where the machine can be
+sealed interface OrderState permits
+    OrderState.Idle,
+    OrderState.Processing,
+    OrderState.Completed,
+    OrderState.Failed {
+
+    record Idle() implements OrderState {}
+    record Processing() implements OrderState {}
+    record Completed(String confirmationCode) implements OrderState {}
+    record Failed(String reason) implements OrderState {}
+}
+```
+
+**Best Practice:** Include state-specific data in state records (e.g., `confirmationCode` in `Completed`).
+
+## Step 2: Define Events
+
+Events trigger state transitions:
+
+```java
+// Events: what can happen
+sealed interface OrderEvent permits
+    OrderEvent.Start,
+    OrderEvent.ProcessPayment,
+    OrderEvent.Ship,
+    OrderEvent.Cancel {
+
+    record Start(String orderId, List<String> items) implements OrderEvent {}
+    record ProcessPayment(double amount) implements OrderEvent {}
+    record Ship(String address) implements OrderEvent {}
+    record Cancel(String reason) implements OrderEvent {}
+}
+```
+
+## Step 3: Define Data
+
+Data holds machine's internal variables:
+
+```java
+// Data: internal state (separate from State!)
+record OrderData(
+    String orderId,
+    List<String> items,
+    double totalAmount,
+    String shippingAddress
+) {
+    OrderData withAddress(String address) {
+        return new OrderData(orderId, items, totalAmount, address);
+    }
+}
+```
+
+**Key insight:** Data is mutable context, State is current position in workflow.
+
+## Step 4: Define Transitions
+
+Use `StateMachine.builder()` to define valid transitions:
+
+```java
+var machine = StateMachine.builder()
+    // Idle state: only "Start" is valid
+    .state(OrderState.Idle.class)
+        .on(OrderEvent.Start.class, (event, data) -> {
+            System.out.println("Starting order: " + event.orderId());
+            var newData = new OrderData(
+                event.orderId(),
+                event.items(),
+                calculateTotal(event.items()),
+                null
+            );
+            return Transition.to(new OrderState.Processing(), newData);
+        })
+        .on(OrderEvent.Cancel.class, (event, data) ->
+            Transition.to(new OrderState.Failed(event.reason()), data)
+        )
+
+    // Processing state: ProcessPayment or Ship or Cancel
+    .state(OrderState.Processing.class)
+        .on(OrderEvent.ProcessPayment.class, (event, data) -> {
+            System.out.println("Processing payment: $" + event.amount());
+            // Stay in Processing (not yet shipped)
+            return Transition.stay(data);
+        })
+        .on(OrderEvent.Ship.class, (event, data) -> {
+            System.out.println("Shipping to: " + event.address());
+            var confirmation = "CONFIRM-" + data.orderId();
+            return Transition.to(
+                new OrderState.Completed(confirmation),
+                data.withAddress(event.address())
+            );
+        })
+        .on(OrderEvent.Cancel.class, (event, data) ->
+            Transition.to(new OrderState.Failed(event.reason()), data)
+        )
+
+    // Completed state: terminal (no further transitions)
+    .state(OrderState.Completed.class)
+        .onAny((event, data) -> {
+            System.out.println("Order already completed, ignoring: " + event);
+            return Transition.stay(data);  // Stay in Completed
+        })
+
+    // Failed state: terminal
+    .state(OrderState.Failed.class)
+        .onAny((event, data) -> Transition.stay(data))
+
+    .build(
+        new OrderState.Idle(),  // Initial state
+        null                     // Initial data
+    );
+```
+
+## Step 5: Wrap in Process
+
+Wrap state machine in `Proc<S,M>` for message handling:
+
+```java
+var orderProcess = Proc.spawn(
+    machine,
+    (stateMachine, event) -> switch (event) {
+        case OrderEvent e -> stateMachine.handle(e);
+        default -> stateMachine;
+    }
+);
+
+// Drive the workflow
+orderProcess.tell(new OrderEvent.Start("order-123", List.of("item-1", "item-2")));
+orderProcess.tell(new OrderEvent.ProcessPayment(99.99));
+orderProcess.tell(new OrderEvent.Ship("123 Main St"));
+
+// Check final state
+Thread.sleep(100);
+var finalMachine = orderProcess.ask("get-state").get();
+System.out.println("Final: " + finalMachine.state());
+// Output: Final: Completed(confirmationCode=CONFIRM-order-123)
+```
+
+## Complete Working Example: Authentication Workflow
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.*;
+
+public class AuthenticationFlow {
+    // ============================================================
+    // States
+    // ============================================================
+
+    sealed interface AuthState permits
+        AuthState.NotAuthenticated,
+        AuthState.AwaitingCredentials,
+        AuthState.AwaitingMfa,
+        AuthState.Authenticated,
+        AuthState.Locked {
+
+        record NotAuthenticated() implements AuthState {}
+        record AwaitingCredentials(String username) implements AuthState {}
+        record AwaitingMfa(String username, String sessionId) implements AuthState {}
+        record Authenticated(String username, String token) implements AuthState {}
+        record Locked(String reason) implements AuthState {}
+    }
+
+    // ============================================================
+    // Events
+    // ============================================================
+
+    sealed interface AuthEvent permits
+        AuthEvent.Login,
+        AuthEvent.ProvideCredentials,
+        AuthEvent.ProvideMfa,
+        AuthEvent.Logout,
+        AuthEvent.Lock {
+
+        record Login(String username) implements AuthEvent {}
+        record ProvideCredentials(String username, String password) implements AuthEvent {}
+        record ProvideMfa(String code) implements AuthEvent {}
+        record Logout() implements AuthEvent {}
+        record Lock(String reason) implements AuthEvent {}
+    }
+
+    // ============================================================
+    // Data
+    // ============================================================
+
+    record AuthData(
+        int failedAttempts,
+        long lastAttemptTime
+    ) {
+        AuthData recordFailure() {
+            return new AuthData(failedAttempts + 1, System.currentTimeMillis());
+        }
+        AuthData resetAttempts() {
+            return new AuthData(0, System.currentTimeMillis());
+        }
+    }
+
+    // ============================================================
+    // State Machine
+    // ============================================================
+
+    public static void main(String[] args) throws Exception {
+        var machine = StateMachine.builder()
+            // NotAuthenticated: start login flow
+            .state(AuthState.NotAuthenticated.class)
+                .on(AuthEvent.Login.class, (event, data) -> {
+                    System.out.println("Initiating login for: " + event.username());
+                    return Transition.to(
+                        new AuthState.AwaitingCredentials(event.username()),
+                        new AuthData(0, System.currentTimeMillis())
+                    );
+                })
+
+            // AwaitingCredentials: validate password
+            .state(AuthState.AwaitingCredentials.class)
+                .on(AuthEvent.ProvideCredentials.class, (event, data) -> {
+                    // Validate credentials
+                    if (isValidPassword(event.username(), event.password())) {
+                        System.out.println("Credentials valid, awaiting MFA");
+                        var sessionId = UUID.randomUUID().toString();
+                        return Transition.to(
+                            new AuthState.AwaitingMfa(event.username(), sessionId),
+                            data.resetAttempts()
+                        );
+                    } else {
+                        System.out.println("Invalid credentials");
+                        var newData = data.recordFailure();
+                        if (newData.failedAttempts() >= 3) {
+                            return Transition.to(
+                                new AuthState.Locked("Too many failed attempts"),
+                                newData
+                            );
+                        }
+                        return Transition.to(
+                            new AuthState.NotAuthenticated(),
+                            newData
+                        );
+                    }
+                })
+                .on(AuthEvent.Lock.class, (event, data) ->
+                    Transition.to(new AuthState.Locked(event.reason()), data)
+                )
+
+            // AwaitingMfa: validate 2FA code
+            .state(AuthState.AwaitingMfa.class)
+                .on(AuthEvent.ProvideMfa.class, (event, data) -> {
+                    if (isValidMfaCode(event.code())) {
+                        System.out.println("MFA valid, user authenticated");
+                        var token = generateToken();
+                        return Transition.to(
+                            new AuthState.Authenticated(
+                                ((AwaitingMfa) machine.state()).username(),
+                                token
+                            ),
+                            data
+                        );
+                    } else {
+                        System.out.println("Invalid MFA code");
+                        return Transition.to(
+                            new AuthState.NotAuthenticated(),
+                            data.recordFailure()
+                        );
+                    }
+                })
+
+            // Authenticated: logout or stay authenticated
+            .state(AuthState.Authenticated.class)
+                .on(AuthEvent.Logout.class, (event, data) -> {
+                    System.out.println("User logged out");
+                    return Transition.to(
+                        new AuthState.NotAuthenticated(),
+                        data.resetAttempts()
+                    );
+                })
+                .onAny((event, data) -> {
+                    System.out.println("Already authenticated, ignoring: " + event);
+                    return Transition.stay(data);
+                })
+
+            // Locked: terminal state
+            .state(AuthState.Locked.class)
+                .onAny((event, data) -> {
+                    System.out.println("Account locked, ignoring: " + event);
+                    return Transition.stay(data);
+                })
+
+            .build(
+                new AuthState.NotAuthenticated(),
+                new AuthData(0, System.currentTimeMillis())
+            );
+
+        // Wrap in process
+        var authProcess = Proc.spawn(
+            machine,
+            (stateMachine, event) -> switch (event) {
+                case AuthEvent e -> stateMachine.handle(e);
+                default -> stateMachine;
+            }
+        );
+
+        // Simulate authentication flow
+        System.out.println("=== Successful Authentication Flow ===");
+        authProcess.tell(new AuthEvent.Login("alice"));
+        Thread.sleep(50);
+        authProcess.tell(new AuthEvent.ProvideCredentials("alice", "wrong-password"));
+        Thread.sleep(50);
+        authProcess.tell(new AuthEvent.ProvideCredentials("alice", "correct-password"));
+        Thread.sleep(50);
+        authProcess.tell(new AuthEvent.ProvideMfa("123456"));
+        Thread.sleep(50);
+        authProcess.tell(new AuthEvent.Logout());
+
+        Thread.sleep(100);
+
+        // Check final state
+        var finalState = (AuthState) authProcess.ask("get-state").get();
+        System.out.println("\nFinal state: " + finalState);
+
+        authProcess.stop();
+    }
+
+    // Mock implementations
+    static boolean isValidPassword(String username, String password) {
+        return password.equals("correct-password");
+    }
+
+    static boolean isValidMfaCode(String code) {
+        return code.equals("123456");
+    }
+
+    static String generateToken() {
+        return UUID.randomUUID().toString();
+    }
+}
+```
+
+**Output:**
+```
+=== Successful Authentication Flow ===
+Initiating login for: alice
+Invalid credentials
+Credentials valid, awaiting MFA
+MFA valid, user authenticated
+User logged out
+
+Final state: NotAuthenticated()
+```
+
+## Pattern: Guards (Conditional Transitions)
+
+Add conditions to transitions:
+
+```java
+.state(OrderState.Processing.class)
+    .on(OrderEvent.ProcessPayment.class, (event, data) -> {
+        // Guard: only process if amount > 0
+        if (event.amount() <= 0) {
+            System.out.println("Invalid amount: " + event.amount());
+            return Transition.to(
+                new OrderState.Failed("Invalid payment amount"),
+                data
+            );
+        }
+
+        // Guard: check payment method exists
+        if (!hasPaymentMethod(data)) {
+            return Transition.to(
+                new OrderState.Failed("No payment method on file"),
+                data
+            );
+        }
+
+        // Action: process payment
+        var result = paymentGateway.charge(event.amount());
+        if (result.success()) {
+            return Transition.stay(data);  // Stay in Processing
+        } else {
+            return Transition.to(
+                new OrderState.Failed("Payment declined: " + result.error()),
+                data
+            );
+        }
+    })
+```
+
+## Pattern: State Timeouts
+
+Auto-transition after delay:
+
+```java
+.state(OrderState.Processing.class)
+    .on(OrderEvent.ProcessPayment.class, (event, data) -> {
+        // Start timeout timer
+        var timer = ProcTimer.sendAfter(
+            Duration.ofMinutes(5).toMillis(),
+            authProcess,
+            new AuthEvent.Timeout("Payment timeout")
+        );
+
+        return Transition.to(
+            new OrderState.AwaitingCompletion(timer),
+            data
+        );
+    })
+
+.state(OrderState.AwaitingCompletion.class)
+    .on(AuthEvent.Timeout.class, (event, data) -> {
+        // Cancel timer if completed
+        if (data.timer() != null) {
+            data.timer().cancel();
+        }
+
+        return Transition.to(
+            new OrderState.Failed("Transaction timed out"),
+            data
+        );
+    })
+    .on(OrderEvent.Complete.class, (event, data) -> {
+        // Cancel timer on successful completion
+        data.timer().cancel();
+
+        return Transition.to(
+            new OrderState.Completed("Success"),
+            data
+        );
+    })
+```
+
+## Pattern: Nested State Machines
+
+Compose complex workflows from simpler machines:
+
+```java
+// Payment sub-machine
+var paymentMachine = StateMachine.builder()
+    .state(PaymentState.Idle.class)
+        .on(PaymentEvent.Authorize.class, (event, data) ->
+            Transition.to(new PaymentState.Authorized(), data)
+        )
+    .state(PaymentState.Authorized.class)
+        .on(PaymentEvent.Capture.class, (event, data) ->
+            Transition.to(new PaymentState.Captured(), data)
+        )
+    .build(...);
+
+// Order machine delegates to payment machine
+var orderMachine = StateMachine.builder()
+    .state(OrderState.Checkout.class)
+        .on(OrderEvent.ProcessPayment.class, (event, data) -> {
+            // Delegate to payment machine
+            var paymentResult = paymentMachine.handle(
+                new PaymentEvent.Authorize(event.amount())
+            );
+
+            if (paymentResult.state() instanceof PaymentState.Authorized) {
+                var captureResult = paymentMachine.handle(
+                    new PaymentEvent.Capture(event.amount())
+                );
+
+                if (captureResult.state() instanceof PaymentState.Captured) {
+                    return Transition.to(new OrderState.PaymentReceived(), data);
+                }
+            }
+
+            return Transition.to(new OrderState.Failed("Payment failed"), data);
+        })
+    .build(...);
+```
+
+## Testing State Machines
+
+```java
+import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
+
+class StateMachineTest {
+    @Test
+    void testValidStateTransitions() {
+        var machine = StateMachine.builder()
+            .state(Idle.class)
+                .on(Start.class, (e, d) -> Transition.to(new Active(), d))
+            .state(Active.class)
+                .on(Complete.class, (e, d) -> Transition.to(new Done(), d))
+            .build(new Idle(), null);
+
+        // Idle → Active
+        machine = machine.handle(new Start());
+        assertThat(machine.state()).isInstanceOf(Active.class);
+
+        // Active → Done
+        machine = machine.handle(new Complete());
+        assertThat(machine.state()).isInstanceOf(Done.class);
+    }
+
+    @Test
+    void testInvalidTransitionInTerminalState() {
+        var machine = StateMachine.builder()
+            .state(Done.class)
+                .onAny((e, d) -> Transition.stay(d))  // Terminal
+            .build(new Done(), null);
+
+        // Try to transition from terminal state
+        machine = machine.handle(new Start());
+        assertThat(machine.state()).isInstanceOf(Done.class);  // Still Done
+    }
+
+    @Test
+    void testGuardConditions() {
+        var machine = StateMachine.builder()
+            .state(Active.class)
+                .on(Complete.class, (event, data) -> {
+                    if (event.isValid()) {
+                        return Transition.to(new Done(), data);
+                    } else {
+                        return Transition.to(new Failed("Invalid"), data);
+                    }
+                })
+            .build(new Active(), null);
+
+        // Invalid completion
+        machine = machine.handle(new Complete(false));
+        assertThat(machine.state()).isInstanceOf(Failed.class);
+
+        // Valid completion
+        machine = machine.handle(new Complete(true));
+        assertThat(machine.state()).isInstanceOf(Done.class);
+    }
+}
+```
+
+## Common Pitfalls
+
+### 1. Mixing State and Data
+
+**BAD:** Putting mutable data in State:
+```java
+record Active(int counter) implements OrderState {}  // Counter should be in Data!
+```
+
+**GOOD:** State is position in workflow, Data holds variables:
+```java
+record Active() implements OrderState {}  // State
+record OrderData(int counter) {}         // Data
+```
+
+### 2. Forgetting Terminal State Transitions
+
+**BAD:** Terminal state doesn't handle events:
+```java
+.state(Done.class)
+    // No handlers! Throws exception on unexpected events
+```
+
+**GOOD:** Use `.onAny()` for terminal states:
+```java
+.state(Done.class)
+    .onAny((event, data) -> {
+        System.out.println("Ignoring event in terminal state: " + event);
+        return Transition.stay(data);
+    })
+```
+
+### 3. State Explosion
+
+**BAD:** Creating state for every combination:
+```java
+sealed interface State permits
+    State.WaitingForPaymentAndShipping,
+    State.WaitingForPaymentOnly,
+    State.WaitingForShippingOnly,
+    State.WaitingForNothing,
+    // ... 20 more states
+```
+
+**GOOD:** Use Data to track combinations:
+```java
+sealed interface State permits State.Processing, State.Done {}
+record Processing() implements State {}
+record Data(boolean hasPayment, boolean hasShipping) {}
+```
+
+## When to Use StateMachine vs. Proc
+
+| Scenario | Use |
+|----------|-----|
+| Simple message handler | `Proc<S,M>` |
+| Workflow with explicit stages | `StateMachine<S,E,D>` |
+| Complex multi-stage process | `StateMachine<S,E,D>` |
+| State explosion (many states) | `StateMachine<S,E,D>` |
+| Fire-and-forget handler | `Proc<S,M>` |
+| Need compiler-enforced transitions | `StateMachine<S,E,D>` |
+
+## Related Patterns
+
+- **[Creating Lightweight Processes](./creating-lightweight-processes.mdx)** — Process basics
+- **[Handling Process Crashes](./handling-process-crashes.mdx)** — Fault tolerance
+- **[Concurrent Pipelines](./concurrent-pipelines.mdx)** — Chain state machines
+
+## API Reference
+
+- **`StateMachine<S,E,D>`** — Generic state machine (State, Event, Data)
+- **`StateMachine.builder()`** — Fluent API for defining transitions
+- **`.state(Class<S>)`** — Define state handler
+- **`.on(Class<E>, BiFunction<E,D,Transition<S,D>>)`** — Define event handler
+- **`.onAny(BiFunction<E,D,Transition<S,D>>)`** — Catch-all for unhandled events
+- **`Transition.to(S, D)`** — Transition to new state with new data
+- **`Transition.stay(D)`** — Remain in current state
+- **`machine.handle(E)`** — Process event, return new machine
+
+---
+
+**Next:** [Concurrent Pipelines](./concurrent-pipelines.mdx) — Fan-out/fan-in patterns

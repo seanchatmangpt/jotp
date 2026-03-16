@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.testing;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.testing.util.PerformanceTestHelper;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ class PerformanceTestHelperTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         helper = new PerformanceTestHelper();
     }
 

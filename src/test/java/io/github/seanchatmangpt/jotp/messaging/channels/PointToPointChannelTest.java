@@ -2,10 +2,12 @@ package io.github.seanchatmangpt.jotp.messaging.channels;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.*;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,8 +15,14 @@ import org.junit.jupiter.api.Test;
  * Test suite for PointToPointChannel pattern. Verifies 1:1 message delivery, ordering, and state
  * management.
  */
+@DtrTest
 @DisplayName("Point-to-Point Channel Pattern")
 class PointToPointChannelTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     static class TestState {
         final Queue<Message> received = new ConcurrentLinkedQueue<>();

@@ -1,0 +1,720 @@
+# Migrating from Quarkus to JOTP
+
+A comprehensive guide for Quarkus developers moving to JOTP (Java 26 implementation of OTP primitives).
+
+## Overview
+
+JOTP brings Erlang/OTP's battle-tested concurrency patterns to the JVM using Java 26's virtual threads. While Quarkus focuses on reactive programming and native compilation, JOTP emphasizes message-passing concurrency and fault tolerance.
+
+**Key Differences:**
+- **Message Passing:** Explicit messaging vs reactive streams
+- **Fault Tolerance:** Supervision trees vs reactive error handling
+- **Concurrency:** Virtual threads vs event loops
+- **State:** Immutable records vs mutable beans
+- **Startup:** No compile-time augmentation
+
+---
+
+## Concept Mapping
+
+### Core Concepts
+
+| Quarkus | JOTP | Notes |
+|---------|------|-------|
+| `@ApplicationScoped` | `Proc<S,M>` | Processes instead of beans |
+| Mutiny `Uni<T>` | `ask()` | Single async result |
+| Mutiny `Multi<T>` | Event stream | Process message stream |
+| `@Inject` | Constructor arguments | Explicit dependencies |
+| `@ReactiveMessaging` | Process mailbox | Message-driven |
+| `@CircuitBreaker` | `CircuitBreaker` process | Explicit state machine |
+| `@Retry` | Supervisor restart | System-level retry |
+| `@Scheduled` | `ProcTimer` | Periodic messages |
+
+### Reactive Patterns
+
+| Quarkus/Mutiny | JOTP | Notes |
+|----------------|------|-------|
+| `Uni<T>` | `CompletableFuture<S>` | Single async result |
+| `Multi<T>` | Process event stream | Multiple events |
+| `emitOn()` | Virtual threads | Thread switching |
+| `subscribeOn()` | Process context | Execution context |
+| `onFailure().retry()` | Supervisor | Automatic restart |
+
+---
+
+## Reactive Service Migration
+
+### Uni-based Service
+
+**Quarkus:**
+```java
+@ApplicationScoped
+public class OrderService {
+    @Inject
+    OrderRepository repository;
+
+    @Inject
+    PaymentService paymentService;
+
+    public Uni<Order> createOrder(OrderRequest request) {
+        return repository.save(new Order(request))
+            .flatMap(order -> paymentService.processPayment(order)
+                .map(payment -> order.withPayment(payment))
+            );
+    }
+
+    public Uni<Order> getOrder(String id) {
+        return repository.findById(id);
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface OrderMsg permits CreateOrder, GetOrder, PaymentCompleted {}
+record CreateOrder(OrderRequest request, CompletableFuture<Order> replyTo) implements OrderMsg {}
+record GetOrder(String id, CompletableFuture<Order> replyTo) implements OrderMsg {}
+record PaymentCompleted(Order order) implements OrderMsg {}
+
+// State
+record OrderState(Map<String, Order> orders) {}
+
+// Process creation
+var orderProcess = Proc.spawn(
+    new OrderState(Map.of()),
+    (state, msg) -> switch (msg) {
+        case CreateOrder(var req, var reply) -> {
+            var order = new Order(req);
+            var updatedOrders = merge(state.orders(), Map.of(order.id(), order));
+
+            // Send payment request asynchronously
+            var paymentFuture = paymentService.ask(new ProcessPayment(order))
+                .thenApply(payment -> {
+                    reply.complete(order.withPayment(payment));
+                    return new OrderState(merge(state.orders(), Map.of(order.id(), order.withPayment(payment))));
+                });
+
+            // State updated when payment completes
+            yield new OrderState(updatedOrders);
+        }
+        case GetOrder(var id, var reply) -> {
+            var order = state.orders().get(id);
+            if (order != null) {
+                reply.complete(order);
+            } else {
+                reply.completeExceptionally(new IllegalArgumentException("Not found"));
+            }
+            yield state;
+        }
+    }
+);
+
+// Usage
+var future = orderProcess.ask(new CreateOrder(request, null));
+var order = future.join();
+```
+
+**Key Differences:**
+1. **Message-driven:** Explicit message types
+2. **State-based:** In-memory state instead of repository
+3. **Bidirectional:** Reply via CompletableFuture
+4. **No Uni:** Standard Java CompletableFuture
+
+### Multi-based Service
+
+**Quarkus:**
+```java
+@ApplicationScoped
+public class PriceUpdateService {
+    @Inject
+    PriceEmitter emitter;
+
+    @Incoming("price-updates")
+    public Multi<PriceUpdate> streamPrices() {
+        return emitter.source();
+    }
+
+    public Uni<Void> broadcastPrice(PriceUpdate update) {
+        return emitter.emit(update);
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface PriceMsg permits StreamPrices, BroadcastPrice, Subscribe, Unsubscribe {}
+record StreamPrices(CompletableFuture<PriceUpdate> subscriber) implements PriceMsg {}
+record BroadcastPrice(PriceUpdate update) implements PriceMsg {}
+record Subscribe(CompletableFuture<PriceUpdate> subscriber) implements PriceMsg {}
+record Unsubscribe(CompletableFuture<PriceUpdate> subscriber) implements PriceMsg {}
+
+// State
+record PriceState(Set<CompletableFuture<PriceUpdate>> subscribers) {}
+
+// Process creation
+var priceService = Proc.spawn(
+    new PriceState(Set.of()),
+    (state, msg) -> switch (msg) {
+        case Subscribe(var subscriber) -> {
+            yield new PriceState(merge(state.subscribers(), Set.of(subscriber)));
+        }
+        case Unsubscribe(var subscriber) -> {
+            var updated = new HashSet<>(state.subscribers());
+            updated.remove(subscriber);
+            yield new PriceState(updated);
+        }
+        case BroadcastPrice(var update) -> {
+            // Notify all subscribers
+            for (var subscriber : state.subscribers()) {
+                subscriber.complete(update);
+            }
+            yield state;
+        }
+        case StreamPrices(var subscriber) -> {
+            // Add to subscribers
+            yield new PriceState(merge(state.subscribers(), Set.of(subscriber)));
+        }
+    }
+);
+```
+
+**Key Differences:**
+1. **Subscriber tracking:** Manual state management
+2. **Backpressure:** Not built-in (use queues)
+3. **No Multi:** Standard Java types
+4. **Explicit lifecycle:** Subscribe/unsubscribe messages
+
+---
+
+## Reactive Messaging
+
+### Quarkus Reactive Messaging
+
+**Quarkus:**
+```java
+@ApplicationScoped
+public class OrderProcessor {
+    @Incoming("orders")
+    @Outgoing("processed-orders")
+    public Order process(Order order) {
+        return order.process();
+    }
+
+    @Incoming("orders")
+    @Acknowledgment(Acknowledgment.Strategy.POST_PROCESSING)
+    public Uni<Void> consume(Order order) {
+        return repository.save(order)
+            .replaceWithVoid();
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface ProcessorMsg permits Process, Consume {}
+record Process(Order order, CompletableFuture<Order> replyTo) implements ProcessorMsg {}
+record Consume(Order order) implements ProcessorMsg {}
+
+// Processor process
+var processor = Proc.spawn(
+    new ProcessorState(),
+    (state, msg) -> switch (msg) {
+        case Process(var order, var reply) -> {
+            var processed = order.process();
+            reply.complete(processed);
+            yield state;
+        }
+        case Consume(var order) -> {
+            repository.save(order);
+            yield state;
+        }
+    }
+);
+
+// Connect to Kafka/MQTT stream
+var consumer = KafkaConsumer.create(config);
+consumer.subscribe("orders");
+
+consumer.handler(record -> {
+    var order = record.value();
+    processor.tell(new Process(order, future));
+    future.thenAccept(processed -> {
+        producer.send(new ProducerRecord<>("processed-orders", processed));
+    });
+});
+```
+
+**Key Differences:**
+1. **Explicit wiring:** Manual connection to streams
+2. **No annotations:** Pure Java code
+3. **Process-based:** Message handling in process
+4. **Flexible:** Can integrate with any messaging system
+
+---
+
+## Fault Tolerance
+
+### Quarkus Fault Tolerance
+
+**Quarkus:**
+```java
+@ApplicationScoped
+public class PaymentService {
+    @CircuitBreaker(
+        requestVolumeThreshold = 10,
+        failureRatio = 0.5,
+        delay = 1000
+    )
+    @Retry(
+        maxRetries = 3,
+        delay = 500
+    )
+    @Timeout(5000)
+    @Fallback(fallbackMethod = "fallbackPayment")
+    public Uni<Payment> processPayment(Order order) {
+        return paymentGateway.charge(order);
+    }
+
+    private Uni<Payment> fallbackPayment(Order order) {
+        return Uni.createFrom().item(Payment.failed(order));
+    }
+}
+```
+
+**JOTP:**
+```java
+// Circuit breaker state machine
+sealed interface CircuitState permits Closed, Open, HalfOpen {}
+record Closed() implements CircuitState {}
+record Open(Instant openUntil) implements CircuitState {}
+record HalfOpen() implements CircuitState {}
+
+record CircuitData(int failures, int successThreshold) {}
+
+var circuitBreaker = StateMachine.of(
+    new Closed(),
+    new CircuitData(0, 5),
+    (state, event, data) -> switch (state) {
+        case Closed _ -> switch (event) {
+            case SMEvent.User(Call(var request, var reply)) -> {
+                try {
+                    var result = paymentGateway.charge(request);
+                    yield Transition.nextState(new Closed(), new CircuitData(0, data.successThreshold()));
+                } catch (Exception e) {
+                    var newFailures = data.failures() + 1;
+                    if (newFailures >= data.successThreshold()) {
+                        yield Transition.nextState(
+                            new Open(Instant.now().plusSeconds(30)),
+                            data
+                        );
+                    } else {
+                        yield Transition.keepState(new CircuitData(newFailures, data.successThreshold()));
+                    }
+                }
+            }
+        };
+
+        case Open(var openUntil) -> switch (event) {
+            case SMEvent.User(Call(var request, var reply)) -> {
+                if (Instant.now().isAfter(openUntil)) {
+                    yield Transition.nextState(new HalfOpen(), data);
+                } else {
+                    reply.completeExceptionally(new CircuitBreakerOpenException());
+                    yield Transition.keepState(data);
+                }
+            }
+        };
+
+        case HalfOpen _ -> switch (event) {
+            case SMEvent.User(Call(var request, var reply)) -> {
+                try {
+                    var result = paymentGateway.charge(request);
+                    yield Transition.nextState(new Closed(), new CircuitData(0, data.successThreshold()));
+                } catch (Exception e) {
+                    yield Transition.nextState(
+                        new Open(Instant.now().plusSeconds(30)),
+                        data
+                    );
+                }
+            }
+        };
+    }
+);
+
+// Supervisor for retry
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    3,
+    Duration.ofSeconds(5)
+);
+```
+
+**Key Differences:**
+1. **Explicit state machine:** Full visibility
+2. **Separate concerns:** Circuit breaker and supervisor
+3. **Type-safe:** Sealed types for states
+4. **No annotations:** Pure Java implementation
+
+---
+
+## Scheduled Tasks
+
+### Quarkus Scheduling
+
+**Quarkus:**
+```java
+@ApplicationScoped
+public class ScheduledTasks {
+    @Scheduled(every = "5s")
+    void reportCurrentTime() {
+        System.out.println("Time: " + Instant.now());
+    }
+
+    @Scheduled(cron = "0 0 12 * * ?")
+    void performDailyTask() {
+        // Daily task at noon
+    }
+}
+```
+
+**JOTP:**
+```java
+// Message protocol
+sealed interface TimerMsg permits Tick, DailyTask {}
+record Tick() implements TimerMsg {}
+record DailyTask() implements TimerMsg {}
+
+// Process creation
+var timerProc = Proc.spawn(
+    new TimerState(),
+    (state, msg) -> switch (msg) {
+        case Tick _ -> {
+            System.out.println("Time: " + Instant.now());
+            yield state;
+        }
+        case DailyTask _ -> {
+            // Perform daily task
+            yield state;
+        }
+    }
+);
+
+// Fixed rate
+var tickTimer = ProcTimer.sendInterval(Duration.ofSeconds(5), timerProc, new Tick());
+
+// Cron-style
+var scheduler = Executors.newScheduledThreadPool(1);
+scheduler.scheduleAtFixedRate(
+    () -> {
+        var now = LocalTime.now();
+        if (now.getHour() == 12 && now.getMinute() == 0) {
+            timerProc.tell(new DailyTask());
+        }
+    },
+    0,
+    1,
+    TimeUnit.MINUTES
+);
+```
+
+**Key Differences:**
+1. **Process-based:** Messages instead of method calls
+2. **No cron expression:** Use ScheduledExecutorService
+3. **Explicit timers:** Can cancel dynamically
+4. **More control:** Custom scheduling logic
+
+---
+
+## Configuration
+
+### Quarkus Configuration
+
+**application.properties:**
+```properties
+quarkus.application.name=my-app
+quarkus.http.port=8080
+
+# Database
+quarkus.datasource.jdbc.url=jdbc:postgresql://localhost/db
+quarkus.datasource.username=user
+quarkus.datasource.password=pass
+
+# Reactive
+quarkus.redis.hosts=localhost:7000
+```
+
+**JOTP:**
+```java
+public class Config {
+    private static final Properties props = loadProperties();
+
+    public record AppConfig(
+        String name,
+        int port
+    ) {}
+
+    public record DatabaseConfig(
+        String url,
+        String username,
+        String password
+    ) {}
+
+    public record RedisConfig(
+        String host
+    ) {}
+
+    public static AppConfig appConfig() {
+        return new AppConfig(
+            props.getProperty("app.name"),
+            Integer.parseInt(props.getProperty("app.port"))
+        );
+    }
+
+    public static DatabaseConfig databaseConfig() {
+        return new DatabaseConfig(
+            props.getProperty("database.url"),
+            props.getProperty("database.username"),
+            props.getProperty("database.password")
+        );
+    }
+
+    public static RedisConfig redisConfig() {
+        return new RedisConfig(
+            props.getProperty("redis.host")
+        );
+    }
+}
+```
+
+**Key Differences:**
+1. **No magic properties:** Manual loading
+2. **Type-safe records:** Compile-time checking
+3. **Custom prefixes:** Any naming convention
+4. **More flexibility:** Custom configuration logic
+
+---
+
+## Testing
+
+### Quarkus Test
+
+**Quarkus:**
+```java
+@QuarkusTest
+class OrderServiceTest {
+    @Inject
+    OrderService orderService;
+
+    @Test
+    void testCreateOrder() {
+        var request = new OrderRequest("product-1", 2);
+        var order = orderService.createOrder(request).await().indefinitely();
+
+        assertNotNull(order);
+        assertEquals("product-1", order.getProductId());
+    }
+}
+```
+
+**JOTP:**
+```java
+class OrderServiceTest {
+    @Test
+    void testCreateOrder() {
+        var orderService = Proc.spawn(
+            new OrderState(Map.of()),
+            orderHandler
+        );
+
+        var request = new OrderRequest("product-1", 2);
+        var future = orderService.ask(new CreateOrder(request, null));
+
+        var order = future.join();
+        assertNotNull(order);
+        assertEquals("product-1", order.productId());
+    }
+}
+```
+
+**Key Differences:**
+1. **No @QuarkusTest:** Direct process creation
+2. **No container:** Fast unit tests
+3. **No await:** Standard CompletableFuture
+4. **Simpler setup:** Less test infrastructure
+
+---
+
+## Migration Checklist
+
+### Phase 1: Core Concepts (Week 1-2)
+- [ ] Understand message passing vs reactive streams
+- [ ] Learn virtual threads vs event loops
+- [ ] Practice CompletableFuture patterns
+- [ ] Understand supervision vs reactive error handling
+
+### Phase 2: Service Migration (Week 3-4)
+- [ ] Convert Uni<T> returns to ask()
+- [ ] Convert Multi<T> to event streams
+- [ ] Implement message protocols
+- [ ] Set up process registry
+
+### Phase 3: Fault Tolerance (Week 5-6)
+- [ ] Convert @CircuitBreaker to state machine
+- [ ] Replace @Retry with supervisor
+- [ ] Implement timeout handling
+- [ ] Set up fallback mechanisms
+
+### Phase 4: Messaging (Week 7-8)
+- [ ] Convert @Incoming/@Outgoing to processes
+- [ ] Implement message streaming
+- [ ] Set up backpressure handling
+- [ ] Connect to external systems
+
+### Phase 5: Advanced Features (Week 9-10)
+- [ ] Remove Quarkus annotations
+- [ ] Implement manual configuration
+- [ ] Set up scheduled tasks
+- [ ] Performance testing and optimization
+
+---
+
+## Common Gotchas
+
+### 1. Blocking Operations
+
+**Problem:** Blocking in reactive streams blocks the event loop.
+
+**Solution:** Offload blocking work to dedicated pool.
+
+```java
+// WRONG
+Uni.createFrom().item(() -> blockingOperation())
+
+// CORRECT
+Uni.createFrom().item(() -> blockingOperation())
+    .emitOn(executor);  // Offload to thread pool
+
+// JOTP equivalent
+var future = CompletableFuture.supplyAsync(
+    () -> blockingOperation(),
+    blockingExecutor
+);
+```
+
+### 2. Backpressure
+
+**Problem:** JOTP doesn't have built-in backpressure.
+
+**Solution:** Use bounded queues or rate limiting.
+
+```java
+var queue = new LinkedBlockingQueue<Message>(1000);
+
+(state, msg) -> switch (msg) {
+    case Process(var data) -> {
+        if (queue.remainingCapacity() == 0) {
+            // Handle backpressure
+            throw new BusyException();
+        }
+        queue.offer(new WorkItem(data));
+        yield state;
+    }
+};
+```
+
+### 3. State Management
+
+**Problem:** Reactive state is different from process state.
+
+**Solution:** Keep state in process, not in streams.
+
+```java
+// WRONG - state in stream
+Multi.createFrom().generator(() -> 0, (count, emitter) -> {
+    emitter.emit(count);
+    return count + 1;
+});
+
+// CORRECT - state in process
+var proc = Proc.spawn(
+    new GeneratorState(0),
+    (state, msg) -> switch (msg) {
+        case Next(var reply) -> {
+            reply.complete(state.count());
+            yield new GeneratorState(state.count() + 1);
+        }
+    }
+);
+```
+
+---
+
+## Best Practices for Migration
+
+### 1. Start with Stateless Services
+Migrate simple services first to learn message passing.
+
+### 2. Use Sealed Types
+Leverage the compiler for message safety.
+
+```java
+sealed interface Message permits A, B, C {}
+record A() implements Message {}
+record B() implements Message {}
+record C() implements Message {}
+```
+
+### 3. Embrace Immutability
+All state should be immutable.
+
+```java
+public record UserState(
+    String id,
+    String name,
+    List<String> roles
+) {}
+```
+
+### 4. Test Supervision
+Verify crash recovery works.
+
+```java
+@Test
+void testSupervisorRestarts() {
+    var sup = Supervisor.create(ONE_FOR_ONE, 5, Duration.ofSeconds(60));
+    var child = sup.supervise("test", state, handler);
+
+    child.proc().thread().interrupt();
+    assertTrue(child.proc().isRunning());
+}
+```
+
+---
+
+## Performance Considerations
+
+### Virtual Thread Advantages
+- **Scalability:** Millions of processes
+- **Memory:** ~1 KB per process
+- **Latency:** Sub-millisecond context switching
+
+### When to Use Reactive
+- High-throughput streaming
+- Complex stream compositions
+- Built-in backpressure needed
+
+---
+
+## Further Reading
+
+- [JOTP Architecture Overview](../explanations/architecture-overview.md)
+- [How-To: Build Supervision Trees](../how-to/build-supervision-trees.md)
+- [How-To: Concurrent Pipelines](../how-to/concurrent-pipelines.md)
+- [Examples: Spring Boot Integration](../examples/spring-boot-integration.md)
+
+---
+
+**Conclusion:** JOTP provides a fundamentally different approach to concurrency than Quarkus. While Quarkus focuses on reactive streams and non-blocking I/O, JOTP emphasizes message passing and supervision. The migration requires rethinking application architecture, but the benefits in fault tolerance and scalability are significant.

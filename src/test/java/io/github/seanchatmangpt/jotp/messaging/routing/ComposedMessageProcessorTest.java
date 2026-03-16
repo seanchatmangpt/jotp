@@ -2,14 +2,21 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 @DisplayName("ComposedMessageProcessor Tests")
 class ComposedMessageProcessorTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @Test
     @DisplayName("should compose multiple routers sequentially")

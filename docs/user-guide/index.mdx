@@ -1,0 +1,193 @@
+---
+title: JOTP User Guide
+description: Comprehensive documentation for JOTP - Java 26 OTP framework
+sidebar_position: 1
+---
+
+# JOTP User Guide
+
+Welcome to the comprehensive JOTP documentation, organized using the **Diátaxis framework** for clear, focused documentation.
+
+## What is JOTP?
+
+**JOTP** is a production-ready Java 26 framework implementing all 15 OTP (Erlang/OTP) primitives. It brings battle-tested concurrency patterns, supervision trees, and fault tolerance to the JVM using virtual threads, sealed types, and pattern matching.
+
+### Key Features
+
+- **Lightweight Processes**: Millions of concurrent processes with virtual threads
+- **Fault Tolerance**: "Let it crash" philosophy with automatic recovery
+- **Supervision Trees**: Hierarchical process management with restart strategies
+- **Type Safety**: Sealed types ensure exhaustive message matching
+- **Event-Driven**: Typed pub/sub event bus for loose coupling
+- **Distribution**: Location-transparent actor messaging
+
+## Documentation Structure
+
+This documentation follows the **Diátaxis framework**, organizing content into four types:
+
+### 1. Tutorials 📚
+
+**Learning-oriented** lessons that guide you step-by-step through building complete systems.
+
+- [Getting Started](tutorials/getting-started.mdx) - Environment setup and first application
+- [Your First Process](tutorials/your-first-process.mdx) - Create and run a stateful process
+- [Building a Supervisor Tree](tutorials/building-a-supervisor-tree.mdx) - Fault-tolerant process hierarchies
+- [Event-Driven Architecture](tutorials/event-driven-architecture.mdx) - Pub/sub messaging patterns
+
+**Best for:** New users learning JOTP concepts
+
+### 2. How-To Guides 🔧
+
+**Problem-oriented** practical guides showing how to solve specific tasks.
+
+- [Create a Process](how-to/create-process.mdx) - Process creation and management
+- [Implement a Supervisor](how-to/implement-supervisor.mdx) - Fault-tolerant supervision
+- [Add Circuit Breaker](how-to/add-circuit-breaker.mdx) - Circuit breaker pattern
+- [Use Event Bus](how-to/use-event-bus.mdx) - Pub/sub event messaging
+- [Distributed Actors](how-to/distributed-actors.mdx) - Building distributed systems
+- [Testing Processes](how-to/testing-procs.mdx) - Testing strategies and patterns
+
+**Best for:** Developers solving specific problems
+
+### 3. Explanation 💡
+
+**Understanding-oriented** discussions providing context and background.
+
+- [OTP in Java](explanation/otp-in-java.mdx) - How Erlang/OTP maps to Java 26
+- [Supervision Trees](explanation/supervision-trees.mdx) - Architectural patterns
+- [Let It Crash Philosophy](explanation/let-it-crash-philosophy.mdx) - Fault tolerance philosophy
+- [Virtual Threads](explanation/virtual-threads.mdx) - Implementation details
+- [Fault Tolerance](explanation/fault-tolerance.mdx) - Building resilient systems
+
+**Best for:** Understanding why JOTP works this way
+
+### 4. Reference 📖
+
+**Information-oriented** technical specifications and API documentation.
+
+- [Proc API](reference/proc-api.mdx) - Process API reference
+- [Supervisor API](reference/supervisor-api.mdx) - Supervisor API reference
+- [EventManager API](reference/event-manager-api.mdx) - Event bus API reference
+- [Configuration](reference/configuration.mdx) - Configuration options
+- [Error Codes](reference/error-codes.mdx) - Common errors and solutions
+
+**Best for:** Looking up specific API details
+
+## Quick Start
+
+### 1. Create a Process
+
+```java
+// Define state and messages
+record CounterState(int value) {}
+sealed interface CounterMessage permits CounterMessage.Increment {}
+record Increment() implements CounterMessage {}
+
+// Spawn process
+Proc<CounterState, CounterMessage> proc = Proc.spawn(
+    "counter",
+    new CounterState(0),
+    (state, msg) -> switch (msg) {
+        case Increment() -> new CounterState(state.value() + 1);
+    }
+);
+
+// Send message
+proc.send(new Increment());
+```
+
+### 2. Create a Supervisor
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "my-supervisor",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        ChildSpec.of(
+            "worker-1",
+            () -> WorkerProc.spawn(),
+            RestartStrategy.PERMANENT,
+            Duration.ofSeconds(5)
+        )
+    )
+);
+```
+
+### 3. Use Event Bus
+
+```java
+EventManager<DomainEvent> bus = EventManager.spawn("events");
+
+// Subscribe
+bus.subscribe("handler", event -> {
+    System.out.println("Received: " + event);
+    return SubscriberState.KEEP;
+});
+
+// Publish
+bus.publish(new OrderCreated("ORD-123", BigDecimal.valueOf(99.99)));
+```
+
+## The 15 OTP Primitives
+
+| Primitive | Purpose | API |
+|-----------|---------|-----|
+| **Proc** | Lightweight process with mailbox | `Proc<S,M>.spawn()` |
+| **Supervisor** | Fault-tolerant process tree | `Supervisor.spawn()` |
+| **StateMachine** | State machine with events | `StateMachine<S,E,D>.spawn()` |
+| **ProcRef** | Stable process reference | `ProcRef.of()` |
+| **ProcMonitor** | One-way death notification | `ProcMonitor.monitor()` |
+| **ProcLink** | Bidirectional crash propagation | `ProcLink.link()` |
+| **ProcRegistry** | Name-based process lookup | `ProcRegistry.lookup()` |
+| **ProcTimer** | Scheduled message delivery | `ProcTimer.send()` |
+| **ProcSys** | Live process introspection | `ProcSys.suspend()` |
+| **ProcLib** | Process utility functions | `ProcLib.init_ack()` |
+| **CrashRecovery** | Isolated execution wrapper | `CrashRecovery.supply()` |
+| **Parallel** | Structured concurrency | `Parallel.run()` |
+| **EventManager** | Typed pub-sub events | `EventManager<E>.spawn()` |
+| **Result** | Railway-oriented errors | `Result.ok() / Result.err()` |
+| **ExitSignal** | Exit reason carrier | `ExitSignal.exception()` |
+
+## Learning Path
+
+### Beginner
+1. Start with [Getting Started](tutorials/getting-started.mdx)
+2. Build [Your First Process](tutorials/your-first-process.mdx)
+3. Learn [Testing Processes](how-to/testing-procs.mdx)
+
+### Intermediate
+4. Build [Supervisor Trees](tutorials/building-a-supervisor-tree.mdx)
+5. Implement [Circuit Breakers](how-to/add-circuit-breaker.mdx)
+6. Understand [Fault Tolerance](explanation/fault-tolerance.mdx)
+
+### Advanced
+7. Build [Event-Driven Systems](tutorials/event-driven-architecture.mdx)
+8. Create [Distributed Actors](how-to/distributed-actors.mdx)
+9. Master [Supervision Trees](explanation/supervision-trees.mdx)
+
+## Prerequisites
+
+- **Java 26** with preview features (`--enable-preview`)
+- **Maven 4.0+** (or included Maven Wrapper)
+- Basic familiarity with:
+  - Java concurrency concepts
+  - Functional programming patterns
+  - Sealed types and pattern matching
+
+## Contributing
+
+See [Contributing](../CONTRIBUTING.md) for guidelines on contributing to JOTP documentation.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/seanchatmangpt/jotp/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/seanchatmangpt/jotp/discussions)
+- **Tests**: See test files linked in each section
+
+## License
+
+[Apache License 2.0](../LICENSE)
+
+---
+
+**Next Steps**: Start with the [Getting Started](tutorials/getting-started.mdx) tutorial to begin your JOTP journey!

@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * @see RunType
  * @see StartType
  */
+@DtrTest
 @DisplayName("ApplicationController — OTP application: module equivalence")
 @Execution(ExecutionMode.SAME_THREAD)
 class ApplicationControllerTest implements WithAssertions {
@@ -109,7 +112,16 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("load() registers the spec in loadedApplications() without starting")
-        void loadMakesSpecAvailable() {
+        void loadMakesSpecAvailable(DtrContext ctx) {
+            ctx.sayNextSection("ApplicationController: OTP application: Module");
+            ctx.say(
+                    """
+                    The ApplicationController is JOTP's equivalent to Erlang/OTP's application module.
+                    It manages application lifecycle: load (register spec) -> start (spawn processes) ->
+                    stop (terminate processes) -> unload (remove spec). Loading an application does NOT
+                    start it - it merely registers the spec for later use.
+                    """);
+
             var f = new AppFixture("my-app");
             var spec = specFrom(f);
 
@@ -167,7 +179,14 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("start(spec) invokes the callback and registers in whichApplications()")
-        void startInvokesCallbackAndRegisters() throws Exception {
+        void startInvokesCallbackAndRegisters(DtrContext ctx) throws Exception {
+            ctx.say(
+                    """
+                    Starting an application invokes its callback's start() method and registers it
+                    in whichApplications() - the list of currently running applications. This is
+                    equivalent to Erlang's application:start/1.
+                    """);
+
             var started = new AtomicBoolean(false);
             var spec =
                     specWithCallback(
@@ -355,7 +374,15 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("StartType.Normal() is passed to the callback on an ordinary start")
-        void normalStartTypeDelivered() throws Exception {
+        void normalStartTypeDelivered(DtrContext ctx) throws Exception {
+            ctx.say(
+                    """
+                    StartTypes mirror Erlang/OTP's distributed application semantics:
+                    - Normal: regular startup
+                    - Takeover: this node is taking over from another node
+                    - Failover: the primary node crashed and this is the backup
+                    """);
+
             var observed = new AtomicReference<ObservedStart>();
             var spec =
                     specWithCallback(
@@ -445,7 +472,14 @@ class ApplicationControllerTest implements WithAssertions {
         @Test
         @DisplayName(
                 "PERMANENT app termination cascades — BEAM runtime equivalent of node shutdown")
-        void permanentStopCascadesToAll() throws Exception {
+        void permanentStopCascadesToAll(DtrContext ctx) throws Exception {
+            ctx.say(
+                    """
+                    RunType.PERMANENT apps are critical infrastructure. When a permanent app terminates,
+                    ALL running apps are stopped - this is equivalent to BEAM's node shutdown behavior.
+                    This ensures system consistency when core services fail.
+                    """);
+
             ApplicationController.start(minimalSpec("app-a"));
             ApplicationController.start(minimalSpec("app-b"));
             ApplicationController.start(minimalSpec("critical"), RunType.PERMANENT);
@@ -515,7 +549,14 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("getEnv() returns value from spec's env map — OTP application:get_env/2")
-        void getEnvReturnsSpecValue() throws Exception {
+        void getEnvReturnsSpecValue(DtrContext ctx) throws Exception {
+            ctx.say(
+                    """
+                    Application environment provides per-app configuration via getEnv/setEnv/unsetEnv,
+                    mirroring Erlang's application:get_env/2,3 and application:set_env/3. Environment
+                    can be set in the spec or overridden at runtime.
+                    """);
+
             var spec = ApplicationSpec.builder("ch-app").env("file", "/usr/local/log").build();
             ApplicationController.start(spec);
 

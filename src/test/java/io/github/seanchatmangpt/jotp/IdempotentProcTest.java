@@ -1,9 +1,12 @@
 package io.github.seanchatmangpt.jotp;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.assertj.core.api.WithAssertions;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -15,8 +18,14 @@ import org.junit.jupiter.api.Timeout;
  * <p>Verifies that duplicate idempotency keys are silently discarded while distinct keys and
  * non-idempotent messages are always forwarded to the delegate process.
  */
+@DtrTest
 @Timeout(10)
 class IdempotentProcTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Domain messages ────────────────────────────────────────────────────────
 
@@ -64,7 +73,15 @@ class IdempotentProcTest implements WithAssertions {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    void tell_deduplicatesIdempotentMessages() throws InterruptedException {
+    void tell_deduplicatesIdempotentMessages(DtrContext ctx) throws InterruptedException {
+        ctx.sayNextSection("IdempotentProc: Message Deduplication Wrapper");
+        ctx.say(
+                """
+                IdempotentProc wraps any Proc to provide automatic message deduplication.
+                Messages implementing the Idempotent interface are checked for duplicate keys.
+                If a key has been seen before, the duplicate message is silently discarded.
+                This implements Joe Armstrong's principle: "Design your protocols to survive retries."
+                """);
         var fixture = buildFixture(100);
         var proc = fixture.idempotentProc();
         var received = fixture.received();
@@ -88,7 +105,13 @@ class IdempotentProcTest implements WithAssertions {
     }
 
     @Test
-    void tell_processesDistinctKeys() throws InterruptedException {
+    void tell_processesDistinctKeys(DtrContext ctx) throws InterruptedException {
+        ctx.say(
+                """
+                Different idempotency keys are processed independently.
+                Each unique key represents a distinct operation that should be executed once.
+                This enables safe retry behavior: retransmitting with the same key is harmless.
+                """);
         var fixture = buildFixture(100);
         var proc = fixture.idempotentProc();
         var received = fixture.received();
@@ -107,7 +130,13 @@ class IdempotentProcTest implements WithAssertions {
     }
 
     @Test
-    void tell_nonIdempotentMessages_alwaysDelivered() throws InterruptedException {
+    void tell_nonIdempotentMessages_alwaysDelivered(DtrContext ctx) throws InterruptedException {
+        ctx.say(
+                """
+                Messages NOT implementing Idempotent are always delivered without deduplication.
+                This allows mixing idempotent and non-idempotent messages in the same Proc.
+                Example: Commands (idempotent) can coexist with Events (non-idempotent).
+                """);
         var fixture = buildFixture(100);
         var proc = fixture.idempotentProc();
         var received = fixture.received();

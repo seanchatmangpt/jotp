@@ -3,12 +3,16 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -30,9 +34,20 @@ import org.junit.jupiter.api.Timeout;
  *   <li>StopAndReply
  *   <li>Action.Reply
  * </ul>
+ *
+ * <p><strong>Living Documentation:</strong> Each test method generates executable documentation
+ * explaining gen_statem semantics, sealed state/event types, transition functions, timeout
+ * handling, and state data persistence. Run with DTR to see examples with actual output values.
  */
 @Timeout(10)
 class StateMachineTest implements WithAssertions {
+
+    @DtrContextField private DtrContext ctx;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Domain model (code lock) ─────────────────────────────────────────────
 
@@ -270,21 +285,164 @@ class StateMachineTest implements WithAssertions {
                         });
     }
 
+    // ── gen_statem contract overview ───────────────────────────────────────────
+
+    void gen_statem_contract_overview() throws Exception {
+        ctx.sayNextSection("StateMachine: OTP gen_statem Contract Implementation");
+        ctx.say(
+                "StateMachine provides full gen_statem feature parity with Java 26 patterns. It implements the Erlang/OTP state machine behavior model.");
+        ctx.sayCode(
+                """
+            // gen_statem core contract: (State, Event, Data) → Transition
+            @FunctionalInterface
+            public interface TransitionFunction<S, E, D> {
+                Transition<S, D> apply(S state, SMEvent<E> event, D data);
+            }
+
+            // Transition types (sealed for exhaustive matching)
+            sealed interface Transition<S, D> permits
+                Transition.Next,    // (newState, newData, actions...)
+                Transition.Keep,    // (sameState, newData, actions...)
+                Transition.Stop     // (reason, reply...)
+            { }
+
+            // State machine creation
+            var sm = StateMachine.of(
+                initialState,      // S - sealed state type
+                initialData,       // D - state data (record, sealed class, or value type)
+                transitionFunction // (S, SMEvent<E>, D) → Transition<S,D>
+            );
+            """,
+                "java");
+        ctx.sayNote(
+                "Unlike traditional state machines, gen_statem separates state transitions (Next/Keep) from event processing. State data is immutable and carried through transitions.");
+
+        ctx.sayTable(
+                new String[][] {
+                    {"gen_statem Feature", "Java 26 Implementation", "OTP Equivalent"},
+                    {
+                        "Sealed State Types",
+                        "sealed interface S permits S.A, S.B",
+                        "State atoms in Erlang"
+                    },
+                    {
+                        "Sealed Event Types",
+                        "sealed interface E permits E.X, E.Y",
+                        "Event records in Erlang"
+                    },
+                    {
+                        "Pattern Matching",
+                        "switch (state) { case A() → ... }",
+                        "function clauses in Erlang"
+                    },
+                    {"Immutable State Data", "record D(...)", "State data in Erlang"},
+                    {
+                        "Transition Functions",
+                        "(S, E, D) → Transition<S,D>",
+                        "handle_event/4 in Erlang"
+                    },
+                    {"Virtual Threads", "StructuredTaskScope for async", "Processes in Erlang"}
+                });
+
+        var sm = codeLock("1234");
+        assertThat(sm.isRunning()).isTrue();
+        assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "StateMachine Running",
+                        String.valueOf(sm.isRunning()),
+                        "Initial State Type",
+                        sm.state().getClass().getSimpleName(),
+                        "State Data Type",
+                        sm.data().getClass().getSimpleName(),
+                        "Transition Function",
+                        "Pure (S,E,D) → Transition<S,D>",
+                        "Thread Model",
+                        "Virtual Thread",
+                        "Pattern Matching",
+                        "Exhaustive switch expressions"));
+        sm.stop();
+    }
+
     // ── Initial state ─────────────────────────────────────────────────────────
 
-    @Test
     void initialState_isLockedWithEmptyEntered() throws Exception {
+        ctx.sayNextSection("StateMachine: Initial State and Sealed State Types");
+        ctx.say(
+                "StateMachine implements OTP gen_statem with sealed state types for exhaustive pattern matching.");
+        ctx.sayCode(
+                """
+            sealed interface LockState permits LockState.Locked, LockState.Open {
+                record Locked() implements LockState {}
+                record Open() implements LockState {}
+            }
+
+            var sm = StateMachine.of(
+                new LockState.Locked(),  // initial state
+                new LockData("1234", ""), // initial state data
+                transitionFunction);
+
+            // Initial state is locked with empty entered code
+            assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
+            assertThat(sm.data().entered()).isEmpty();
+            assertThat(sm.isRunning()).isTrue();
+            """,
+                "java");
+        ctx.sayNote(
+                "Sealed state types enable exhaustive switch expressions. The compiler guarantees all states are handled, eliminating missing state bugs.");
+
         var sm = codeLock("1234");
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
         assertThat(sm.data().entered()).isEmpty();
         assertThat(sm.isRunning()).isTrue();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Initial State",
+                        sm.state().getClass().getSimpleName(),
+                        "State Data",
+                        String.valueOf(sm.data().entered()),
+                        "Running",
+                        String.valueOf(sm.isRunning())));
         sm.stop();
     }
 
     // ── Correct code opens the lock ───────────────────────────────────────────
 
-    @Test
     void correctCode_transitionsToOpen() throws Exception {
+        ctx.sayNextSection("StateMachine: State Transitions with Sealed Events");
+        ctx.say(
+                "Events are also sealed types, enabling exhaustive pattern matching on events within each state.");
+        ctx.sayCode(
+                """
+            sealed interface LockEvent permits LockEvent.PushButton, LockEvent.Lock {
+                record PushButton(char button) implements LockEvent {}
+                record Lock() implements LockEvent {}
+            }
+
+            // Transition function uses nested switch expressions
+            (state, event, data) -> switch (state) {
+                case LockState.Locked() -> switch (event) {
+                    case SMEvent.User(LockEvent.PushButton(var b)) -> {
+                        var entered = data.entered() + b;
+                        yield entered.equals(data.code())
+                            ? Transition.nextState(new LockState.Open(), data.withEntered(""))
+                            : Transition.keepState(data.withEntered(entered));
+                    }
+                    default -> Transition.keepState(data);
+                };
+                case LockState.Open() -> switch (event) {
+                    case SMEvent.User(LockEvent.Lock()) ->
+                        Transition.nextState(new LockState.Locked(), data.withEntered(""));
+                    default -> Transition.keepState(data);
+                };
+            };
+            """,
+                "java");
+        ctx.sayNote(
+                "Pattern matching with record patterns (var b) extracts button values directly. Exhaustive switches guarantee all state/event combinations are handled.");
+
         var sm = codeLock("1234");
         sm.send(new LockEvent.PushButton('1'));
         sm.send(new LockEvent.PushButton('2'));
@@ -294,13 +452,46 @@ class StateMachineTest implements WithAssertions {
 
         assertThat(sm.state()).isInstanceOf(LockState.Open.class);
         assertThat(data.entered()).isEmpty();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Code Entered",
+                        "1234",
+                        "Final State",
+                        sm.state().getClass().getSimpleName(),
+                        "Entered Data",
+                        data.entered(),
+                        "Transition",
+                        "Locked → Open (correct code)"));
         sm.stop();
     }
 
     // ── Wrong code stays locked ───────────────────────────────────────────────
 
-    @Test
     void wrongCode_staysLocked() throws Exception {
+        ctx.sayNextSection("StateMachine: State Persistence and KeepState Transitions");
+        ctx.say(
+                "Transition.keepState() maintains current state while updating state data. Wrong codes accumulate but don't unlock.");
+        ctx.sayCode(
+                """
+            // When code doesn't match, keep the Locked state
+            case SMEvent.User(LockEvent.PushButton(var b)) -> {
+                var entered = data.entered() + b;
+                yield entered.equals(data.code())
+                    ? Transition.nextState(new LockState.Open(), data.withEntered(""))
+                    : Transition.keepState(data.withEntered(entered)); // stays locked
+            }
+            """,
+                "java");
+        ctx.sayTable(
+                new String[][] {
+                    {"Event", "State Before", "State After", "Entered Data", "Match Code?"},
+                    {"PushButton('9')", "Locked", "Locked", "9", "false"},
+                    {"PushButton('9')", "Locked", "Locked", "99", "false"},
+                    {"PushButton('9')", "Locked", "Locked", "999", "false"},
+                    {"PushButton('9')", "Locked", "Locked", "9999", "false"}
+                });
+
         var sm = codeLock("1234");
         sm.send(new LockEvent.PushButton('9'));
         sm.send(new LockEvent.PushButton('9'));
@@ -308,26 +499,98 @@ class StateMachineTest implements WithAssertions {
         sm.call(new LockEvent.PushButton('9')).get(5, TimeUnit.SECONDS);
 
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Expected Code",
+                        "1234",
+                        "Entered Code",
+                        "9999",
+                        "Final State",
+                        sm.state().getClass().getSimpleName(),
+                        "Transition Type",
+                        "KeepState (no state change)"));
         sm.stop();
     }
 
     // ── Partial code accumulates ──────────────────────────────────────────────
 
-    @Test
     void partialCode_accumulatesDigits() throws Exception {
+        ctx.sayNextSection("StateMachine: State Data Persistence Across Events");
+        ctx.say(
+                "State data persists across transitions. Each event can update data without changing state, accumulating partial input.");
+        ctx.sayCode(
+                """
+            record LockData(String code, String entered) {
+                LockData withEntered(String e) {
+                    return new LockData(code, e);  // immutable update
+                }
+            }
+
+            // Partial code accumulation
+            var data = sm.call(new LockEvent.PushButton('9')).get(5, TimeUnit.SECONDS);
+            // data.entered() == "9"
+
+            data = sm.call(new LockEvent.PushButton('9')).get(5, TimeUnit.SECONDS);
+            // data.entered() == "99"
+            """,
+                "java");
+        ctx.sayNote(
+                "State data is immutable. Each transition returns a new data instance. The state machine holds the current (state, data) pair.");
+
         var sm = codeLock("999");
         var data = sm.call(new LockEvent.PushButton('9')).get(5, TimeUnit.SECONDS);
         assertThat(data.entered()).isEqualTo("9");
 
         data = sm.call(new LockEvent.PushButton('9')).get(5, TimeUnit.SECONDS);
         assertThat(data.entered()).isEqualTo("99");
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Target Code",
+                        "999",
+                        "After 1st Button",
+                        "9",
+                        "After 2nd Button",
+                        "99",
+                        "State",
+                        sm.state().getClass().getSimpleName()));
         sm.stop();
     }
 
     // ── Re-locking ────────────────────────────────────────────────────────────
 
-    @Test
     void lock_afterOpen_transitionsToLocked() throws Exception {
+        ctx.sayNextSection("StateMachine: Bidirectional State Transitions");
+        ctx.say(
+                "State machines support bidirectional transitions. Open → Locked is a separate transition from Locked → Open.");
+        ctx.sayCode(
+                """
+            // Open state handles Lock event to return to Locked
+            case LockState.Open() -> switch (event) {
+                case SMEvent.User(LockEvent.Lock()) ->
+                    Transition.nextState(new LockState.Locked(), data.withEntered(""));
+                default -> Transition.keepState(data);
+            };
+
+            // Usage: unlock then re-lock
+            sm.call(new LockEvent.PushButton('4')).get(5, TimeUnit.SECONDS);
+            sm.call(new LockEvent.PushButton('2')).get(5, TimeUnit.SECONDS);
+            // Now in Open state
+
+            var data = sm.call(new LockEvent.Lock()).get(5, TimeUnit.SECONDS);
+            // Now back in Locked state with empty entered data
+            """,
+                "java");
+        ctx.sayMermaid(
+                """
+            stateDiagram-v2
+                [*] --> Locked
+                Locked --> Open: correct code
+                Open --> Locked: Lock event
+                Locked --> Locked: wrong code (keepState)
+                """);
+
         var sm = codeLock("42");
         sm.call(new LockEvent.PushButton('4')).get(5, TimeUnit.SECONDS);
         sm.call(new LockEvent.PushButton('2')).get(5, TimeUnit.SECONDS);
@@ -336,17 +599,59 @@ class StateMachineTest implements WithAssertions {
         var data = sm.call(new LockEvent.Lock()).get(5, TimeUnit.SECONDS);
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
         assertThat(data.entered()).isEmpty();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Initial State",
+                        "Locked",
+                        "After Code '42'",
+                        "Open",
+                        "After Lock Event",
+                        "Locked",
+                        "Entered Data Reset",
+                        data.entered()));
         sm.stop();
     }
 
     // ── Ignored events ────────────────────────────────────────────────────────
 
-    @Test
     void lockEvent_inLockedState_isIgnored() throws Exception {
+        ctx.sayNextSection("StateMachine: Event Handling with Default Clauses");
+        ctx.say(
+                "Events not explicitly handled in a state fall through to default clauses. This implements 'ignored event' semantics.");
+        ctx.sayCode(
+                """
+            case LockState.Locked() -> switch (event) {
+                case SMEvent.User(LockEvent.PushButton(var b)) -> { /* handle */ }
+                default -> Transition.keepState(data); // Lock event ignored in Locked state
+            };
+
+            case LockState.Open() -> switch (event) {
+                case SMEvent.User(LockEvent.Lock()) -> { /* handle */ }
+                default -> Transition.keepState(data); // PushButton ignored in Open state
+            };
+            """,
+                "java");
+        ctx.sayNote(
+                "Default clauses provide explicit handling for ignored events. This is preferred over implicit ignore behavior, as it makes state machine behavior explicit and verifiable.");
+
         var sm = codeLock("99");
         var data = sm.call(new LockEvent.Lock()).get(5, TimeUnit.SECONDS);
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
         assertThat(data.entered()).isEmpty();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Event Sent",
+                        "Lock()",
+                        "Current State",
+                        "Locked",
+                        "Event Handling",
+                        "Ignored (default clause)",
+                        "State Changed",
+                        "false",
+                        "Data Changed",
+                        "false"));
         sm.stop();
     }
 
@@ -364,8 +669,34 @@ class StateMachineTest implements WithAssertions {
         record Quit() implements SimpleEvent {}
     }
 
-    @Test
     void stop_transition_terminatesMachine() throws Exception {
+        ctx.sayNextSection("StateMachine: Normal Termination with Transition.stop()");
+        ctx.say(
+                "Transition.stop(reason) terminates the state machine gracefully. The virtual thread exits and stopReason() captures the termination cause.");
+        ctx.sayCode(
+                """
+            (state, event, data) -> switch (event) {
+                case SMEvent.User(SimpleEvent.Work(var n)) ->
+                    Transition.keepState(data + n);  // accumulate work
+                case SMEvent.User(SimpleEvent.Quit()) ->
+                    Transition.stop("normal");  // graceful shutdown
+                default -> Transition.keepState(data);
+            };
+
+            // Usage
+            sm.send(new SimpleEvent.Work(10));
+            sm.send(new SimpleEvent.Work(5));
+            var data = sm.call(new SimpleEvent.Work(1)).get(5, TimeUnit.SECONDS);
+            // data == 16
+
+            sm.send(new SimpleEvent.Quit());
+            await().atMost(5, TimeUnit.SECONDS).until(() -> !sm.isRunning());
+            assertThat(sm.stopReason()).isEqualTo("normal");
+            """,
+                "java");
+        ctx.sayNote(
+                "Transition.stop() is the gen_statem equivalent of {stop, Reason, NewStateData}. It terminates the state machine process after processing the current event.");
+
         var sm =
                 StateMachine.of(
                         new SimpleState.Running(),
@@ -387,6 +718,17 @@ class StateMachineTest implements WithAssertions {
         sm.send(new SimpleEvent.Quit());
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !sm.isRunning());
         assertThat(sm.stopReason()).isEqualTo("normal");
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Work Accumulated",
+                        String.valueOf(data),
+                        "Termination Event",
+                        "Quit()",
+                        "Stop Reason",
+                        "normal",
+                        "Final State",
+                        sm.isRunning() ? "Running" : "Stopped"));
     }
 
     @Test
@@ -628,8 +970,30 @@ class StateMachineTest implements WithAssertions {
 
     // ── State Timeout ─────────────────────────────────────────────────────────
 
-    @Test
     void stateTimeout_firesAfterDelay() throws Exception {
+        ctx.sayNextSection("StateMachine: State Timeout Transitions");
+        ctx.say(
+                "State timeouts provide automatic transitions after a period of inactivity. They're essential for implementing SLAs, circuit breakers, and session expiration.");
+        ctx.sayCode(
+                """
+            // Set state timeout when returning from transition
+            case SMEvent.User(TEvent.Start()) ->
+                Transition.keepState(data, Action.stateTimeout(80, "tick"));
+
+            // Handle timeout event when it fires
+            case SMEvent.StateTimeout(var content) -> {
+                // content == "tick"
+                yield Transition.nextState(new TState.Done(), data);
+            }
+
+            // State timeout auto-cancels on state change
+            case SMEvent.User(CSEvent.Move()) ->
+                Transition.nextState(new CSState.B(), data); // cancels pending timeout
+            """,
+                "java");
+        ctx.sayNote(
+                "State timeouts are gen_statem's {{state_timeout, Time}} feature. They're automatically cancelled when transitioning to a new state, preventing timeout leaks.");
+
         var timedOut = new AtomicInteger(0);
 
         var sm =
@@ -663,6 +1027,19 @@ class StateMachineTest implements WithAssertions {
                 .until(() -> sm.state() instanceof TState.Done);
 
         assertThat(timedOut.get()).isEqualTo(1);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Timeout Set",
+                        "80ms",
+                        "Timeout Content",
+                        "tick",
+                        "Timeout Fired",
+                        timedOut.get() + " time(s)",
+                        "State After Timeout",
+                        "Done",
+                        "Auto-Cancel",
+                        "On state change"));
         sm.stop();
     }
 

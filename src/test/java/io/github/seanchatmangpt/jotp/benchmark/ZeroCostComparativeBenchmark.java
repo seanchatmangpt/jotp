@@ -21,7 +21,6 @@ import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
-import org.openjdk.jmh.annotations.CompilerControl;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
@@ -37,10 +36,11 @@ import org.openjdk.jmh.infra.Blackhole;
 /**
  * Comparative benchmark: Ideal zero-cost abstraction vs. JOTP FrameworkEventBus.
  *
- * <p><strong>Research Question:</strong> What is the actual cost gap between the theoretical
- * ideal (single branch check) and the production implementation?
+ * <p><strong>Research Question:</strong> What is the actual cost gap between the theoretical ideal
+ * (single branch check) and the production implementation?
  *
  * <p><strong>Methodology:</strong>
+ *
  * <ol>
  *   <li>Establish baseline with {@link IdealEventBus} (theoretical minimum: <50ns)
  *   <li>Measure JOTP {@link FrameworkEventBus} under identical conditions
@@ -49,6 +49,7 @@ import org.openjdk.jmh.infra.Blackhole;
  * </ol>
  *
  * <p><strong>Expected Results:</strong>
+ *
  * <ul>
  *   <li>Ideal: <50ns (single branch, dead code elimination)
  *   <li>JOTP disabled: <100ns (3-branch check: !enabled || !running || isEmpty)
@@ -56,6 +57,7 @@ import org.openjdk.jmh.infra.Blackhole;
  * </ul>
  *
  * <p><strong>Running:</strong>
+ *
  * <pre>{@code
  * mvnd test -Dtest=ZeroCostComparativeBenchmark
  * }</pre>
@@ -75,6 +77,7 @@ public class ZeroCostComparativeBenchmark {
      * Feature flag parameter: test both disabled and enabled states.
      *
      * <p><strong>false:</strong> Measures fast path (zero-overhead claim validation)
+     *
      * <p><strong>true:</strong> Measures async delivery overhead
      */
     @Param({"false", "true"})
@@ -115,8 +118,8 @@ public class ZeroCostComparativeBenchmark {
      *
      * <p><strong>Assembly (enabled):</strong> Single branch, no memory access.
      *
-     * <p>This is the "north star" - any real implementation will be slower due to
-     * necessary features (running flag, subscriber management, etc.).
+     * <p>This is the "north star" - any real implementation will be slower due to necessary
+     * features (running flag, subscriber management, etc.).
      */
     @Benchmark
     public void ideal_publish_disabled() {
@@ -129,6 +132,7 @@ public class ZeroCostComparativeBenchmark {
      * JOTP: FrameworkEventBus publish (production implementation).
      *
      * <p><strong>Expected (disabled):</strong> <100ns - 3-branch fast path:
+     *
      * <pre>
      * if (!ENABLED || !running || subscribers.isEmpty()) {
      *     return;
@@ -136,10 +140,11 @@ public class ZeroCostComparativeBenchmark {
      * </pre>
      *
      * <p><strong>Gap analysis:</strong> Why is this slower than ideal?
+     *
      * <ul>
-     *   <li><code>!running</code> - volatile read, prevents reordering (10-20ns)</li>
-     *   <li><code>subscribers.isEmpty()</code> - CopyOnWriteArrayList.size() check (20-30ns)</li>
-     *   <li>Potential virtual call overhead for isEmpty() (5-10ns)</li>
+     *   <li><code>!running</code> - volatile read, prevents reordering (10-20ns)
+     *   <li><code>subscribers.isEmpty()</code> - CopyOnWriteArrayList.size() check (20-30ns)
+     *   <li>Potential virtual call overhead for isEmpty() (5-10ns)
      * </ul>
      *
      * <p><strong>Expected (enabled):</strong> 200-500ns - async executor.submit().
@@ -174,8 +179,8 @@ public class ZeroCostComparativeBenchmark {
      *
      * <p><strong>Expected:</strong> 20-30ns - volatile int field read.
      *
-     * <p><strong>Note:</strong> CopyOnWriteArrayList.isEmpty() reads a volatile int field,
-     * which is faster than a full array traversal but still has memory visibility costs.
+     * <p><strong>Note:</strong> CopyOnWriteArrayList.isEmpty() reads a volatile int field, which is
+     * faster than a full array traversal but still has memory visibility costs.
      */
     @Benchmark
     public void component_copyOnWriteIsEmpty() {
@@ -188,18 +193,18 @@ public class ZeroCostComparativeBenchmark {
     /**
      * Component: Triple branch check (reconstructs JOTP fast path logic).
      *
-     * <p><strong>Purpose:</strong> Isolate the cost of the 3-branch fast path:
-     * {@code if (!enabled || !running || isEmpty) return;}
+     * <p><strong>Purpose:</strong> Isolate the cost of the 3-branch fast path: {@code if (!enabled
+     * || !running || isEmpty) return;}
      *
      * <p><strong>Expected:</strong> 50-70ns - three sequential boolean checks.
      *
-     * <p>This benchmark validates whether the gap is explained by branch checks alone,
-     * or if there are other factors (method inlining, object allocation, etc.).
+     * <p>This benchmark validates whether the gap is explained by branch checks alone, or if there
+     * are other factors (method inlining, object allocation, etc.).
      */
     @Benchmark
     public void component_tripleBranchCheck() {
         boolean enabled = false;
-        volatile boolean running = true;
+        boolean running = true;
         var list = new java.util.concurrent.CopyOnWriteArrayList<Object>();
 
         // Reconstruct JOTP's fast path logic
@@ -215,9 +220,9 @@ public class ZeroCostComparativeBenchmark {
     /**
      * Comparison: Direct call overhead (method invocation baseline).
      *
-     * <p><strong>Purpose:</strong> Establish the baseline cost of calling a void method
-     * with one parameter. This helps distinguish between method call overhead vs.
-     * actual implementation logic.
+     * <p><strong>Purpose:</strong> Establish the baseline cost of calling a void method with one
+     * parameter. This helps distinguish between method call overhead vs. actual implementation
+     * logic.
      *
      * <p><strong>Expected:</strong> <10ns - inlined void method call.
      */
@@ -226,9 +231,7 @@ public class ZeroCostComparativeBenchmark {
         noopMethod(sampleEvent);
     }
 
-    /**
-     * No-op method for baseline measurement.
-     */
+    /** No-op method for baseline measurement. */
     private void noopMethod(Object event) {
         // Intentionally empty - measures method call overhead
     }
@@ -236,8 +239,8 @@ public class ZeroCostComparativeBenchmark {
     /**
      * Baseline: Empty benchmark (JMH framework overhead).
      *
-     * <p><strong>Purpose:</strong> Measure JMH's intrinsic overhead (loop overhead,
-     * timing, etc.). Subtract this from all other measurements.
+     * <p><strong>Purpose:</strong> Measure JMH's intrinsic overhead (loop overhead, timing, etc.).
+     * Subtract this from all other measurements.
      *
      * <p><strong>Expected:</strong> <5ns - timing loop overhead.
      */

@@ -1,4 +1,4 @@
-# Java Maven Template - OCI Outputs
+# JOTP - OCI Outputs
 
 output "vcn_id" {
   description = "VCN ID"

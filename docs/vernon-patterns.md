@@ -1,5 +1,11 @@
 # Vaughn Vernon Domain-Driven Design Patterns
 
+> **📌 RELATED DOCUMENTS:**
+> - **Reactive Messaging Patterns**: See [`VERNON_PATTERNS.md`](./VERNON_PATTERNS.md) for comprehensive guide to all 34 messaging patterns
+> - **Quick Reference**: See [`vernon-patterns.md`](./vernon-patterns.md) for condensed reference card
+>
+> **This document covers Domain-Driven Design strategic and tactical patterns from Vaughn Vernon's "Implementing Domain-Driven Design" (IDDD).**
+
 Enterprise-grade DDD and reactive messaging patterns implemented in `org.acme`, following the principles from Vaughn Vernon's books * *Implementing Domain-Driven Design* (IDDD) and *Reactive Messaging Patterns with the Actor Model*.
 
 ---

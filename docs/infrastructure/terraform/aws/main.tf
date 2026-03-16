@@ -1,4 +1,4 @@
-# Java Maven Template - AWS Terraform Configuration
+# JOTP - AWS Terraform Configuration
 # Requires: Terraform >= 1.6.0, AWS credentials
 
 terraform {
@@ -14,7 +14,7 @@ terraform {
   # Backend configuration (uncomment for remote state)
   # backend "s3" {
   #   bucket         = "terraform-state-bucket"
-  #   key            = "java-maven-template/terraform.tfstate"
+  #   key            = "jotp/terraform.tfstate"
   #   region         = "us-east-1"
   #   encrypt        = true
   #   dynamodb_table = "terraform-locks"
@@ -26,7 +26,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "java-maven-template"
+      Project     = "jotp"
       Environment = var.environment
       ManagedBy   = "terraform"
     }
@@ -95,7 +95,7 @@ resource "aws_route_table_association" "public" {
 # Security Group - Application
 resource "aws_security_group" "app" {
   name        = "${var.app_name}-sg"
-  description = "Security group for Java Maven Template application"
+  description = "Security group for JOTP application"
   vpc_id      = aws_vpc.main.id
 
   ingress {

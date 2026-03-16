@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp.stress;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +16,11 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("JOTP vs Industry Alternatives - Architectural Comparison")
 class ArchitecturalComparisonTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     /**
      * Compare JOTP against Akka, Vert.x, Loom-based custom, and traditional ThreadPool.

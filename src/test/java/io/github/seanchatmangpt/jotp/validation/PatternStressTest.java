@@ -165,10 +165,10 @@ class PatternStressTest {
 
             Result<List<Integer>, Exception> result = Parallel.all(tasks);
             if (shouldFail) {
-                assertThat(result).isInstanceOf(Result.Failure.class);
+                assertThat(result).isInstanceOf(Result.Err.class);
                 failedCount++;
             } else {
-                assertThat(result).isInstanceOf(Result.Success.class);
+                assertThat(result).isInstanceOf(Result.Ok.class);
                 result.fold(
                         values -> {
                             assertThat(values).hasSize(taskCount);

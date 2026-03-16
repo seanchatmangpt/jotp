@@ -101,7 +101,7 @@ class PatternCorrectnessTest implements WithAssertions {
                                 return x.toString();
                             });
             assertThat(callCount.get()).isZero();
-            assertThat(mapped).isInstanceOf(Result.Failure.class);
+            assertThat(mapped).isInstanceOf(Result.Err.class);
         }
 
         @Test
@@ -540,7 +540,7 @@ class PatternCorrectnessTest implements WithAssertions {
                             .<java.util.function.Supplier<Integer>>mapToObj(i -> () -> i)
                             .toList();
             var result = Parallel.all(tasks);
-            assertThat(result).isInstanceOf(Result.Success.class);
+            assertThat(result).isInstanceOf(Result.Ok.class);
             result.fold(
                     values -> {
                         assertThat(values).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);

@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,11 @@ import org.junit.jupiter.api.Test;
 class EventManagerGenEventTest implements WithAssertions {
 
     record ErrorMsg(String text) {}
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @AfterEach
     void resetRegistry() {

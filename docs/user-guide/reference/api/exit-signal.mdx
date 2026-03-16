@@ -1,0 +1,531 @@
+---
+title: ExitSignal API Reference
+description: Exit signal trapping and handling - OTP's trap_exit pattern for crash notification
+sidebar_position: 10
+---
+
+# ExitSignal API Reference
+
+**OTP exit signal** — Crash notification via mailbox when `trap_exit` is enabled, mirroring Erlang's `{'EXIT', From, Reason}` message pattern.
+
+## Overview
+
+`ExitSignal` is a record that wraps exit reasons from crashed linked processes. When a process enables exit trapping via `Proc.trapExits(true)`, EXIT signals from linked processes become `ExitSignal` messages in the mailbox instead of killing the process immediately.
+
+### Key Concepts
+
+- **Exit Trapping**: Convert crash signals into mailbox messages
+- **Graceful Shutdown**: Handle linked process crashes explicitly
+- **Bidirectional Linking**: Both processes must link for signal propagation
+- **Type Safety**: Message type must include `ExitSignal` when trapping
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `process_flag(trap_exit, true)` | `proc.trapExits(true)` |
+| `{'EXIT', Pid, Reason}` | `ExitSignal(Throwable reason)` |
+| `normal` exit | `ExitSignal(null)` |
+| `exit(abnormal)` | `ExitSignal(new RuntimeException(...))` |
+
+## Type Definition
+
+```java
+public record ExitSignal(Throwable reason) {}
+```
+
+**Parameters:**
+- `reason` — The exit reason from the crashed linked process (`null` for normal exits)
+
+## Usage Pattern
+
+### Basic Exit Trapping
+
+```java
+// Define message type that includes ExitSignal
+sealed interface Msg permits Work, ExitSignal {}
+record Work(String data) implements Msg {}
+
+// Create process with exit trapping
+var proc = new Proc<>(initialState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        if (reason == null) {
+            System.out.println("Linked process exited normally");
+        } else {
+            System.err.println("Linked process crashed: " + reason);
+        }
+        yield state;
+    }
+    case Work(var data) -> handleWork(state, data);
+});
+
+proc.trapExits(true); // Enable exit trapping
+```
+
+### Linking and Trapping
+
+```java
+// Create two processes
+var proc1 = Proc.spawn(state1, handler1);
+var proc2 = Proc.spawn(state2, handler2);
+
+// Link them bidirectionally
+proc1.addCrashCallback(() -> {
+    // Send ExitSignal to proc2
+    proc2.tell(new ExitSignal(new RuntimeException("proc1 crashed")));
+});
+
+// Enable trapping on proc2
+proc2.trapExits(true);
+
+// When proc1 crashes, proc2 receives ExitSignal
+```
+
+### Type-Safe Pattern Matching
+
+```java
+sealed interface Msg extends ExitSignal, UserMsg {}
+record UserMsg(String text) implements Msg {}
+record ExitSignal(Throwable reason) implements Msg {}
+
+var proc = new Proc<>(initialState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> handleExit(state, reason);
+    case UserMsg(var text) -> handleUserMessage(state, text);
+});
+
+proc.trapExits(true);
+```
+
+## Implementation Details
+
+### Exit Signal Protocol
+
+When a linked process crashes:
+
+1. **Without trapping** (`trapExits(false)`):
+   ```java
+   // Process dies immediately
+   // Supervisor is notified for restart
+   ```
+
+2. **With trapping** (`trapExits(true)`):
+   ```java
+   // ExitSignal is enqueued as a message
+   // Process handles it in the message loop
+   // Process decides what to do
+   ```
+
+### Message Type Requirements
+
+When `trapExits(true)` is enabled, `ExitSignal` is cast to the message type `M`:
+
+```java
+// In Proc.java message loop:
+if (trappingExits) {
+    mailbox.offer((M) new ExitSignal(reason)); // Unchecked cast!
+}
+```
+
+**Risk:** If `M` doesn't include `ExitSignal`, `ClassCastException` occurs at dispatch time:
+
+```java
+// BAD: Message type doesn't include ExitSignal
+sealed interface BadMsg permits Work {}
+record Work(String data) implements BadMsg {}
+
+var proc = new Proc<>(state, handler);
+proc.trapExits(true); // Enables ExitSignal in mailbox
+// Later: ClassCastException when ExitSignal can't be cast to BadMsg!
+```
+
+**Solution:** Ensure `M` includes `ExitSignal`:
+
+```java
+// GOOD: Message type includes ExitSignal
+sealed interface GoodMsg permits Work, ExitSignal {}
+record Work(String data) implements GoodMsg {}
+record ExitSignal(Throwable reason) implements GoodMsg {}
+```
+
+### Normal vs. Abnormal Exits
+
+```java
+// Normal exit (explicit stop)
+linkedProc.stop();
+// Trapping process receives: ExitSignal(null)
+
+// Abnormal exit (crash)
+linkedProc.tell(new CrashMessage()); // Handler throws
+// Trapping process receives: ExitSignal(RuntimeException(...))
+```
+
+## Common Usage Patterns
+
+### Cleanup After Linked Process
+
+```java
+var worker = Proc.spawn(workerState, workerHandler);
+var supervisor = Proc.spawn(supervisorState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        if (reason != null) {
+            logger.error("Worker crashed, cleaning up", reason);
+            cleanupResources(state);
+            // Restart worker
+            var newWorker = Proc.spawn(workerState, workerHandler);
+            link(newWorker, supervisor);
+        }
+        yield state;
+    }
+    default -> state;
+});
+
+link(worker, supervisor);
+supervisor.trapExits(true);
+```
+
+### Graceful Shutdown Cascade
+
+```java
+// Parent traps child exits
+var parent = Proc.spawn(parentState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        System.out.println("Child exited: " + (reason == null ? "normal" : reason));
+        if (reason == null && state.children().isEmpty()) {
+            // All children exited normally, shutdown parent
+            parent.stop();
+        }
+        yield state;
+    }
+    // ... other messages
+});
+
+parent.trapExits(true);
+```
+
+### Error Aggregation
+
+```java
+var monitor = Proc.spawn(monitorState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        if (reason != null) {
+            // Track crashes
+            var updated = new MonitorState(
+                state.crashCount() + 1,
+                state.lastCrashTime(),
+                reason
+            );
+            // Alert if crash rate is high
+            if (updated.crashCount() > 10) {
+                alertService.sendAlert("High crash rate detected");
+            }
+            yield updated;
+        }
+        yield state;
+    }
+    // ... other messages
+});
+
+monitor.trapExits(true);
+```
+
+### Conditional Propagation
+
+```java
+var proc = Proc.spawn(state, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        if (reason instanceof RetryableException) {
+            // Don't propagate retryable errors
+            System.out.println("Ignoring retryable error: " + reason);
+            yield state;
+        } else {
+            // Propagate non-retryable errors
+            System.err.println("Fatal error, propagating: " + reason);
+            throw new RuntimeException(reason);
+        }
+    }
+    // ... other messages
+});
+
+proc.trapExits(true);
+```
+
+## Best Practices
+
+### 1. Always Include ExitSignal in Message Type
+
+```java
+// Good: Sealed interface includes ExitSignal
+sealed interface Msg permits Work, ExitSignal {}
+record Work(String data) implements Msg {}
+
+// Bad: ExitSignal not in message type
+sealed interface Msg permits Work {}
+record Work(String data) implements Msg {}
+// Will cause ClassCastException when trapExits(true)!
+```
+
+### 2. Handle Both Normal and Abnormal Exits
+
+```java
+// Good: Handle both cases
+case ExitSignal(var reason) -> {
+    if (reason == null) {
+        // Normal exit
+        logger.info("Linked process exited normally");
+    } else {
+        // Abnormal exit
+        logger.error("Linked process crashed", reason);
+    }
+    yield state;
+}
+
+// Bad: Only handling crashes
+case ExitSignal(var reason) -> {
+    logger.error("Process crashed", reason); // reason might be null!
+    yield state;
+}
+```
+
+### 3. Use Trapping for Supervision, Not for Error Recovery
+
+```java
+// Good: Supervision uses ExitSignal for restart logic
+case ExitSignal(var reason) -> {
+    if (reason != null) {
+        var newWorker = spawnWorker();
+        return state.withWorker(newWorker);
+    }
+    yield state;
+}
+
+// Bad: Complex error recovery in ExitSignal handler
+case ExitSignal(var reason) -> {
+    // Don't do complex recovery here!
+    // Use Supervisor for restart strategies
+    try {
+        recoverFromError(reason);
+    } catch (Exception e) {
+        // Nested error handling...
+    }
+    yield state;
+}
+```
+
+### 4. Combine with ProcMonitor for Unilateral Monitoring
+
+```java
+// Use ProcMonitor when you only need to know about exits
+// Use ExitSignal when you need to handle exits explicitly
+
+// Monitoring (unilateral)
+proc.addTerminationCallback(reason -> {
+    logger.info("Process terminated: " + reason);
+});
+
+// Trapping (bidirectional with handling)
+proc.trapExits(true);
+// ExitSignal messages are handled in message loop
+```
+
+### 5. Disable Trapping When Not Needed
+
+```java
+// Good: Enable trapping only when needed
+if (needsExitHandling) {
+    proc.trapExits(true);
+}
+
+// Bad: Always leaving trapping enabled
+proc.trapExits(true); // Adds overhead for every exit signal
+```
+
+## Gotchas
+
+### 1. ClassCastException with Wrong Message Type
+
+```java
+// Risk: Message type doesn't include ExitSignal
+sealed interface Msg permits Work {}
+record Work(String data) implements Msg {}
+
+var proc = new Proc<>(state, handler);
+proc.trapExits(true);
+
+// Later, when linked process crashes:
+// ClassCastException: ExitSignal cannot be cast to Work
+```
+
+**Solution:** Always include `ExitSignal` in sealed interface:
+
+```java
+sealed interface Msg permits Work, ExitSignal {}
+```
+
+### 2. Forgetting to Enable Trapping
+
+```java
+// Risk: Handler expects ExitSignal but trapping not enabled
+sealed interface Msg permits Work, ExitSignal {}
+
+var proc = new Proc<>(state, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> handleExit(state, reason);
+    case Work(var w) -> handleWork(state, w);
+});
+// Oops, forgot proc.trapExits(true)!
+
+// When linked process crashes:
+// Process dies immediately (ExitSignal case never reached)
+```
+
+**Solution:** Always call `trapExits(true)` after creating process:
+
+```java
+var proc = new Proc<>(state, handler);
+proc.trapExits(true); // MUST enable trapping!
+```
+
+### 3. Bidirectional Linking Required
+
+```java
+// Risk: Only one-way link
+var proc1 = Proc.spawn(state1, handler1);
+var proc2 = Proc.spawn(state2, handler2);
+
+proc1.addCrashCallback(() -> {
+    // This sends ExitSignal to proc2
+    proc2.tell(new ExitSignal(new RuntimeException("proc1 crashed")));
+});
+
+// But proc2 didn't link back to proc1!
+// proc2 won't receive signals from proc1 unless it also links
+```
+
+**Solution:** Use `ProcLink` for bidirectional linking:
+
+```java
+ProcLink.link(proc1, proc2); // Bidirectional
+proc2.trapExits(true); // proc2 will receive ExitSignal from proc1
+```
+
+### 4. ExitSignal is a Record, Not Sealed
+
+```java
+// Note: ExitSignal is NOT sealed
+public record ExitSignal(Throwable reason) {}
+
+// This means it can implement any interface:
+sealed interface Msg permits Work {}
+record Work(String data) implements Msg {}
+
+// ExitSignal can implement Msg even though it's not in permits!
+record ExitSignal(Throwable reason) implements Msg {}
+```
+
+**Implication:** You don't need to modify `ExitSignal` definition to use it with your message types.
+
+### 5. Normal Exit Reason is null
+
+```java
+// Risk: Assuming reason is never null
+case ExitSignal(var reason) -> {
+    logger.error("Process crashed", reason); // NPE if reason is null!
+    yield state;
+}
+```
+
+**Solution:** Always check for null:
+
+```java
+case ExitSignal(var reason) -> {
+    if (reason == null) {
+        logger.info("Process exited normally");
+    } else {
+        logger.error("Process crashed", reason);
+    }
+    yield state;
+}
+```
+
+## Performance Considerations
+
+### Overhead of Trapping
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| Exit without trapping | ~100ns | Direct callback invocation |
+| Exit with trapping | ~200-500ns | Message enqueue + processing |
+| ExitSignal handling | <1μs | Pattern match in handler |
+
+### When to Use Exit Trapping
+
+- **Supervision**: Need to restart crashed children
+- **Cleanup**: Must release resources when linked process exits
+- **Error handling**: Need custom logic for different exit reasons
+- **Graceful shutdown**: Want to cascade shutdowns
+
+### When NOT to Use Exit Trapping
+
+- **Simple monitoring**: Use `ProcMonitor` or `addTerminationCallback()` instead
+- **Fire-and-forget**: Don't care about exit reasons
+- **Performance critical**: Trapping adds overhead to every exit
+- **Complex error recovery**: Use `Supervisor` for restart strategies
+
+## Production Usage
+
+### Supervision with ExitSignal
+
+```java
+var supervisor = Proc.spawn(supervisorState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        if (reason != null) {
+            logger.warn("Child crashed: {}", reason.getMessage());
+            // Restart child with exponential backoff
+            var delay = state.backoffStrategy().nextDelay();
+            Thread.sleep(delay);
+            var newChild = spawnChild(childSpec);
+            return state.withChild(newChild);
+        }
+        yield state;
+    }
+    // ... other messages
+});
+
+supervisor.trapExits(true);
+```
+
+### Health Monitoring
+
+```java
+var healthMonitor = Proc.spawn(healthState, (state, msg) -> switch (msg) {
+    case ExitSignal(var reason) -> {
+        if (reason != null) {
+            // Update health status
+            metrics.incrementCrashCount();
+            healthStatus.setUnhealthy(reason);
+        } else {
+            // Process exited normally
+            healthStatus.setHealthy();
+        }
+        yield state;
+    }
+    // ... other messages
+});
+
+healthMonitor.trapExits(true);
+```
+
+## Related Classes
+
+- **[`Proc<S,M>`](proc.md)** — Lightweight process with virtual-thread mailbox
+- **[`ProcLink`](../proc_link.md)** — Bilateral crash propagation between processes
+- **[`ProcMonitor`](../proc_monitor.md)** — Unilateral DOWN notifications
+- **[`Supervisor`](supervisor.md)** — Hierarchical process supervision
+
+## See Also
+
+- [JOTP Architecture](../architecture.md)
+- [Proc API](proc.md)
+- [ProcLink API](../proc_link.md)
+- [Supervisor API](supervisor.md)
+- [OTP Design Principles: Specifications](https://erlang.org/doc/design_principles/spec.html)
+- [Erlang process_flag(trap_exit, true)](https://erlang.org/doc/man/erlang.html#process_flag-2)

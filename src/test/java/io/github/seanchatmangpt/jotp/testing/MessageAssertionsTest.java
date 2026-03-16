@@ -1,7 +1,9 @@
 package io.github.seanchatmangpt.jotp.testing;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.testing.util.MessageAssertions;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,11 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(10)
 @DisplayName("MessageAssertions")
 class MessageAssertionsTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Test fixtures ─────────────────────────────────────────────────────────
 

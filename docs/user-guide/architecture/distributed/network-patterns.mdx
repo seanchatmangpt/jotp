@@ -1,0 +1,597 @@
+# Network Patterns - gRPC Bridges & Service Discovery
+
+import { Diagram } from '@/components/diagram';
+
+## Overview
+
+JOTP provides multiple networking patterns for inter-service communication, including gRPC bridges for external systems, service discovery for dynamic routing, and protocol translation for polyglot environments.
+
+## Architecture Overview
+
+<Diagram caption="Network patterns: gRPC bridge, service discovery, and protocol translation">
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        JOTP Network Layer                                │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                    Service Registry (DNS-based)                    │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ payment-service → [10.0.1.10:5432, 10.0.1.11:5432]          │  │  │
+│  │  │ inventory-service → [10.0.1.20:5432, 10.0.1.21:5432]        │  │  │
+│  │  │ telemetry-service → [10.0.1.30:5432, 10.0.1.31:5432]        │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                 │                                         │
+│                                 ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                   DistributedActorRef (Location-Transparent)        │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ registry.lookup("payment-service")                           │  │  │
+│  │  │   → Resolves to NodeId[10.0.1.10:5432] (leader)              │  │  │
+│  │  │   → Returns LocalDistributedActorRef or Remote               │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                 │                                         │
+│                                 ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                      Transport Layer (Pluggable)                    │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │  │
+│  │  │   UDP       │  │   TCP       │  │   gRPC      │  │   Aeron   │ │  │
+│  │  │ (default)   │  │ (reliable)  │  │ (external)  │  │ (fast)    │ │  │
+│  │  │ ~80µs       │  │ ~150µs      │  │ ~200µs      │  │ ~60µs     │ │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────┘ │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                 │                                         │
+│                                 ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                    Protocol Translation Layer                      │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ Java Message (Record) ──► Jackson JSON ──► Wire Envelope     │  │  │
+│  │  │ Java Message (Record) ──► Protobuf ──► Binary Frame          │  │  │
+│  │  │ Java Message (Record) ──► gRPC ──► Protocol Buffers          │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                 │                                         │
+│                                 ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                       External Integration                          │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │  │
+│  │  │   Python    │  │    Go       │  │   Node.js   │  │  Rust     │ │  │
+│  │  │ Service     │  │  Service    │  │  Service    │  │ Service   │ │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────┘ │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+## gRPC Bridge
+
+### Why gRPC?
+
+**Benefits:**
+- Strong typing via Protocol Buffers
+- Polyglot interoperability (Java, Go, Python, Node.js, Rust)
+- Bidirectional streaming
+- Built-in load balancing
+- TLS security
+
+**Tradeoffs:**
+- Higher latency than raw UDP/TCP (~200µs vs ~80µs)
+- Requires `.proto` schema definitions
+- More complex deployment (needs gRPC server)
+
+### gRPC Bridge Architecture
+
+<Diagram caption="gRPC bridge translating between JOTP messages and gRPC calls">
+
+```
+JOTP Process ──► gRPC Bridge ──► gRPC Server ──► External Service
+     │               │                │                 │
+     │ tell()        │ translate       │ gRPC call       │ handle()
+     ▼               ▼                ▼                 ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        Message Flow                                       │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  JOTP Side (Java)                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │ PaymentMsg.Charge("ORD-123", 100.0)                                │  │
+│  │     │                                                               │  │
+│  │     │ DistributedActorRef.tell()                                   │  │
+│  │     ▼                                                               │  │
+│  │ ┌────────────────────────────────────────────────────────────────┐ │  │
+│  │ │ GrpcBridge                                                    │ │  │
+│  │ │   - Converts Java Record → Protobuf                            │ │  │
+│  │ │   - Invokes gRPC stub                                          │ │  │
+│  │ └────────────────────────────────────────────────────────────────┘ │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                               │                                           │
+│                               ▼                                           │
+│  Network (gRPC over HTTP/2)                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │ POST /payment.PaymentService/Charge                                │  │
+│  │ Content-Type: application/grpc+proto                               │  │
+│  │                                                                     │  │
+│  │ 0a 09 4f 52 44 2d 31 32 33  | ..ORD-123                            │
+│  │ 10 64 40 59 40 00 00 00 00  | .d@Y@....                            │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                               │                                           │
+│                               ▼                                           │
+│  External Service (Go/Python/Node.js)                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │ payment.PaymentService                                              │  │
+│  │   func Charge(ctx, req) (*ChargeResponse, error) {                  │  │
+│  │     // Process payment                                              │  │
+│  │     return &ChargeResponse{Success: true}                           │  │
+│  │   }                                                                 │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+### gRPC Service Definition
+
+```protobuf
+// payment.proto
+syntax = "proto3";
+
+package payment;
+
+service PaymentService {
+  rpc Charge(ChargeRequest) returns (ChargeResponse);
+  rpc Refund(RefundRequest) returns (RefundResponse);
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+}
+
+message ChargeRequest {
+  string order_id = 1;
+  double amount = 2;
+  string currency = 3;
+}
+
+message ChargeResponse {
+  bool success = 1;
+  string transaction_id = 2;
+  string error_message = 3;
+}
+
+message RefundRequest {
+  string transaction_id = 1;
+  double amount = 2;
+}
+
+message RefundResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message GetStatusRequest {
+  string transaction_id = 1;
+}
+
+message GetStatusResponse {
+  string status = 1; // PENDING, COMPLETED, FAILED
+  double amount = 2;
+}
+```
+
+### JOTP gRPC Bridge Implementation
+
+```java
+public final class GrpcBridge {
+    private final ManagedChannel channel;
+    private final PaymentServiceGrpc.PaymentServiceBlockingStub stub;
+
+    public GrpcBridge(String host, int port) {
+        this.channel = ManagedChannelBuilder
+            .forAddress(host, port)
+            .usePlaintext() // Use TLS in production
+            .build();
+
+        this.stub = PaymentServiceGrpc.newBlockingStub(channel);
+    }
+
+    // Bridge JOTP message → gRPC call
+    public Result<ChargeResponse, String> charge(PaymentMsg.Charge charge) {
+        try {
+            ChargeRequest request = ChargeRequest.newBuilder()
+                .setOrderId(charge.orderId())
+                .setAmount(charge.amount())
+                .setCurrency(charge.currency())
+                .build();
+
+            payment.ChargeResponse response = stub.charge(request);
+
+            if (response.getSuccess()) {
+                return Result.ok(new ChargeResponse(
+                    response.getTransactionId(),
+                    true,
+                    null
+                ));
+            } else {
+                return Result.err(response.getErrorMessage());
+            }
+        } catch (StatusRuntimeException e) {
+            return Result.err("gRPC error: " + e.getStatus());
+        }
+    }
+
+    public void shutdown() {
+        channel.shutdown();
+    }
+}
+```
+
+### Using gRPC Bridge with Supervision
+
+```java
+// Supervised gRPC bridge process
+Proc<GrpcBridgeState, PaymentMsg> bridge = Proc.start(
+    initialState -> msg -> {
+        return switch (msg) {
+            case PaymentMsg.Charge(var orderId, var amount, var currency) -> {
+                var bridge = new GrpcBridge("payment-service", 50051);
+                Result<ChargeResponse, String> result = bridge.charge(msg);
+
+                if (result instanceof Result.Ok<ChargeResponse, String>(var response)) {
+                    yield state.withResponse(orderId, response);
+                } else {
+                    // gRPC call failed — crash and let supervisor retry
+                    throw new RuntimeException("gRPC call failed", result.error());
+                }
+            }
+        };
+    },
+    new GrpcBridgeState()
+);
+
+// Supervisor will restart on gRPC failures
+Supervisor supervisor = Supervisor.builder()
+    .strategy(Supervisor.Strategy.ONE_FOR_ONE)
+    .maxRestarts(5)
+    .timeWindow(Duration.ofSeconds(10))
+    .build();
+
+supervisor.supervise("grpc-payment-bridge", () -> bridge);
+```
+
+## Service Discovery
+
+### DNS-Based Service Discovery
+
+```java
+public interface ServiceRegistry {
+    List<NodeId> lookup(String serviceName);
+    void register(String serviceName, NodeId nodeId);
+    void unregister(String serviceName, NodeId nodeId);
+}
+
+// DNS-based implementation
+public class DnsServiceRegistry implements ServiceRegistry {
+    private final DnsClient dnsClient;
+
+    @Override
+    public List<NodeId> lookup(String serviceName) {
+        try {
+            // DNS SRV record lookup
+            List<SrvRecord> records = dnsClient.lookupSRV(
+                "_jotp._tcp." + serviceName
+            );
+
+            return records.stream()
+                .map(record -> new NodeId(
+                    serviceName,
+                    record.target(),
+                    record.port(),
+                    null, // No UUID needed for DNS
+                    0    // No epoch needed for DNS
+                ))
+                .toList();
+        } catch (DnsException e) {
+            return List.of(); // Service not found
+        }
+    }
+}
+
+// Usage
+ServiceRegistry registry = new DnsServiceRegistry();
+
+List<NodeId> paymentNodes = registry.lookup("payment-service");
+// Returns: [NodeId("payment-service", "10.0.1.10", 5432), ...]
+```
+
+### Service Registration
+
+```java
+// Register service on startup
+public class PaymentService implements Application.Infrastructure {
+    private final ServiceRegistry registry;
+    private final DistributedNode node;
+
+    @Override
+    public void onStart(Application<?> app) {
+        // Register this node as payment-service instance
+        registry.register("payment-service", node.nodeId());
+
+        System.out.println("Registered: " + node.nodeId() + " as payment-service");
+    }
+
+    @Override
+    public void onStop(Application<?> app) {
+        // Unregister on shutdown
+        registry.unregister("payment-service", node.nodeId());
+    }
+}
+```
+
+### Service Discovery with Load Balancing
+
+```java
+public class LoadBalancedServiceRef<S, M> {
+    private final String serviceName;
+    private final ServiceRegistry registry;
+    private final LoadBalancerStrategy strategy;
+
+    public ProcRef<S, M> select() {
+        List<NodeId> nodes = registry.lookup(serviceName);
+
+        if (nodes.isEmpty()) {
+            throw new RuntimeException("No nodes available for: " + serviceName);
+        }
+
+        // Select node based on strategy
+        NodeId selected = strategy.select(nodes);
+        return DistributedActorRef.create(selected);
+    }
+}
+
+// Load balancing strategies
+public interface LoadBalancerStrategy {
+    NodeId select(List<NodeId> nodes);
+}
+
+class RoundRobinStrategy implements LoadBalancerStrategy {
+    private final AtomicInteger counter = new AtomicInteger(0);
+
+    @Override
+    public NodeId select(List<NodeId> nodes) {
+        int index = Math.abs(counter.getAndIncrement() % nodes.size());
+        return nodes.get(index);
+    }
+}
+
+class LeastLoadedStrategy implements LoadBalancerStrategy {
+    @Override
+    public NodeId select(List<NodeId> nodes) {
+        return nodes.stream()
+            .min(Comparator.comparingInt(this::getActiveRequestCount))
+            .orElse(nodes.get(0));
+    }
+
+    private int getActiveRequestCount(NodeId node) {
+        // Query node for active requests
+        return DistributedActorRef.create(node).ask(new SysRequest.ActiveRequests())
+            .orTimeout(Duration.ofSeconds(1))
+            .join()
+            .count();
+    }
+}
+```
+
+## Protocol Translation
+
+### Serialization Strategies
+
+<Diagram caption="Serialization options for cross-language communication">
+
+```
+Java Message (Record)
+         │
+         ├─► Jackson JSON ──► WireEnvelope(JSON) ──► Python/Go/Node.js
+         │    - Human-readable
+         │    - ~10-50µs serialization
+         │    - ~2-3× wire size
+         │
+         ├─► Protobuf ──► WireEnvelope(Binary) ──► Python/Go/Node.js
+         │    - Schema required
+         │    - ~10-30µs serialization
+         │    - ~1× wire size (compact)
+         │
+         ├─► gRPC ──► HTTP/2 Frame ──► Any gRPC-supported language
+         │    - Strong typing
+         │    - ~50-100µs serialization
+         │    - ~1.5× wire size
+         │
+         └─► MessagePack ──► WireEnvelope(Binary) ──► Python/Go/Node.js
+              - No schema required
+              - ~5-15µs serialization
+              - ~1.2× wire size
+```
+
+</Diagram>
+
+### JSON Serialization (Jackson)
+
+```java
+public class JsonSerializer<M> implements Serializer<M> {
+    private final ObjectMapper mapper;
+
+    public JsonSerializer(Class<M> messageType) {
+        this.mapper = new ObjectMapper()
+            .registerModule(new SimpleModule()
+                .addSerializer(messageType, new JsonSerializer<M>()))
+            .registerModule(new SimpleModule()
+                .addDeserializer(messageType, new JsonDeserializer<M>()));
+    }
+
+    @Override
+    public byte[] serialize(M message) {
+        try {
+            return mapper.writeValueAsBytes(message);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("JSON serialization failed", e);
+        }
+    }
+
+    @Override
+    public M deserialize(byte[] data) {
+        try {
+            return mapper.readValue(data, messageType);
+        } catch (IOException e) {
+            throw new RuntimeException("JSON deserialization failed", e);
+        }
+    }
+}
+```
+
+### Protobuf Serialization
+
+```java
+public class ProtobufSerializer<M> implements Serializer<M> {
+    private final Parser<M> parser;
+    private final MessageMarshaller<M> marshaller;
+
+    public ProtobufSerializer(Parser<M> parser, MessageMarshaller<M> marshaller) {
+        this.parser = parser;
+        this.marshaller = marshaller;
+    }
+
+    @Override
+    public byte[] serialize(M message) {
+        return marshaller.toByteArray(message);
+    }
+
+    @Override
+    public M deserialize(byte[] data) {
+        try {
+            return parser.parseFrom(data);
+        } catch (InvalidProtocolBufferException e) {
+            throw new RuntimeException("Protobuf deserialization failed", e);
+        }
+    }
+}
+```
+
+## Network Performance
+
+### Latency Comparison
+
+| Transport | Protocol | Latency p50 | Throughput | Use Case |
+|-----------|----------|-------------|------------|----------|
+| **UDP** | JOTP Wire Envelope | ~80µs | 1.2M msg/s | Internal cluster |
+| **TCP** | JOTP Wire Envelope | ~150µs | 800K msg/s | Reliable internal |
+| **gRPC** | Protocol Buffers | ~200µs | 500K msg/s | External integration |
+| **Aeron** | Binary Frame | ~60µs | 2M msg/s | High-throughput |
+
+### Throughput Scaling
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                    Throughput vs Concurrent Connections                    │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  2M ┤                                                  *                   │
+│     │                                              *   *                  │
+│ 1.5M┤                                          *   *   * Aeron            │
+│     │                                      *   *   *   *                │
+│ 1M  ┤                                  *   *   *   *   *                │
+│     │                              *   *   *   *   *   *                │
+│ 0.5M┤          *   *   *   *   *   *   *   *   *   *   * UDP/TCP        │
+│     │      *   *   *   *   *   *   *   *   *   *   *   *                │
+│  0  └────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴─────           │
+│       1   10  50  100 200 500 1K  2K  5K  10K 20K 50K 100K             │
+│                         Concurrent Connections                            │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Production Deployment
+
+### Kubernetes Service Discovery
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+spec:
+  selector:
+    app: payment-service
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+      - name: jotp
+        image: jotp:26.0.0
+        env:
+        - name: SERVICE_NAME
+          value: "payment-service"
+        ports:
+        - containerPort: 5432
+```
+
+### Consul Service Discovery
+
+```java
+// Consul-based service registry
+public class ConsulServiceRegistry implements ServiceRegistry {
+    private final ConsulClient client;
+
+    @Override
+    public void register(String serviceName, NodeId nodeId) {
+        // Register service with Consul
+        client.registerService(
+            serviceName,
+            nodeId.host(),
+            nodeId.port(),
+            "jotp",
+            List.of("datacenter:dc1")
+        );
+    }
+
+    @Override
+    public List<NodeId> lookup(String serviceName) {
+        // Query Consul for service instances
+        List<ServiceHealth> instances = client.getHealthyInstances(serviceName);
+
+        return instances.stream()
+            .map(instance -> new NodeId(
+                serviceName,
+                instance.getAddress(),
+                instance.getPort(),
+                null,
+                0
+            ))
+            .toList();
+    }
+}
+```
+
+## Next Steps
+
+- [Production Deployment](../../production/deployment) — Running JOTP in production
+- [Case Studies](../../case-studies/mclaren-atlas) — Real-world integration patterns
+- [API Reference](../../reference/api) — Complete API documentation

@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.messaging.system;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class ProcessManagerTest {
 
     @BeforeEach
     void setup() throws InterruptedException {
+        ApplicationController.reset();
         // Clean up from previous test
         pm = new ProcessManager<>("test-workflow");
     }

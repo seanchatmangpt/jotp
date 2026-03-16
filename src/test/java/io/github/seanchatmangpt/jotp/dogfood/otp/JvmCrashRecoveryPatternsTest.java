@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.CrashRecovery;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.dogfood.otp.JvmCrashRecoveryPatterns.ChargeMessage;
@@ -11,6 +12,7 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,11 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("JvmCrashRecoveryPatterns")
 class JvmCrashRecoveryPatternsTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ---------------------------------------------------------------------------
     // Pattern 1: Idempotent Charge

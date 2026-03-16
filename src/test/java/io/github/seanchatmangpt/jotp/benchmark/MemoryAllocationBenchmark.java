@@ -25,8 +25,8 @@ import org.openjdk.jmh.infra.Blackhole;
 /**
  * JMH memory allocation & GC pressure benchmarks for FrameworkEventBus hot path.
  *
- * <p><strong>Analysis Goal:</strong> Identify whether memory allocation contributes to the 456ns hot
- * path regression by measuring:
+ * <p><strong>Analysis Goal:</strong> Identify whether memory allocation contributes to the 456ns
+ * hot path regression by measuring:
  *
  * <ul>
  *   <li>Bytes allocated per publish() call
@@ -93,7 +93,10 @@ public class MemoryAllocationBenchmark {
 
         supervisorChildCrashedEvent =
                 new FrameworkEventBus.FrameworkEvent.SupervisorChildCrashed(
-                        java.time.Instant.now(), "supervisor-1", "child-1", new RuntimeException("test"));
+                        java.time.Instant.now(),
+                        "supervisor-1",
+                        "child-1",
+                        new RuntimeException("test"));
     }
 
     // ── HOT PATH: publish() ALLOCATION ANALYSIS ─────────────────────────────────────
@@ -104,6 +107,7 @@ public class MemoryAllocationBenchmark {
      * <p><strong>Expected allocation:</strong> 0 bytes (fast path returns immediately).
      *
      * <p><strong>GC profiler output:</strong>
+     *
      * <pre>
      * [ GC profile result ]
      * allocated: 0.000 ± 0.000 MB/sec
@@ -123,6 +127,7 @@ public class MemoryAllocationBenchmark {
      * <p><strong>Expected allocation:</strong> 0 bytes (subscribers.isEmpty() check returns early).
      *
      * <p><strong>GC profiler output:</strong>
+     *
      * <pre>
      * allocated: 0.000 ± 0.000 MB/sec
      * GC count: 0
@@ -142,6 +147,7 @@ public class MemoryAllocationBenchmark {
      * <p><strong>Expected allocation:</strong> ~100-200 bytes per call.
      *
      * <p><strong>Allocation breakdown:</strong>
+     *
      * <ul>
      *   <li>Lambda capture: ~16 bytes (reference to event)
      *   <li>Executor task: ~32 bytes (FutureTask wrapper)
@@ -150,6 +156,7 @@ public class MemoryAllocationBenchmark {
      * </ul>
      *
      * <p><strong>GC profiler output:</strong>
+     *
      * <pre>
      * allocated: ~0.100 ± 0.010 MB/sec (at 1M ops/sec)
      * GC count: ~1-2 per second
@@ -159,9 +166,10 @@ public class MemoryAllocationBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void publish_enabled_withSubscriber_measuresAllocation() {
-        eventBus.subscribe(event -> {
-            // No-op subscriber
-        });
+        eventBus.subscribe(
+                event -> {
+                    // No-op subscriber
+                });
         eventBus.publish(processCreatedEvent);
     }
 
@@ -173,6 +181,7 @@ public class MemoryAllocationBenchmark {
      * <p><strong>Expected allocation:</strong> ~56-72 bytes.
      *
      * <p><strong>Object layout:</strong>
+     *
      * <ul>
      *   <li>Record header: 12 bytes (mark word + class pointer)
      *   <li>Instant timestamp: 16 bytes (epochSecond + nano)
@@ -187,7 +196,8 @@ public class MemoryAllocationBenchmark {
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public FrameworkEventBus.FrameworkEvent.ProcessCreated createProcessCreated_measuresAllocation() {
+    public FrameworkEventBus.FrameworkEvent.ProcessCreated
+            createProcessCreated_measuresAllocation() {
         return new FrameworkEventBus.FrameworkEvent.ProcessCreated(
                 java.time.Instant.now(), "proc-" + System.nanoTime(), "Proc");
     }
@@ -198,6 +208,7 @@ public class MemoryAllocationBenchmark {
      * <p><strong>Expected allocation:</strong> ~72-88 bytes (larger than ProcessCreated).
      *
      * <p><strong>Object layout:</strong>
+     *
      * <ul>
      *   <li>Record header: 12 bytes
      *   <li>Instant timestamp: 16 bytes
@@ -211,7 +222,8 @@ public class MemoryAllocationBenchmark {
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public FrameworkEventBus.FrameworkEvent.ProcessTerminated createProcessTerminated_measuresAllocation() {
+    public FrameworkEventBus.FrameworkEvent.ProcessTerminated
+            createProcessTerminated_measuresAllocation() {
         return new FrameworkEventBus.FrameworkEvent.ProcessTerminated(
                 java.time.Instant.now(), "proc-" + System.nanoTime(), "Proc", false, "normal");
     }
@@ -222,6 +234,7 @@ public class MemoryAllocationBenchmark {
      * <p><strong>Expected allocation:</strong> ~80-96 bytes.
      *
      * <p><strong>Object layout:</strong>
+     *
      * <ul>
      *   <li>Record header: 12 bytes
      *   <li>Instant timestamp: 16 bytes
@@ -234,9 +247,13 @@ public class MemoryAllocationBenchmark {
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public FrameworkEventBus.FrameworkEvent.SupervisorChildCrashed createSupervisorChildCrashed_measuresAllocation() {
+    public FrameworkEventBus.FrameworkEvent.SupervisorChildCrashed
+            createSupervisorChildCrashed_measuresAllocation() {
         return new FrameworkEventBus.FrameworkEvent.SupervisorChildCrashed(
-                java.time.Instant.now(), "sup-" + System.nanoTime(), "child-" + System.nanoTime(), new RuntimeException("test"));
+                java.time.Instant.now(),
+                "sup-" + System.nanoTime(),
+                "child-" + System.nanoTime(),
+                new RuntimeException("test"));
     }
 
     // ── PROC.TELL() HOT PATH PURITY ─────────────────────────────────────────────────
@@ -250,6 +267,7 @@ public class MemoryAllocationBenchmark {
      * non-zero allocation, it means observability code has leaked into the hot path.
      *
      * <p><strong>GC profiler output:</strong>
+     *
      * <pre>
      * allocated: 0.000 ± 0.000 MB/sec
      * </pre>
@@ -292,7 +310,8 @@ public class MemoryAllocationBenchmark {
      *
      * <p><strong>Expected allocation:</strong> ~16-24 bytes (lambda instance + captured vars).
      *
-     * <p><strong>Purpose:</strong> Measure lambda overhead, which is used in async executor.submit().
+     * <p><strong>Purpose:</strong> Measure lambda overhead, which is used in async
+     * executor.submit().
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
@@ -308,17 +327,18 @@ public class MemoryAllocationBenchmark {
      *
      * <p><strong>Expected allocation:</strong> 0 bytes (after JIT optimization).
      *
-     * <p><strong>Validation:</strong> If JIT's escape analysis proves the event doesn't escape
-     * this method, it will be stack-allocated (zero GC pressure). Run with `-XX:+PrintEliminateAllocations`
-     * to verify.
+     * <p><strong>Validation:</strong> If JIT's escape analysis proves the event doesn't escape this
+     * method, it will be stack-allocated (zero GC pressure). Run with
+     * `-XX:+PrintEliminateAllocations` to verify.
      *
      * <p><strong>Note:</strong> Requires C2 compiler (typically after ~10k iterations).
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public long escapeAnalysis_nonEscapingEvent() {
-        var event = new FrameworkEventBus.FrameworkEvent.ProcessCreated(
-                java.time.Instant.now(), "bench-proc-1", "Proc");
+        var event =
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                        java.time.Instant.now(), "bench-proc-1", "Proc");
         // Event doesn't escape: just read a field and return
         return event.timestamp().getEpochSecond();
     }
@@ -328,8 +348,8 @@ public class MemoryAllocationBenchmark {
      *
      * <p><strong>Expected allocation:</strong> ~56 bytes.
      *
-     * <p><strong>Purpose:</strong> Compare with non-escaping version to validate escape analysis
-     * is working. The allocation difference shows JIT optimization effectiveness.
+     * <p><strong>Purpose:</strong> Compare with non-escaping version to validate escape analysis is
+     * working. The allocation difference shows JIT optimization effectiveness.
      */
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)

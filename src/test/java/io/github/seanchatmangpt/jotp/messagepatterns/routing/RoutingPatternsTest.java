@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.messagepatterns.routing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -9,13 +11,24 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/** Tests for Routing patterns ported from Vaughn Vernon's Reactive Messaging Patterns. */
+/**
+ * Tests for Routing patterns ported from Vaughn Vernon's Reactive Messaging Patterns.
+ *
+ * <p>Enterprise Integration Patterns (EIP) routing patterns enable messages to be dynamically
+ * routed to different destinations based on content, conditions, or runtime configuration.
+ */
 @DisplayName("Routing Patterns")
 class RoutingPatternsTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @Nested
     @DisplayName("ContentBasedRouter")
@@ -25,7 +38,32 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("routes to matching destination")
-        void routesCorrectly() {
+        void routesCorrectly(DtrContext ctx) {
+            ctx.sayNextSection("Content-Based Router");
+            ctx.say(
+                    "Routes messages to different destinations based on message content. Each message is examined and routed to the appropriate channel based on predefined conditions.");
+            ctx.sayCode(
+                    """
+                    var router = ContentBasedRouter.<Order>builder()
+                        .when(o -> o.type().equals("A"), typeA::add)
+                        .when(o -> o.type().equals("B"), typeB::add)
+                        .build();
+
+                    router.route(new Order("1", "A"));
+                    router.route(new Order("2", "B"));
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Message] --> B{Content-Based Router}
+                        B -->|type=A| C[Channel A]
+                        B -->|type=B| D[Channel B]
+                        B -->|default| E[Default Channel]
+                    """);
+            ctx.sayNote(
+                    "Use when you need to route messages based on their content, such as order type, customer tier, or message priority.");
+
             var typeA = new CopyOnWriteArrayList<Order>();
             var typeB = new CopyOnWriteArrayList<Order>();
 
@@ -45,7 +83,21 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("falls through to otherwise")
-        void otherwise() {
+        void otherwise(DtrContext ctx) {
+            ctx.sayNextSection("Content-Based Router: Default Routing");
+            ctx.say(
+                    "Messages that don't match any specific condition can be routed to a default/fallback channel using the otherwise clause.");
+            ctx.sayCode(
+                    """
+                    var router = ContentBasedRouter.<Order>builder()
+                        .when(o -> o.type().equals("A"), o -> {})
+                        .otherwise(fallback::add)
+                        .build();
+                    """,
+                    "java");
+            ctx.sayNote(
+                    "Always provide a fallback channel to handle unexpected message types gracefully, preventing message loss.");
+
             var fallback = new CopyOnWriteArrayList<Order>();
 
             var router =
@@ -65,7 +117,30 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("dynamically adds and removes interests")
-        void dynamicRouting() {
+        void dynamicRouting(DtrContext ctx) {
+            ctx.sayNextSection("Dynamic Router");
+            ctx.say(
+                    "Routes messages based on dynamic conditions that can be added or removed at runtime. Unlike static routers, dynamic routers allow destinations to register their interests programmatically.");
+            ctx.sayCode(
+                    """
+                    var router = new DynamicRouter<String>();
+                    router.registerInterest("upper", s -> s.equals(s.toUpperCase()), results::add);
+                    router.route("HELLO");
+                    router.removeInterest("upper");
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Message] --> B[Dynamic Router]
+                        B -->|Predicate 1| C[Channel 1]
+                        B -->|Predicate 2| D[Channel 2]
+                        B -->|Predicate N| E[Channel N]
+                        F[Runtime Registration] --> B
+                    """);
+            ctx.sayNote(
+                    "Use when routing conditions change frequently or when you need to add/remove destinations without redeploying the application.");
+
             var router = new DynamicRouter<String>();
             var results = new CopyOnWriteArrayList<String>();
 
@@ -86,7 +161,29 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("routes to all interested recipients")
-        void routesToInterested() {
+        void routesToInterested(DtrContext ctx) {
+            ctx.sayNextSection("Recipient List");
+            ctx.say(
+                    "Routes a single message to multiple recipients that have expressed interest in it. Unlike multicast, recipients can dynamically register or deregister their interest.");
+            ctx.sayCode(
+                    """
+                    var list = new RecipientList<PriceRequest>();
+                    list.register("budget", budget::add, r -> r.totalPrice() < 100);
+                    list.register("premium", premium::add, r -> r.totalPrice() >= 100);
+                    int count = list.route(new PriceRequest(50));
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Message] --> B[Recipient List]
+                        B -->|matches| C[Recipient 1]
+                        B -->|matches| D[Recipient 2]
+                        B -->|no match| E[Recipient 3]
+                    """);
+            ctx.sayNote(
+                    "Use when multiple recipients need to receive the same message based on their individual criteria, such as vendor selection or notification routing.");
+
             var list = new RecipientList<PriceRequest>();
             var budget = new CopyOnWriteArrayList<PriceRequest>();
             var premium = new CopyOnWriteArrayList<PriceRequest>();
@@ -109,7 +206,27 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("splits composite message into parts")
-        void splits() {
+        void splits(DtrContext ctx) {
+            ctx.sayNextSection("Splitter");
+            ctx.say(
+                    "Breaks down a composite message into individual parts for independent processing. Each part is sent as a separate message through the channel.");
+            ctx.sayCode(
+                    """
+                    var splitter = new Splitter<Order, String>(o -> o.items(), parts::add);
+                    int count = splitter.split(new Order("o1", List.of("item-a", "item-b", "item-c")));
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Composite Message] --> B[Splitter]
+                        B --> C[Part 1]
+                        B --> D[Part 2]
+                        B --> E[Part 3]
+                    """);
+            ctx.sayNote(
+                    "Use when you need to process elements of a collection independently, such as processing individual items in an order or lines in a batch file.");
+
             var parts = new CopyOnWriteArrayList<String>();
             var splitter = new Splitter<Order, String>(o -> o.items(), parts::add);
 
@@ -127,7 +244,33 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("aggregates correlated parts and emits result")
-        void aggregates() throws InterruptedException {
+        void aggregates(DtrContext ctx) throws InterruptedException {
+            ctx.sayNextSection("Aggregator");
+            ctx.say(
+                    "Combines multiple related messages into a single aggregate message. Messages are correlated by a correlation ID and the aggregation strategy determines when to emit the result.");
+            ctx.sayCode(
+                    """
+                    var aggregator = new Aggregator<Quote, String, Double>(
+                        Quote::rfqId,
+                        quotes -> quotes.stream().mapToDouble(Quote::price).min().orElse(0),
+                        best -> { /* emit result */ });
+                    aggregator.expect("rfq-1", 3);
+                    aggregator.addPart(new Quote("rfq-1", 100.0));
+                    aggregator.addPart(new Quote("rfq-1", 80.0));
+                    aggregator.addPart(new Quote("rfq-1", 120.0));
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Part 1] --> D[Aggregator]
+                        B[Part 2] --> D
+                        C[Part 3] --> D
+                        D -->|complete| E[Aggregate Message]
+                    """);
+            ctx.sayNote(
+                    "Use when you need to collect multiple related messages before processing, such as gathering quotes from multiple vendors or assembling order lines.");
+
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<Double>();
 
@@ -227,7 +370,31 @@ class RoutingPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("round-robin routes across destinations")
-        void roundRobin() {
+        void roundRobin(DtrContext ctx) {
+            ctx.sayNextSection("Message Router");
+            ctx.say(
+                    "Routes messages to multiple destinations in a round-robin fashion, distributing load evenly across available endpoints.");
+            ctx.sayCode(
+                    """
+                    var router = new MessageRouter<String>(dest1::add, dest2::add);
+                    router.route("a");
+                    router.route("b");
+                    router.route("c");
+                    router.route("d");
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Message 1] --> D{Router}
+                        B[Message 2] --> D
+                        C[Message 3] --> D
+                        D -->|round robin| E[Endpoint 1]
+                        D -->|round robin| F[Endpoint 2]
+                    """);
+            ctx.sayNote(
+                    "Use when you need to distribute load evenly across multiple identical consumers for horizontal scaling.");
+
             var dest1 = new CopyOnWriteArrayList<String>();
             var dest2 = new CopyOnWriteArrayList<String>();
 

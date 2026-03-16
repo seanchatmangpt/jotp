@@ -3,11 +3,18 @@ package io.github.seanchatmangpt.jotp.dogfood.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class InputValidationTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Preconditions ────────────────────────────────────────────────────────
 

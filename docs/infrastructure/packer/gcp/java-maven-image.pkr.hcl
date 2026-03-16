@@ -1,4 +1,4 @@
-# Java Maven Template - GCP VM Image Builder
+# JOTP - GCP VM Image Builder
 # Requires: Packer >= 1.9.0, GCP credentials (Application Default Credentials)
 
 packer {
@@ -29,13 +29,13 @@ variable "zone" {
 
 variable "image_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Name of the image"
 }
 
 variable "image_family" {
   type        = string
-  default     = "java-maven"
+  default     = "jotp"
   description = "Image family"
 }
 
@@ -88,7 +88,7 @@ source "googlecompute" "java-maven" {
 
   image_name        = "${var.image_name}-${formatdate("YYYYMMDD-HHmmss", timestamp())}"
   image_family      = var.image_family
-  image_description = "Java Maven Template Image with Java ${var.java_version}"
+  image_description = "JOTP Image with Java ${var.java_version}"
 
   machine_type = var.machine_type
 
@@ -102,8 +102,8 @@ source "googlecompute" "java-maven" {
 
   # Labels
   labels = {
-    name        = "java-maven-template"
-    project     = "java-maven-template"
+    name        = "jotp"
+    project     = "jotp"
     java-version = var.java_version
     app-version  = var.app_version
     built-by     = "packer"
@@ -132,38 +132,38 @@ build {
   # Create application directory
   provisioner "shell" {
     inline = [
-      "sudo mkdir -p /opt/java-maven-app",
-      "sudo chmod 755 /opt/java-maven-app",
+      "sudo mkdir -p /opt/jotp-app",
+      "sudo chmod 755 /opt/jotp-app",
     ]
   }
 
   # Copy application JAR
   provisioner "file" {
-    source      = "../../../target/java-maven-template-${var.app_version}.jar"
+    source      = "../../../target/jotp-${var.app_version}.jar"
     destination = "/tmp/app.jar"
   }
 
   # Move JAR to application directory
   provisioner "shell" {
     inline = [
-      "sudo mv /tmp/app.jar /opt/java-maven-app/app.jar",
-      "sudo chmod 644 /opt/java-maven-app/app.jar",
+      "sudo mv /tmp/app.jar /opt/jotp-app/app.jar",
+      "sudo chmod 644 /opt/jotp-app/app.jar",
     ]
   }
 
   # Create systemd service
   provisioner "shell" {
     inline = [
-      "sudo tee /etc/systemd/system/java-maven-app.service > /dev/null <<'EOF'",
+      "sudo tee /etc/systemd/system/jotp-app.service > /dev/null <<'EOF'",
       "[Unit]",
-      "Description=Java Maven Template Application",
+      "Description=JOTP Application",
       "After=network.target",
       "",
       "[Service]",
       "Type=simple",
       "User=nobody",
-      "WorkingDirectory=/opt/java-maven-app",
-      "ExecStart=/usr/bin/java -jar /opt/java-maven-app/app.jar",
+      "WorkingDirectory=/opt/jotp-app",
+      "ExecStart=/usr/bin/java -jar /opt/jotp-app/app.jar",
       "Restart=on-failure",
       "RestartSec=10",
       "",
@@ -171,7 +171,7 @@ build {
       "WantedBy=multi-user.target",
       "EOF",
       "sudo systemctl daemon-reload",
-      "sudo systemctl enable java-maven-app",
+      "sudo systemctl enable jotp-app",
     ]
   }
 

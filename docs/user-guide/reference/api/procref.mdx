@@ -1,0 +1,372 @@
+---
+title: "ProcRef<S,M> API Reference"
+description: "Stable process references that survive supervisor restarts - Opaque handles"
+sidebar_position: 4
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# ProcRef<S,M> API Reference
+
+**Stable opaque handle to supervised processes** — Mirrors Erlang's `Pid`.
+
+## Overview
+
+`ProcRef<S,M>` provides location transparency and crash recovery. When a `Supervisor` restarts a crashed child, it atomically swaps the underlying `Proc`. All existing `ProcRef` handles transparently redirect to the new process without any caller changes.
+
+### Key Characteristics
+
+- **Opaque Handle** — Callers don't know or care about restarts
+- **Automatic Redirection** — Transparently routes to current process
+- **Crash Visibility** — `lastCrashedProc` allows crash inspection
+- **Message Safety** — `tell()` and `ask()` work during and after restarts
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `Pid` | `ProcRef<S,M>` |
+| `pid(self())` | `new ProcRef<>(proc)` |
+| `is_process_alive(Pid)` | `proc().thread().isAlive()` |
+
+## Type Parameters
+
+- **`<S>`** — Process state type
+- **`<M>`** — Message type (use records or sealed interfaces)
+
+## Public API
+
+### Message Passing
+
+#### `tell(M msg)`
+
+Fire-and-forget: enqueue `msg` without blocking.
+
+```java
+counterRef.tell(new Increment(5));
+```
+
+**Warning:** If the process is mid-restart, the message goes to the stale process and is lost.
+
+---
+
+#### `ask(M msg)`
+
+Request-reply: returns future that completes with process state after `msg` is processed.
+
+```java
+CompletableFuture<CounterState> future = counterRef.ask(new Increment(5));
+future.thenAccept(state -> System.out.println("Count: " + state.value()));
+```
+
+**Timeout Handling:** Times out naturally if the process is restarting (future never completes).
+
+---
+
+### Lifecycle
+
+#### `stop()`
+
+Gracefully stop this process. Does **not** notify the supervisor.
+
+```java
+counterRef.stop();  // Stops child, but supervisor doesn't know
+```
+
+**Note:** Use `Supervisor.shutdown()` to stop the entire tree.
+
+---
+
+### Introspection
+
+#### `proc()`
+
+Returns the underlying `Proc` delegate, or the last crashed proc if a crash has been recorded.
+
+```java
+Proc<CounterState, CounterMsg> proc = counterRef.proc();
+
+if (proc.lastError() != null) {
+    System.err.println("Process crashed: " + proc.lastError());
+}
+```
+
+**Behavior:**
+- After restart: Returns crashed proc (with `lastError` set) until observed
+- After observation: Returns current live delegate
+- Primarily for monitoring infrastructure
+
+**Prefer:** `tell()` / `ask()` for normal message-passing
+
+---
+
+## Usage Patterns
+
+### Basic Usage with Supervisor
+
+```java
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofMinutes(1)
+);
+
+ProcRef<CounterState, CounterMsg> counter = supervisor.supervise(
+    "counter",
+    new CounterState(0),
+    (state, msg) -> switch (msg) {
+        case Increment(var n) -> new CounterState(state.value() + n);
+        case Reset _ -> new CounterState(0);
+    }
+);
+
+// Send messages
+counter.tell(new Increment(5));
+counter.tell(new Increment(3));
+
+// Query state
+CounterState state = counter.ask(new Snapshot(), Duration.ofSeconds(1)).get();
+System.out.println("Count: " + state.value());  // 8
+
+// If counter crashes and restarts, counterRef still works
+// All messages automatically route to the new process
+```
+
+---
+
+### Monitoring Crashes
+
+```java
+ProcRef<DatabaseState, DbMsg> db = supervisor.supervise("db", initialState, handler);
+
+Thread.ofVirtual().start(() -> {
+    while (true) {
+        Thread.sleep(Duration.ofSeconds(10));
+        var proc = db.proc();
+        if (proc.lastError() != null) {
+            System.err.println("DB crashed: " + proc.lastError());
+            // After this observation, proc() returns the live delegate
+        }
+    }
+});
+```
+
+---
+
+### Retry with Awaitility
+
+```java
+// Send message that might be lost during restart
+counter.tell(new Increment(1));
+
+// Wait until message is processed (retries if restarting)
+await()
+    .atMost(Duration.ofSeconds(5))
+    .until(() -> {
+        try {
+            var state = counter.ask(new Snapshot(), Duration.ofMillis(100)).get();
+            return state.value() > 0;
+        } catch (Exception e) {
+            return false;  // Retry on timeout/exception
+        }
+    });
+```
+
+---
+
+### Multiple References to Same Process
+
+```java
+// Single supervised process
+ProcRef<CacheState, CacheMsg> cache = supervisor.supervise("cache", state, handler);
+
+// Multiple components hold references
+ComponentA uses cacheRefA = cache;
+ComponentB uses cacheRefB = cache;
+ComponentC uses cacheRefC = cache;
+
+// All references transparently survive restarts
+// If cache crashes and restarts, all components automatically use new process
+```
+
+---
+
+## Implementation Details
+
+### Swap Mechanism
+
+When a supervisor restarts a crashed child:
+
+1. Supervisor spawns new process with fresh state
+2. Supervisor calls `ref.swap(newProc)`
+3. `ref.lastCrashedProc = ref.delegate` (saves crashed proc)
+4. `ref.delegate = newProc` (atomic volatile write)
+5. Future `proc()` calls see crashed proc until observed
+6. After observation, `proc()` returns live delegate
+
+```java
+void swap(Proc<S, M> next) {
+    this.lastCrashedProc = this.delegate;
+    this.delegate = next;
+}
+```
+
+---
+
+### Thread Safety
+
+- **Delegate reference:** `volatile` (guarantees visibility across threads)
+- **Swap operation:** Happens-before relationship established
+- **Message routing:** Direct delegate access (no locking)
+
+---
+
+### Crash Observation Window
+
+After a restart, there's a ~75ms window where external observers can see the crashed process:
+
+```java
+// Supervisor restarts child
+ref.swap(newProc);  // lastCrashedProc set
+
+// 75ms delay in restart thread
+
+// External observers can see crash during this window
+ref.proc().lastError();  // Returns crash reason
+
+// After first observation, returns live delegate
+ref.proc();  // Returns newProc
+```
+
+This delay serves two purposes:
+1. Gives observers time to detect crash via `lastError()`
+2. Absorbs rapid re-crash messages during restart
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `tell()` | ~50ns | Volatile read + enqueue |
+| `ask()` | ~100ns | Volatile read + future creation |
+| `proc()` | ~10ns | Volatile read only |
+| `swap()` | ~50ns | Volatile write |
+
+**Overhead:** Negligible compared to `Proc.tell()` (~50ns)
+
+---
+
+## Best Practices
+
+### 1. Use ProcRef for External Access
+
+```java
+// Good: Store ProcRef for long-lived access
+ProcRef<Cache, CacheMsg> cache = supervisor.supervise("cache", state, handler);
+cacheRefField = cache;  // Keep for later use
+
+// Bad: Store Proc directly (breaks on restart)
+Proc<Cache, CacheMsg> proc = ...;  // Won't survive restart
+```
+
+---
+
+### 2. Assume Messages May Be Lost During Restart
+
+```java
+// Good: Retry or use timeouts
+for (int i = 0; i < 3; i++) {
+    try {
+        return ref.ask(msg, Duration.ofSeconds(1)).get();
+    } catch (TimeoutException e) {
+        // Retry - might be restarting
+    }
+}
+
+// Bad: Assume delivery during restart
+ref.tell(criticalMessage);  // May be lost
+```
+
+---
+
+### 3. Monitor for Crashes
+
+```java
+Thread.ofVirtual().start(() -> {
+    var proc = ref.proc();
+    if (proc.lastError() != null) {
+        logger.error("Process crashed: {}", proc.lastError());
+        metrics.incrementCrashes();
+    }
+});
+```
+
+---
+
+### 4. Use Graceful Shutdown for Supervisors
+
+```java
+// Good: Supervisor stops all children
+supervisor.shutdown();
+
+// Bad: Individual ProcRef.stop() calls
+ref1.stop();
+ref2.stop();
+ref3.stop();
+// Supervisor doesn't know, may try to restart them
+```
+
+---
+
+## Gotchas
+
+### 1. Messages Lost During Restart
+
+```java
+// Process crashes
+// Supervisor restarting (takes ~200μs + 75ms delay)
+
+ref.tell(new Message());  // Goes to old (crashed) process, lost!
+
+// Solution: Retry or use ask() with timeout
+```
+
+---
+
+### 2. proc() Observation Behavior
+
+```java
+// After restart
+ref.proc().lastError();  // Returns crash reason
+
+// First observation
+var crashedProc = ref.proc();
+assert crashedProc.lastError() != null;
+
+// Second observation returns live delegate
+var liveProc = ref.proc();
+assert liveProc.lastError() == null;
+assert liveProc.thread().isAlive();
+```
+
+---
+
+### 3. stop() Doesn't Notify Supervisor
+
+```java
+ref.stop();  // Stops process
+// Supervisor still sees child as "alive"
+// May try to restart it
+// Use supervisor.terminateChild(id) instead
+```
+
+---
+
+## See Also
+
+- [Supervisor API](./supervisor.mdx) — Hierarchical supervision with restart strategies
+- [Proc API](./proc.mdx) — Lightweight process primitive
+- [ProcMonitor API](./procmonitor.mdx) — Unilateral crash monitoring
+- [Building Supervision Trees](/docs/user-guide/how-to/build-supervision-trees) — Practical guide

@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.core;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +19,7 @@ class PersonTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         subject = new Person("Alice", 30);
     }
 

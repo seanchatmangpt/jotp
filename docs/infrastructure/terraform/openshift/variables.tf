@@ -1,4 +1,4 @@
-# Java Maven Template - OpenShift Variables
+# JOTP - OpenShift Variables
 
 variable "openshift_server_url" {
   type        = string
@@ -19,13 +19,13 @@ variable "cluster_ca_certificate" {
 
 variable "namespace" {
   type        = string
-  default     = "java-maven-app"
+  default     = "jotp-app"
   description = "OpenShift namespace"
 }
 
 variable "app_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Application name"
 }
 

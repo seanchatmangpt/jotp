@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.dogfood.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -10,9 +11,15 @@ import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZoneId;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class JavaTimePatternsTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── LocalDate ────────────────────────────────────────────────────────────
 

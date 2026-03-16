@@ -1,0 +1,458 @@
+---
+title: "Getting Started with JOTP"
+description: "Setup your environment and create your first JOTP process"
+difficulty: beginner
+estimatedTime: "15 minutes"
+tutorialNumber: 1
+totalTutorials: 6
+nextTutorial: "02-your-first-process"
+prevTutorial: null
+---
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+# Getting Started with JOTP
+
+<Badge variant="secondary">Tutorial 1 of 6</Badge>
+
+Welcome to JOTP! This tutorial will guide you through setting up your development environment and creating your first fault-tolerant process. By the end, you'll have a running JOTP application that demonstrates the power of supervised processes.
+
+## What You'll Learn
+
+In this tutorial, you'll:
+
+- Set up a Java 26 development environment with preview features
+- Add JOTP to your project
+- Create your first supervised process
+- See the "let it crash" philosophy in action
+- Understand basic process communication
+
+## Prerequisites
+
+Before we begin, make sure you have:
+
+- **Java 26** installed with preview features enabled
+- **Maven 4** or higher (or Maven Wrapper)
+- A code editor (IntelliJ IDEA, VS Code, or similar)
+- Basic familiarity with Java
+
+## Step 1: Install Java 26
+
+JOTP requires Java 26 with preview features enabled. Here's how to get set up:
+
+<Tabs defaultValue="macos" className="w-full">
+  <TabsList className="grid w-full grid-cols-3">
+    <TabsTrigger value="macos">macOS</TabsTrigger>
+    <TabsTrigger value="linux">Linux</TabsTrigger>
+    <TabsTrigger value="windows">Windows</TabsTrigger>
+  </TabsList>
+
+  <TabsContent value="macos">
+    ```bash
+    # Using Homebrew
+    brew install openjdk@26
+
+    # Set JAVA_HOME
+    echo 'export JAVA_HOME=$(/usr/libexec/java_home -v 26)' >> ~/.zshrc
+    echo 'export PATH="$JAVA_HOME/bin:$PATH"' >> ~/.zshrc
+    source ~/.zshrc
+
+    # Verify installation
+    java --version
+    ```
+  </TabsContent>
+
+  <TabsContent value="linux">
+    ```bash
+    # Ubuntu/Debian
+    sudo apt update
+    sudo apt install openjdk-26-jdk
+
+    # Verify installation
+    java --version
+    ```
+  </TabsContent>
+
+  <TabsContent value="windows">
+    ```powershell
+    # Download from Oracle or AdoptOpenJDK
+    # Install using the installer
+    # Set JAVA_HOME environment variable
+
+    # Verify installation
+    java --version
+    ```
+  </TabsContent>
+</Tabs>
+
+<Alert>
+  <AlertDescription>
+    **Important:** JOTP requires Java 26 with preview features. All javac and java commands must include the <code>--enable-preview</code> flag.
+  </AlertDescription>
+</Alert>
+
+## Step 2: Create a New Project
+
+Let's create a new Maven project:
+
+```bash
+# Create project directory
+mkdir jotp-quickstart
+cd jotp-quickstart
+
+# Create Maven project structure
+mkdir -p src/main/java/com/example/quickstart
+mkdir -p src/test/java/com/example/quickstart
+```
+
+## Step 3: Configure Maven
+
+Create a `pom.xml` file with JOTP dependencies:
+
+```xml
+{<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>jotp-quickstart</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>26</maven.compiler.source>
+        <maven.compiler.target>26</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- JOTP Core -->
+        <dependency>
+            <groupId>io.github.seanchatmangpt</groupId>
+            <artifactId>jotp</artifactId>
+            <version>1.0</version>
+        </dependency>
+
+        <!-- JUnit 5 for testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Enable preview features -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>26</release>
+                    <compilerArgs>
+                        <arg>--enable-preview</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Enable preview for execution -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0</version>
+                <configuration>
+                    <argLine>--enable-preview</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>}
+```
+
+<CopyButton>Copy pom.xml</CopyButton>
+
+## Step 4: Your First JOTP Process
+
+Let's create a simple counter process that demonstrates JOTP's core concepts.
+
+Create the file `src/main/java/com/example/quickstart/QuickStart.java`:
+
+```java
+{package com.example.quickstart;
+
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+
+/**
+ * Your first JOTP application - A supervised counter process.
+ */
+public class QuickStart {
+
+    // Define process state as an immutable record
+    record Counter(int value) {}
+
+    // Define messages using sealed interfaces
+    sealed interface CounterMsg permits Increment, Get {}
+    record Increment(int by) implements CounterMsg {}
+    record Get() implements CounterMsg {}
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("🚀 Starting JOTP Quick Start...");
+
+        // Create a supervisor with ONE_FOR_ONE strategy
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,  // max restarts
+            Duration.ofMinutes(1)  // time window
+        );
+
+        // Create a supervised counter process
+        ProcRef<Counter, CounterMsg> counter = supervisor.supervise(
+            "counter",
+            new Counter(0),  // initial state
+            (state, msg) -> switch (msg) {
+                case Increment(var by) -> {
+                    System.out.println("📈 Incrementing by " + by);
+                    yield new Counter(state.value() + by);
+                }
+                case Get() -> state;  // Return current state
+            }
+        );
+
+        // Send some messages
+        System.out.println("\n--- Sending Messages ---");
+        counter.tell(new Increment(5));
+        counter.tell(new Increment(3));
+        counter.tell(new Increment(2));
+
+        // Query the state
+        Counter result = counter.ask(new Get(), Duration.ofSeconds(1)).get();
+        System.out.println("\n✅ Final count: " + result.value());
+
+        // Clean shutdown
+        supervisor.shutdown();
+        System.out.println("\n✨ Application shutdown complete!");
+    }
+}}
+```
+
+<CopyButton>Copy QuickStart.java</CopyButton>
+
+## Step 5: Build and Run
+
+Now let's compile and run your first JOTP application:
+
+<Tabs defaultValue="mvn" className="w-full">
+  <TabsList className="grid w-full grid-cols-2">
+    <TabsTrigger value="mvn">Maven</TabsTrigger>
+    <TabsTrigger value="mvnd">Maven Daemon (Faster)</TabsTrigger>
+  </TabsList>
+
+  <TabsContent value="mvn">
+    ```bash
+    # Compile the project
+    ./mvnw compile
+
+    # Run the application
+    ./mvnw exec:java -Dexec.mainClass="com.example.quickstart.QuickStart"
+    ```
+  </TabsContent>
+
+  <TabsContent value="mvnd">
+    ```bash
+    # Using Maven Daemon (30% faster)
+    mvnd compile
+
+    # Run the application
+    mvnd exec:java -Dexec.mainClass="com.example.quickstart.QuickStart"
+    ```
+  </TabsContent>
+</Tabs>
+
+## Expected Output
+
+When you run the application, you should see:
+
+```
+🚀 Starting JOTP Quick Start...
+
+--- Sending Messages ---
+📈 Incrementing by 5
+📈 Incrementing by 3
+📈 Incrementing by 2
+
+✅ Final count: 10
+
+✨ Application shutdown complete!
+```
+
+<Alert>
+  <AlertTitle>🎯 What's Happening?</AlertTitle>
+  <AlertDescription>
+    <ol className="list-decimal list-inside space-y-2 mt-2">
+      <li><strong>Supervisor Creation:</strong> We created a supervisor with ONE_FOR_ONE strategy, meaning if one child process crashes, only that process is restarted.</li>
+      <li><strong>Process Supervision:</strong> The <code>supervisor.supervise()</code> method creates a counter process under the supervisor's protection.</li>
+      <li><strong>Message Passing:</strong> We used <code>tell()</code> to send fire-and-forget messages and <code>ask()</code> to query the state.</li>
+      <li><strong>State Immutability:</strong> Each message returns a new Counter state - the original is never modified.</li>
+      <li><strong>Clean Shutdown:</strong> The supervisor properly shuts down all child processes.</li>
+    </ol>
+  </AlertDescription>
+</Alert>
+
+## Understanding the Core Concepts
+
+### 1. Processes are Lightweight
+
+Each JOTP process runs in its own virtual thread, using only ~1KB of heap memory. You can create millions of processes:
+
+```java
+// This creates 1 million processes - no problem!
+for (int i = 0; i < 1_000_000; i++) {
+    supervisor.supervise("proc-" + i, initialState, handler);
+}
+```
+
+### 2. Messages are Immutable
+
+We use sealed interfaces and records to ensure messages can't be modified:
+
+```java
+sealed interface CounterMsg permits Increment, Get {}
+record Increment(int by) implements CounterMsg {}
+```
+
+This prevents shared state bugs and makes concurrency safe.
+
+### 3. Let It Crash Philosophy
+
+Notice there's no try-catch in our message handler. In JOTP:
+
+- **Process crashes are expected** - they're handled by the supervisor
+- **No defensive programming** - focus on the happy path
+- **Automatic recovery** - supervisors restart crashed processes
+
+## Try It: Make It Crash!
+
+Let's see fault tolerance in action. Modify your `QuickStart.java`:
+
+```java
+{ProcRef<Counter, CounterMsg> counter = supervisor.supervise(
+    "counter",
+    new Counter(0),
+    (state, msg) -> switch (msg) {
+        case Increment(var by) -> {
+            if (by < 0) {
+                throw new RuntimeException("Negative increment!");
+            }
+            System.out.println("📈 Incrementing by " + by);
+            yield new Counter(state.value() + by);
+        }
+        case Get() -> state;
+    }
+);
+
+// This will crash the process
+counter.tell(new Increment(-1));
+
+// But the supervisor restarts it automatically!
+Thread.sleep(100);  // Give it time to restart
+counter.tell(new Increment(5));  // This still works
+
+Counter result = counter.ask(new Get(), Duration.ofSeconds(1)).get();
+System.out.println("✅ Count after crash: " + result.value());}
+```
+
+<CopyButton>Copy crash example</CopyButton>
+
+**Expected Output:**
+```
+📈 Incrementing by -1
+[Supervisor] Process 'counter' crashed: java.lang.RuntimeException: Negative increment!
+[Supervisor] Restarting 'counter'...
+📈 Incrementing by 5
+✅ Count after crash: 5
+```
+
+The process crashed, but the supervisor automatically restarted it. This is the "let it crash" philosophy in action!
+
+## Checkpoint Summary
+
+<Card className="mt-6">
+  <CardHeader>
+    <CardTitle>✅ Checkpoint: What You've Accomplished</CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-2">
+    <p>By completing this tutorial, you've:</p>
+    <ul className="list-disc list-inside space-y-1 mt-2">
+      <li>Set up a Java 26 development environment with preview features</li>
+      <li>Created a Maven project with JOTP dependencies</li>
+      <li>Built your first supervised process</li>
+      <li>Seen message passing with <code>tell()</code> and <code>ask()</code></li>
+      <li>Witnessed automatic crash recovery</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## Common Issues and Solutions
+
+<Alert variant="destructive">
+  <AlertTitle>⚠️ Troubleshooting</AlertTitle>
+  <AlertDescription>
+    <div className="space-y-3">
+      <div>
+        <strong>Issue: "Unsupported class file major version"</strong><br/>
+        <span className="text-sm">Solution: Make sure you're using Java 26. Run <code>java --version</code> to verify.</span>
+      </div>
+      <div>
+        <strong>Issue: "Preview features not enabled"</strong><br/>
+        <span className="text-sm">Solution: Ensure <code>--enable-preview</code> is in your <code>pom.xml</code> compiler configuration.</span>
+      </div>
+      <div>
+        <strong>Issue: Process hangs on <code>ask()</code></strong><br/>
+        <span className="text-sm">Solution: Always provide a timeout to <code>ask()</code>. The process might have crashed.</span>
+      </div>
+    </div>
+  </AlertDescription>
+</Alert>
+
+## Practice Exercise
+
+Try modifying the QuickStart application:
+
+1. **Add a new message type** `Reset` that sets the counter back to 0
+2. **Create multiple counters** with different names
+3. **Make one counter crash** and verify the others keep running
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium">Show Hint</summary>
+  ```java
+  sealed interface CounterMsg permits Increment, Get, Reset {}
+  record Reset() implements CounterMsg {}
+
+  // In your handler:
+  case Reset _ -> new Counter(0);
+  ```
+</details>
+
+## Next Steps
+
+Congratulations! You've created your first JOTP application. In the next tutorial, we'll dive deeper into process creation and explore more messaging patterns.
+
+**Next:** [Your First Process →](/docs/user-guide/tutorials/beginner/02-your-first-process)
+
+---
+
+## Additional Resources
+
+- [JOTP GitHub Repository](https://github.com/seanchatmangpt/jotp)
+- [Proc API Reference](/docs/reference/api/proc)
+- [Supervisor API Reference](/docs/reference/api/supervisor)
+- [Concurrency Model Explanation](/docs/user-guide/explanations/concurrency-model)

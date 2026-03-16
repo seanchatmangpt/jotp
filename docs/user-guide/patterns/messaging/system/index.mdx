@@ -1,0 +1,656 @@
+# System Patterns
+
+System patterns provide reliable messaging infrastructure that handles failures, prevents duplicates, and ensures messages are processed correctly. They form the reliability layer of your messaging system.
+
+## Overview
+
+JOTP implements three core system patterns from the Enterprise Integration Patterns catalog:
+
+1. **Idempotent Receiver** - Prevent duplicate message processing
+2. **Message Expiration** - TTL-based automatic discarding
+3. **Process Manager** - Coordinate multi-step workflows
+
+These patterns leverage JOTP's supervision trees and process monitoring for fault-tolerant, reliable message processing.
+
+## Idempotent Receiver
+
+### Pattern Description
+
+The Idempotent Receiver pattern ensures that duplicate messages are processed only once, even if the message is delivered multiple times. This is critical for at-least-once delivery semantics where duplicates are possible.
+
+### Implementation
+
+```java
+public final class IdempotentReceiver<T, K> {
+    private final Function<T, K> keyExtractor;
+    private final Consumer<T> handler;
+    private final Proc<Set<K>, T> proc;
+
+    public IdempotentReceiver(
+        Function<T, K> keyExtractor,
+        Consumer<T> handler
+    ) {
+        this.keyExtractor = keyExtractor;
+        this.handler = handler;
+        this.proc = new Proc<>(
+            new HashSet<>(),
+            (processed, msg) -> {
+                K key = keyExtractor.apply(msg);
+                if (processed.contains(key)) {
+                    return processed; // Skip duplicate
+                }
+                handler.accept(msg);
+                var updated = new HashSet<>(processed);
+                updated.add(key);
+                return updated;
+            }
+        );
+    }
+
+    public void send(T message) {
+        proc.tell(message);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Payment processing must be idempotent
+record PaymentCommand(
+    String paymentId,  // Unique key
+    String orderId,
+    BigDecimal amount,
+    String paymentMethod
+) {}
+
+var paymentProcessor = new IdempotentReceiver<PaymentCommand, String>(
+    PaymentCommand::paymentId,
+    command -> {
+        // Process payment (safe to call multiple times)
+        paymentGateway.charge(command.paymentMethod(), command.amount());
+        orderService.markAsPaid(command.orderId());
+    }
+);
+
+// Send multiple times - only processes once
+paymentProcessor.send(new PaymentCommand("pay-123", "order-456", new BigDecimal("99.99"), "card-123"));
+paymentProcessor.send(new PaymentCommand("pay-123", "order-456", new BigDecimal("99.99"), "card-123")); // Duplicate - skipped
+paymentProcessor.send(new PaymentCommand("pay-123", "order-456", new BigDecimal("99.99"), "card-123")); // Duplicate - skipped
+```
+
+### Composite Keys
+
+```java
+// Use composite keys for uniqueness across multiple fields
+record OrderItemKey(
+    String orderId,
+    String productId,
+    String batchNumber
+) {}
+
+var itemProcessor = new IdempotentReceiver<OrderItem, OrderItemKey>(
+    item -> new OrderItemKey(item.orderId(), item.productId(), item.batchNumber()),
+    item -> inventoryService.reserve(item)
+);
+```
+
+### Distributed Idempotency
+
+```java
+// Use Redis for distributed deduplication
+class RedisIdempotentReceiver<T, K> {
+    private final RedisClient redis;
+    private final Function<T, K> keyExtractor;
+    private final Consumer<T> handler;
+    private final Duration ttl;
+
+    public void send(T message) {
+        K key = keyExtractor.apply(message);
+
+        // Atomically check and set
+        var wasSet = redis.setnx(key.toString(), "1");
+        if (wasSet) {
+            redis.expire(key.toString(), ttl);
+            handler.accept(message);
+        } else {
+            // Duplicate detected
+            metrics.increment("duplicates.detected");
+        }
+    }
+}
+
+// Use in cluster deployments
+var receiver = new RedisIdempotentReceiver<Payment, String>(
+    redis,
+    Payment::paymentId,
+    this::processPayment,
+    Duration.ofHours(24)
+);
+```
+
+### Idempotency with Database
+
+```java
+// Use database unique constraints for idempotency
+record DatabaseIdempotentReceiver<T> {
+    private final EntityManager entityManager;
+    private final Consumer<T> handler;
+
+    public void send(T message) {
+        try {
+            // Attempt to insert idempotency key
+            entityManager.persist(new ProcessedMessage(message.id()));
+
+            // If successful, process message
+            handler.accept(message);
+        } catch (ConstraintViolationException e) {
+            // Duplicate - skip processing
+            logger.info("Duplicate message skipped: " + message.id());
+        }
+    }
+}
+```
+
+### Expiration of Keys
+
+```java
+// Expire old keys to prevent memory bloat
+var receiver = new IdempotentReceiver<Message, String>(
+    Message::id,
+    this::process,
+    Duration.ofHours(1) // Keys expire after 1 hour
+);
+
+// Periodic cleanup
+ProcTimer.scheduleAtFixedRate(Duration.ofMinutes(30), () -> {
+    var proc = receiver.proc();
+    var state = ProcSys.getState(proc).get();
+    var now = Instant.now();
+
+    // Remove keys older than 1 hour
+    var cleaned = state.processedKeys().stream()
+        .filter(key -> {
+            var timestamp = state.timestamp(key);
+            return Duration.between(timestamp, now).toHours() > 1;
+        })
+        .toList();
+
+    cleaned.forEach(key -> state.remove(key));
+});
+```
+
+## Message Expiration
+
+### Pattern Description
+
+The Message Expiration pattern adds a time-to-live (TTL) to messages, ensuring they're automatically discarded if not processed within a specified time. This prevents stale messages from being processed and helps manage system resources.
+
+### Implementation
+
+```java
+record ExpirableMessage<T> {
+    T payload;
+    Instant expiresAt;
+
+    public boolean isExpired() {
+        return Instant.now().isAfter(expiresAt);
+    }
+}
+
+class MessageExpirer<T> {
+    private final Duration defaultTTL;
+    private final Proc<Queue<ExpirableMessage<T>>, T> proc;
+
+    public MessageExpirer(Duration defaultTTL, Consumer<T> handler) {
+        this.defaultTTL = defaultTTL;
+        this.proc = new Proc<>(
+            new LinkedList<>(),
+            (queue, msg) -> {
+                var expirable = new ExpirableMessage<>(
+                    msg,
+                    Instant.now().plus(defaultTTL)
+                );
+                queue.offer(expirable);
+                return queue;
+            }
+        );
+    }
+
+    public void processExpired(Consumer<T> expiredHandler) {
+        var state = ProcSys.getState(proc).get();
+        var now = Instant.now();
+
+        var expired = state.stream()
+            .filter(ExpirableMessage::isExpired)
+            .toList();
+
+        expired.forEach(expMsg -> {
+            expiredHandler.accept(expMsg.payload());
+            state.remove(expMsg);
+        });
+    }
+}
+```
+
+### Usage Example
+
+```java
+// OTP codes expire after 5 minutes
+record OtpMessage(
+    String phoneNumber,
+    String code,
+    Instant createdAt
+) {}
+
+var otpExpirer = new MessageExpirer<OtpMessage>(
+    Duration.ofMinutes(5),
+    otp -> smsService.send(otp.phoneNumber(), otp.code())
+);
+
+// Send OTP
+otpExpirer.send(new OtpMessage("+15551234567", "123456", Instant.now()));
+
+// Check for expired OTPs periodically
+ProcTimer.scheduleAtFixedRate(Duration.ofMinutes(1), () -> {
+    otpExpirer.processExpired(expired -> {
+        metrics.increment("otp.expired");
+        logger.warn("OTP expired for " + expired.phoneNumber());
+    });
+});
+```
+
+### Per-Message TTL
+
+```java
+// Custom TTL per message
+record PriorityMessage<T> {
+    T payload;
+    Duration ttl;
+    Instant createdAt;
+
+    public boolean isExpired() {
+        return Duration.between(createdAt, Instant.now()).compareTo(ttl) > 0;
+    }
+}
+
+var priorityExpirer = new Proc<Queue<PriorityMessage<Object>>, PriorityMessage<Object>>(
+    new LinkedList<>(),
+    (queue, msg) -> {
+        queue.offer(msg);
+        return queue;
+    }
+);
+
+// High priority messages live longer
+priorityExpirer.tell(new PriorityMessage<>(
+    criticalOrder,
+    Duration.ofHours(24),  // Live 24 hours
+    Instant.now()
+));
+
+// Low priority messages expire quickly
+priorityExpirer.tell(new PriorityMessage<>(
+    notification,
+    Duration.ofMinutes(5),  // Live 5 minutes
+    Instant.now()
+));
+```
+
+### Graceful Degradation
+
+```java
+// Handle expired messages gracefully
+var handler = new Consumer<Order>() {
+    @Override
+    public void accept(Order order) {
+        if (order.isExpired()) {
+            metrics.increment("order.expired");
+            notificationService.alertTeam("Order expired: " + order.id());
+
+            // Attempt recovery or compensation
+            if (order.isRecoverable()) {
+                recoveryService.attemptRecovery(order);
+            }
+            return;
+        }
+
+        // Process valid order
+        processOrder(order);
+    }
+};
+```
+
+### TTL with Dead Letter Channel
+
+```java
+// Combine expiration with dead letter channel
+var deadLetter = new DeadLetterChannel<Order>();
+
+var processor = new Consumer<Order>() {
+    @Override
+    public void accept(Order order) {
+        if (order.isExpired()) {
+            deadLetter.send(order, "message-expired");
+            return;
+        }
+
+        try {
+            orderService.process(order);
+        } catch (Exception e) {
+            deadLetter.send(order, "processing-failed: " + e.getMessage());
+        }
+    }
+};
+```
+
+## Process Manager
+
+### Pattern Description
+
+The Process Manager pattern coordinates multi-step workflows by maintaining state and orchestrating message flows. Unlike simple routers, process managers maintain conversation state and make decisions based on that state.
+
+### Implementation
+
+```java
+public final class ProcessManager<State, Message> {
+    private final State initialState;
+    private final Function<State, Message, Transition<State>> transition;
+
+    public record Transition<State>(
+        State nextState,
+        List<CommandMessage> commandsToEmit
+    ) {}
+
+    private final Proc<State, Message> proc;
+
+    public ProcessManager(
+        State initialState,
+        Function<State, Message, Transition<State>> transition
+    ) {
+        this.initialState = initialState;
+        this.transition = transition;
+        this.proc = new Proc<>(initialState, (state, msg) -> {
+            var result = transition.apply(state, msg);
+            result.commandsToEmit().forEach(cmd -> cmd.executeOn(this.proc));
+            return result.nextState();
+        });
+    }
+
+    public void send(Message message) {
+        proc.tell(message);
+    }
+
+    public State getState() {
+        return ProcSys.getState(proc).orElse(initialState);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Order fulfillment workflow
+sealed interface OrderState permits Pending, Validated, Paid, Shipped, Completed {}
+record Pending() implements OrderState {}
+record Validated(Order order) implements OrderState {}
+record Paid(Order order, Payment payment) implements OrderState {}
+record Shipped(Order order, Payment payment, ShippingInfo shipping) implements OrderState {}
+record Completed(Order order) implements OrderState {}
+
+sealed interface OrderEvent permits OrderCreated, PaymentReceived, ShippingCompleted {}
+record OrderCreated(Order order) implements OrderEvent {}
+record PaymentReceived(String orderId, Payment payment) implements OrderEvent {}
+record ShippingCompleted(String orderId, ShippingInfo shipping) implements OrderEvent {}
+
+// Process manager orchestrates fulfillment
+var orderFulfillment = new ProcessManager<>(
+    new Pending(),
+    (state, event) -> switch (state, event) {
+        case (Pending(), OrderCreated(var order)) -> {
+            // Validate order
+            if (order.isValid()) {
+                yield new Transition<>(
+                    new Validated(order),
+                    List.of(new ProcessPayment(order))
+                );
+            } else {
+                yield new Transition<>(
+                    new Pending(), // Stay pending
+                    List.of(new NotifyCustomerInvalidOrder(order))
+                );
+            }
+        }
+
+        case (Validated(var order), PaymentReceived(var orderId, var payment)) -> {
+            yield new Transition<>(
+                new Paid(order, payment),
+                List.of(new ShipOrder(order))
+            );
+        }
+
+        case (Paid(var order, var payment), ShippingCompleted(var orderId, var shipping)) -> {
+            yield new Transition<>(
+                new Shipped(order, payment, shipping),
+                List.of(new NotifyCustomerShipped(order, shipping))
+            );
+        }
+
+        case (Shipped(var order, _, _), DeliveryConfirmed(var orderId)) -> {
+            yield new Transition<>(
+                new Completed(order),
+                List.of(new ArchiveOrder(order))
+            );
+        }
+
+        default -> {
+            logger.warn("Unexpected transition: " + state + " + " + event);
+            yield new Transition<>(state, List.of());
+        }
+    }
+);
+
+// Send events
+orderFulfillment.send(new OrderCreated(order));
+orderFulfillment.send(new PaymentReceived("order-123", payment));
+orderFulfillment.send(new ShippingCompleted("order-123", shipping));
+```
+
+### Timeout Handling
+
+```java
+// Add timeout transitions
+record Timeout(String processId) implements OrderEvent {}
+
+var manager = new ProcessManager<>(
+    new Pending(),
+    (state, event) -> switch (state, event) {
+        case (Validated(var order), Timeout _) -> {
+            // Payment timeout - cancel order
+            yield new Transition<>(
+                new Cancelled(order, "Payment timeout"),
+                List.of(new CancelOrder(order), new RefundCustomer(order))
+            );
+        }
+
+        case (Paid(var order, _), Timeout _) -> {
+            // Shipping timeout - escalate
+            yield new Transition<>(
+                new Escalated(order, "Shipping timeout"),
+                List.of(new EscalateToSupport(order))
+            );
+        }
+
+        // ... other transitions
+    }
+);
+
+// Schedule timeout checks
+ProcTimer.schedule(Duration.ofMinutes(30), () -> {
+    manager.send(new Timeout("order-123"));
+});
+```
+
+### Saga Pattern
+
+```java
+// Process manager implementing saga (compensating transactions)
+sealed interface SagaState permits Started, Step1Complete, Step2Complete, Failed {}
+record Started() implements SagaState {}
+record Step1Complete(Step1Result result) implements SagaState {}
+record Step2Complete(Step1Result s1, Step2Result s2) implements SagaState {}
+record Failed(List<Compensation> compensations) implements SagaState {}
+
+var saga = new ProcessManager<>(
+    new Started(),
+    (state, event) -> switch (state, event) {
+        case (Started(), Step1Success(var result)) -> {
+            yield new Transition<>(
+                new Step1Complete(result),
+                List.of(new ExecuteStep2(result))
+            );
+        }
+
+        case (Step1Complete(var s1), Step2Success(var s2)) -> {
+            yield new Transition<>(
+                new Step2Complete(s1, s2),
+                List.of(new ExecuteStep3(s2))
+            );
+        }
+
+        case (Step2Complete(var s1, var s2), Step3Failed(var error)) -> {
+            // Compensate: undo step2, undo step1
+            yield new Transition<>(
+                new Failed(List.of(
+                    new CompensateStep2(s2),
+                    new CompensateStep1(s1)
+                )),
+                List.of()
+            );
+        }
+
+        // ... other cases
+    }
+);
+```
+
+### State Persistence
+
+```java
+// Persist process manager state for recovery
+class PersistentProcessManager<State, Message> {
+    private final StateStore<State> stateStore;
+    private final ProcessManager<State, Message> manager;
+
+    public void send(Message message) {
+        // Load current state
+        State currentState = stateStore.load(processId)
+            .orElse(manager.initialState());
+
+        // Handle message
+        manager.send(message);
+
+        // Persist new state
+        State newState = manager.getState();
+        stateStore.save(processId, newState);
+    }
+
+    public void recover(String processId) {
+        State state = stateStore.load(processId)
+            .orElseThrow(() -> new IllegalStateException("Process not found"));
+
+        // Resume from persisted state
+        manager = new ProcessManager<>(state, transition);
+    }
+}
+```
+
+## Best Practices
+
+### 1. Always Use Idempotency Keys
+
+```java
+// Always include unique idempotency key
+record CommandMessage {
+    String idempotencyKey;  // Required
+    String command;
+    Object payload;
+}
+```
+
+### 2. Set Appropriate TTLs
+
+```java
+// Set TTL based on business requirements
+var shortLived = Duration.ofMinutes(5);   // OTP, notifications
+var mediumLived = Duration.ofHours(24);   // Orders, payments
+var longLived = Duration.ofDays(30);      // Audit logs
+```
+
+### 3. Monitor Duplicate Rates
+
+```java
+// Track duplicate metrics
+metrics.gauge("idempotency.duplicates", () -> {
+    var state = ProcSys.getState(receiver.proc).get();
+    return state.duplicateCount();
+});
+```
+
+### 4. Persist Process Manager State
+
+```java
+// Save state after each transition
+manager.onStateChange((oldState, newState) -> {
+    stateStore.save(processId, newState);
+    eventStore.append(new StateTransitionEvent(processId, oldState, newState));
+});
+```
+
+## Performance Considerations
+
+### Idempotency Key Storage
+
+```java
+// Use efficient data structures for key storage
+var keys = new ConcurrentHashMap<String, Instant>(); // Fast lookups
+
+// Or use Bloom filters for approximate deduplication (memory efficient)
+var filter = BloomFilter.create(Funnels.stringFunnel(), 1_000_000);
+```
+
+### Expiration Cleanup
+
+```java
+// Clean expired keys efficiently
+var now = Instant.now();
+keys.entrySet().removeIf(entry ->
+    Duration.between(entry.getValue(), now).toHours() > 1
+);
+```
+
+### Process Manager Scaling
+
+```java
+// Partition process managers by key for parallel processing
+var partition = hash(processId) % 10;
+var manager = managers[partition];
+manager.send(message);
+```
+
+## Summary
+
+System patterns provide reliable messaging infrastructure:
+
+- **Idempotent Receiver**: Prevent duplicate processing
+- **Message Expiration**: TTL-based automatic discarding
+- **Process Manager**: Coordinate multi-step workflows
+
+These patterns ensure your messaging system is reliable, fault-tolerant, and can handle failures gracefully.
+
+## Further Reading
+
+- [Enterprise Integration Patterns: Chapter 10](https://www.enterpriseintegrationpatterns.com/patterns/messaging/) - Original EIP system patterns
+- [Saga Pattern](https://microservices.io/patterns/data/saga.html) - Distributed transactions
+- [JOTP Supervisor](../../../concurrency/supervisor/) - Automatic restart strategies
+- [JOTP State Machine](../../../concurrency/state-machine/) - State machine workflows

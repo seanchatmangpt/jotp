@@ -1,0 +1,525 @@
+---
+title: "Result<T,E> API Reference"
+description: "Railway-oriented error handling - Sealed success/failure type"
+sidebar_position: 10
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Result<T,E> API Reference
+
+**Result type** — Sealed interface for success/failure outcomes (railway-oriented programming).
+
+## Overview
+
+`Result<T,E>` represents operations that can succeed or fail explicitly. Instead of throwing exceptions that propagate invisibly, operations return a `Result` that forces callers to handle both cases.
+
+### Key Characteristics
+
+- **Explicit Errors** — Success and failure are both explicit in type
+- **Sealed Hierarchy** — `Ok<T,E>` and `Err<T,E>` variants
+- **Railway-Oriented** — Operations chain naturally (success track or failure track)
+- **Type Safety** — Compiler verifies exhaustive pattern matching
+- **Composable** — `map`, `flatMap`, `peek`, `recover` for chaining
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `{ok, Value}` | `Result.ok(value)` or `new Ok(value)` |
+| `{error, Reason}` | `Result.err(reason)` or `new Err(reason)` |
+| `case {ok, V} -> ...` | `case Ok(var v) -> ...` |
+
+## Type Parameters
+
+- **`<T>`** — Success type (the value on success)
+- **`<E>`** — Error type (often `Exception` or sealed error hierarchy)
+
+## Factory Methods
+
+### Creating Results
+
+#### `ok<T,E>(T value)`
+
+Create a successful result.
+
+```java
+Result<String, Exception> result = Result.ok("Success!");
+```
+
+**Alias:** `success(value)`
+
+---
+
+#### `err<T,E>(E error)`
+
+Create a failed result.
+
+```java
+Result<String, Exception> result = Result.err(new IOException("Failed"));
+```
+
+**Alias:** `failure(error)`
+
+---
+
+#### `of<T,E>(Supplier<T> supplier)`
+
+Wrap a supplier that may throw.
+
+```java
+Result<String, Exception> result = Result.of(() -> {
+    return Files.readString(path);  // May throw IOException
+});
+
+// If supplier succeeds: Ok(value)
+// If supplier throws: Err(exception)
+```
+
+**Use case:** Bridge between exception-based APIs and railway-oriented programming
+
+---
+
+## Query Operations
+
+### Testing State
+
+#### `isSuccess()`
+
+Returns `true` if this is a successful result.
+
+```java
+if (result.isSuccess()) {
+    System.out.println("Succeeded!");
+}
+```
+
+---
+
+#### `isError()`
+
+Returns `true` if this is a failed result.
+
+```java
+if (result.isError()) {
+    System.err.println("Failed!");
+}
+```
+
+**Alias:** `isFailure()`
+
+---
+
+### Extracting Values
+
+#### `orElse(T defaultValue)`
+
+Get success value, or default if failed.
+
+```java
+String value = result.orElse("default");
+```
+
+---
+
+#### `orElseThrow()`
+
+Get success value, or throw if failed.
+
+```java
+String value = result.orElseThrow();
+// Throws RuntimeException if this is an Err
+```
+
+**Special behavior:** If error is a `Throwable`, it's rethrown directly (not wrapped)
+
+---
+
+## Transformations
+
+### Success Track
+
+#### `map<T>(Function<? super T, ? extends T> mapper)`
+
+Transform success value; short-circuits on failure.
+
+```java
+Result<Integer, Exception> result = Result.ok(5);
+
+Result<String, Exception> mapped = result.map(x -> "Number: " + x);
+// Ok("Number: 5")
+
+Result<Integer, Exception> failed = Result.err(new Exception());
+Result<String, Exception> mappedFailed = failed.map(x -> "Number: " + x);
+// Still Err(Exception) - map short-circuits
+```
+
+---
+
+#### `flatMap<T>(Function<? super T, ? extends Result<T, E>> mapper)`
+
+Chain operations that return Results.
+
+```java
+Result<String, Exception> result = Result.of(() -> fetchUser(1))
+    .flatMap(user -> Result.of(() -> validateUser(user)))
+    .flatMap(user -> Result.of(() -> saveUser(user)));
+```
+
+If any step fails, subsequent steps are skipped.
+
+---
+
+#### `peek(Consumer<? super T> action)`
+
+Apply side-effect on success without changing result.
+
+```java
+Result.of(() -> processData(data))
+    .peek(processed -> auditLog.add(processed))
+    .peek(processed -> metrics.record("process", processed.size()));
+```
+
+---
+
+### Failure Track
+
+#### `recover(Function<? super E, ? extends Result<T, E>> handler)`
+
+Recover from failure by applying handler.
+
+```java
+Result<Data, Exception> result = Result.of(() -> fetchData())
+    .recover(error -> {
+        logger.warn("Fetch failed, using cache: {}", error.getMessage());
+        return Result.of(() -> loadFromCache());
+    });
+```
+
+If this is success, `recover` is skipped.
+
+---
+
+## Elimination
+
+#### `fold<T>(Function<? super T, ? extends T> onSuccess, Function<? super E, ? extends T> onError)`
+
+Handle both cases, returning unified type.
+
+```java
+String message = result.fold(
+    value -> "Success: " + value,
+    error -> "Error: " + error.getMessage()
+);
+```
+
+---
+
+## Usage Patterns
+
+### Railway-Oriented Chaining
+
+```java
+Result<Order, OrderError> result = Result.of(() -> validate(request))
+    .flatMap(valid -> Result.of(() -> calculatePrice(valid)))
+    .flatMap(order -> Result.of(() -> reserveInventory(order)))
+    .peek(order -> auditLog.add(order))
+    .recover(error -> {
+        metrics.recordFailure(error);
+        return Result.failure(error);
+    });
+```
+
+---
+
+### Exhaustive Pattern Matching
+
+```java
+switch (result) {
+    case Result.Ok<String, Exception>(var value) ->
+        System.out.println("Success: " + value);
+    case Result.Err<String, Exception>(var error) ->
+        System.err.println("Error: " + error.getMessage());
+}
+```
+
+Compiler verifies all cases are handled.
+
+---
+
+### Combining Multiple Results
+
+```java
+// Validate all fields
+Result<String, ValidationError> nameResult = validateName(name);
+Result<Integer, ValidationError> ageResult = validateAge(age);
+Result<String, ValidationError> emailResult = validateEmail(email);
+
+// Combine with railway pattern
+Result<User, ValidationError> userResult = nameResult
+    .flatMap(validName -> ageResult
+        .flatMap(validAge -> emailResult
+            .map(validEmail -> new User(validName, validAge, validEmail))
+        )
+    );
+```
+
+---
+
+### Error Aggregation
+
+```java
+sealed interface Error permits NameError, AgeError, EmailError {}
+record NameError(String msg) implements Error {}
+record AgeError(int age) implements Error {}
+record EmailError(String email) implements Error {}
+
+Result<String, Error> validateName(String name) {
+    if (name == null || name.isBlank()) {
+        return Result.err(new NameError("Name required"));
+    }
+    return Result.ok(name);
+}
+
+Result<Integer, Error> validateAge(int age) {
+    if (age < 18 || age > 120) {
+        return Result.err(new AgeError(age));
+    }
+    return Result.ok(age);
+}
+
+Result<String, Error> validateEmail(String email) {
+    if (!email.contains("@")) {
+        return Result.err(new EmailError(email));
+    }
+    return Result.ok(email);
+}
+
+// Usage
+var result = validateName(name)
+    .flatMap(n -> validateAge(age).map(a -> Pair.of(n, a)))
+    .flatMap(pair -> validateEmail(email).map(e ->
+        new User(pair.first(), pair.second(), e)
+    ));
+```
+
+---
+
+### Converting Exceptions
+
+```java
+Result<String, IOException> readFile(String path) {
+    return Result.of(() -> Files.readString(path));
+}
+
+// Convert IOException to domain error
+Result<String, DomainError> result = readFile(path)
+    .mapError(err -> new DomainError("Failed to read: " + path, err));
+```
+
+---
+
+## Implementation Details
+
+### Sealed Hierarchy
+
+```java
+public sealed interface Result<T, E> permits Result.Ok, Result.Err {
+    record Ok<T, E>(T value) implements Result<T, E> {}
+    record Err<T, E>(E error) implements Result<T, E> {}
+}
+```
+
+**Benefits:**
+- **Exhaustive matching** — Compiler verifies all cases handled
+- **Type safety** — Can't invent new variants
+- **Pattern matching** — Deconstruct with records
+
+---
+
+### Railway Metaphor
+
+Think of success and failure as two parallel tracks:
+
+```
+Success track:  Ok → map → flatMap → peek → Ok
+                │                       ↓
+Failure track:              Err ←───←─┘
+```
+
+Operations on the success track skip if the result is `Err`.
+
+---
+
+### Two Naming Conventions
+
+Both conventions are equivalent:
+
+```java
+// Erlang-style (short names)
+Result.ok(value)
+Result.err(error)
+
+// Railway-oriented (explicit)
+Result.success(value)
+Result.failure(error)
+
+// Both produce the same Result instance
+assert Result.ok(x).equals(Result.success(x));
+```
+
+Use one convention consistently throughout your codebase.
+
+---
+
+## Performance Characteristics
+
+| Operation | Overhead | Notes |
+|-----------|----------|-------|
+| `ok()` / `err()` | ~10ns | Record construction |
+| `map()` | ~20ns | Function application (success only) |
+| `flatMap()` | ~30ns | Function application (success only) |
+| `fold()` | ~30ns | Switch + function application |
+| Pattern matching | ~10ns | Record deconstruction |
+
+**Memory:**
+- `Ok<T,E>`: ~16 bytes (header + reference)
+- `Err<T,E>`: ~16 bytes (header + reference)
+
+---
+
+## Best Practices
+
+### 1. Use Sealed Error Types
+
+```java
+// Good: Exhaustive error handling
+sealed interface Error permits A, B, C {}
+record A() implements Error {}
+record B() implements Error {}
+record C() implements Error {}
+
+// Bad: Unbounded error type
+Result<String, Exception> result;  // Too many possibilities
+```
+
+---
+
+### 2. Chain with flatMap for Validation
+
+```java
+// Good: Railway chain
+validateName(name)
+    .flatMap(n -> validateAge(age).map(a -> new Pair(n, a)))
+    .flatMap(pair -> validateEmail(email).map(e ->
+        new User(pair.first(), pair.second(), e)
+    ));
+
+// Bad: Nested if-statements
+if (nameValid) {
+    if (ageValid) {
+        if (emailValid) {
+            return new User(name, age, email);
+        }
+    }
+}
+throw new ValidationException();
+```
+
+---
+
+### 3. Use peek for Side Effects
+
+```java
+result
+    .peek(value -> metrics.record("success", 1))
+    .peek(value -> logger.info("Processed: {}", value))
+    .peek(value -> cache.put(value.id(), value));
+```
+
+---
+
+### 4. Handle Both Cases Explicitly
+
+```java
+// Good: Exhaustive handling
+result.fold(
+    value -> System.out.println("Success: " + value),
+    error -> System.err.println("Error: " + error)
+);
+
+// Good: Pattern matching
+switch (result) {
+    case Ok(var value) -> System.out.println("Success: " + value);
+    case Err(var error) -> System.err.println("Error: " + error);
+}
+
+// Bad: Ignoring error case
+if (result.isSuccess()) {
+    System.out.println(result.orElseThrow());
+}
+// What about the error case?
+```
+
+---
+
+## Gotchas
+
+### 1. map on Err Short-Circuits
+
+```java
+Result<String, Exception> err = Result.err(new Exception());
+
+Result<Integer, Exception> mapped = err.map(String::length);
+// Still Err(Exception) - map was skipped
+```
+
+---
+
+### 2. orElseThrow Can Throw Original Exception
+
+```java
+Result<String, IOException> result = Result.err(
+    new IOException("File not found")
+);
+
+try {
+    result.orElseThrow();
+} catch (IOException e) {
+    // Re-throws original IOException, not wrapped
+}
+```
+
+---
+
+### 3. recover Can Convert Err to Ok
+
+```java
+Result<String, Exception> result = Result.err(new Exception("Failed"))
+    .recover(error -> Result.ok("Fallback"));
+
+// result is now Ok("Fallback")
+```
+
+---
+
+### 4. Generic Error Types Lose Type Safety
+
+```java
+// Less type-safe
+Result<String, Exception> result;
+
+// More type-safe
+sealed interface MyError permits A, B, C {}
+Result<String, MyError> result;
+```
+
+---
+
+## See Also
+
+- [Parallel API](./parallel.mdx) — Uses Result for error handling
+- [CrashRecovery](/docs/reference/crashrecovery) — Retry with Result types
+- [Railway-Oriented Programming](https://fsharpforfunandprofit.com/rop/) — Conceptual guide
+- [Java 26 Pattern Matching](https://openjdk.org/jeps/406) — JEP documentation

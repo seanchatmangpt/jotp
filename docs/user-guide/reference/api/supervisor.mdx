@@ -1,0 +1,552 @@
+---
+title: "Supervisor API Reference"
+description: "Hierarchical process supervision with restart strategies - OTP supervisor behavior"
+sidebar_position: 2
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Supervisor API Reference
+
+**OTP supervision tree node** — Hierarchical process supervision with restart strategies.
+
+## Overview
+
+`Supervisor` implements OTP's fault-tolerance core: automatic restart of failed processes with configurable strategies. When a child crashes, the supervisor decides whether to restart it, restart all children, or give up and terminate itself.
+
+### Key Characteristics
+
+- **Restart Strategies**: ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE, SIMPLE_ONE_FOR_ONE
+- **Intensity Control**: Max restarts per time window prevents infinite restart loops
+- **Auto-Shutdown**: Optional automatic termination when significant children exit
+- **Graceful Shutdown**: Ordered child termination with configurable timeouts
+- **Stable References**: `ProcRef` handles survive supervisor restarts transparently
+
+### Restart Strategies
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| **ONE_FOR_ONE** | Only crashed child restarts | Independent workers |
+| **ONE_FOR_ALL** | All children restart on any crash | Tightly coupled processes |
+| **REST_FOR_ONE** | Crashed child + later children restart | Ordered dependencies |
+| **SIMPLE_ONE_FOR_ONE** | Dynamic pool from template | Connection pools, workers |
+
+## Public API
+
+### Factory Methods
+
+#### `create(Strategy strategy, int maxRestarts, Duration window)`
+
+Create a supervisor with restart limits.
+
+```java
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,  // Max 5 crashes
+    Duration.ofSeconds(60)  // Within 60 seconds
+);
+
+var worker = supervisor.supervise("worker-1", initialState, handler);
+```
+
+**Parameters:**
+- `strategy` — Restart policy (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)
+- `maxRestarts` — Crash limit within window (gives up on maxRestarts-th crash)
+- `window` — Time window for counting restarts
+
+**Note:** `maxRestarts=5` allows up to 4 crashes and gives up on the 5th crash within the window.
+
+---
+
+#### `create(String name, Strategy strategy, int maxRestarts, Duration window)`
+
+Create a named supervisor for better debugging and monitoring.
+
+```java
+var supervisor = Supervisor.create(
+    "payment-service",
+    Supervisor.Strategy.ONE_FOR_ONE,
+    10,
+    Duration.ofMinutes(1)
+);
+```
+
+---
+
+#### `create(Strategy strategy, int maxRestarts, Duration window, AutoShutdown autoShutdown)`
+
+Create a supervisor with auto-shutdown behavior.
+
+```java
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofSeconds(60),
+    Supervisor.AutoShutdown.ANY_SIGNIFICANT  // Shutdown if any significant child exits
+);
+```
+
+**Auto-Shutdown Options:**
+- **NEVER** — Never auto-shutdown (default)
+- **ANY_SIGNIFICANT** — Shutdown when any significant child exits
+- **ALL_SIGNIFICANT** — Shutdown when all significant children exit
+
+---
+
+#### `createSimple(ChildSpec<S,M> template, int maxRestarts, Duration window)`
+
+Create a SIMPLE_ONE_FOR_ONE supervisor for dynamic child pools.
+
+```java
+var template = Supervisor.ChildSpec.worker(
+    "conn",
+    ConnState::new,
+    ConnHandler::handle
+);
+
+var pool = Supervisor.createSimple(template, 10, Duration.ofSeconds(30));
+
+// Dynamically spawn instances
+var conn1 = pool.startChild();
+var conn2 = pool.startChild();
+```
+
+---
+
+### Child Management
+
+#### `supervise(String id, S initialState, BiFunction<S, M, S> handler)`
+
+Convenience method to supervise a permanent worker child.
+
+```java
+ProcRef<CounterState, CounterMsg> counter = supervisor.supervise(
+    "counter",
+    new CounterState(0),
+    (state, msg) -> switch (msg) {
+        case Increment(var n) -> new CounterState(state.value() + n);
+        case Reset _ -> new CounterState(0);
+    }
+);
+```
+
+**Equivalent to:** `startChild(ChildSpec.permanent(id, initialState, handler))`
+
+---
+
+#### `startChild(ChildSpec<S,M> spec)`
+
+Add a child with full configuration control.
+
+```java
+var spec = new Supervisor.ChildSpec<>(
+    "database-pool",
+    () -> new DbState(new ArrayList<>()),
+    DbHandler::handle,
+    Supervisor.ChildSpec.RestartType.PERMANENT,
+    new Supervisor.ChildSpec.Shutdown.Timeout(Duration.ofSeconds(10)),
+    Supervisor.ChildSpec.ChildType.WORKER,
+    true  // significant = true
+);
+
+var dbRef = supervisor.startChild(spec);
+```
+
+**ChildSpec Parameters:**
+- `id` — Unique identifier for this child
+- `stateFactory` — Supplier creating fresh state for each restart
+- `handler` — Message handler function
+- `restart` — PERMANENT, TRANSIENT, or TEMPORARY
+- `shutdown` — BrutalKill, Timeout, or Infinity
+- `type` — WORKER or SUPERVISOR
+- `significant` — Whether child affects auto-shutdown
+
+**Restart Types:**
+- **PERMANENT** — Always restarted (crash or normal exit)
+- **TRANSIENT** — Restarted only on crash
+- **TEMPORARY** — Never restarted
+
+**Shutdown Types:**
+- **BrutalKill** — Immediate interruption
+- **Timeout** — Graceful shutdown with timeout
+- **Infinity** — Wait indefinitely
+
+---
+
+#### `startChild()` (SIMPLE_ONE_FOR_ONE)
+
+Spawn a new instance from the template (only for SIMPLE_ONE_FOR_ONE supervisors).
+
+```java
+var template = Supervisor.ChildSpec.worker("worker", State::new, Handler::handle);
+var pool = Supervisor.createSimple(template, 5, Duration.ofMinutes(1));
+
+ProcRef<State, Msg> worker1 = pool.startChild();
+ProcRef<State, Msg> worker2 = pool.startChild();
+ProcRef<State, Msg> worker3 = pool.startChild();
+```
+
+Each instance gets a unique ID: `worker-1`, `worker-2`, `worker-3`, etc.
+
+---
+
+#### `terminateChild(String id)`
+
+Stop a child and retain its spec (can be restarted later).
+
+```java
+supervisor.terminateChild("worker-1");
+// worker-1 can be restarted with startChild(spec) using same id
+```
+
+Does **not** trigger auto-shutdown even if the child is significant.
+
+---
+
+#### `deleteChild(String id)`
+
+Remove a stopped child's spec from the tree.
+
+```java
+supervisor.terminateChild("worker-1");
+supervisor.deleteChild("worker-1");  // Spec removed from tree
+```
+
+---
+
+#### `whichChildren()`
+
+Returns a snapshot of all children in the tree.
+
+```java
+List<Supervisor.ChildInfo> children = supervisor.whichChildren();
+children.forEach(info -> {
+    System.out.println(info.id() + ": " + (info.alive() ? "alive" : "dead"));
+});
+```
+
+**Returns:** Unmodifiable list of `ChildInfo` records
+
+---
+
+### Lifecycle
+
+#### `shutdown()`
+
+Gracefully shut down the supervisor and all children.
+
+```java
+supervisor.shutdown();  // Blocks until all children stopped
+```
+
+**Shutdown Order:**
+- Static strategies: LIFO order (reverse creation)
+- SIMPLE_ONE_FOR_ONE: Asynchronous parallel shutdown
+
+---
+
+#### `isRunning()`
+
+Check if the supervisor is still running.
+
+```java
+if (!supervisor.isRunning()) {
+    System.err.println("Supervisor failed: " + supervisor.fatalError());
+}
+```
+
+---
+
+#### `fatalError()`
+
+Returns the error that caused the supervisor to terminate (if any).
+
+```java
+Throwable error = supervisor.fatalError();
+if (error != null) {
+    System.err.println("Supervisor gave up after max restarts: " + error);
+}
+```
+
+---
+
+## Usage Patterns
+
+### Simple ONE_FOR_ONE Supervisor
+
+```java
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofMinutes(1)
+);
+
+var counter = supervisor.supervise(
+    "counter",
+    new CounterState(0),
+    (state, msg) -> switch (msg) {
+        case Increment(var n) -> new CounterState(state.value() + n);
+        case Reset _ -> new CounterState(0);
+    }
+);
+
+// If counter crashes, only counter restarts
+// If counter crashes 5+ times in 1 minute, supervisor terminates
+```
+
+---
+
+### ONE_FOR_ALL Supervisor
+
+```java
+var supervisor = Supervisor.create(
+    "cache-coordinator",
+    Supervisor.Strategy.ONE_FOR_ALL,
+    3,
+    Duration.ofMinutes(5)
+);
+
+supervisor.supervise("cache-1", cache1State, cache1Handler);
+supervisor.supervise("cache-2", cache2State, cache2Handler);
+supervisor.supervise("cache-3", cache3State, cache3Handler);
+
+// If ANY cache crashes, ALL caches restart
+```
+
+Use when children are tightly coupled and must maintain consistency.
+
+---
+
+### REST_FOR_ONE Supervisor
+
+```java
+var supervisor = Supervisor.create(
+    "pipeline",
+    Supervisor.Strategy.REST_FOR_ONE,
+    5,
+    Duration.ofMinutes(1)
+);
+
+supervisor.supervise("parser", parserState, parserHandler);
+supervisor.supervise("validator", validatorState, validatorHandler);
+supervisor.supervise("processor", processorState, processorHandler);
+
+// If validator crashes, validator + processor restart
+// If processor crashes, only processor restarts
+```
+
+Use when children have startup dependencies (later children depend on earlier ones).
+
+---
+
+### SIMPLE_ONE_FOR_ONE Pool
+
+```java
+var template = new Supervisor.ChildSpec<>(
+    "connection",
+    ConnectionState::new,
+    ConnectionHandler::handle,
+    Supervisor.ChildSpec.RestartType.TRANSIENT,
+    new Supervisor.ChildSpec.Shutdown.Timeout(Duration.ofSeconds(5)),
+    Supervisor.ChildSpec.ChildType.WORKER,
+    false
+);
+
+var pool = Supervisor.createSimple(template, 50, Duration.ofMinutes(1));
+
+// Dynamically manage connections
+var conn1 = pool.startChild();
+var conn2 = pool.startChild();
+
+pool.terminateChild(conn1);  // Remove specific instance
+```
+
+Perfect for connection pools, worker queues, and dynamic services.
+
+---
+
+### Auto-Shutdown Supervisor
+
+```java
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofMinutes(1),
+    Supervisor.AutoShutdown.ALL_SIGNIFICANT  // Shutdown when all significant children exit
+);
+
+var spec = Supervisor.ChildSpec.worker(
+    "worker",
+    WorkerState::new,
+    WorkerHandler::handle
+).withSignificance(true);  // Mark as significant
+
+supervisor.startChild(spec);
+
+// When all significant workers finish, supervisor shuts down automatically
+```
+
+---
+
+### Nested Supervisors
+
+```java
+var rootSup = Supervisor.create(
+    "application",
+    Supervisor.Strategy.ONE_FOR_ONE,
+    10,
+    Duration.ofMinutes(1)
+);
+
+var paymentSup = Supervisor.create(
+    "payment-service",
+    Supervisor.Strategy.ONE_FOR_ALL,
+    3,
+    Duration.ofMinutes(1)
+);
+
+// Register payment supervisor as child of root
+rootSup.supervise("payment-service", paymentSupState, paymentSupHandler);
+
+// Workers under payment supervisor
+paymentSup.supervise("processor", procState, procHandler);
+paymentSup.supervise("auditor", auditState, auditHandler);
+
+// If processor crashes, payment supervisor restarts all payment workers
+// Root supervisor only sees payment supervisor crashes
+```
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| Child spawn | ~1μs | Virtual thread start |
+| Crash detection | <1ms | Callback via crash handler |
+| Restart latency | ~200μs | New process + ProcRef swap |
+| Supervisor overhead | ~50ns | Event queue processing |
+
+**Restart Metrics:**
+- ONE_FOR_ONE: Only crashed child restarts (~200μs)
+- ONE_FOR_ALL: All children restart (N × 200μs)
+- REST_FOR_ONE: Partial restarts (depends on position)
+- SIMPLE_ONE_FOR_ONE: Single instance restart (~200μs)
+
+---
+
+## Best Practices
+
+### 1. Use State Factories for Fresh State
+
+```java
+// Good: Fresh state for each restart
+var spec = new Supervisor.ChildSpec<>(
+    "worker",
+    () -> new WorkerState(new ArrayList<>()),  // Factory
+    handler,
+    // ...
+);
+
+// Bad: Shared state across restarts
+var sharedList = new ArrayList<String>();
+var spec = new Supervisor.ChildSpec<>(
+    "worker",
+    () -> new WorkerState(sharedList),  // All restarts share same list!
+    handler,
+    // ...
+);
+```
+
+---
+
+### 2. Choose Appropriate Restart Types
+
+```java
+// Critical service: always restart
+Supervisor.ChildSpec.RestartType.PERMANENT
+
+// Idempotent worker: restart on crash only
+Supervisor.ChildSpec.RestartType.TRANSIENT
+
+// One-time job: never restart
+Supervisor.ChildSpec.RestartType.TEMPORARY
+```
+
+---
+
+### 3. Configure Shutdown Timeouts
+
+```java
+// Fast cleanup: brutal kill
+new Supervisor.ChildSpec.Shutdown.BrutalKill()
+
+// Graceful cleanup: 10 second timeout
+new Supervisor.ChildSpec.Shutdown.Timeout(Duration.ofSeconds(10))
+
+// Trusted supervisor: wait forever
+new Supervisor.ChildSpec.Shutdown.Infinity()
+```
+
+---
+
+### 4. Monitor Supervisor Health
+
+```java
+Thread.ofVirtual().start(() -> {
+    while (supervisor.isRunning()) {
+        Thread.sleep(Duration.ofSeconds(30));
+        System.out.println("Children: " + supervisor.whichChildren());
+    }
+    System.err.println("Supervisor failed: " + supervisor.fatalError());
+});
+```
+
+---
+
+## Gotchas
+
+### 1. Max Restarts Includes Normal Exits
+
+```java
+// PERMANENT child: normal exits count toward intensity
+Supervisor.ChildSpec.RestartType.PERMANENT
+
+// If child exits normally 5 times in 60 seconds, supervisor gives up
+// Use TRANSIENT to only count crashes
+```
+
+---
+
+### 2. SIMPLE_ONE_FOR_ONE Can't Use startChild(spec)
+
+```java
+var pool = Supervisor.createSimple(template, 5, Duration.ofMinutes(1));
+
+// Wrong: SIMPLE_ONE_FOR_ONE doesn't accept specs
+pool.startChild(spec);  // IllegalStateException
+
+// Correct: Use parameterless startChild()
+pool.startChild();  // Spawns from template
+```
+
+---
+
+### 3. terminateChild Doesn't Trigger Auto-Shutdown
+
+```java
+// Manual termination doesn't count as "significant child exit"
+supervisor.terminateChild("worker-1");
+
+// Auto-shutdown only triggers on spontaneous exits (crash or normal exit)
+```
+
+---
+
+## See Also
+
+- [Proc API](./proc.mdx) — Lightweight process primitive
+- [ProcRef API](./procref.mdx) — Stable handles that survive restarts
+- [ChildSpec Javadoc](https://jotp.io/javadoc/io/github/seanchatmangpt/jotp/Supervisor.ChildSpec.html) — Full configuration reference
+- [Building Supervision Trees](/docs/user-guide/how-to/build-supervision-trees) — Practical guide

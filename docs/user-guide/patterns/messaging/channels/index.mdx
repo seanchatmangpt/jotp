@@ -1,0 +1,557 @@
+# Channel Patterns
+
+## Overview
+
+Channel patterns in JOTP provide the fundamental communication infrastructure for asynchronous message passing. They define how messages flow between producers and consumers, with different semantics for various use cases.
+
+## Point-to-Point Channel
+
+### Intent
+Exactly one consumer receives each message. Multiple consumers may compete for messages, but each message is consumed by only one consumer.
+
+### Enterprise Integration Pattern
+[EIP: Point-to-Point Channel](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PointToPointChannel.html)
+
+### Erlang Equivalent
+```erlang
+% Single mailbox, multiple processes competing
+receive
+    Message -> process(Message)
+end
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messaging.channels;
+
+public final class PointToPointChannel<M> {
+    private final Proc<Void, M> proc;
+
+    public PointToPointChannel(Consumer<M> consumer) {
+        this.proc = new Proc<>(
+            null,
+            (state, msg) -> {
+                consumer.accept(msg);
+                return state;
+            }
+        );
+    }
+
+    public void send(M message) {
+        proc.tell(message);
+    }
+
+    public int queueDepth() {
+        return proc.mailboxSize();
+    }
+
+    public void stop() throws InterruptedException {
+        proc.stop();
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Create a channel for processing orders
+var orderChannel = new PointToPointChannel<Order>(order -> {
+    System.out.println("Processing: " + order.id());
+    inventoryService.reserveItems(order.items());
+});
+
+// Send orders
+orderChannel.send(new Order("order-123", List.of(item1, item2)));
+
+// Monitor backlog
+System.out.println("Pending orders: " + orderChannel.queueDepth());
+
+// Clean up
+orderChannel.stop();
+```
+
+### When to Use
+
+**Use Point-to-Point when:**
+- Work distribution across multiple consumers
+- Load balancing through competing consumers
+- Exactly-once processing required
+- Need for message ordering guarantees
+
+**Avoid when:**
+- All consumers need every message (use Publish-Subscribe)
+- Complex routing required (use Content-Based Router)
+
+### Advanced Usage: Competing Consumers
+
+```java
+// Multiple workers sharing a single channel
+var workQueue = new PointToPointChannel<WorkItem>(work -> {
+    // Any available worker handles the message
+    process(work);
+});
+
+// Spawn multiple worker processes
+for (int i = 0; i < 10; i++) {
+    workerSupervisor.spawn(String.format("worker-%d", i),
+        () -> new WorkHandler(workQueue));
+}
+```
+
+### Monitoring and Metrics
+
+```java
+// Track channel utilization
+class MonitoredChannel<M> {
+    private final PointToPointChannel<M> delegate;
+    private final AtomicLong processed = new AtomicLong(0);
+    private final AtomicLong totalDepth = new AtomicLong(0);
+
+    public void send(M message) {
+        delegate.send(message);
+        totalDepth.updateAndGet(d -> d + delegate.queueDepth());
+    }
+
+    public ChannelMetrics getMetrics() {
+        return new ChannelMetrics(
+            processed.get(),
+            delegate.queueDepth(),
+            (double) totalDepth.get() / processed.get()
+        );
+    }
+}
+```
+
+## Publish-Subscribe Channel
+
+### Intent
+Broadcast messages to all subscribed consumers. Each message is delivered to every subscriber independently.
+
+### Enterprise Integration Pattern
+[EIP: Publish-Subscribe Channel](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html)
+
+### Erlang Equivalent
+```erlang
+% Fan-out to multiple processes
+[Pid ! Message || Pid <- Subscribers].
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messaging.channels;
+
+public final class PublishSubscribeChannel<M> {
+    private final List<Consumer<M>> subscribers = new CopyOnWriteArrayList<>();
+    private final Proc<Void, List<Consumer<M>>> proc;
+
+    public PublishSubscribeChannel() {
+        this.proc = new Proc<>(
+            new ArrayList<>(subscribers),
+            (state, msg) -> {
+                var currentSubscribers = new ArrayList<>(subscribers);
+                var nextSubscribers = new ArrayList<Consumer<M>>();
+
+                for (var subscriber : currentSubscribers) {
+                    try {
+                        subscriber.accept(msg);
+                        nextSubscribers.add(subscriber);
+                    } catch (Exception e) {
+                        // Crashing subscribers are removed (OTP fault isolation)
+                    }
+                }
+                return nextSubscribers;
+            }
+        );
+    }
+
+    public void subscribe(Consumer<M> consumer) {
+        subscribers.add(consumer);
+    }
+
+    public void send(M message) {
+        proc.tell(message);
+    }
+
+    public void sendSync(M message) {
+        for (var subscriber : subscribers) {
+            try {
+                subscriber.accept(message);
+            } catch (Exception e) {
+                subscribers.remove(subscriber);
+            }
+        }
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Event notification system
+var eventBus = new PublishSubscribeChannel<DomainEvent>();
+
+// Multiple independent subscribers
+eventBus.subscribe(event ->
+    auditLogger.log("Event: " + event.type()));
+
+eventBus.subscribe(event ->
+    metricsRecorder.record(event.type()));
+
+eventBus.subscribe(event ->
+    searchIndexer.index(event));
+
+// All subscribers receive every event
+eventBus.send(new UserCreatedEvent("user-123"));
+eventBus.send(new OrderPlacedEvent("order-456"));
+```
+
+### When to Use
+
+**Use Publish-Subscribe when:**
+- Event notification to multiple independent handlers
+- Loose coupling between event producers and consumers
+- Need for multiple independent processing pipelines
+- Audit logging, metrics, monitoring sidecars
+
+**Avoid when:**
+- Only one consumer should process each message
+- Need for load balancing (use Point-to-Point)
+- Subscribers have complex ordering dependencies
+
+### Advanced Usage: Dynamic Subscription
+
+```java
+// Topic-based pub-sub
+class TopicRouter {
+    private final Map<String, PublishSubscribeChannel<Message>> topics =
+        new ConcurrentHashMap<>();
+
+    public void subscribe(String topic, Consumer<Message> handler) {
+        topics.computeIfAbsent(topic, t -> new PublishSubscribeChannel<>())
+              .subscribe(handler);
+    }
+
+    public void publish(String topic, Message message) {
+        var channel = topics.get(topic);
+        if (channel != null) {
+            channel.send(message);
+        }
+    }
+}
+```
+
+### Fault Isolation
+
+```java
+// Subscriber crashes don't affect others
+var channel = new PublishSubscribeChannel<String>();
+
+channel.subscribe(msg -> {
+    throw new RuntimeException("This subscriber crashes");
+});
+
+channel.subscribe(msg -> {
+    System.out.println("This subscriber still receives: " + msg);
+});
+
+// Second subscriber continues working after first crashes
+channel.send("test");
+```
+
+## Data Type Channel
+
+### Intent
+Route messages based on their runtime type using sealed interfaces and pattern matching. Provides type-safe message dispatch without explicit instanceof checks.
+
+### Enterprise Integration Pattern
+[EIP: Datatype Channel](https://www.enterpriseintegrationpatterns.com/patterns/messaging/DatatypeChannel.html)
+
+### Java 21 Feature
+Sealed interfaces enable exhaustive pattern matching:
+
+```java
+public sealed interface Message permits Command, Event, Document {}
+public final class Command implements Message {}
+public final class Event implements Message {}
+public final class Document implements Message {}
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messaging.channels;
+
+public final class DataTypeChannel<M extends Message<?>> {
+    private final Map<Class<?>, ProcRef<?>> routes = new ConcurrentHashMap<>();
+    private final AtomicLong totalDispatched = new AtomicLong(0);
+
+    public static <M extends Message<?>> DataTypeChannel<M> create() {
+        return new DataTypeChannel<>();
+    }
+
+    public <T extends M> void addRoute(Class<T> messageType, ProcRef<T> handler) {
+        routes.put(messageType, handler);
+    }
+
+    public void dispatch(M message) {
+        totalDispatched.incrementAndGet();
+        var handler = routes.get(message.getClass());
+        if (handler != null) {
+            ((ProcRef<M>) handler).tell(message);
+        }
+    }
+
+    public record ChannelState(
+        List<Class<? extends Message<?>>> registeredTypes,
+        long totalDispatched,
+        Map<Class<?>, Long> dispatchCountByType
+    ) {}
+}
+```
+
+### Usage Example
+
+```java
+// Define message hierarchy
+public sealed interface OrderMessage permits CreateOrder, CancelOrder, UpdateOrder {}
+public record CreateOrder(String orderId, List<Item> items) implements OrderMessage {}
+public record CancelOrder(String orderId, String reason) implements OrderMessage {}
+public record UpdateOrder(String orderId, Status newStatus) implements OrderMessage {}
+
+// Setup type-based routing
+var channel = DataTypeChannel.create();
+var orderService = new ProcRef<OrderMessage>(orderServiceProc);
+var inventoryService = new ProcRef<OrderMessage>(inventoryProc);
+
+DataTypeChannel.addRoute(channel, CreateOrder.class, orderService);
+DataTypeChannel.addRoute(channel, CancelOrder.class, orderService);
+DataTypeChannel.addRoute(channel, UpdateOrder.class, inventoryService);
+
+// Dispatch based on type
+DataTypeChannel.dispatch(channel, new CreateOrder("order-123", items));
+```
+
+### When to Use
+
+**Use Data Type Channel when:**
+- Strong typing required for message handling
+- Complex message hierarchies with sealed interfaces
+- Compiler-enforced exhaustive handling
+- Type-safe routing without runtime checks
+
+**Avoid when:**
+- Simple content-based routing sufficient
+- Message types not known at compile time
+- Dynamic message formats (JSON, XML)
+
+### Advanced Usage: Pattern Matching Dispatch
+
+```java
+// Combining with pattern matching
+sealed interface Notification permits Email, Sms, Push {}
+record Email(String address, String subject) implements Notification {}
+record Sms(String phone, String message) implements Notification {}
+record Push(String deviceId, String alert) implements Notification {}
+
+var channel = DataTypeChannel.create();
+
+channel.dispatch(new Email("user@example.com", "Welcome"));
+
+// Handler uses pattern matching
+var handler = new Proc<Notification, Notification>(null, (state, notification) -> {
+    return switch (notification) {
+        case Email(var address, var subject) -> {
+            emailService.send(address, subject);
+            yield state;
+        }
+        case Sms(var phone, var message) -> {
+            smsService.send(phone, message);
+            yield state;
+        }
+        case Push(var deviceId, var alert) -> {
+            pushService.send(deviceId, alert);
+            yield state;
+        }
+    };
+});
+```
+
+## Dead Letter Channel
+
+### Intent
+Capture undeliverable messages for inspection, retry, or analysis. Provides fault tolerance by preventing message loss and enabling error recovery.
+
+### Enterprise Integration Pattern
+[EIP: Dead Letter Channel](https://www.enterpriseintegrationpatterns.com/patterns/messaging/DeadLetterChannel.html)
+
+### Erlang Equivalent
+```erlang
+% Failed message routing
+try
+    process_message(Message)
+catch
+    Error:Reason ->
+        dead_letter ! {failed, Message, Error, Reason}
+end
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messaging.channels;
+
+public final class DeadLetterChannel<M> {
+    private final ConcurrentLinkedQueue<DeadLetter<M>> messages =
+        new ConcurrentLinkedQueue<>();
+
+    public void send(M message) {
+        messages.offer(new DeadLetter<>(message, "undeliverable", Instant.now()));
+    }
+
+    public void send(M message, String reason) {
+        messages.offer(new DeadLetter<>(message, reason, Instant.now()));
+    }
+
+    public int size() {
+        return messages.size();
+    }
+
+    public List<DeadLetter<M>> drain() {
+        var result = new ArrayList<DeadLetter<M>>();
+        DeadLetter<M> msg;
+        while ((msg = messages.poll()) != null) {
+            result.add(msg);
+        }
+        return result;
+    }
+
+    public record DeadLetter<M>(
+        M message,
+        String reason,
+        Instant timestamp
+    ) {}
+}
+```
+
+### Usage Example
+
+```java
+// Integration with error handling
+var deadLetters = new DeadLetterChannel<Order>();
+var orderChannel = new PointToPointChannel<Order>(order -> {
+    try {
+        processOrder(order);
+    } catch (ValidationException e) {
+        deadLetters.send(order, "validation-failed: " + e.getMessage());
+    } catch (InventoryException e) {
+        deadLetters.send(order, "out-of-stock: " + order.itemId());
+    }
+});
+
+// Process failed messages
+if (deadLetters.size() > 0) {
+    var failed = deadLetters.drain();
+    for (var letter : failed) {
+        System.out.println("Failed: " + letter.message() +
+                          " Reason: " + letter.reason() +
+                          " At: " + letter.timestamp());
+
+        // Retry logic
+        if (canRetry(letter)) {
+            orderChannel.send(letter.message());
+        }
+    }
+}
+```
+
+### When to Use
+
+**Use Dead Letter Channel when:**
+- Guaranteed message delivery required
+- Need for error analysis and debugging
+- Retry logic for failed messages
+- Audit trail of processing failures
+
+**Avoid when:**
+- Messages can be safely discarded on failure
+- No recovery mechanism available
+- Performance overhead unacceptable
+
+### Advanced Usage: Automatic Retry
+
+```java
+// Dead letter with exponential backoff retry
+class RetryingDeadLetter<M> {
+    private final DeadLetterChannel<M> deadLetters;
+    private final ScheduledExecutorService scheduler;
+
+    public void scheduleRetry(M message, String reason) {
+        deadLetters.send(message, reason);
+        scheduler.schedule(
+            () -> attemptRetry(message),
+            calculateBackoff(reason),
+            TimeUnit.MILLISECONDS
+        );
+    }
+
+    private long calculateBackoff(String reason) {
+        return switch (reason) {
+            case String r when r.contains("timeout") -> 5000;
+            case String r when r.contains("overload") -> 10000;
+            default -> 1000;
+        };
+    }
+}
+```
+
+## Pattern Comparison
+
+| Pattern | Delivery | Consumers | Ordering | Fault Tolerance |
+|---------|----------|-----------|----------|-----------------|
+| Point-to-Point | Exactly one | Competing | FIFO | Inherited from Proc |
+| Publish-Subscribe | All subscribers | All | Unordered | Isolated failures |
+| Data Type | Type-based | Single | FIFO | Inherited from Proc |
+| Dead Letter | Capture only | Inspection | FIFO | Persistent storage |
+
+## Testing Channels
+
+```java
+@Test
+void testPointToPointDelivery() {
+    var received = new ArrayList<String>();
+    var channel = new PointToPointChannel<String>(received::add);
+
+    channel.send("message-1");
+    channel.send("message-2");
+
+    await().atMost(Duration.ofSeconds(1))
+        .until(() -> received.size() == 2);
+}
+
+@Test
+void testPubSubFanout() {
+    var subscriber1 = new ArrayList<String>();
+    var subscriber2 = new ArrayList<String>();
+
+    var channel = new PublishSubscribeChannel<String>();
+    channel.subscribe(subscriber1::add);
+    channel.subscribe(subscriber2::add);
+
+    channel.send("broadcast");
+
+    await().atMost(Duration.ofSeconds(1))
+        .until(() -> subscriber1.contains("broadcast") &&
+                    subscriber2.contains("broadcast"));
+}
+```
+
+## Best Practices
+
+1. **Always stop channels** when done to release virtual threads
+2. **Monitor queue depth** for backpressure signals
+3. **Use dead letters** for any critical message processing
+4. **Type safety** through sealed interfaces for Data Type Channels
+5. **Fault isolation** through subscriber-level exception handling
+6. **Resource cleanup** in try-with-resources or supervision trees

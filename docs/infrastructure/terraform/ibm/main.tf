@@ -1,4 +1,4 @@
-# Java Maven Template - IBM Cloud Terraform Configuration
+# JOTP - IBM Cloud Terraform Configuration
 # Requires: Terraform >= 1.6.0, IBM Cloud API key
 
 terraform {
@@ -14,7 +14,7 @@ terraform {
   # Backend configuration (uncomment for remote state)
   # backend "pg" {
   #   conn_str = "postgres://user:pass@host/database"
-  #   schema_name = "java-maven-template"
+  #   schema_name = "jotp"
   # }
 }
 
@@ -34,7 +34,7 @@ resource "ibm_is_vpc" "main" {
   resource_group = data.ibm_resource_group.group.id
 
   tags = [
-    "project:java-maven-template",
+    "project:jotp",
     "environment:${var.environment}"
   ]
 }
@@ -47,7 +47,7 @@ resource "ibm_is_subnet" "main" {
   total_ipv4_address_count = 256
 
   tags = [
-    "project:java-maven-template"
+    "project:jotp"
   ]
 }
 
@@ -58,7 +58,7 @@ resource "ibm_is_public_gateway" "main" {
   zone   = "${var.region}-1"
 
   tags = [
-    "project:java-maven-template"
+    "project:jotp"
   ]
 }
 
@@ -75,7 +75,7 @@ resource "ibm_is_security_group" "app" {
   resource_group = data.ibm_resource_group.group.id
 
   tags = [
-    "project:java-maven-template"
+    "project:jotp"
   ]
 }
 
@@ -108,7 +108,7 @@ resource "ibm_is_ssh_key" "app" {
   public_key = var.ssh_public_key
 
   tags = [
-    "project:java-maven-template"
+    "project:jotp"
   ]
 }
 
@@ -128,7 +128,7 @@ resource "ibm_is_instance" "app" {
   }
 
   tags = [
-    "project:java-maven-template",
+    "project:jotp",
     "environment:${var.environment}"
   ]
 }
@@ -139,6 +139,6 @@ resource "ibm_is_floating_ip" "app" {
   target = ibm_is_instance.app.primary_network_interface[0].id
 
   tags = [
-    "project:java-maven-template"
+    "project:jotp"
   ]
 }

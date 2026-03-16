@@ -356,8 +356,7 @@ class ApplicationLifecycleExampleTest {
             String channelId =
                     switch (result) {
                         case Result.Ok<String, Exception>(var id) -> id;
-                        case Result.Success<String, Exception>(var id) -> id;
-                        default -> null;
+                        case Result.Err<String, Exception> ignored -> null;
                     };
             assertThat(channelId).isNotNull().startsWith("CHANNEL-");
         }
@@ -385,8 +384,7 @@ class ApplicationLifecycleExampleTest {
             var channelId =
                     switch (allocResult) {
                         case Result.Ok<String, Exception>(var id) -> id;
-                        case Result.Success<String, Exception>(var id) -> id;
-                        default -> null;
+                        case Result.Err<String, Exception> ignored -> null;
                     };
             assertThat(channelPool.getActiveChannels()).isEqualTo(1);
 
@@ -412,8 +410,7 @@ class ApplicationLifecycleExampleTest {
             var channelId1 =
                     switch (result1) {
                         case Result.Ok<String, Exception>(var id) -> id;
-                        case Result.Success<String, Exception>(var id) -> id;
-                        default -> null;
+                        case Result.Err<String, Exception> ignored -> null;
                     };
             channelPool.releaseChannel(channelId1);
 
@@ -433,20 +430,17 @@ class ApplicationLifecycleExampleTest {
             String id1 =
                     switch (result1) {
                         case Result.Ok<String, Exception>(var id) -> id;
-                        case Result.Success<String, Exception>(var id) -> id;
-                        default -> null;
+                        case Result.Err<String, Exception> ignored -> null;
                     };
             String id2 =
                     switch (result2) {
                         case Result.Ok<String, Exception>(var id) -> id;
-                        case Result.Success<String, Exception>(var id) -> id;
-                        default -> null;
+                        case Result.Err<String, Exception> ignored -> null;
                     };
             String id3 =
                     switch (result3) {
                         case Result.Ok<String, Exception>(var id) -> id;
-                        case Result.Success<String, Exception>(var id) -> id;
-                        default -> null;
+                        case Result.Err<String, Exception> ignored -> null;
                     };
             assertThat(id1).isNotEqualTo(id2).isNotEqualTo(id3);
         }

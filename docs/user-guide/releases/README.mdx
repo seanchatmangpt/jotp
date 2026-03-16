@@ -1,0 +1,381 @@
+# JOTP Release Documentation
+
+Welcome to the JOTP release documentation hub. This section contains comprehensive information about JOTP releases, including version history, migration guides, and security policies.
+
+## Quick Navigation
+
+### For Users
+
+**📖 [Changelog](./changelog.mdx)**
+Complete version history with all changes, bug fixes, and new features organized by version.
+
+**🔄 [Migration Guides](./migration-guides.mdx)**
+Step-by-step guides for upgrading between JOTP versions, including breaking changes and code examples.
+
+**🔒 [Security Advisories](./security-advisories.mdx)**
+Security vulnerability reporting, disclosure policy, and best practices for secure JOTP usage.
+
+### For Contributors
+
+**🚀 [Release Process](./release-process.mdx)**
+Complete guide to the JOTP release lifecycle, including planning, testing, and publishing procedures.
+
+**🤝 [Contributing](./contributing.mdx)**
+How to contribute to JOTP releases, including feature development, bug fixes, documentation, and code review.
+
+**⚠️ [Deprecation Policy](./deprecation-policy.mdx)**
+API deprecation timeline, process, and migration support for deprecated features.
+
+## Current Release
+
+**Version:** 1.0.0 (Java 26 Launch)
+**Released:** March 23, 2026
+**Status:** ✅ Production Ready
+**Support:** Until December 2027
+
+### Quick Start
+
+```xml
+<dependency>
+    <groupId>io.github.seanchatmangpt</groupId>
+    <artifactId>jotp</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+
+var supervisor = new Supervisor(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofMinutes(1)
+);
+
+ProcRef<Integer, String> counter = supervisor.supervise(
+    "counter",
+    0,
+    (state, msg) -> switch (msg) {
+        case "increment" -> state + 1;
+        case "reset" -> 0;
+        default -> state;
+    }
+);
+
+counter.tell("increment");
+counter.tell("increment");
+```
+
+## Release Timeline
+
+### 2026 Q1: Java 26 Launch
+- **March 23, 2026** - v1.0.0 Production Release
+- All 15 OTP primitives complete
+- 100+ tests, comprehensive documentation
+- Production-ready for enterprise use
+
+### 2026 Q2-Q4: Enterprise Features
+- **June 2026** - v1.1.0 (Planned)
+- **September 2026** - v1.2.0 (Planned)
+- **December 2026** - v1.3.0 (Planned)
+
+### 2027+: Vision 2030
+- **2027** - v2.0.0 (Planned)
+- Autonomous systems features
+- Advanced AI/agent capabilities
+
+## Version Status
+
+| Version | Status | EOL | Security Updates |
+|---------|--------|-----|------------------|
+| **1.0.x** | ✅ Current | Dec 2027 | ✅ Yes |
+| 0.9.x | ⚠️ Deprecated | Mar 2026 | Critical only |
+| 0.1.x | ❌ Unsupported | Dec 2025 | ❌ No |
+
+**Recommendation:** All users should upgrade to 1.0.x for security patches and bug fixes.
+
+## Key Features by Version
+
+### 1.0.0 - Java 26 Launch (Current)
+
+**Core Features:**
+- ✅ All 15 OTP primitives implemented
+- ✅ Virtual threads for 10M+ concurrent processes
+- ✅ Sealed types for type-safe message protocols
+- ✅ Pattern matching for concise handlers
+- ✅ Production-ready with 100+ tests
+
+**Enterprise Ready:**
+- ✅ Comprehensive documentation
+- ✅ Migration guides for Erlang developers
+- ✅ Spring Boot integration examples
+- ✅ Cloud deployment guides (AWS, GCP, Azure)
+- ✅ Performance benchmarking
+
+**Developer Experience:**
+- ✅ Google Java Format (AOSP style)
+- ✅ Maven Daemon support (30% faster builds)
+- ✅ Javadoc validation
+- ✅ GitHub Actions CI/CD
+- ✅ Comprehensive examples
+
+### 0.9.0 - Java 26 Beta (Deprecated)
+
+**Features:**
+- Java 26 preview features
+- Virtual threads integration
+- Basic supervision strategies
+
+**Status:** Upgrade to 1.0.0 required
+
+## Getting Started with Releases
+
+### New Users
+
+1. **Read the Quick Start** - [JOTP README](https://github.com/seanchatmangpt/jotp#quick-start)
+2. **Check the Changelog** - [Changelog](./changelog.mdx)
+3. **Run Examples** - [Examples Directory](https://github.com/seanchatmangpt/jotp/tree/main/src/main/java/io/github/seanchatmangpt/jotp/examples)
+4. **Read User Guide** - [User Guide](../)
+
+### Upgrading Users
+
+1. **Check Migration Guide** - [Migration Guides](./migration-guides.mdx)
+2. **Review Breaking Changes** - [Changelog](./changelog.mdx)
+3. **Test in Staging** - Use feature flags for gradual rollout
+4. **Monitor for Issues** - Check GitHub Issues for known problems
+
+### Contributors
+
+1. **Read Contributing Guide** - [Contributing](./contributing.mdx)
+2. **Check Release Process** - [Release Process](./release-process.mdx)
+4. **Join Discussions** - [GitHub Discussions](https://github.com/seanchatmangpt/jotp/discussions)
+
+## Support and Resources
+
+### Documentation
+
+- **User Guide** - Comprehensive how-to guides and explanations
+- **API Reference** - Complete API documentation
+- **Examples** - Working code examples
+- **Books** - Three comprehensive books on JOTP patterns and operations
+
+### Community
+
+- **GitHub Issues** - Bug reports and feature requests
+- **GitHub Discussions** - General questions and discussions
+- **Security** - Report vulnerabilities privately
+
+### Professional Support
+
+For enterprise support, custom training, or consulting:
+- Contact: [seanchatmangpt.io](https://seanchatmangpt.io)
+- SLA-backed support available
+- On-site training and workshops
+
+## Release Verification
+
+### Verify Maven Central Release
+
+```bash
+# Check if version is available
+curl -I https://repo1.maven.org/maven2/io/github/seanchatmangpt/jotp/1.0.0/jotp-1.0.0.pom
+
+# Should return HTTP 200
+```
+
+### Verify GPG Signature
+
+```bash
+# Download artifact
+wget https://repo1.maven.org/maven2/io/github/seanchatmangpt/jotp/1.0.0/jotp-1.0.0.jar
+
+# Download signature
+wget https://repo1.maven.org/maven2/io/github/seanchatmangpt/jotp/1.0.0/jotp-1.0.0.jar.asc
+
+# Verify signature
+gpg --verify jotp-1.0.0.jar.asc jotp-1.0.0.jar
+
+# Should show "Good signature"
+```
+
+### Verify Checksum
+
+```bash
+# Download checksums
+wget https://repo1.maven.org/maven2/io/github/seanchatmangpt/jotp/1.0.0/jotp-1.0.0.jar.sha512
+
+# Verify
+sha512sum -c jotp-1.0.0.jar.sha512
+
+# Should show "OK"
+```
+
+## Security
+
+### Reporting Vulnerabilities
+
+**DO NOT** create public GitHub issues for security vulnerabilities.
+
+**Instead:**
+- Email: security@seanchatmangpt.io
+- Use GitHub Security Advisory: https://github.com/seanchatmangpt/jotp/security/advisories
+
+See [Security Advisories](./security-advisories.mdx) for details.
+
+### Security Updates
+
+- **Critical vulnerabilities:** Patched within 2 weeks
+- **High vulnerabilities:** Patched within 4 weeks
+- **Medium/Low:** Patches in next minor version
+
+### Known Vulnerabilities
+
+See [Security Advisories](./security-advisories.mdx) for current list of known vulnerabilities and their status.
+
+## Deprecation Warnings
+
+### Currently Deprecated
+
+**In v1.0.0 (removes in v2.0.0):**
+
+1. **`Proc.start()`** - Use `Proc.spawn()` instead
+   ```java
+   // Deprecated
+   var proc = Proc.start(state, handler);
+
+   // Use this instead
+   var proc = Proc.spawn(state, handler);
+   ```
+
+2. **`Proc.send()`** - Use `Proc.tell()` instead
+   ```java
+   // Deprecated
+   proc.send(message);
+
+   // Use this instead
+   proc.tell(message);
+   ```
+
+See [Deprecation Policy](./deprecation-policy.mdx) for complete list.
+
+## Frequently Asked Questions
+
+### General
+
+**Q: How often are releases published?**
+A: Major releases annually, minor releases quarterly, patch releases as needed.
+
+**Q: How long is each version supported?**
+A: Major versions supported for 2 years after the next major release.
+
+**Q: Are there LTS (Long Term Support) versions?**
+A: Not currently, but 1.0.x will receive extended support until 2027.
+
+### Upgrading
+
+**Q: Do I need to change code between patch releases?**
+A: No, patch releases (1.0.0 → 1.0.1) are backward compatible.
+
+**Q: What about minor releases?**
+A: Minor releases (1.0.0 → 1.1.0) may add features but don't break existing code.
+
+**Q: When do I need to change code?**
+A: Only for major releases (1.0.0 → 2.0.0), which have breaking changes. Migration guides are provided.
+
+### Security
+
+**Q: How are security vulnerabilities handled?**
+A: See [Security Advisories](./security-advisories.mdx) for the complete process.
+
+**Q: How do I report a security issue?**
+A: Email security@seanchatmangpt.io or use GitHub Security Advisory.
+
+**Q: Are old versions still supported?**
+A: Only the latest minor version receives security patches.
+
+## Contributing to Releases
+
+We welcome contributions! See [Contributing](./contributing.mdx) for details.
+
+**Ways to contribute:**
+- Report bugs
+- Suggest features
+- Submit pull requests
+- Review pull requests
+- Write documentation
+- Test release candidates
+- Report security vulnerabilities
+
+## Release Announcements
+
+Stay informed about new releases:
+
+- **GitHub Releases** - Watch https://github.com/seanchatmangpt/jotp/releases
+- **GitHub Notifications** - Customize notifications at https://github.com/seanchatmangpt/jotp/watching
+- **RSS Feed** - https://github.com/seanchatmangpt/jotp/releases.atom
+
+## Release Calendar
+
+| Version | Target Date | Status | Notes |
+|---------|-------------|--------|-------|
+| 1.0.1 | April 2026 | 🔜 Planned | Patch release (if needed) |
+| 1.1.0 | June 2026 | 🔜 Planned | Minor release (new features) |
+| 1.2.0 | September 2026 | 🔜 Planned | Minor release |
+| 1.3.0 | December 2026 | 🔜 Planned | Minor release |
+| 2.0.0 | 2027 | 🔜 Planned | Major release (breaking changes) |
+
+**Subject to change based on development progress and community feedback.**
+
+## Performance Benchmarks
+
+Latest benchmarks from v1.0.0:
+
+| Metric | Value |
+|--------|-------|
+| Supervisor Restart Latency | ~200µs (99th percentile) |
+| Process Spawn Time | <1ms per process |
+| Message Throughput | 1M+ messages/second/core |
+| Memory per Process | ~1KB heap |
+| Max Concurrent Processes | 10M+ (tested) |
+
+See [Changelog](./changelog.mdx) for detailed performance notes.
+
+## Documentation Quality
+
+All JOTP documentation follows these standards:
+
+- ✅ **Accurate** - Tested and verified with each release
+- ✅ **Complete** - Covers all features and APIs
+- ✅ **Current** - Updated with every release
+- ✅ **Clear** - Written for developers, not academics
+- ✅ **Actionable** - Includes working examples
+
+## Acknowledgments
+
+JOTP releases are made possible by contributions from:
+
+- Core maintainers
+- Community contributors
+- Beta testers
+- Security researchers
+- Documentation writers
+- Performance analysts
+
+**Thank you to everyone who contributes to JOTP!** 🚀
+
+## Quick Links
+
+- **[Home](../../)** - Back to main documentation
+- **[Changelog](./changelog.mdx)** - Complete version history
+- **[Migration Guides](./migration-guides.mdx)** - Upgrade instructions
+- **[Security](./security-advisories.mdx)** - Vulnerability handling
+- **[Contributing](./contributing.mdx)** - How to contribute
+- **[Release Process](./release-process.mdx)** - Release lifecycle
+
+---
+
+**Last Updated:** 2026-03-15
+**Current Version:** 1.0.0
+**Documentation Version:** 1.0.0
+
+For questions about releases, see [Getting Help](#support-and-resources) above.

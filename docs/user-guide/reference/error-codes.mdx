@@ -1,0 +1,474 @@
+---
+title: Error Codes Reference
+description: Common errors and their resolutions in JOTP
+sidebar_position: 5
+---
+
+# Error Codes Reference
+
+Complete reference for common errors and their resolutions in JOTP.
+
+## Process Errors
+
+### `IllegalArgumentException: Process ID cannot be null`
+
+**Cause:** Attempted to create a process with null ID
+
+**Example:**
+```java
+Proc.spawn(null, state, handler);  // Error!
+```
+
+**Resolution:** Provide valid process ID
+```java
+Proc.spawn("my-proc", state, handler);  // OK
+```
+
+### `IllegalStateException: Process is not alive`
+
+**Cause:** Operation on stopped process
+
+**Example:**
+```java
+Proc<String, String> proc = Proc.spawn("test", state, handler);
+proc.stop();
+proc.send("message");  // Error!
+```
+
+**Resolution:** Check process is alive before operations
+```java
+if (proc.isAlive()) {
+    proc.send("message");
+}
+```
+
+### `TimeoutException: ask() timed out after {duration}`
+
+**Cause:** ask() call exceeded timeout
+
+**Example:**
+```java
+proc.ask(new GetValue(), Duration.ofMillis(100))
+    .join();  // Times out if handler slow
+```
+
+**Resolution:** Increase timeout or fix handler performance
+```java
+proc.ask(new GetValue(), Duration.ofSeconds(5))
+    .join();  // Longer timeout
+```
+
+## Supervisor Errors
+
+### `IllegalStateException: Supervisor intensity exceeded`
+
+**Cause:** Too many restarts within period
+
+**Example:**
+```java
+// Config: intensity=5, period=60s
+// Child crashes 6 times in 60 seconds
+// Supervisor terminates
+```
+
+**Resolution:**
+1. Fix underlying issue causing crashes
+2. Increase intensity if crashes are transient
+3. Increase period for longer time window
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .intensity(10)  // Increase from 5
+    .period(Duration.ofSeconds(120))  // Increase from 60s
+    .build();
+```
+
+### `IllegalArgumentException: Child ID already exists`
+
+**Cause:** Duplicate child ID
+
+**Example:**
+```java
+supervisor.startChild(workerSpec("worker-1"));
+supervisor.startChild(workerSpec("worker-1"));  // Error!
+```
+
+**Resolution:** Use unique child IDs
+```java
+supervisor.startChild(workerSpec("worker-" + id));
+```
+
+### `IllegalStateException: Child not found`
+
+**Cause:** Attempted operation on non-existent child
+
+**Example:**
+```java
+supervisor.restartChild("non-existent");  // Error!
+```
+
+**Resolution:** Check child exists before operation
+```java
+if (supervisor.findChild("worker-1").isPresent()) {
+    supervisor.restartChild("worker-1");
+}
+```
+
+## EventManager Errors
+
+### `ClassCastException: Event type mismatch`
+
+**Cause:** Publishing wrong event type
+
+**Example:**
+```java
+EventManager<OrderEvent> orderBus = EventManager.spawn("orders");
+PaymentEvent payment = new PaymentEvent(...);
+orderBus.publish(payment);  // Compile error!
+```
+
+**Resolution:** Use correct event type
+```java
+orderBus.publish(new OrderCreated(...));  // OK
+```
+
+### `IllegalArgumentException: Subscription ID cannot be null`
+
+**Cause:** Null subscription ID
+
+**Example:**
+```java
+eventBus.subscribe(null, handler);  // Error!
+```
+
+**Resolution:** Provide valid subscription ID
+```java
+eventBus.subscribe("my-handler", handler);
+```
+
+## Circuit Breaker Errors
+
+### `CircuitBreakerOpenException: Circuit breaker is open`
+
+**Cause:** Circuit breaker has tripped
+
+**Example:**
+```java
+Result<Response, Exception> result = breaker.execute(() ->
+    externalService.call()
+);
+
+if (result.isErr() && result.getError() instanceof CircuitBreakerOpenException) {
+    // Circuit breaker is open
+}
+```
+
+**Resolution:**
+1. Wait for timeout to expire
+2. Fix underlying service
+3. Manually reset circuit breaker
+
+```java
+breaker.reset();  // Manual reset
+```
+
+### `IllegalStateException: Circuit breaker not open`
+
+**Cause:** Attempted reset of closed breaker
+
+**Example:**
+```java
+breaker.reset();  // Error if not open
+```
+
+**Resolution:** Check state before reset
+```java
+if (breaker.isOpen()) {
+    breaker.reset();
+}
+```
+
+## Registry Errors
+
+### `IllegalStateException: Process already registered`
+
+**Cause:** Duplicate process registration
+
+**Example:**
+```java
+ProcRegistry.register("my-service", proc1);
+ProcRegistry.register("my-service", proc2);  // Error!
+```
+
+**Resolution:** Use unique names or unregister first
+```java
+ProcRegistry.unregister("my-service");
+ProcRegistry.register("my-service", proc2);
+```
+
+### `NoSuchElementException: Process not found in registry`
+
+**Cause:** Lookup of non-existent process
+
+**Example:**
+```java
+Optional<ProcRef<?,?>> ref = ProcRegistry.lookup("non-existent");
+// Returns Optional.empty()
+```
+
+**Resolution:** Handle optional properly
+```java
+ProcRegistry.lookup("my-service").ifPresent(ref -> {
+    ref.send(message);
+});
+```
+
+## Concurrency Errors
+
+### `IllegalMonitorStateException: Not owner`
+
+**Cause:** Improper synchronization
+
+**Example:**
+```java
+Object lock = new Object();
+lock.wait();  // Error! Not synchronized
+```
+
+**Resolution:** Use proper synchronization
+```java
+synchronized (lock) {
+    lock.wait();
+}
+```
+
+### `InterruptedException: Thread interrupted`
+
+**Cause:** Thread interrupted during blocking operation
+
+**Example:**
+```java
+String response = proc.ask(new GetValue(), Duration.ofSeconds(30))
+    .join();  // Can throw InterruptedException
+```
+
+**Resolution:** Handle interruption properly
+```java
+try {
+    String response = proc.ask(new GetValue(), Duration.ofSeconds(30))
+        .join();
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+    // Handle interruption
+}
+```
+
+## Memory Errors
+
+### `OutOfMemoryError: Cannot create new native thread`
+
+**Cause:** Too many platform threads
+
+**Example:**
+```java
+// Creating 100,000 platform threads
+for (int i = 0; i < 100_000; i++) {
+    new Thread(() -> {}).start();  // Error!
+}
+```
+
+**Resolution:** Use virtual threads (Proc) instead
+```java
+// Creating 1,000,000 virtual processes
+for (int i = 0; i < 1_000_000; i++) {
+    Proc.spawn("proc-" + i, state, handler);  // OK
+}
+```
+
+### `OutOfMemoryError: Java heap space`
+
+**Cause:** Too many processes or large state
+
+**Example:**
+```java
+// 10 million processes with large state
+for (int i = 0; i < 10_000_000; i++) {
+    Proc.spawn("proc-" + i, hugeState, handler);  // Error!
+}
+```
+
+**Resolution:** Increase heap or reduce processes
+```bash
+java -Xmx8g -jar app.jar
+```
+
+## Networking Errors (Distributed)
+
+### `ConnectException: Connection refused`
+
+**Cause:** Cannot connect to remote node
+
+**Example:**
+```java
+DistributedNode.connect("host:2551");  // No node running
+```
+
+**Resolution:** Ensure remote node is running
+```java
+// Start remote node first
+DistributedNode remote = DistributedNode.spawn("remote", 2551);
+
+// Then connect
+DistributedNode.connect("localhost:2551");
+```
+
+### `TimeoutException: Remote call timed out`
+
+**Cause:** Remote node unresponsive
+
+**Example:**
+```java
+remoteRef.ask(new Request(), Duration.ofMillis(100))
+    .join();  // Too fast timeout
+```
+
+**Resolution:** Increase timeout
+```java
+remoteRef.ask(new Request(), Duration.ofSeconds(5))
+    .join();
+```
+
+### `SerializationException: Cannot serialize message`
+
+**Cause:** Message not serializable
+
+**Example:**
+```java
+public record BadMessage(NonSerializable obj) implements RemoteMessage {}
+// NonSerializable doesn't implement java.io.Serializable
+```
+
+**Resolution:** Make messages serializable
+```java
+public record GoodMessage(String data) implements RemoteMessage, java.io.Serializable {}
+```
+
+## Diagnostic Commands
+
+### Check Process Status
+
+```java
+boolean isAlive = proc.isAlive();
+int mailboxSize = proc.getMailboxSize();
+String state = proc.getState();
+```
+
+### Check Supervisor Status
+
+```java
+List<String> children = supervisor.getChildren();
+List<String> alive = supervisor.getAliveChildren();
+int restarts = supervisor.getChildRestartCount("worker-1");
+```
+
+### Check Event Manager Status
+
+```java
+boolean isAlive = eventBus.isAlive();
+// Check subscriber health via monitoring
+```
+
+### Enable Debug Logging
+
+```bash
+# Enable virtual thread tracing
+java -Djdk.tracePinnedThreads=full -jar app.jar
+
+# Enable JFR recording
+java -XX:StartFlightRecording=filename=jfr.jfr -jar app.jar
+```
+
+## Common Patterns
+
+### Error Handling Pattern
+
+```java
+Result<Response, Exception> result = breaker.execute(() ->
+    externalService.call()
+);
+
+result.match(
+    response -> handleSuccess(response),
+    error -> {
+        if (error instanceof CircuitBreakerOpenException) {
+            return handleOpenBreaker();
+        }
+        return handleOtherError(error);
+    }
+);
+```
+
+### Retry Pattern
+
+```java
+int maxRetries = 3;
+for (int attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+        return operation();
+    } catch (Exception e) {
+        if (attempt == maxRetries - 1) {
+            throw e;
+        }
+        Thread.sleep(100 * (attempt + 1));  // Exponential backoff
+    }
+}
+```
+
+### Fallback Pattern
+
+```java
+Result<Response, Exception> result = primaryService.call();
+if (result.isErr()) {
+    result = fallbackService.call();
+}
+return result;
+```
+
+## Prevention Strategies
+
+### Validation
+
+```java
+// Validate before operations
+if (proc == null || !proc.isAlive()) {
+    throw new IllegalArgumentException("Invalid process");
+}
+```
+
+### Timeouts
+
+```java
+// Always use timeouts for ask()
+proc.ask(new Request(), Duration.ofSeconds(5))
+    .orTimeout(5, SECONDS)
+    .join();
+```
+
+### Resource Limits
+
+```java
+// Limit process count
+if (processCount >= maxProcesses) {
+    throw new IllegalStateException("Too many processes");
+}
+```
+
+## Related Tests
+- `ErrorHandlingTest.java` - Error handling patterns
+- `SupervisorTest.java` - Supervisor error scenarios
+- `CircuitBreakerTest.java` - Circuit breaker errors
+
+## See Also
+- [Fault Tolerance](../explanation/fault-tolerance.mdx) - Error prevention
+- [Testing Processes](../how-to/testing-procs.mdx) - Error testing
+- [Configuration Reference](./configuration.mdx) - Configuration options

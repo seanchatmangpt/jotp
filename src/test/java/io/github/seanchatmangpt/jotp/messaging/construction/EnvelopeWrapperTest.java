@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messaging.construction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Timeout;
  * <p>EnvelopeWrapper enables stateless routing, distributed tracing, SLA enforcement, and
  * idempotent retry semantics in loosely-coupled services.
  */
+@DtrTest
 @Timeout(5)
 class EnvelopeWrapperTest implements WithAssertions {
 

@@ -2,6 +2,7 @@ package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Result;
 import io.github.seanchatmangpt.jotp.StateMachine;
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +41,11 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("ArmstrongAgiEngine — stress / concurrency")
 class ArmstrongAgiEngineStressTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Source fixtures (same as functional tests; reused for throughput) ─────
 

@@ -1,0 +1,732 @@
+# Message Routing
+
+> **Problem:** In distributed systems, messages need to be routed to different destinations based on content, priority, or load. Hardcoding routing logic in processes makes them rigid and hard to change. You need flexible, composable routing patterns.
+
+> **Solution:** JOTP provides Enterprise Integration Patterns (EIP) routing primitives — Content-Based Router, Scatter-Gather, Routing Slip, and more — implemented with processes for fault tolerance and scalability.
+
+## When to Use This Pattern
+
+Use message routing when you need:
+- **Content-based routing** — Route messages based on payload (type, priority, region)
+- **Scatter-gather** — Send to multiple recipients, aggregate responses
+- **Dynamic routing** — Change routing logic at runtime without code changes
+- **Load balancing** — Distribute load across multiple workers
+- **Recipient lists** — Broadcast to multiple subscribers
+- **Routing slips** — Predefine route itineraries for complex workflows
+
+## Mental Model
+
+Routing patterns sit between producers and consumers:
+
+```
+Producer → [Router] → Consumer A
+                    → Consumer B
+                    → Consumer C
+```
+
+**Router types:**
+- **Content-Based Router:** Examine message, route to first matching channel
+- **Scatter-Gather:** Broadcast to all, aggregate responses
+- **Recipient List:** Send to predefined list of recipients
+- **Routing Slip:** Message carries its route itinerary
+
+## Pattern 1: Content-Based Router
+
+Route based on message content:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class ContentBasedRouting {
+    record Order(String type, double amount, String region) {}
+
+    public static void main(String[] args) throws Exception {
+        var router = new ContentBasedRouter<Order>();
+
+        // Define routes (first match wins)
+        router.addRoute(
+            order -> order.type().equals("URGENT") && order.amount() > 10000,
+            order -> {
+                System.out.println("→ VIP Team: " + order);
+                processVipOrder(order);
+            }
+        );
+
+        router.addRoute(
+            order -> order.region().equals("US"),
+            order -> {
+                System.out.println("→ US Warehouse: " + order);
+                processUsOrder(order);
+            }
+        );
+
+        router.addRoute(
+            order -> order.region().equals("EU"),
+            order -> {
+                System.out.println("→ EU Warehouse: " + order);
+                processEuOrder(order);
+            }
+        );
+
+        // Default route (catch-all)
+        router.setDefault(order -> {
+            System.out.println("→ General Pool: " + order);
+            processGeneralOrder(order);
+        });
+
+        // Route orders
+        router.route(new Order("URGENT", 15000, "US"));    // VIP Team
+        router.route(new Order("NORMAL", 500, "US"));      // US Warehouse
+        router.route(new Order("NORMAL", 300, "EU"));      // EU Warehouse
+        router.route(new Order("NORMAL", 100, "ASIA"));    // General Pool
+
+        Thread.sleep(500);
+        router.process().stop();
+    }
+
+    static void processVipOrder(Order order) {
+        // VIP processing logic
+    }
+
+    static void processUsOrder(Order order) {
+        // US warehouse logic
+    }
+
+    static void processEuOrder(Order order) {
+        // EU warehouse logic
+    }
+
+    static void processGeneralOrder(Order order) {
+        // General processing logic
+    }
+}
+```
+
+**Key characteristics:**
+- **First match wins:** Routes evaluated in order
+- **No match:** Silently dropped (unless default set)
+- **Non-blocking:** Route evaluation happens asynchronously
+
+## Pattern 2: Scatter-Gather
+
+Broadcast to multiple recipients, aggregate responses:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class ScatterGatherRouting {
+    sealed interface QueryMsg permits Execute {}
+    record Execute(String query, ProcRef<Result, QueryMsg> replyTo) implements QueryMsg {}
+
+    sealed interface Result permits Success, Error {}
+    record Success(String source, List<String> data) implements Result {}
+    record Error(String source, String message) implements Error {}
+
+    public static void main(String[] args) throws Exception {
+        // Create multiple data sources
+        var sources = new ArrayList<ProcRef<Integer, QueryMsg>>();
+
+        for (int i = 0; i < 3; i++) {
+            var sourceId = "source-" + i;
+            var source = Proc.spawn(
+                0,
+                (state, msg) -> switch (msg) {
+                    case Execute(var query, var replyTo) -> {
+                        try {
+                            Thread.sleep(ThreadLocalRandom.current().nextInt(50, 150));
+                            var data = List.of(
+                                sourceId + "-row1",
+                                sourceId + "-row2",
+                                sourceId + "-row3"
+                            );
+                            replyTo.tell(new Success(sourceId, data));
+                            yield state + 1;
+                        } catch (Exception e) {
+                            replyTo.tell(new Error(sourceId, e.getMessage()));
+                            yield state;
+                        }
+                    }
+                }
+            );
+            sources.add(new ProcRef<>(source));
+        }
+
+        // Scatter: send query to all sources
+        var query = new Execute("SELECT * FROM users", null);
+        var futures = new ArrayList<CompletableFuture<Result>>();
+
+        for (var source : sources) {
+            var future = source.ask(query, Duration.ofSeconds(1))
+                .thenApply(result -> (Result) result);
+            futures.add(future);
+        }
+
+        // Gather: collect all results
+        var allResults = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> {
+                var results = new ArrayList<Result>();
+                for (var future : futures) {
+                    try {
+                        results.add(future.get());
+                    } catch (Exception e) {
+                        results.add(new Error("unknown", e.getMessage()));
+                    }
+                }
+                return results;
+            })
+            .get(5, TimeUnit.SECONDS);
+
+        // Process aggregated results
+        System.out.println("\n=== Scatter-Gather Results ===");
+        var allRows = new ArrayList<String>();
+        for (var result : allResults) {
+            switch (result) {
+                case Success(var source, var data) -> {
+                    System.out.println(source + ": returned " + data.size() + " rows");
+                    allRows.addAll(data);
+                }
+                case Error(var source, var message) -> {
+                    System.err.println(source + ": error - " + message);
+                }
+            }
+        }
+
+        System.out.println("\nTotal rows: " + allRows.size());
+        System.out.println("All data: " + allRows);
+
+        // Cleanup
+        for (var source : sources) {
+            source.proc().stop();
+        }
+    }
+}
+```
+
+**Output:**
+```
+=== Scatter-Gather Results ===
+source-0: returned 3 rows
+source-1: returned 3 rows
+source-2: returned 3 rows
+
+Total rows: 9
+All data: [source-0-row1, source-0-row2, source-0-row3, source-1-row1, ...]
+```
+
+## Pattern 3: Recipient List
+
+Broadcast to multiple subscribers:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class RecipientListRouting {
+    sealed interface NewsletterMsg permits Subscribe, Unsubscribe, Publish {}
+    record Subscribe(String topic, ProcRef<String, NewsletterMsg> subscriber) implements NewsletterMsg {}
+    record Unsubscribe(String topic, ProcRef<String, NewsletterMsg> subscriber) implements NewsletterMsg {}
+    record Publish(String topic, String message) implements NewsletterMsg {}
+
+    record NewsletterState(
+        Map<String, Set<ProcRef<String, NewsletterMsg>>> subscribers
+    ) {
+        NewsletterState subscribe(String topic, ProcRef<String, NewsletterMsg> subscriber) {
+            var newSubscribers = new HashMap<>(subscribers);
+            newSubscribers.computeIfAbsent(topic, k -> ConcurrentHashMap.newKeySet()).add(subscriber);
+            return new NewsletterState(newSubscribers);
+        }
+
+        NewsletterState unsubscribe(String topic, ProcRef<String, NewsletterMsg> subscriber) {
+            var newSubscribers = new HashMap<>(subscribers);
+            if (newSubscribers.containsKey(topic)) {
+                newSubscribers.get(topic).remove(subscriber);
+            }
+            return new NewsletterState(newSubscribers);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        // Newsletter service
+        var newsletter = Proc.spawn(
+            new NewsletterState(new HashMap<>()),
+            (state, msg) -> switch (msg) {
+                case Subscribe(var topic, var subscriber) -> {
+                    System.out.println("New subscriber to " + topic + ": " + subscriber);
+                    yield state.subscribe(topic, subscriber);
+                }
+                case Unsubscribe(var topic, var subscriber) -> {
+                    System.out.println("Unsubscribed from " + topic + ": " + subscriber);
+                    yield state.unsubscribe(topic, subscriber);
+                }
+                case Publish(var topic, var message) -> {
+                    var subscribers = state.subscribers().get(topic);
+                    if (subscribers != null) {
+                        System.out.println("Publishing to " + subscribers.size() + " subscribers");
+                        for (var subscriber : subscribers) {
+                            subscriber.tell(message);  // Non-blocking broadcast
+                        }
+                    } else {
+                        System.out.println("No subscribers for topic: " + topic);
+                    }
+                    yield state;
+                }
+            }
+        );
+
+        // Create subscribers
+        var alice = Proc.spawn(0, (state, msg) -> {
+            System.out.println("Alice received: " + msg);
+            return state + 1;
+        });
+        var bob = Proc.spawn(0, (state, msg) -> {
+            System.out.println("Bob received: " + msg);
+            return state + 1;
+        });
+        var charlie = Proc.spawn(0, (state, msg) -> {
+            System.out.println("Charlie received: " + msg);
+            return state + 1;
+        });
+
+        var aliceRef = new ProcRef<String, NewsletterMsg>(alice);
+        var bobRef = new ProcRef<String, NewsletterMsg>(bob);
+        var charlieRef = new ProcRef<String, NewsletterMsg>(charlie);
+
+        // Subscribe to topics
+        newsletter.tell(new Subscribe("tech", aliceRef));
+        newsletter.tell(new Subscribe("tech", bobRef));
+        newsletter.tell(new Subscribe("finance", bobRef));
+        newsletter.tell(new Subscribe("finance", charlieRef));
+
+        Thread.sleep(100);
+
+        // Publish messages
+        System.out.println("\n=== Publishing to 'tech' ===");
+        newsletter.tell(new Publish("tech", "New JOTP release!"));
+
+        System.out.println("\n=== Publishing to 'finance' ===");
+        newsletter.tell(new Publish("finance", "Stock market update"));
+
+        Thread.sleep(100);
+
+        // Check subscriber counts
+        var aliceCount = alice.ask("get-count").get(1, TimeUnit.SECONDS);
+        var bobCount = bob.ask("get-count").get(1, TimeUnit.SECONDS);
+        var charlieCount = charlie.ask("get-count").get(1, TimeUnit.SECONDS);
+
+        System.out.println("\n=== Message Counts ===");
+        System.out.println("Alice: " + aliceCount + " messages");
+        System.out.println("Bob: " + bobCount + " messages");
+        System.out.println("Charlie: " + charlieCount + " messages");
+
+        newsletter.stop();
+        alice.stop();
+        bob.stop();
+        charlie.stop();
+    }
+}
+```
+
+**Output:**
+```
+New subscriber to tech: ProcRef@...
+New subscriber to tech: ProcRef@...
+New subscriber to finance: ProcRef@...
+New subscriber to finance: ProcRef@...
+
+=== Publishing to 'tech' ===
+Publishing to 2 subscribers
+Alice received: New JOTP release!
+Bob received: New JOTP release!
+
+=== Publishing to 'finance' ===
+Publishing to 2 subscribers
+Bob received: Stock market update
+Charlie received: Stock market update
+
+=== Message Counts ===
+Alice: 1 messages
+Bob: 2 messages
+Charlie: 1 messages
+```
+
+## Pattern 4: Routing Slip
+
+Message carries its route itinerary:
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.util.*;
+
+public class RoutingSlipPattern {
+    sealed interface Step {
+        record Validate(String rule) implements Step {}
+        record Enrich(String source) implements Step {}
+        record Transform(String format) implements Step {}
+        record Deliver(String endpoint) implements Step {}
+    }
+
+    record RoutingSlip(
+        String messageId,
+        List<Step> steps,
+        int currentIndex,
+        Map<String, Object> headers,
+        String payload
+    ) {
+        RoutingSlip advance() {
+            return new RoutingSlip(messageId, steps, currentIndex + 1, headers, payload);
+        }
+        RoutingSlip withPayload(String newPayload) {
+            return new RoutingSlip(messageId, steps, currentIndex, headers, newPayload);
+        }
+        RoutingSlip withHeader(String key, Object value) {
+            var newHeaders = new HashMap<>(headers);
+            newHeaders.put(key, value);
+            return new RoutingSlip(messageId, steps, currentIndex, newHeaders, payload);
+        }
+        boolean hasMoreSteps() {
+            return currentIndex < steps.size();
+        }
+        Step currentStep() {
+            return steps.get(currentIndex);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        var processor = Proc.spawn(
+            (RoutingSlip state) -> {
+                if (!state.hasMoreSteps()) {
+                    System.out.println("✅ Routing slip complete: " + state.messageId());
+                    System.out.println("   Final payload: " + state.payload());
+                    System.out.println("   Headers: " + state.headers());
+                    return state;
+                }
+
+                var step = state.currentStep();
+                System.out.println("→ Step " + (state.currentIndex() + 1) + ": " + step);
+
+                var newState = switch (step) {
+                    case Step.Validate(var rule) -> {
+                        System.out.println("   Validating against rule: " + rule);
+                        boolean isValid = state.payload().length() > 0;
+                        yield state.withHeader("validated", isValid)
+                                    .withHeader("validationRule", rule);
+                    }
+                    case Step.Enrich(var source) -> {
+                        System.out.println("   Enriching from: " + source);
+                        var enriched = state.payload() + " [enriched from " + source + "]";
+                        yield state.withPayload(enriched)
+                                    .withHeader("enrichmentSource", source);
+                    }
+                    case Step.Transform(var format) -> {
+                        System.out.println("   Transforming to format: " + format);
+                        var transformed = "<" + format + ">" + state.payload() + "</" + format + ">";
+                        yield state.withPayload(transformed)
+                                    .withHeader("outputFormat", format);
+                    }
+                    case Step.Deliver(var endpoint) -> {
+                        System.out.println("   Delivering to: " + endpoint);
+                        System.out.println("   ✅ Delivered to " + endpoint + ": " + state.payload());
+                        yield state.withHeader("deliveredTo", endpoint);
+                    }
+                };
+
+                // Self-send to process next step
+                processor.tell(newState.advance());
+                return newState;
+            }
+        );
+
+        // Create routing slip with multiple steps
+        var slip = new RoutingSlip(
+            "msg-123",
+            List.of(
+                new Step.Validate("schema-v1"),
+                new Step.Enrich("customer-db"),
+                new Step.Transform("json"),
+                new Step.Deliver("email-service")
+            ),
+            0,
+            new HashMap<>(),
+            "Order data"
+        );
+
+        System.out.println("=== Starting Routing Slip ===");
+        processor.tell(slip);
+
+        Thread.sleep(500);
+        processor.stop();
+    }
+}
+```
+
+**Output:**
+```
+=== Starting Routing Slip ===
+→ Step 1: Validate(rule=schema-v1)
+   Validating against rule: schema-v1
+→ Step 2: Enrich(source=customer-db)
+   Enriching from: customer-db
+→ Step 3: Transform(format=json)
+   Transforming to format: json
+→ Step 4: Deliver(endpoint=email-service)
+   Delivering to: email-service
+   ✅ Delivered to email-service: <json>Order data [enriched from customer-db]</json>
+✅ Routing slip complete: msg-123
+   Final payload: <json>Order data [enriched from customer-db]</json>
+   Headers: {validated=true, validationRule=schema-v1, enrichmentSource=customer-db, outputFormat=json, deliveredTo=email-service}
+```
+
+## Complete Working Example: Order Processing Router
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.*;
+
+public class OrderProcessingRouter {
+    sealed interface OrderMsg permits CreateOrder, ValidateOrder, ProcessPayment, ShipOrder, CompleteOrder {}
+    record CreateOrder(String orderId, String itemId, int qty, String region) implements OrderMsg {}
+    record ValidateOrder(String orderId, boolean isValid) implements OrderMsg {}
+    record ProcessPayment(String orderId, double amount) implements OrderMsg {}
+    record ShipOrder(String orderId, String address) implements OrderMsg {}
+    record CompleteOrder(String orderId, String confirmation) implements OrderMsg {}
+
+    sealed interface RouterMsg permits RouteOrder, OrderResult {}
+    record RouteOrder(CreateOrder order, ProcRef<OrderResult, RouterMsg> replyTo) implements RouterMsg {}
+    record OrderResult(String orderId, String status, String message) implements OrderResult {}
+
+    public static void main(String[] args) throws Exception {
+        // Content-based router for order routing
+        var router = new ContentBasedRouter<CreateOrder>();
+
+        // Route 1: High-value orders (>$1000) → VIP team
+        router.addRoute(
+            order -> order.qty() * 100 > 1000,  // Assume $100 per item
+            order -> {
+                System.out.println("→ VIP Team: " + order.orderId());
+                vipTeam.tell(new ProcessPayment(order.orderId(), order.qty() * 100));
+            }
+        );
+
+        // Route 2: US orders → US warehouse
+        router.addRoute(
+            order -> order.region().equals("US"),
+            order -> {
+                System.out.println("→ US Warehouse: " + order.orderId());
+                usWarehouse.tell(new ShipOrder(order.orderId(), "US-Address"));
+            }
+        );
+
+        // Route 3: EU orders → EU warehouse
+        router.addRoute(
+            order -> order.region().equals("EU"),
+            order -> {
+                System.out.println("→ EU Warehouse: " + order.orderId());
+                euWarehouse.tell(new ShipOrder(order.orderId(), "EU-Address"));
+            }
+        );
+
+        // Default: General processing
+        router.setDefault(order -> {
+            System.out.println("→ General Pool: " + order.orderId());
+            generalPool.tell(new ProcessPayment(order.orderId(), order.qty() * 100));
+        });
+
+        // Create backend services
+        var vipTeam = Proc.spawn("vip-team", orderServiceHandler("VIP"));
+        var usWarehouse = Proc.spawn("us-warehouse", orderServiceHandler("US Warehouse"));
+        var euWarehouse = Proc.spawn("eu-warehouse", orderServiceHandler("EU Warehouse"));
+        var generalPool = Proc.spawn("general-pool", orderServiceHandler("General"));
+
+        // Route orders
+        var orders = List.of(
+            new CreateOrder("order-1", "item-1", 15, "US"),      // VIP ($1500)
+            new CreateOrder("order-2", "item-2", 3, "US"),       // US Warehouse
+            new CreateOrder("order-3", "item-3", 2, "EU"),       // EU Warehouse
+            new CreateOrder("order-4", "item-4", 1, "ASIA")      // General Pool
+        );
+
+        System.out.println("=== Routing Orders ===");
+        for (var order : orders) {
+            router.route(order);
+        }
+
+        Thread.sleep(500);
+
+        router.process().stop();
+        vipTeam.stop();
+        usWarehouse.stop();
+        euWarehouse.stop();
+        generalPool.stop();
+    }
+
+    static BiFunction<String, OrderMsg, String> orderServiceHandler(String serviceName) {
+        return (state, msg) -> switch (msg) {
+            case ProcessPayment(var orderId, var amount) -> {
+                System.out.println("  [" + serviceName + "] Processing payment: $" + amount);
+                yield state;
+            }
+            case ShipOrder(var orderId, var address) -> {
+                System.out.println("  [" + serviceName + "] Shipping to: " + address);
+                yield state;
+            }
+            default -> state;
+        };
+    }
+}
+```
+
+**Output:**
+```
+=== Routing Orders ===
+→ VIP Team: order-1
+  [VIP Team] Processing payment: $1500
+→ US Warehouse: order-2
+  [US Warehouse] Shipping to: US-Address
+→ EU Warehouse: order-3
+  [EU Warehouse] Shipping to: EU-Address
+→ General Pool: order-4
+  [General Pool] Processing payment: $100
+```
+
+## Testing Message Routing
+
+```java
+@Test
+void testContentBasedRouting() throws Exception {
+    var router = new ContentBasedRouter<String>();
+
+    var urgentCount = new AtomicInteger(0);
+    var normalCount = new AtomicInteger(0);
+
+    router.addRoute(
+        msg -> msg.startsWith("URGENT"),
+        msg -> urgentCount.incrementAndGet()
+    );
+
+    router.addRoute(
+        msg -> true,  // Default
+        msg -> normalCount.incrementAndGet()
+    );
+
+    router.route("URGENT: Fix bug");
+    router.route("Normal: Feature request");
+
+    Thread.sleep(100);
+
+    assertThat(urgentCount.get()).isEqualTo(1);
+    assertThat(normalCount.get()).isEqualTo(1);
+
+    router.process().stop();
+}
+
+@Test
+void testScatterGather() throws Exception {
+    var sources = List.of(
+        Proc.spawn(0, (s, m) -> s + 1),
+        Proc.spawn(0, (s, m) -> s + 1),
+        Proc.spawn(0, (s, m) -> s + 1)
+    );
+
+    // Scatter
+    var futures = new ArrayList<CompletableFuture<Integer>>();
+    for (var source : sources) {
+        futures.add(source.ask("increment", Duration.ofSeconds(1))
+            .thenApply(result -> (Integer) result));
+    }
+
+    // Gather
+    var results = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+        .thenApply(v -> futures.stream().map(CompletableFuture::join).toList())
+        .get(1, TimeUnit.SECONDS);
+
+    assertThat(results).containsExactly(1, 1, 1);
+}
+```
+
+## Common Pitfalls
+
+### 1. Blocking in Route Handlers
+
+**BAD:** Blocks router thread:
+```java
+router.addRoute(msg -> {
+    httpClient.get(url);  // BLOCKS!
+    return true;
+});
+```
+
+**GOOD:** Offload to worker process:
+```java
+router.addRoute(msg -> {
+    worker.tell(new FetchTask(url));
+    return true;
+});
+```
+
+### 2. Forgetting Default Route
+
+**BAD:** Messages silently dropped:
+```java
+router.addRoute(msg -> msg.type().equals("A"), handler1);
+router.addRoute(msg -> msg.type().equals("B"), handler2);
+// No default! Type-C messages dropped
+```
+
+**GOOD:** Always provide default:
+```java
+router.addRoute(msg -> msg.type().equals("A"), handler1);
+router.addRoute(msg -> msg.type().equals("B"), handler2);
+router.setDefault(msg -> {
+    log.warn("Unhandled message: " + msg);
+});
+```
+
+### 3. Mutable Route State
+
+**BAD:** Shared mutable state in routes:
+```java
+var counter = new AtomicInteger(0);  // Shared!
+router.addRoute(msg -> {
+    counter.incrementAndGet();  // Race conditions!
+});
+```
+
+**GOOD:** Use process state:
+```java
+var proc = Proc.spawn(new CounterState(0), (state, msg) -> {
+    return new CounterState(state.count() + 1);
+});
+```
+
+## Performance Characteristics
+
+| Pattern | Throughput | Latency | Use Case |
+|---------|-----------|---------|----------|
+| Content-Based Router | High | Low | Conditional routing |
+| Scatter-Gather | Medium | Medium | Fan-out/fan-in |
+| Recipient List | High | Low | Pub/sub broadcast |
+| Routing Slip | Low | High | Complex workflows |
+
+## Related Patterns
+
+- **[Concurrent Pipelines](./concurrent-pipelines.mdx)** — Chain routers in pipelines
+- **[Creating Lightweight Processes](./creating-lightweight-processes.mdx)** — Process basics
+- **[Building Supervision Trees](./building-supervision-trees.mdx)** — Fault-tolerant routing
+
+## API Reference
+
+- **`ContentBasedRouter<T>`** — Route based on predicates
+- **`ScatterGather`** — Broadcast and aggregate
+- **`router.addRoute(Predicate<T>, Consumer<T>)`** — Add route
+- **`router.setDefault(Consumer<T>)`** — Set default route
+- **`router.route(T)`** — Route message
+
+---
+
+**Previous:** [Concurrent Pipelines](./concurrent-pipelines.mdx) | **Complete:** Core How-To Guides

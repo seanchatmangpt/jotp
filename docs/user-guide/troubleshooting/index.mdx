@@ -1,0 +1,693 @@
+# Troubleshooting Guide Index
+
+import { Card, Cards } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This comprehensive troubleshooting guide provides systematic procedures for diagnosing and resolving issues across all layers of JOTP applications, from build problems to distributed system failures.
+
+<Callout type="info">
+  **Quick Start:** Start with the [Diagnostic Checklist](/docs/user-guide/troubleshooting/diagnostic-checklist) to identify your issue category, then navigate to the specific guide for detailed solutions.
+</Callout>
+
+---
+
+## Getting Started
+
+### Step 1: Identify Your Issue Category
+
+Use the decision tree below to identify which guide covers your issue:
+
+```
+Is it a compilation/build issue?
+├─ Yes → Build Issues Guide
+└─ No
+   ├─ Is it about process lifecycle or messaging?
+   │  ├─ Yes → Runtime Issues Guide
+   │  └─ No
+   │      ├─ Is it about supervision trees?
+   │      │  ├─ Yes → Supervision Issues Guide
+   │      │  └─ No
+   │          ├─ Is it about performance (latency, memory, GC)?
+   │          │  ├─ Yes → Performance Issues Guide
+   │          │  └─ No
+   │              ├─ Is it about testing?
+   │              │  ├─ Yes → Testing Issues Guide
+   │              │  └─ No
+   │                  ├─ Is it about production deployment?
+   │                  │  ├─ Yes → Production Issues Guide
+   │                  │  └─ No
+   │                      ├─ Is it about enterprise patterns?
+   │                      │  ├─ Yes → Enterprise Pattern Issues Guide
+   │                      │  └─ No
+   │                          ├─ Is it about distributed systems?
+   │                          │  ├─ Yes → Distributed Issues Guide
+   │                          │  └─ No
+   │                              └─ Is it about combining patterns?
+   │                                 └─ Yes → Pattern Composition Issues Guide
+```
+
+### Step 2: Enable Debug Logging
+
+```java
+// Enable comprehensive JOTP logging
+import io.github.seanchatmangpt.jotp.debug.DebugOptions;
+
+DebugOptions options = DebugOptions.builder()
+    .traceAll(true)
+    .logMessageHandling(true)
+    .logStateTransitions(true)
+    .logSupervision(true)
+    .build();
+
+Proc.setGlobalDebugOptions(options);
+```
+
+### Step 3: Collect Diagnostic Information
+
+```bash
+# Thread dump
+jcmd <pid> Thread.print_to_file -file=/tmp/threads.txt
+
+# Heap information
+jcmd <pid> GC.heap_info
+
+# JOTP process summary
+jcmd <pid> ProcSys.summary
+
+# List all processes
+jcmd <pid> ProcSys.listProcesses
+
+# Virtual thread summary
+jcmd <pid> Thread.vthread_summary
+```
+
+---
+
+## Core Troubleshooting Guides
+
+<Cards>
+  <Card title="Build Issues" icon="🔨" href="/docs/user-guide/troubleshooting/build-issues">
+    <strong>Compilation errors, Java 26 setup, Maven problems</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Java 26 preview feature errors</li>
+      <li>Maven compilation failures</li>
+      <li>Spotless formatting issues</li>
+      <li>Dependency conflicts</li>
+      <li>Module system errors</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>mvnd clean compile && mvnd spotless:apply</code>
+  </Card>
+
+  <Card title="Runtime Issues" icon="⚡" href="/docs/user-guide/troubleshooting/runtime-issues">
+    <strong>Process lifecycle, message delivery, deadlocks</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Process won't start</li>
+      <li>Messages not delivered</li>
+      <li>Mailbox overflow</li>
+      <li>Deadlock diagnosis</li>
+      <li>Virtual thread pinning</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>ProcSys.inspect(procId)</code>
+  </Card>
+
+  <Card title="Supervision Issues" icon="🌳" href="/docs/user-guide/troubleshooting/supervision-issues">
+    <strong>Supervision trees, restart problems, orphaned processes</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Children not restarting</li>
+      <li>Supervisor crashes</li>
+      <li>Restart intensity exceeded</li>
+      <li>Orphaned processes</li>
+      <li>Shutdown hangs</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>supervisor.ref().children()</code>
+  </Card>
+
+  <Card title="Performance Issues" icon="📊" href="/docs/user-guide/troubleshooting/performance-issues">
+    <strong>Latency, memory leaks, GC pressure, thread exhaustion</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>High message latency</li>
+      <li>Memory leaks</li>
+      <li>GC pressure</li>
+      <li>Thread exhaustion</li>
+      <li>Supervisor restart storms</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>jfr print recording.jfr</code>
+  </Card>
+
+  <Card title="Testing Issues" icon="🧪" href="/docs/user-guide/troubleshooting/testing-issues">
+    <strong>Flaky async tests, test isolation, mocking problems</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Flaky async tests</li>
+      <li>Awaitility timeouts</li>
+      <li>Mock setup problems</li>
+      <li>Test isolation failures</li>
+      <li>Race conditions</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>Awaitility.await().atMost(5, TimeUnit.SECONDS)</code>
+  </Card>
+
+  <Card title="Production Issues" icon="🚀" href="/docs/user-guide/troubleshooting/production-issues">
+    <strong>Production monitoring, distributed systems, performance</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Production monitoring setup</li>
+      <li>Distributed system issues</li>
+      <li>Memory issues in production</li>
+      <li>Performance degradation</li>
+      <li>Incident response</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>curl http://localhost:8080/health</code>
+  </Card>
+
+  <Card title="Enterprise Pattern Issues" icon="🏢" href="/docs/user-guide/troubleshooting/enterprise-issues">
+    <strong>Circuit breakers, bulkheads, backpressure, sagas</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Circuit breaker stuck open</li>
+      <li>Bulkhead permit exhaustion</li>
+      <li>Mailbox overflow</li>
+      <li>Saga stuck in non-terminal state</li>
+      <li>Compensation failures</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>circuitBreaker.getState()</code>
+  </Card>
+
+  <Card title="Distributed Issues" icon="🌐" href="/docs/user-guide/troubleshooting/distributed-issues">
+    <strong>Cluster formation, network partitions, node failures</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Nodes fail to discover each other</li>
+      <li>Network partitions</li>
+      <li>Node failures</li>
+      <li>Leader election issues</li>
+      <li>Split-brain scenarios</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>distributedNode.getClusterMembers()</code>
+  </Card>
+
+  <Card title="Pattern Composition Issues" icon="🔗" href="/docs/user-guide/troubleshooting/pattern-composition-issues">
+    <strong>Combining patterns, interaction problems</strong>
+    <br/><br/>
+    **Common problems:**
+    <ul>
+      <li>Circuit breaker + bulkhead conflicts</li>
+      <li>Supervisor + saga restart issues</li>
+      <li>Event bus + bulkhead blocking</li>
+      <li>State machine + supervisor restart</li>
+      <li>Complex pattern interactions</li>
+    </ul>
+    **Quick fix:**
+    <br/>
+    <code>Trace request flow through patterns</code>
+  </Card>
+</Cards>
+
+---
+
+## Reference Guides
+
+<Cards>
+  <Card title="Common Errors" icon="📖" href="/docs/user-guide/troubleshooting/common-errors">
+    Quick reference for common error messages with immediate solutions.
+  </Card>
+
+  <Card title="Debugging Techniques" icon="🔍" href="/docs/user-guide/troubleshooting/debugging-techniques">
+    Advanced debugging techniques, tools, and introspection methods.
+  </Card>
+
+  <Card title="Diagnostic Checklist" icon="✅" href="/docs/user-guide/troubleshooting/diagnostic-checklist">
+    Systematic diagnosis procedures for identifying and categorizing issues.
+  </Card>
+</Cards>
+
+---
+
+## Common Error Quick Reference
+
+| Error | Quick Fix | Guide |
+|-------|-----------|-------|
+| `ClassCastException` in handler | Use sealed interfaces with exhaustive matching | [Common Errors](/docs/user-guide/troubleshooting/common-errors) |
+| Process already registered | Check registry before registering | [Common Errors](/docs/user-guide/troubleshooting/common-errors) |
+| `TimeoutException` in ask() | Always use timeouts with fallback | [Common Errors](/docs/user-guide/troubleshooting/common-errors) |
+| Mailbox overflow | Implement backpressure or bounded mailboxes | [Runtime Issues](/docs/user-guide/troubleshooting/runtime-issues) |
+| Circuit breaker stuck open | Check half-open timeout and success detection | [Enterprise Issues](/docs/user-guide/troubleshooting/enterprise-issues) |
+| Children not restarting | Check restart intensity and strategy | [Supervision Issues](/docs/user-guide/troubleshooting/supervision-issues) |
+| OutOfMemoryError | Capture heap dump, analyze for leaks | [Performance Issues](/docs/user-guide/troubleshooting/performance-issues) |
+| Flaky test | Use Awaitility with proper waits | [Testing Issues](/docs/user-guide/troubleshooting/testing-issues) |
+| Virtual thread pinning | Replace synchronized with ReentrantLock | [Runtime Issues](/docs/user-guide/troubleshooting/runtime-issues) |
+| Cluster not forming | Check network connectivity and firewall | [Distributed Issues](/docs/user-guide/troubleshooting/distributed-issues) |
+
+---
+
+## Diagnostic Workflow
+
+### Phase 1: Initial Assessment
+
+<Callout type="info">
+  **Time Estimate:** 5-10 minutes
+</Callout>
+
+1. **Identify Symptoms**
+   - What are you observing?
+   - When did it start?
+   - Is it affecting all users or specific ones?
+   - Is it intermittent or constant?
+
+2. **Check System Health**
+   ```bash
+   # Check process status
+   jcmd <pid> ProcSys.summary
+
+   # Check system resources
+   top -p <pid>
+   free -h
+   df -h
+
+   # Check logs for errors
+   grep -i error /var/log/jotp/application.log | tail -100
+   ```
+
+3. **Collect Quick Metrics**
+   ```bash
+   # Process count
+   jcmd <pid> ProcSys.listProcesses | wc -l
+
+   # Memory usage
+   jcmd <pid> GC.heap_info
+
+   # Thread count
+   jcmd <pid> Thread.vthread_summary
+   ```
+
+### Phase 2: Categorization
+
+<Callout type="info">
+  **Time Estimate:** 5-15 minutes
+</Callout>
+
+Use the decision tree or [Diagnostic Checklist](/docs/user-guide/troubleshooting/diagnostic-checklist) to categorize your issue.
+
+**Key Questions:**
+- Is it a build/compilation issue? → [Build Issues](/docs/user-guide/troubleshooting/build-issues)
+- Is it about process lifecycle? → [Runtime Issues](/docs/user-guide/troubleshooting/runtime-issues)
+- Is it about supervision? → [Supervision Issues](/docs/user-guide/troubleshooting/supervision-issues)
+- Is it about performance? → [Performance Issues](/docs/user-guide/troubleshooting/performance-issues)
+- Is it about testing? → [Testing Issues](/docs/user-guide/troubleshooting/testing-issues)
+- Is it production-related? → [Production Issues](/docs/user-guide/troubleshooting/production-issues)
+- Is it about enterprise patterns? → [Enterprise Issues](/docs/user-guide/troubleshooting/enterprise-issues)
+- Is it distributed systems? → [Distributed Issues](/docs/user-guide/troubleshooting/distributed-issues)
+- Is it pattern composition? → [Pattern Composition Issues](/docs/user-guide/troubleshooting/pattern-composition-issues)
+
+### Phase 3: Detailed Diagnosis
+
+<Callout type="info">
+  **Time Estimate:** 15-30 minutes
+</Callout>
+
+Follow the diagnostic steps in the relevant guide:
+
+1. **Enable Specific Debugging**
+   ```java
+   // For runtime issues
+   DebugOptions options = DebugOptions.builder()
+       .traceAll(true)
+       .logMessageHandling(true)
+       .build();
+
+   // For performance issues
+   -XX:StartFlightRecording=filename=recording.jfr,duration=60s
+
+   // For distributed issues
+   -Dio.github.seanchatmangpt.jotp.distributed.level=FINEST
+   ```
+
+2. **Collect Detailed Information**
+   - Thread dumps
+   - Heap dumps (if memory issue)
+   - JFR recordings (if performance issue)
+   - Network diagnostics (if distributed issue)
+   - Application logs
+
+3. **Analyze Patterns**
+   - Look for correlations in timestamps
+   - Check for resource exhaustion
+   - Identify bottlenecks
+   - Find error patterns
+
+### Phase 4: Solution Implementation
+
+<Callout type="info">
+  **Time Estimate:** Variable (30 minutes to several hours)
+</Callout>
+
+1. **Try Quick Fixes First**
+   - Each guide has "Quick Fix" sections
+   - Start with the most likely solutions
+   - Test one change at a time
+
+2. **Implement Systematic Solutions**
+   - Follow the detailed solution steps
+   - Make incremental changes
+   - Test after each change
+
+3. **Verify the Fix**
+   ```bash
+   # Check system health
+   jcmd <pid> ProcSys.summary
+
+   # Monitor metrics
+   curl http://localhost:8080/metrics
+
+   # Run relevant tests
+   mvnd test -Dtest=RelevantTest
+   ```
+
+### Phase 5: Prevention
+
+<Callout type="info">
+  **Time Estimate:** Ongoing
+</Callout>
+
+1. **Add Monitoring**
+   - Set up alerts for the issue
+   - Create dashboards for key metrics
+   - Implement automated checks
+
+2. **Update Documentation**
+   - Document the issue and solution
+   - Update runbooks
+   - Share with team
+
+3. **Prevent Recurrence**
+   - Add tests to catch the issue
+   - Improve code review checklist
+   - Update best practices guide
+
+---
+
+## Key Diagnostic Commands
+
+### Process Inspection
+
+```java
+// Check process state
+ProcInspection inspect = ProcSys.inspect(procId);
+System.out.println("State: " + inspect.state());
+System.out.println("Mailbox: " + inspect.mailboxSize());
+System.out.println("Alive: " + inspect.isAlive());
+
+// List all processes
+Set<ProcId> all = ProcSys.allProcesses();
+
+// Find processes by name
+List<ProcRef<?, ?>> processes = ProcRegistry.getInstance().lookup("payment-service");
+```
+
+### JVM Diagnostics
+
+```bash
+# Thread dump
+jcmd <pid> Thread.print_to_file -file=threads.txt
+
+# Heap info
+jcmd <pid> GC.heap_info
+
+# Virtual threads
+jcmd <pid> Thread.vthread_summary
+
+# GC stats
+jstat -gcutil <pid> 1000 10
+
+# Heap dump
+jmap -dump:format=b,file=heap.hprof <pid>
+
+# JFR recording
+jcmd <pid> JFR.dump name=recording filename=recording.jfr
+```
+
+### JOTP-Specific Commands
+
+```bash
+# Process summary
+jcmd <pid> ProcSys.summary
+
+# List processes
+jcmd <pid> ProcSys.listProcesses
+
+# Get process info
+jcmd <pid> ProcSys.getProcess <procId>
+
+# Set trace level
+jcmd <pid> ProcSys.setTraceLevel VERBOSE
+
+# Check version
+jcmd <pid> ProcSys.version
+```
+
+### Distributed System Commands
+
+```java
+// Check cluster status
+Set<NodeId> members = distributedNode.getClusterMembers();
+NodeId leader = distributedNode.getLeader();
+
+// Check application status
+AppStatus status = distributedNode.getAppStatus("app-name");
+
+// Get cluster info
+jcmd <pid> DistributedNode.clusterInfo
+
+// Check network connectivity
+nc -zv hostname port
+```
+
+---
+
+## Prevention Best Practices
+
+### Development
+
+- [ ] Always use sealed interfaces for messages
+- [ ] Enable exhaustive pattern matching
+- [ ] Handle exceptions in all handlers
+- [ ] Use timeouts on `ask()` calls
+- [ ] Enable debug tracing during development
+- [ ] Add logging to all handlers
+- [ ] Implement proper error handling
+
+### Testing
+
+- [ ] Use Awaitility for async assertions
+- [ ] Clean up processes in `@AfterEach`
+- [ ] Run tests multiple times to detect flakiness
+- [ ] Test with realistic load
+- [ ] Verify process cleanup
+- [ ] Test failure scenarios
+- [ ] Add integration tests for patterns
+
+### Production
+
+- [ ] Set up monitoring and alerting
+- [ ] Implement health checks
+- [ ] Use bounded mailboxes
+- [ ] Enable distributed tracing
+- [ ] Regular heap dump analysis in staging
+- [ ] Monitor GC pause times
+- [ ] Profile before deploying
+- [ ] Test failure scenarios
+- [ ] Document runbooks
+- [ ] Practice incident response
+
+---
+
+## Getting Help
+
+### Before Asking for Help
+
+1. **Read the relevant guide** for your issue category
+2. **Follow the diagnostic checklist** to gather information
+3. **Enable debug tracing** and collect logs
+4. **Search existing issues** in the repository
+5. **Prepare a minimal reproducer**
+
+### Issue Report Template
+
+```markdown
+## Issue Description
+[Brief description of the problem]
+
+## Symptoms
+- [ ] Process won't start
+- [ ] Messages not delivered
+- [ ] High latency
+- [ ] Process crashes
+- [ ] Other: ______
+
+## Environment
+- Java version: ______
+- Maven version: ______
+- JOTP version: ______
+- OS: ______
+- Cluster size: ______ (if distributed)
+
+## Steps to Reproduce
+1. ______
+2. ______
+3. ______
+
+## Diagnostics Performed
+- [ ] Thread dump collected
+- [ ] Heap dump collected
+- [ ] Debug tracing enabled
+- [ ] Metrics collected
+- [ ] Network diagnostics performed (if distributed)
+
+## Logs and Diagnostics
+[Attach relevant logs, thread dumps, heap dumps]
+
+## Timeline
+- When did it start? ______
+- What changed recently? ______
+- Is it recurring? ______
+```
+
+### Resources
+
+- **GitHub Issues:** [JOTP Issues](https://github.com/seanchatmangpt/jotp/issues)
+- **Documentation:** [Main Docs](/docs)
+- **Examples:** [Example Code](/src/main/java/io/github/seanchatmangpt/jotp/examples/)
+- **Book:** [JOTP Book](/docs/book/)
+- **Architecture:** [Architecture Docs](/docs/user-guide/architecture/)
+
+<Callout type="warning">
+  For emergency production issues, contact the JOTP core team via the private support channel with "URGENT: Production Issue" in the subject.
+</Callout>
+
+---
+
+## Escalation Guidelines
+
+### Level 1: Self-Service
+
+**Time to Resolution:** 1-2 hours
+
+- Use troubleshooting guides
+- Follow diagnostic workflow
+- Try documented solutions
+- Search existing issues
+
+### Level 2: Community Support
+
+**Time to Resolution:** 1-2 days
+
+- Post on GitHub Discussions
+- Include issue report template
+- Share diagnostic information
+- Engage with community
+
+### Level 3: Core Team
+
+**Time to Resolution:** 2-5 business days
+
+- Create GitHub issue with full details
+- Include all diagnostics
+- Provide minimal reproducer
+- Be available for follow-up questions
+
+### Level 4: Emergency
+
+**Time to Resolution:** < 4 hours (production down)
+
+- Contact via private support channel
+- Subject: "URGENT: Production Issue"
+- Include:
+  - Impact assessment (users affected, revenue impact)
+  - Current workaround (if any)
+  - All diagnostic information
+  - Timeline of events
+
+---
+
+## Continuous Improvement
+
+### Feedback Loop
+
+1. **Document Learnings**
+   - What worked?
+   - What didn't work?
+   - What was missing from the guides?
+
+2. **Update Guides**
+   - Add new symptoms discovered
+   - Improve solution steps
+   - Add missing diagnostic commands
+
+3. **Share with Team**
+   - Present incident retrospective
+   - Update runbooks
+   - Train team members
+
+4. **Prevent Recurrence**
+   - Add automated tests
+   - Improve monitoring
+   - Update code review checklist
+
+---
+
+## Troubleshooting Guides Index
+
+| Guide | Focus | Link |
+|-------|-------|------|
+| **Build Issues** | Compilation, Maven, formatting | [build-issues.mdx](/docs/user-guide/troubleshooting/build-issues) |
+| **Runtime Issues** | Process lifecycle, messaging | [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) |
+| **Supervision Issues** | Supervision trees, restarts | [supervision-issues.mdx](/docs/user-guide/troubleshooting/supervision-issues) |
+| **Performance Issues** | Latency, memory, GC | [performance-issues.mdx](/docs/user-guide/troubleshooting/performance-issues) |
+| **Testing Issues** | Flaky tests, async | [testing-issues.mdx](/docs/user-guide/troubleshooting/testing-issues) |
+| **Production Issues** | Production debugging, monitoring | [production-issues.mdx](/docs/user-guide/troubleshooting/production-issues) |
+| **Enterprise Pattern Issues** | Circuit breakers, bulkheads, sagas | [enterprise-issues.mdx](/docs/user-guide/troubleshooting/enterprise-issues) |
+| **Distributed Issues** | Cluster formation, network partitions | [distributed-issues.mdx](/docs/user-guide/troubleshooting/distributed-issues) |
+| **Pattern Composition Issues** | Combining patterns, interactions | [pattern-composition-issues.mdx](/docs/user-guide/troubleshooting/pattern-composition-issues) |
+| **Common Errors** | Error message reference | [common-errors.mdx](/docs/user-guide/troubleshooting/common-errors) |
+| **Debugging Techniques** | Advanced debugging | [debugging-techniques.mdx](/docs/user-guide/troubleshooting/debugging-techniques) |
+| **Diagnostic Checklist** | Systematic diagnosis | [diagnostic-checklist.mdx](/docs/user-guide/troubleshooting/diagnostic-checklist) |
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0
+**Maintainer:** JOTP Core Team
+
+<Callout type="info">
+  These troubleshooting guides are continuously improving. If you find an issue or have suggestions for improvements, please let us know on GitHub!
+</Callout>

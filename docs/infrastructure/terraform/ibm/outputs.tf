@@ -1,4 +1,4 @@
-# Java Maven Template - IBM Cloud Outputs
+# JOTP - IBM Cloud Outputs
 
 output "vpc_id" {
   description = "VPC ID"

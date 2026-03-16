@@ -1,0 +1,982 @@
+---
+title: "Message Passing Patterns"
+description: "Master tell, ask, fire-and-forget, and advanced messaging patterns in JOTP"
+difficulty: intermediate
+estimatedTime: "35 minutes"
+tutorialNumber: 5
+totalTutorials: 6
+nextTutorial: "06-building-simple-application"
+prevTutorial: "04-supervision-basics"
+---
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+# Message Passing Patterns
+
+<Badge variant="secondary">Tutorial 5 of 6</Badge>
+
+Message passing is the heart of JOTP. In this tutorial, you'll master the essential patterns for building robust, scalable concurrent systems: tell (fire-and-forget), ask (request-response), timeouts, error handling, and advanced patterns like event broadcasting and request routing.
+
+## What You'll Learn
+
+By the end of this tutorial, you'll be proficient in:
+
+- Tell pattern: Fire-and-forget messaging
+- Ask pattern: Request-response with timeouts
+- Event broadcasting with EventManager
+- Request routing and load balancing
+- Dead letter queues for failed messages
+- Message aggregation and scatter-gather
+- Best practices for message design
+
+## Pattern 1: Tell (Fire-and-Forget)
+
+The simplest pattern - send a message and continue immediately.
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+
+/**
+ * Tell Pattern Examples
+ *
+ * Use when:
+ * - You don't need a response
+ * - Speed is more important than confirmation
+ * - Sending notifications, logging, metrics
+ * - Multiple independent operations
+ */
+public class TellPatternDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Example 1: Simple tell
+        var logger = supervisor.supervise(
+            "logger",
+            new LogState(),
+            TellPatternDemo::handleLog
+        );
+
+        // Send log message - no waiting!
+        logger.tell(new LogMessage("info", "Application started"));
+        logger.tell(new LogMessage("debug", "Loading configuration..."));
+        logger.tell(new LogMessage("info", "Server ready on port 8080"));
+
+        System.out.println("Messages sent! Execution continues immediately.");
+
+        // Example 2: Batch tell
+        var metrics = supervisor.supervise(
+            "metrics",
+            new MetricsState(),
+            TellPatternDemo::handleMetrics
+        );
+
+        // Send thousands of metrics without blocking
+        for (int i = 0; i < 10_000; i++) {
+            metrics.tell(new RecordMetric("request.count", 1));
+            metrics.tell(new RecordMetric("request.latency", Math.random() * 100));
+        }
+
+        System.out.println("10,000 metrics sent in < 1ms!");
+
+        Thread.sleep(100);  // Give processes time to handle
+        supervisor.shutdown();
+    }
+
+    // State classes
+    record LogState(int messageCount) {
+        LogState() { this(0); }
+        LogState increment() { return new LogState(messageCount + 1); }
+    }
+
+    record MetricsState(
+        double requestRate,
+        double avgLatency
+    ) {
+        MetricsState() { this(0.0, 0.0); }
+    }
+
+    // Messages
+    sealed interface LogMsg permits LogMessage {}
+    record LogMessage(String level, String message) implements LogMsg {}
+
+    sealed interface MetricMsg permits RecordMetric {}
+    record RecordMetric(String name, double value) implements MetricMsg {}
+
+    // Handlers
+    static Proc.StateResult<LogState, Object> handleLog(
+        LogState state,
+        Object msg
+    ) {
+        if (msg instanceof LogMessage(var level, var message)) {
+            System.out.printf("[%s] %s%n", level.toUpperCase(), message);
+            return new Proc.StateResult<>(state.increment(), null);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<MetricsState, Object> handleMetrics(
+        MetricsState state,
+        Object msg
+    ) {
+        if (msg instanceof RecordMetric(var name, var value)) {
+            // Process metric...
+            return new Proc.StateResult<>(state, null);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+}}
+```
+
+<CopyButton>Copy tell pattern example</CopyButton>
+
+### When to Use Tell
+
+```java
+{✅ Use tell for:
+   - Logging and auditing
+   - Metrics and monitoring
+   - Notifications and alerts
+   - Cache invalidation
+   - State synchronization
+   - Event streaming
+
+❌ Don't use tell for:
+   - Operations requiring confirmation
+   - Queries where you need the result
+   - Critical operations that might fail
+   - Sequences where order matters}
+```
+
+## Pattern 2: Ask (Request-Response)
+
+Send a message and wait for a response, with timeout protection.
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.concurrent.TimeoutException;
+
+/**
+ * Ask Pattern Examples
+ *
+ * Use when:
+ * - You need a response
+ * - Operation must complete before continuing
+ * - You need to handle errors
+ * - Querying state or data
+ */
+public class AskPatternDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        var database = supervisor.supervise(
+            "database",
+            new DatabaseState(),
+            AskPatternDemo::handleDatabase
+        );
+
+        // Example 1: Simple ask
+        System.out.println("--- Simple Ask ---");
+        try {
+            var user1 = database.ask(new GetUser(1), Duration.ofSeconds(1)).get();
+            System.out.println("Got user: " + user1);
+        } catch (TimeoutException e) {
+            System.err.println("⏰ Database didn't respond!");
+        }
+
+        // Example 2: Ask with error handling
+        System.out.println("\n--- Ask with Error Handling ---");
+        try {
+            var user2 = database.ask(new GetUser(999), Duration.ofSeconds(1)).get();
+            System.out.println("Got user: " + user2);
+        } catch (Exception e) {
+            System.err.println("❌ Error: " + e.getMessage());
+        }
+
+        // Example 3: Parallel asks (concurrent queries)
+        System.out.println("\n--- Parallel Asks ---");
+        long start = System.nanoTime();
+
+        var user3 = database.ask(new GetUser(3), Duration.ofSeconds(1)).get();
+        var user4 = database.ask(new GetUser(4), Duration.ofSeconds(1)).get();
+        var user5 = database.ask(new GetUser(5), Duration.ofSeconds(1)).get();
+
+        long elapsed = (System.nanoTime() - start) / 1_000_000;
+        System.out.println("Fetched 3 users in " + elapsed + "ms (parallel!)");
+
+        supervisor.shutdown();
+    }
+
+    // State
+    record DatabaseState() {}
+
+    // Messages
+    sealed interface DbMsg permits GetUser, CreateUser {}
+    record GetUser(int userId) implements DbMsg {}
+    record CreateUser(String name, String email) implements DbMsg {}
+
+    // Handler
+    static Proc.StateResult<DatabaseState, Object> handleDatabase(
+        DatabaseState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case GetUser(var userId) -> {
+                if (userId == 999) {
+                    throw new RuntimeException("User not found: " + userId);
+                }
+                // Simulate database latency
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {}
+
+                String user = "User{id=" + userId + ", name='User " + userId + "'}";
+                yield new Proc.StateResult<>(state, user);
+            }
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+}}
+```
+
+<CopyButton>Copy ask pattern example</CopyButton>
+
+### Ask Best Practices
+
+```java
+{/**
+ * DO: Always provide timeouts
+ */
+var response = process.ask(new Query(), Duration.ofSeconds(5))
+    .orTimeout()  // Throws TimeoutException
+    .get();
+
+/**
+ * DO: Handle timeouts gracefully
+ */
+try {
+    var result = process.ask(new Query(), Duration.ofSeconds(1)).get();
+    // Handle success
+} catch (TimeoutException e) {
+    // Process might be crashed - supervisor will restart
+    // Retry or use fallback
+    logger.tell(new LogMessage("warn", "Query timed out, using cache"));
+} catch (Exception e) {
+    // Handle other errors
+}
+
+/**
+ * DON'T: Use ask() without timeout
+ */
+var bad = process.ask(new Query(), null);  // ❌ Might block forever!
+
+/**
+ * DON'T: Use ask() for fire-and-forget
+ */
+process.ask(new LogMessage("info", "Started"), Duration.ofSeconds(1));  // ❌ Wasteful!
+process.tell(new LogMessage("info", "Started"));  // ✅ Correct!}
+```
+
+## Pattern 3: Event Broadcasting
+
+Broadcast events to multiple subscribers using EventManager.
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/**
+ * Event Broadcasting Pattern
+ *
+ * Use when:
+ * - Multiple processes need to receive the same event
+ * - Decoupling senders from receivers
+ * - Building event-driven architectures
+ * - Implementing pub/sub systems
+ */
+public class EventBroadcastDemo {
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  Event Broadcasting Demo                  ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Create event manager
+        var eventManager = new EventManager<SystemEvent>("system-events", supervisor);
+
+        // Create multiple subscribers
+        var logSubscriber = supervisor.supervise(
+            "log-subscriber",
+            new LogSubscriberState(),
+            (state, msg) -> handleLogEvent(state, msg, eventManager)
+        );
+
+        var metricsSubscriber = supervisor.supervise(
+            "metrics-subscriber",
+            new MetricsSubscriberState(),
+            (state, msg) -> handleMetricsEvent(state, msg, eventManager)
+        );
+
+        var alertSubscriber = supervisor.supervise(
+            "alert-subscriber",
+            new AlertSubscriberState(),
+            (state, msg) -> handleAlertEvent(state, msg, eventManager)
+        );
+
+        System.out.println("✅ 3 subscribers registered\n");
+
+        // Broadcast events
+        System.out.println("--- Broadcasting Events ---");
+        eventManager.publish(new UserLogin("alice"));
+        eventManager.publish(new UserLogin("bob"));
+        eventManager.publish(new SystemError("Database connection lost", 5));
+        eventManager.publish(new UserLogout("alice"));
+
+        Thread.sleep(100);
+
+        System.out.println("\n--- All Subscribers Received Events ---");
+        supervisor.shutdown();
+    }
+
+    // Event definitions
+    sealed interface SystemEvent permits UserLogin, UserLogout, SystemError {}
+    record UserLogin(String username) implements SystemEvent {}
+    record UserLogout(String username) implements SystemEvent {}
+    record SystemError(String message, int severity) implements SystemEvent {}
+
+    // Subscriber states
+    record LogSubscriberState(List<String> events) {
+        LogSubscriberState() {
+            this(new CopyOnWriteArrayList<>());
+        }
+    }
+
+    record MetricsSubscriberState(int loginCount, int errorCount) {
+        MetricsSubscriberState() {
+            this(0, 0);
+        }
+    }
+
+    record AlertSubscriberState(List<String> alerts) {
+        AlertSubscriberState() {
+            this(new CopyOnWriteArrayList<>());
+        }
+    }
+
+    // Subscriber handlers
+    static Proc.StateResult<LogSubscriberState, Object> handleLogEvent(
+        LogSubscriberState state,
+        Object msg,
+        EventManager<SystemEvent> eventManager
+    ) {
+        if (msg instanceof SystemEvent event) {
+            System.out.println("[LOG] " + event);
+            var newEvents = new CopyOnWriteArrayList<>(state.events());
+            newEvents.add(event.toString());
+            return new Proc.StateResult<>(new LogSubscriberState(newEvents), null);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<MetricsSubscriberState, Object> handleMetricsEvent(
+        MetricsSubscriberState state,
+        Object msg,
+        EventManager<SystemEvent> eventManager
+    ) {
+        if (msg instanceof UserLogin) {
+            System.out.println("[METRICS] Login count: " + (state.loginCount() + 1));
+            return new Proc.StateResult<>(
+                new MetricsSubscriberState(state.loginCount() + 1, state.errorCount()),
+                null
+            );
+        } else if (msg instanceof SystemError) {
+            System.out.println("[METRICS] Error count: " + (state.errorCount() + 1));
+            return new Proc.StateResult<>(
+                new MetricsSubscriberState(state.loginCount(), state.errorCount() + 1),
+                null
+            );
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<AlertSubscriberState, Object> handleAlertEvent(
+        AlertSubscriberState state,
+        Object msg,
+        EventManager<SystemEvent> eventManager
+    ) {
+        if (msg instanceof SystemError(var message, var severity)) {
+            if (severity >= 5) {
+                String alert = "🚨 CRITICAL: " + message;
+                System.out.println("[ALERT] " + alert);
+                var newAlerts = new CopyOnWriteArrayList<>(state.alerts());
+                newAlerts.add(alert);
+                return new Proc.StateResult<>(new AlertSubscriberState(newAlerts), null);
+            }
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+}}
+```
+
+<CopyButton>Copy event broadcast example</CopyButton>
+
+## Pattern 4: Request Routing
+
+Route requests to multiple workers and aggregate responses.
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Request Routing Pattern
+ *
+ * Use when:
+ * - Distributing load across multiple workers
+ * - Implementing scatter-gather patterns
+ * - Querying multiple data sources in parallel
+ * - Building map-reduce style operations
+ */
+public class RequestRoutingDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            10,
+            Duration.ofMinutes(1)
+        );
+
+        // Create router
+        var router = supervisor.supervise(
+            "router",
+            new RouterState(),
+            (state, msg) -> handleRouter(state, msg, supervisor)
+        );
+
+        // Create worker pool
+        for (int i = 0; i < 5; i++) {
+            final int workerId = i;
+            supervisor.supervise(
+                "worker-" + i,
+                new WorkerState(workerId),
+                RequestRoutingDemo::handleWorker
+            );
+        }
+
+        // Send requests to router
+        System.out.println("--- Routing Requests ---");
+        for (int i = 0; i < 10; i++) {
+            var response = router.ask(
+                new RouteRequest("query-" + i),
+                Duration.ofSeconds(1)
+            ).get();
+
+            System.out.println("Request " + i + " → " + response);
+        }
+
+        supervisor.shutdown();
+    }
+
+    // State classes
+    record RouterState(Map<Integer, ProcRef<WorkerState, Object>> workers) {
+        RouterState() {
+            this(new ConcurrentHashMap<>());
+        }
+    }
+
+    record WorkerState(int workerId) {
+        public WorkerState work() {
+            return new WorkerState(workerId);
+        }
+    }
+
+    // Messages
+    sealed interface RouterMsg permits RouteRequest, RegisterWorker {}
+    record RouteRequest(String query) implements RouterMsg {}
+    record RegisterWorker(int id, ProcRef<WorkerState, Object> worker) implements RouterMsg {}
+
+    // Handlers
+    static Proc.StateResult<RouterState, Object> handleRouter(
+        RouterState state,
+        Object msg,
+        Supervisor supervisor
+    ) {
+        if (msg instanceof RouteRequest(var query)) {
+            // Round-robin routing
+            var workers = new ArrayList<>(state.workers().values());
+            if (workers.isEmpty()) {
+                return new Proc.StateResult<>(state, "No workers available");
+            }
+
+            // Simple round-robin
+            int workerIndex = query.hashCode() % workers.size();
+            var worker = workers.get(workerIndex);
+
+            try {
+                var response = worker.ask(
+                    new WorkMessage(query),
+                    Duration.ofMillis(100)
+                ).orElse("Worker timeout");
+
+                return new Proc.StateResult<>(state, response);
+            } catch (Exception e) {
+                return new Proc.StateResult<>(state, "Error: " + e.getMessage());
+            }
+        }
+
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<WorkerState, Object> handleWorker(
+        WorkerState state,
+        Object msg
+    ) {
+        if (msg instanceof WorkMessage(var query)) {
+            // Simulate work
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {}
+
+            return new Proc.StateResult<>(
+                state,
+                "Worker-" + state.workerId() + " processed: " + query
+            );
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    record WorkMessage(String query) {}
+}}
+```
+
+<CopyButton>Copy request routing example</CopyButton>
+
+## Pattern 5: Dead Letter Queue
+
+Handle failed messages gracefully with a dead letter queue.
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+/**
+ * Dead Letter Queue Pattern
+ *
+ * Use when:
+ * - Messages fail processing
+ * - Need to retry failed messages later
+ * - Auditing and debugging
+ * - Implementing retry policies
+ */
+public class DeadLetterQueueDemo {
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            5,
+            Duration.ofMinutes(1)
+        );
+
+        // Create DLQ
+        var dlq = supervisor.supervise(
+            "dead-letter-queue",
+            new DLQState(new ConcurrentLinkedQueue<>()),
+            DeadLetterQueueDemo::handleDLQ
+        );
+
+        // Create worker that might fail
+        var worker = supervisor.supervise(
+            "worker",
+            new WorkerState(dlq),
+            DeadLetterQueueDemo::handleWorker
+        );
+
+        // Send messages
+        System.out.println("--- Sending Messages ---");
+        worker.tell(new ProcessMessage("valid-1", "data1"));
+        worker.tell(new ProcessMessage("invalid", null));  // Will fail
+        worker.tell(new ProcessMessage("valid-2", "data2"));
+        worker.tell(new ProcessMessage("invalid", null));  // Will fail
+
+        Thread.sleep(200);
+
+        // Check DLQ
+        System.out.println("\n--- Checking Dead Letter Queue ---");
+        var failedMessages = dlq.ask(new GetFailedMessages(), Duration.ofSeconds(1)).get();
+        System.out.println("Failed messages: " + failedMessages);
+
+        supervisor.shutdown();
+    }
+
+    // State classes
+    record DLQState(java.util.Queue<FailedMessage> queue) {}
+
+    record WorkerState(ProcRef<DLQState, Object> dlq) {}
+
+    // Messages
+    sealed interface WorkerMsg permits ProcessMessage {}
+    record ProcessMessage(String id, String data) implements WorkerMsg {}
+
+    sealed interface DLQMsg permits GetFailedMessages, RetryMessage {}
+    record GetFailedMessages() implements DLQMsg {}
+    record RetryMessage(FailedMessage msg) implements DLQMsg {}
+
+    record FailedMessage(String id, String data, String reason, long timestamp) {
+        FailedMessage(String id, String data, String reason) {
+            this(id, data, reason, System.currentTimeMillis());
+        }
+    }
+
+    // Handlers
+    static Proc.StateResult<WorkerState, Object> handleWorker(
+        WorkerState state,
+        Object msg
+    ) {
+        if (msg instanceof ProcessMessage(var id, var data)) {
+            if (data == null) {
+                // Send to DLQ
+                state.dlq().tell(new FailedMessage(id, data, "Null data"));
+                System.out.println("❌ Message " + id + " sent to DLQ");
+                return new Proc.StateResult<>(state, null);
+            }
+
+            // Process message
+            System.out.println("✅ Message " + id + " processed");
+            return new Proc.StateResult<>(state, null);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<DLQState, Object> handleDLQ(
+        DLQState state,
+        Object msg
+    ) {
+        if (msg instanceof FailedMessage failed) {
+            state.queue().add(failed);
+            return new Proc.StateResult<>(state, null);
+        } else if (msg instanceof GetFailedMessages) {
+            return new Proc.StateResult<>(state, state.queue().size() + " messages");
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+}}
+```
+
+<CopyButton>Copy DLQ example</CopyButton>
+
+## Complete Example: Message Hub
+
+Let's build a complete message hub combining all patterns:
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Complete Message Hub
+ *
+ * Demonstrates:
+ * - Tell pattern (logging)
+ * - Ask pattern (queries)
+ * - Event broadcasting (notifications)
+ * - Request routing (load balancing)
+ * - Dead letter queue (error handling)
+ */
+public class MessageHubDemo {
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  JOTP Message Hub Demo                    ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            10,
+            Duration.ofMinutes(1)
+        );
+
+        // Event manager for broadcasting
+        var events = new EventManager<HubEvent>("hub-events", supervisor);
+
+        // Logger (tell pattern)
+        var logger = supervisor.supervise(
+            "logger",
+            new LoggerState(),
+            (state, msg) -> handleLogger(state, msg)
+        );
+
+        // Query service (ask pattern)
+        var queryService = supervisor.supervise(
+            "query-service",
+            new QueryState(new HashMap<>()),
+            (state, msg) -> handleQuery(state, msg)
+        );
+
+        // DLQ for failed messages
+        var dlq = supervisor.supervise(
+            "dlq",
+            new DLQState(new ArrayDeque<>()),
+            (state, msg) -> handleDLQ(state, msg)
+        );
+
+        // Worker pool
+        var workers = new ArrayList<ProcRef<WorkerState, Object>>();
+        for (int i = 0; i < 3; i++) {
+            final int id = i;
+            var worker = supervisor.supervise(
+                "worker-" + i,
+                new WorkerState(id, logger, dlq),
+                (state, msg) -> handleWorker(state, msg)
+            );
+            workers.add(worker);
+        }
+
+        System.out.println("✅ Message hub initialized\n");
+
+        // Demo 1: Tell pattern - logging
+        System.out.println("--- Demo 1: Tell Pattern (Logging) ---");
+        logger.tell(new LogMessage("info", "Hub started"));
+        logger.tell(new LogMessage("debug", "3 workers ready"));
+
+        // Demo 2: Ask pattern - queries
+        System.out.println("\n--- Demo 2: Ask Pattern (Queries) ---");
+        queryService.tell(new StoreData("user:1", "Alice"));
+        queryService.tell(new StoreData("user:2", "Bob"));
+
+        var result1 = queryService.ask(new QueryData("user:1"), Duration.ofSeconds(1)).get();
+        var result2 = queryService.ask(new QueryData("user:2"), Duration.ofSeconds(1)).get();
+        System.out.println("Query 1: " + result1);
+        System.out.println("Query 2: " + result2);
+
+        // Demo 3: Event broadcasting
+        System.out.println("\n--- Demo 3: Event Broadcasting ---");
+        events.publish(new HubEvent.UserLoggedIn("alice"));
+        events.publish(new HubEvent.UserLoggedIn("bob"));
+        events.publish(new HubEvent.SystemAlert("High load", 3));
+
+        // Demo 4: Request routing
+        System.out.println("\n--- Demo 4: Request Routing ---");
+        for (int i = 0; i < 6; i++) {
+            var worker = workers.get(i % workers.size());
+            var response = worker.ask(
+                new ProcessTask("task-" + i),
+                Duration.ofSeconds(1)
+            ).get();
+            System.out.println(response);
+        }
+
+        Thread.sleep(200);
+        supervisor.shutdown();
+        System.out.println("\n✨ Demo complete!");
+    }
+
+    // State classes
+    record LoggerState(int messageCount) {
+        LoggerState() { this(0); }
+    }
+
+    record QueryState(Map<String, String> data) {}
+
+    record DLQState Queue<FailedTask> queue) {}
+
+    record WorkerState(
+        int id,
+        ProcRef<LoggerState, Object> logger,
+        ProcRef<DLQState, Object> dlq
+    ) {}
+
+    // Messages
+    sealed interface LoggerMsg permits LogMessage {}
+    record LogMessage(String level, String message) implements LoggerMsg {}
+
+    sealed interface QueryMsg permits StoreData, QueryData {}
+    record StoreData(String key, String value) implements QueryMsg {}
+    record QueryData(String key) implements QueryMsg {}
+
+    sealed interface WorkerMsg permits ProcessTask {}
+    record ProcessTask(String taskId) implements WorkerMsg {}
+
+    sealed interface DLQMsg permits FailedTask {}
+    record FailedTask(String taskId, String reason) implements DLQMsg {}
+
+    // Events
+    sealed interface HubEvent permits UserLoggedIn, SystemAlert {}
+    record UserLoggedIn(String username) implements HubEvent {}
+    record SystemAlert(String message, int severity) implements HubEvent {}
+
+    // Handlers (simplified for demo)
+    static Proc.StateResult<LoggerState, Object> handleLogger(
+        LoggerState state,
+        Object msg
+    ) {
+        if (msg instanceof LogMessage(var level, var message)) {
+            System.out.println("[" + level.toUpperCase() + "] " + message);
+            return new Proc.StateResult<>(new LoggerState(state.messageCount() + 1), null);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<QueryState, Object> handleQuery(
+        QueryState state,
+        Object msg
+    ) {
+        if (msg instanceof StoreData(var key, var value)) {
+            var newData = new HashMap<>(state.data());
+            newData.put(key, value);
+            return new Proc.StateResult<>(new QueryState(newData), "Stored");
+        } else if (msg instanceof QueryData(var key)) {
+            var value = state.data().get(key);
+            return new Proc.StateResult<>(state, value);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<DLQState, Object> handleDLQ(
+        DLQState state,
+        Object msg
+    ) {
+        if (msg instanceof FailedTask task) {
+            state.queue().add(task);
+            System.out.println("DLQ: Added " + task.taskId());
+            return new Proc.StateResult<>(state, null);
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+
+    static Proc.StateResult<WorkerState, Object> handleWorker(
+        WorkerState state,
+        Object msg
+    ) {
+        if (msg instanceof ProcessTask(var taskId)) {
+            if (taskId.contains("fail")) {
+                state.dlq().tell(new FailedTask(taskId, "Invalid task"));
+                return new Proc.StateResult<>(state, "Failed: " + taskId);
+            }
+
+            state.logger().tell(new LogMessage("info", "Worker-" + state.id() + " processing " + taskId));
+
+            try { Thread.sleep(10); } catch (InterruptedException e) {}
+
+            return new Proc.StateResult<>(
+                state,
+                "Worker-" + state.id() + " completed: " + taskId
+            );
+        }
+        return new Proc.StateResult<>(state, null);
+    }
+}}
+```
+
+<CopyButton>Copy message hub example</CopyButton>
+
+## Checkpoint Summary
+
+<Card className="mt-6">
+  <CardHeader>
+    <CardTitle>✅ Checkpoint: What You've Learned</CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-2">
+    <p>You've mastered:</p>
+    <ul className="list-disc list-inside space-y-1 mt-2">
+      <li>Tell pattern for fire-and-forget messaging</li>
+      <li>Ask pattern for request-response with timeouts</li>
+      <li>Event broadcasting with EventManager</li>
+      <li>Request routing and load balancing</li>
+      <li>Dead letter queues for failed messages</li>
+      <li>Combining multiple patterns in real applications</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## Practice Exercise
+
+Build a **Stock Trading System** with:
+
+1. **Market Data Feed** (tell) - Broadcast price updates
+2. **Order Processor** (ask) - Validate and execute orders
+3. **Portfolio Manager** (routing) - Route to appropriate accounts
+4. **Risk Checker** (DLQ) - Flag risky orders
+5. **Trade Auditor** (events) - Log all trades
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium">Show Hint</summary>
+  ```java
+  sealed interface TradeMsg
+      permits MarketData, PlaceOrder, GetPortfolio, RiskCheck {}
+
+  record MarketData(String symbol, double price) implements TradeMsg {}
+  record PlaceOrder(String symbol, int qty, double price) implements TradeMsg {}
+
+  // Use EventManager for price broadcasts
+  // Use ask for order validation
+  // Use DLQ for risky orders
+  ```
+</details>
+
+## Common Issues
+
+<Alert variant="destructive">
+  <AlertTitle>⚠️ Troubleshooting</AlertTitle>
+  <AlertDescription>
+    <div className="space-y-3">
+      <div>
+        <strong>Issue: "Ask() blocks forever"</strong><br/>
+        <span className="text-sm">Cause: Process crashed or handler didn't return response.</span><br/>
+        <span className="text-sm">Solution: Always use timeouts and handle exceptions.</span>
+      </div>
+      <div>
+        <strong>Issue: "Events not received by subscribers"</strong><br/>
+        <span className="text-sm">Cause: Not registered with EventManager or wrong event type.</span><br/>
+        <span className="text-sm">Solution: Check subscription and event type matching.</span>
+      </div>
+      <div>
+        <strong>Issue: "Messages lost in DLQ"</strong><br/>
+        <span className="text-sm">Cause: Not processing DLQ messages or no retry logic.</span><br/>
+        <span className="text-sm">Solution: Implement DLQ processor and retry mechanism.</span>
+      </div>
+    </div>
+  </AlertDescription>
+</Alert>
+
+## Next Steps
+
+Excellent! You're now a message passing expert. In the final tutorial, we'll build a complete application from scratch.
+
+**Next:** [Building a Simple Application →](/docs/user-guide/tutorials/beginner/06-building-simple-application)
+
+---
+
+## Additional Resources
+
+- [Process Communication Guide](/docs/user-guide/how-to/process-communication)
+- [Send and Receive Messages](/docs/user-guide/how-to/send-receive-messages)
+- [EventManager API](/docs/reference/api/event-manager)
+- [Message Patterns Reference](/docs/otp-patterns)

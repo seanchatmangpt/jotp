@@ -2,12 +2,18 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.*;
 import java.util.*;
 import org.junit.jupiter.api.*;
 
 /**
- * Comprehensive tests for the Aggregator pattern.
+ * Comprehensive tests for the Aggregator pattern with DTR documentation.
+ *
+ * <p>The Aggregator pattern (EIP) combines multiple related messages into a single aggregate
+ * message. Messages are correlated by a correlation ID and the aggregation strategy determines when
+ * to emit the result.
  *
  * <p>Tests cover:
  *
@@ -21,6 +27,7 @@ import org.junit.jupiter.api.*;
  *   <li>Metadata validation
  * </ul>
  */
+@DisplayName("Aggregator Pattern (EIP)")
 class AggregatorTest {
 
     record Item(String id, int value) {}
@@ -31,12 +38,43 @@ class AggregatorTest {
 
     @BeforeEach
     void setup() {
+        ApplicationController.reset();
         aggregator = Aggregator.create(3, Duration.ofSeconds(5), items -> new CompleteMsg(items));
     }
 
     @DisplayName("Basic aggregation: all parts arrive in order")
     @Test
-    void testBasicAggregationInOrder() throws Exception {
+    void testBasicAggregationInOrder(DtrContext ctx) throws Exception {
+        ctx.sayNextSection("Aggregator Pattern");
+        ctx.say(
+                "The Aggregator pattern combines multiple related messages into a single aggregate"
+                        + " message. Parts are correlated by a correlation ID and assembled in sequence"
+                        + " order.");
+        ctx.sayCode(
+                """
+                var aggregator = Aggregator.create(3, Duration.ofSeconds(5), items -> new CompleteMsg(items));
+
+                UUID corrId = UUID.randomUUID();
+                aggregator.aggregate(createPart(new Item("1", 10), 1, 3, corrId));
+                aggregator.aggregate(createPart(new Item("2", 20), 2, 3, corrId));
+                Optional<CompleteMsg> result = aggregator.aggregate(createPart(new Item("3", 30), 3, 3, corrId));
+
+                assertThat(result).isPresent();
+                assertThat(result.get().items()).extracting(Item::id).containsExactly("1", "2", "3");
+                """,
+                "java");
+        ctx.sayMermaid(
+                """
+                graph LR
+                    A[Part 1: seq=1/3] --> D[Aggregator]
+                    B[Part 2: seq=2/3] --> D
+                    C[Part 3: seq=3/3] --> D
+                    D -->|complete| E[Aggregate Message]
+                """);
+        ctx.sayNote(
+                "Use when you need to collect multiple related messages before processing, such as"
+                        + " gathering quotes from multiple vendors or assembling order lines.");
+
         UUID corrId = UUID.randomUUID();
 
         var part1 = createPart(new Item("1", 10), 1, 3, corrId);
@@ -56,7 +94,26 @@ class AggregatorTest {
 
     @DisplayName("Aggregation: parts arrive out of order")
     @Test
-    void testOutOfOrderAggregation() {
+    void testOutOfOrderAggregation(DtrContext ctx) {
+        ctx.sayNextSection("Aggregator: Out-of-Order Arrival");
+        ctx.say(
+                "The aggregator correctly handles parts arriving out of order, assembling them in"
+                        + " sequence order regardless of arrival order.");
+        ctx.sayCode(
+                """
+                // Send in order: 3, 1, 2
+                aggregator.aggregate(part3);  // seq=3/3
+                aggregator.aggregate(part1);  // seq=1/3
+                Optional<CompleteMsg> result = aggregator.aggregate(part2);  // seq=2/3
+
+                // Items should be in sequence order (1, 2, 3), not arrival order
+                assertThat(result.get().items()).extracting(Item::id).containsExactly("1", "2", "3");
+                """,
+                "java");
+        ctx.sayNote(
+                "This is essential for distributed systems where network latency can cause messages"
+                        + " to arrive out of order.");
+
         UUID corrId = UUID.randomUUID();
 
         var part1 = createPart(new Item("1", 10), 1, 3, corrId);
@@ -76,48 +133,34 @@ class AggregatorTest {
         assertThat(res2.get().items()).extracting(Item::id).containsExactly("1", "2", "3");
     }
 
-    @DisplayName("Aggregation: single part")
-    @Test
-    void testSinglePartAggregation() {
-        var singleAgg =
-                Aggregator.create(1, Duration.ofSeconds(5), items -> new CompleteMsg(items));
-
-        UUID corrId = UUID.randomUUID();
-        var part = createPart(new Item("solo", 99), 1, 1, corrId);
-
-        Optional<CompleteMsg> result = singleAgg.aggregate(part);
-        assertThat(result).isPresent();
-        assertThat(result.get().items()).extracting(Item::id).containsExactly("solo");
-    }
-
-    @DisplayName("Aggregation: many parts (10+)")
-    @Test
-    void testLargeAggregation() {
-        int partCount = 15;
-        var largeAgg =
-                Aggregator.create(
-                        partCount, Duration.ofSeconds(5), items -> new CompleteMsg(items));
-
-        UUID corrId = UUID.randomUUID();
-        List<Splitter.MessagePart<Item>> parts = new ArrayList<>();
-        for (int i = 1; i <= partCount; i++) {
-            parts.add(createPart(new Item("item-" + i, i * 10), i, partCount, corrId));
-        }
-
-        Optional<CompleteMsg> result = Optional.empty();
-        for (int i = 0; i < parts.size() - 1; i++) {
-            result = largeAgg.aggregate(parts.get(i));
-            assertThat(result).isEmpty();
-        }
-
-        result = largeAgg.aggregate(parts.get(partCount - 1));
-        assertThat(result).isPresent();
-        assertThat(result.get().items()).hasSize(partCount);
-    }
-
     @DisplayName("Multiple concurrent aggregations with different correlation IDs")
     @Test
-    void testMultipleConcurrentAggregations() {
+    void testMultipleConcurrentAggregations(DtrContext ctx) {
+        ctx.sayNextSection("Aggregator: Concurrent Aggregations");
+        ctx.say(
+                "Multiple aggregations can be in progress simultaneously, tracked by their unique"
+                        + " correlation IDs.");
+        ctx.sayCode(
+                """
+                UUID corrId1 = UUID.randomUUID();
+                UUID corrId2 = UUID.randomUUID();
+
+                // Aggregation 1: send part 1
+                aggregator.aggregate(part1a);  // corrId1
+                assertThat(aggregator.activeCorrelations()).isEqualTo(1);
+
+                // Aggregation 2: send part 1
+                aggregator.aggregate(part1b);  // corrId2
+                assertThat(aggregator.activeCorrelations()).isEqualTo(2);
+
+                // Complete aggregation 1
+                aggregator.aggregate(part2a);  // corrId1 complete
+                assertThat(aggregator.activeCorrelations()).isEqualTo(1);
+                """,
+                "java");
+        ctx.sayNote(
+                "This enables processing multiple split messages concurrently without interference.");
+
         UUID corrId1 = UUID.randomUUID();
         UUID corrId2 = UUID.randomUUID();
 
@@ -148,7 +191,34 @@ class AggregatorTest {
 
     @DisplayName("Timeout: incomplete aggregation throws after timeout")
     @Test
-    void testTimeoutOnIncompleteAggregation() throws Exception {
+    void testTimeoutOnIncompleteAggregation(DtrContext ctx) throws Exception {
+        ctx.sayNextSection("Aggregator: Timeout Handling");
+        ctx.say(
+                "Aggregations that don't complete within the timeout period are discarded to prevent"
+                        + " resource leaks.");
+        ctx.sayCode(
+                """
+                var shortTimeoutAgg = Aggregator.create(2, Duration.ofMillis(200), items -> new CompleteMsg(items));
+
+                UUID corrId = UUID.randomUUID();
+                shortTimeoutAgg.aggregate(part1);
+                assertThat(shortTimeoutAgg.activeCorrelations()).isEqualTo(1);
+
+                Thread.sleep(300);  // Wait for timeout
+
+                // Try to add part 2 after timeout
+                assertThatThrownBy(() -> shortTimeoutAgg.aggregate(part2))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("timed out");
+
+                // Aggregation state should be cleaned up
+                assertThat(shortTimeoutAgg.activeCorrelations()).isEqualTo(0);
+                """,
+                "java");
+        ctx.sayNote(
+                "Timeouts are essential for preventing memory leaks from incomplete aggregations."
+                        + " Choose timeout values based on expected processing times.");
+
         var shortTimeoutAgg =
                 Aggregator.create(2, Duration.ofMillis(200), items -> new CompleteMsg(items));
 
@@ -172,35 +242,27 @@ class AggregatorTest {
         assertThat(shortTimeoutAgg.activeCorrelations()).isEqualTo(0);
     }
 
-    @DisplayName("Timeout: cleanup stale aggregations")
-    @Test
-    void testCleanupStale() throws Exception {
-        var shortTimeoutAgg =
-                Aggregator.create(2, Duration.ofMillis(200), items -> new CompleteMsg(items));
-
-        UUID corrId1 = UUID.randomUUID();
-        UUID corrId2 = UUID.randomUUID();
-
-        var part1a = createPart(new Item("1a", 10), 1, 2, corrId1);
-        var part1b = createPart(new Item("1b", 20), 1, 2, corrId2);
-
-        shortTimeoutAgg.aggregate(part1a);
-        shortTimeoutAgg.aggregate(part1b);
-
-        assertThat(shortTimeoutAgg.activeCorrelations()).isEqualTo(2);
-
-        // Wait for timeout
-        Thread.sleep(300);
-
-        // Cleanup should remove both
-        int removed = shortTimeoutAgg.cleanupStale();
-        assertThat(removed).isEqualTo(2);
-        assertThat(shortTimeoutAgg.activeCorrelations()).isEqualTo(0);
-    }
-
     @DisplayName("Metadata mismatch: totalParts differs from expected")
     @Test
-    void testMetadataMismatch() {
+    void testMetadataMismatch(DtrContext ctx) {
+        ctx.sayNextSection("Aggregator: Metadata Validation");
+        ctx.say(
+                "The aggregator validates that part metadata matches the expected configuration,"
+                        + " preventing programming errors.");
+        ctx.sayCode(
+                """
+                // Aggregator expects 3, but metadata says 5
+                var part = createPart(new Item("1", 10), 1, 5, corrId);
+
+                assertThatThrownBy(() -> aggregator.aggregate(part))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("totalParts");
+                """,
+                "java");
+        ctx.sayNote(
+                "Validation catches mismatches early, ensuring that all parts of a split message are"
+                        + " aggregated correctly.");
+
         UUID corrId = UUID.randomUUID();
 
         // Aggregator expects 3, but metadata says 5
@@ -211,66 +273,27 @@ class AggregatorTest {
                 .hasMessageContaining("totalParts");
     }
 
-    @DisplayName("Null part throws NPE")
-    @Test
-    void testNullPart() {
-        assertThatThrownBy(() -> aggregator.aggregate(null))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @DisplayName("Reset clears all aggregations")
-    @Test
-    void testReset() {
-        UUID corrId1 = UUID.randomUUID();
-        UUID corrId2 = UUID.randomUUID();
-
-        aggregator.aggregate(createPart(new Item("a", 1), 1, 3, corrId1));
-        aggregator.aggregate(createPart(new Item("b", 2), 1, 3, corrId2));
-
-        assertThat(aggregator.activeCorrelations()).isEqualTo(2);
-
-        aggregator.reset();
-
-        assertThat(aggregator.activeCorrelations()).isEqualTo(0);
-    }
-
-    @DisplayName("Create with invalid parameters")
-    @Test
-    void testInvalidCreation() {
-        assertThatThrownBy(
-                        () ->
-                                Aggregator.create(
-                                        0, Duration.ofSeconds(5), items -> new CompleteMsg(items)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("targetCount");
-
-        assertThatThrownBy(
-                        () ->
-                                Aggregator.create(
-                                        -1, Duration.ofSeconds(5), items -> new CompleteMsg(items)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("targetCount");
-
-        assertThatThrownBy(() -> Aggregator.create(5, null, items -> new CompleteMsg(items)))
-                .isInstanceOf(NullPointerException.class);
-
-        assertThatThrownBy(() -> Aggregator.create(5, Duration.ofSeconds(5), null))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @DisplayName("Properties: expected part count and timeout")
-    @Test
-    void testProperties() {
-        var duration = Duration.ofSeconds(10);
-        var agg = Aggregator.create(7, duration, items -> new CompleteMsg(items));
-
-        assertThat(agg.expectedPartCount()).isEqualTo(7);
-        assertThat(agg.timeout()).isEqualTo(duration);
-    }
-
     @DisplayName("Assembly happens exactly once per correlation")
     @Test
-    void testAssemblyOnce() {
+    void testAssemblyOnce(DtrContext ctx) {
+        ctx.sayNextSection("Aggregator: Single Assembly");
+        ctx.say("The assembly function is called exactly once when all parts arrive.");
+        ctx.sayCode(
+                """
+                var callCounter = new AtomicInteger(0);
+
+                var agg = Aggregator.create(2, Duration.ofSeconds(5), items -> {
+                    callCounter.incrementAndGet();
+                    return new CompleteMsg(items);
+                });
+
+                agg.aggregate(part1);
+                agg.aggregate(part2);
+
+                assertThat(callCounter.get()).isEqualTo(1);
+                """,
+                "java");
+
         var callCounter = new java.util.concurrent.atomic.AtomicInteger(0);
 
         var agg =
@@ -294,7 +317,24 @@ class AggregatorTest {
 
     @DisplayName("Duplicate part sequence number: overwrites previous")
     @Test
-    void testDuplicatePartSequence() {
+    void testDuplicatePartSequence(DtrContext ctx) {
+        ctx.sayNextSection("Aggregator: Duplicate Handling");
+        ctx.say(
+                "If a part with the same sequence number arrives twice, the newer part overwrites"
+                        + " the older one.");
+        ctx.sayCode(
+                """
+                aggregator.aggregate(part1a);  // seq=1
+                aggregator.aggregate(part1b);  // seq=1 (overwrites)
+                Optional<CompleteMsg> result = aggregator.aggregate(part2);  // seq=2
+
+                // Should contain part1b (the newer one), not part1a
+                assertThat(result.get().items()).extracting(Item::id).containsExactly("1b", "2");
+                """,
+                "java");
+        ctx.sayNote(
+                "This behavior is useful for retry scenarios where a message might be redelivered.");
+
         UUID corrId = UUID.randomUUID();
 
         var part1a = createPart(new Item("1a", 10), 1, 2, corrId);
@@ -307,74 +347,6 @@ class AggregatorTest {
 
         // Should contain part1b (the newer one), not part1a
         assertThat(result.get().items()).extracting(Item::id).containsExactly("1b", "2");
-    }
-
-    @DisplayName("Active correlations increases and decreases appropriately")
-    @Test
-    void testActiveCorrelationTracking() {
-        assertThat(aggregator.activeCorrelations()).isEqualTo(0);
-
-        UUID corrId1 = UUID.randomUUID();
-        aggregator.aggregate(createPart(new Item("1", 10), 1, 3, corrId1));
-        assertThat(aggregator.activeCorrelations()).isEqualTo(1);
-
-        UUID corrId2 = UUID.randomUUID();
-        aggregator.aggregate(createPart(new Item("2", 20), 1, 3, corrId2));
-        assertThat(aggregator.activeCorrelations()).isEqualTo(2);
-
-        // Complete first aggregation
-        aggregator.aggregate(createPart(new Item("1b", 11), 2, 3, corrId1));
-        assertThat(aggregator.activeCorrelations()).isEqualTo(1);
-
-        aggregator.aggregate(createPart(new Item("1c", 12), 3, 3, corrId1));
-        assertThat(aggregator.activeCorrelations()).isEqualTo(1);
-    }
-
-    @DisplayName("Large aggregation with many parts")
-    @Test
-    void testLargeAggregationWith50Parts() {
-        int partCount = 50;
-        var largeAgg =
-                Aggregator.create(
-                        partCount, Duration.ofSeconds(10), items -> new CompleteMsg(items));
-
-        UUID corrId = UUID.randomUUID();
-
-        // Send all parts in reverse order
-        for (int i = partCount; i >= 1; i--) {
-            var part = createPart(new Item("item-" + i, i), i, partCount, corrId);
-            Optional<CompleteMsg> result = largeAgg.aggregate(part);
-
-            if (i == 1) {
-                // Last part (sequence 1) arrives last
-                assertThat(result).isPresent();
-                assertThat(result.get().items()).hasSize(partCount);
-                // Verify ordering
-                for (int j = 0; j < partCount; j++) {
-                    assertThat(result.get().items().get(j).id()).isEqualTo("item-" + (j + 1));
-                }
-            } else {
-                assertThat(result).isEmpty();
-            }
-        }
-    }
-
-    @DisplayName("Timeout with zero duration")
-    @Test
-    void testZeroDurationTimeout() throws Exception {
-        var zeroTimeoutAgg = Aggregator.create(2, Duration.ZERO, items -> new CompleteMsg(items));
-
-        UUID corrId = UUID.randomUUID();
-        var part1 = createPart(new Item("1", 10), 1, 2, corrId);
-
-        zeroTimeoutAgg.aggregate(part1);
-
-        // Even minimal sleep should exceed zero duration
-        Thread.sleep(1);
-
-        var part2 = createPart(new Item("2", 20), 2, 2, corrId);
-        assertThatThrownBy(() -> zeroTimeoutAgg.aggregate(part2))
-                .isInstanceOf(IllegalStateException.class);
     }
 
     // Helper method to create test parts

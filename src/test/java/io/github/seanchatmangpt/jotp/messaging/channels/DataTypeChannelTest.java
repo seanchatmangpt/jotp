@@ -2,11 +2,13 @@ package io.github.seanchatmangpt.jotp.messaging.channels;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.*;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -26,8 +28,14 @@ import org.junit.jupiter.api.Test;
  *   <li>Type isolation and independence
  * </ul>
  */
+@DtrTest
 @DisplayName("Data Type Channel Pattern")
 class DataTypeChannelTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ====== Helper State Classes ======
 

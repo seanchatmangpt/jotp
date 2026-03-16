@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -25,7 +28,12 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Nodes communicate via TCP on loopback — same physical machine, different ports — faithfully
  * simulating the multi-JVM distributed application lifecycle.
+ *
+ * @see DistributedNode
+ * @see DistributedAppSpec
+ * @see StartMode
  */
+@DtrTest
 @DisplayName("DistributedNode — OTP distributed application semantics")
 class DistributedNodeTest {
 
@@ -37,6 +45,7 @@ class DistributedNodeTest {
 
     @BeforeEach
     void setUp() throws IOException {
+        ApplicationController.reset();
         // OS assigns free ports — no conflicts across test runs
         node1 = new DistributedNode("cp1", "localhost", 0, NodeConfig.defaults());
         node2 = new DistributedNode("cp2", "localhost", 0, NodeConfig.defaults());
@@ -99,7 +108,9 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Application starts on highest-priority node only")
-    void startOnHighestPriorityNode() {
+    void startOnHighestPriorityNode(DtrContext ctx) {
+        ctx.say("OTP distributed application: Application starts on highest-priority node only.");
+        ctx.say("Node priority is defined by the order in DistributedAppSpec.distribution().");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
         TrackingCallbacks cb2 = new TrackingCallbacks();
@@ -124,7 +135,10 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Failover to node2 when node1 goes down")
-    void failoverWhenPrimaryGoesDown() {
+    void failoverWhenPrimaryGoesDown(DtrContext ctx) {
+        ctx.say(
+                "Failover pattern: When primary node crashes, next priority node takes over with StartMode.Failover.");
+        ctx.say("The failover node receives the crashed node's ID via StartMode.Failover.from().");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
         TrackingCallbacks cb2 = new TrackingCallbacks();
@@ -155,7 +169,11 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Takeover by node1 when it rejoins after node2 ran the app")
-    void takeoverWhenHigherPriorityReturns() throws IOException {
+    void takeoverWhenHigherPriorityReturns(DtrContext ctx) throws IOException {
+        ctx.say(
+                "Takeover pattern: When higher-priority node rejoins, it takes over from current node.");
+        ctx.say(
+                "The current node receives onStop() and the rejoining node starts with StartMode.Takeover.");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
         TrackingCallbacks cb2 = new TrackingCallbacks();
@@ -268,7 +286,11 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Cascading failover: node3 takes over after both node1 and node2 go down")
-    void cascadingFailover() {
+    void cascadingFailover(DtrContext ctx) {
+        ctx.say(
+                "Cascading failover: Application survives multiple node failures by cascading through priority list.");
+        ctx.say(
+                "Each failover passes the previous node's ID, maintaining the failure chain history.");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
         TrackingCallbacks cb2 = new TrackingCallbacks();

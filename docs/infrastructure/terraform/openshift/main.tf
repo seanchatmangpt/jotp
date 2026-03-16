@@ -1,4 +1,4 @@
-# Java Maven Template - OpenShift Terraform Configuration
+# JOTP - OpenShift Terraform Configuration
 # Requires: Terraform >= 1.6.0, OpenShift cluster access
 
 terraform {

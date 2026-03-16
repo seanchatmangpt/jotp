@@ -3,7 +3,7 @@ package io.github.seanchatmangpt.jotp.testing.annotations;
 import java.lang.annotation.*;
 
 /**
- * Non-invasive message interception via ProcMonitor.
+ * Non-invasive message interception via ProcessMonitor.
  *
  * <p>Records all mailbox messages with:
  *

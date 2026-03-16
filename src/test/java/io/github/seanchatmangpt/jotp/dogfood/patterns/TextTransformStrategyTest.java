@@ -1,12 +1,21 @@
 package io.github.seanchatmangpt.jotp.dogfood.patterns;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** Dogfood: tests for TextTransformStrategy generated from patterns/strategy-functional.tera. */
+@DtrTest
 @DisplayName("TextTransformStrategy")
 class TextTransformStrategyTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @Test
     @DisplayName("UPPER_CASE transforms to uppercase")

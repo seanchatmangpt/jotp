@@ -1,0 +1,538 @@
+---
+title: "EventManager<E> API Reference"
+description: "Typed event broadcasting and decoupling - Java 26 gen_event equivalent"
+sidebar_position: 5
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# EventManager<E> API Reference
+
+**OTP `gen_event` equivalent** — Event manager that decouples event producers from consumers.
+
+## Overview
+
+`EventManager<E>` manages a list of event handlers, broadcasting events to all registered handlers. A crashing handler is removed but does **not** kill the event manager — isolating handler failures.
+
+### Key Characteristics
+
+- **Typed Events** — Sealed event hierarchies for type safety
+- **Handler Isolation** — Crashing handlers removed automatically
+- **Async Broadcast** — Fire-and-forget event delivery
+- **Sync Broadcast** — Wait for all handlers to process
+- **Hot Code Upgrade** — Runtime handler updates
+
+### OTP Equivalence
+
+| Erlang/OTP | Java 26 |
+|------------|---------|
+| `gen_event:start({local, Name})` | `EventManager.start(name)` |
+| `gen_event:add_handler/3` | `manager.addHandler(handler)` |
+| `gen_event:notify/2` | `manager.notify(event)` |
+| `gen_event:sync_notify/2` | `manager.syncNotify(event)` |
+| `gen_event:delete_handler/3` | `manager.deleteHandler(handler)` |
+| `gen_event:call/4` | `manager.call(handler, event)` |
+
+## Type Parameters
+
+- **`<E>`** — Event type (use sealed interface of records)
+
+## Factory Methods
+
+#### `start()`
+
+Start an event manager with default 5-second timeout.
+
+```java
+EventManager<LogEvent> logger = EventManager.start();
+```
+
+---
+
+#### `start(Duration timeout)`
+
+Start with custom timeout for synchronous operations.
+
+```java
+var manager = EventManager.start(Duration.ofSeconds(10));
+```
+
+---
+
+#### `start(String name)`
+
+Start a named event manager and register it.
+
+```java
+var logger = EventManager.start("error-logger");
+// Other processes can look it up via ProcRegistry
+```
+
+---
+
+#### `start(String name, Duration timeout)`
+
+Start named manager with custom timeout.
+
+```java
+var logger = EventManager.start("error-logger", Duration.ofSeconds(30));
+```
+
+---
+
+## Handler Management
+
+#### `addHandler(Handler<E> handler)`
+
+Register an event handler.
+
+```java
+EventManager<String> logger = EventManager.start();
+
+logger.addHandler(new EventManager.Handler<>() {
+    private final List<String> log = new ArrayList<>();
+
+    @Override
+    public void handleEvent(String event) {
+        log.add(event);
+        System.out.println("Logged: " + event);
+    }
+
+    @Override
+    public void terminate(Throwable reason) {
+        if (reason != null) {
+            System.err.println("Handler crashed: " + reason);
+        } else {
+            System.out.println("Handler removed normally");
+        }
+    }
+});
+```
+
+---
+
+#### `addSupHandler(Handler<E> handler)`
+
+Register a supervised handler (removed when calling thread terminates).
+
+```java
+public void processEvents() {
+    var manager = EventManager.start("my-manager");
+
+    // Handler automatically removed when processEvents() returns
+    manager.addSupHandler(new EventManager.Handler<>() {
+        @Override
+        public void handleEvent(String event) {
+            System.out.println("Processing: " + event);
+        }
+    });
+
+    // Do work...
+    // When this method returns, handler is automatically removed
+}
+```
+
+---
+
+#### `deleteHandler(Handler<E> handler)`
+
+Remove a handler with default timeout.
+
+```java
+boolean removed = manager.deleteHandler(handler);
+if (removed) {
+    System.out.println("Handler removed");
+}
+```
+
+Calls `handler.terminate(null)` before removal.
+
+---
+
+#### `deleteHandler(Handler<E> handler, Duration timeout)`
+
+Remove handler with custom timeout.
+
+```java
+boolean removed = manager.deleteHandler(handler, Duration.ofSeconds(5));
+```
+
+---
+
+## Event Broadcasting
+
+#### `notify(E event)`
+
+Broadcast event asynchronously (fire-and-forget).
+
+```java
+manager.notify("User logged in");
+manager.notify("File uploaded");
+// Returns immediately; handlers process in their own time
+```
+
+**Performance:** Lock-free enqueue, ~100ns
+
+---
+
+#### `syncNotify(E event)`
+
+Broadcast event and wait for all handlers to process.
+
+```java
+try {
+    manager.syncNotify("Critical error");
+    // All handlers have processed the event
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+}
+```
+
+Uses manager's configured timeout (default 5 seconds).
+
+---
+
+#### `syncNotify(E event, Duration timeout)`
+
+Broadcast and wait with custom timeout.
+
+```java
+manager.syncNotify("Important event", Duration.ofSeconds(10));
+```
+
+---
+
+## Handler Communication
+
+#### `call(Handler<E> handler, E event)`
+
+Synchronously call a specific handler.
+
+```java
+var handler = new MyHandler();
+manager.addHandler(handler);
+
+manager.call(handler, "Specific message");
+// Only this handler receives the event
+```
+
+Uses manager's configured timeout.
+
+---
+
+#### `call(Handler<E> handler, E event, Duration timeout)`
+
+Call specific handler with custom timeout.
+
+```java
+manager.call(handler, "Message", Duration.ofSeconds(5));
+```
+
+---
+
+## Hot Code Upgrade
+
+#### `codeChange(Object oldVsn, Object extra)`
+
+Trigger hot code upgrade on all handlers.
+
+```java
+// Upgrade from version "1.0" to "2.0"
+manager.codeChange("1.0", "upgrade-data");
+```
+
+Calls `handler.codeChange(oldVsn, extra)` on each registered handler.
+
+---
+
+## Lifecycle
+
+#### `stop()`
+
+Shut down the event manager.
+
+```java
+manager.stop();  // Calls terminate() on all handlers
+```
+
+Calls `handler.terminate(null)` on all handlers, then stops the manager process.
+
+---
+
+## Handler Interface
+
+### `Handler<E>`
+
+Implement this interface to receive events.
+
+```java
+public interface Handler<E> {
+    /**
+     * Called for each event broadcast.
+     * Exceptions cause handler removal.
+     */
+    void handleEvent(E event);
+
+    /**
+     * Called when handler is removed.
+     * reason = null: normal removal
+     * reason != null: handler crashed
+     */
+    default void terminate(Throwable reason) {}
+
+    /**
+     * Called for non-event messages (e.g., exit signals).
+     * Crashes here do NOT remove the handler.
+     */
+    default void handleInfo(Object info) {}
+
+    /**
+     * Called during hot code upgrade.
+     */
+    default void codeChange(Object oldVsn, Object extra) {}
+}
+```
+
+---
+
+## Usage Patterns
+
+### Simple Logger
+
+```java
+EventManager<String> logger = EventManager.start();
+
+logger.addHandler(new EventManager.Handler<>() {
+    private final List<String> log = new ArrayList<>();
+
+    @Override
+    public void handleEvent(String event) {
+        log.add(Instant.now() + ": " + event);
+    }
+
+    @Override
+    public void terminate(Throwable reason) {
+        System.out.println("Final log: " + log);
+    }
+});
+
+logger.notify("Application started");
+logger.notify("User logged in");
+logger.notify("Database connected");
+```
+
+---
+
+### Multiple Handlers
+
+```java
+EventManager<SystemEvent> bus = EventManager.start();
+
+// File logger
+bus.addHandler(new EventManager.Handler<SystemEvent>() {
+    public void handleEvent(SystemEvent e) {
+        Files.writeString(logFile, e + "\n", APPEND);
+    }
+});
+
+// Metrics collector
+bus.addHandler(new EventManager.Handler<SystemEvent>() {
+    public void handleEvent(SystemEvent e) {
+        metrics.record(e.type(), e.timestamp());
+    }
+});
+
+// Alert system
+bus.addHandler(new EventManager.Handler<SystemEvent>() {
+    public void handleEvent(SystemEvent e) {
+        if (e.severity() > WARNING) {
+            alertService.send(e);
+        }
+    }
+});
+
+// Single broadcast reaches all handlers
+bus.notify(new SystemEvent(ERROR, "Database timeout"));
+```
+
+---
+
+### Supervised Handlers
+
+```java
+public class Worker {
+    private final EventManager<String> manager;
+
+    public Worker() {
+        manager = EventManager.start("worker-events");
+
+        // Handler automatically removed when Worker is GC'd
+        manager.addSupHandler(new EventManager.Handler<String>() {
+            @Override
+            public void handleEvent(String event) {
+                process(event);
+            }
+        });
+    }
+
+    private void process(String event) {
+        // Handle event
+    }
+}
+```
+
+---
+
+### Typed Event Hierarchies
+
+```java
+sealed interface AppEvent permits UserEvent, SystemEvent, ErrorEvent {}
+record UserEvent(String user, String action) implements AppEvent {}
+record SystemEvent(String component, String status) implements AppEvent {}
+record ErrorEvent(String error, Throwable cause) implements ErrorEvent {}
+
+EventManager<AppEvent> bus = EventManager.start();
+
+bus.addHandler(new EventManager.Handler<AppEvent>() {
+    @Override
+    public void handleEvent(AppEvent event) {
+        switch (event) {
+            case UserEvent(var u, var a) ->
+                System.out.println("User " + u + " did " + a);
+            case SystemEvent(var c, var s) ->
+                System.out.println("Component " + c + " is " + s);
+            case ErrorEvent(var e, var t) ->
+                System.err.println("Error: " + e + " - " + t);
+        }
+    }
+});
+
+bus.notify(new UserEvent("alice", "login"));
+bus.notify(new SystemEvent("database", "connected"));
+```
+
+---
+
+## Performance Characteristics
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `notify()` | ~100ns | Lock-free enqueue |
+| `syncNotify()` | ~1μs + handler time | Waits for all handlers |
+| `addHandler()` | ~50ns | CopyOnWriteArrayList add |
+| Handler processing | User-dependent | Handler's handleEvent() |
+
+**Scalability:**
+- Handlers: Thousands (limited by memory)
+- Event throughput: ~1M events/sec per manager
+- Manager overhead: ~2 KB (virtual thread + handler list)
+
+---
+
+## Best Practices
+
+### 1. Use Sealed Event Types
+
+```java
+// Good: Exhaustive pattern matching
+sealed interface Event permits A, B, C {}
+record A() implements Event {}
+record B() implements Event {}
+record C() implements Event {}
+```
+
+---
+
+### 2. Handle terminate() for Cleanup
+
+```java
+@Override
+public void terminate(Throwable reason) {
+    try {
+        if (reason != null) {
+            logger.error("Handler crashed: {}", reason);
+        }
+        closeResources();
+    } catch (Exception e) {
+        // Swallow exceptions in terminate()
+    }
+}
+```
+
+---
+
+### 3. Use handleInfo() for Non-Event Messages
+
+```java
+@Override
+public void handleInfo(Object info) {
+    if (info instanceof ExitSignal) {
+        // Handle exit signal
+        // Crashing here does NOT remove handler
+    }
+}
+```
+
+---
+
+### 4. Keep handleEvent() Fast
+
+```java
+// Good: Fast processing
+public void handleEvent(Event e) {
+    queue.add(e);  // Just enqueue
+}
+
+// Bad: Blocking operations
+public void handleEvent(Event e) {
+    httpClient.post(e);  // Blocks!
+}
+```
+
+---
+
+## Gotchas
+
+### 1. Crashing Handlers Are Removed
+
+```java
+// If handleEvent() throws:
+manager.addHandler(new Handler<>() {
+    public void handleEvent(Event e) {
+        throw new RuntimeException("Boom!");  // Handler removed
+    }
+});
+
+manager.notify(new Event());  // Handler removed after this
+```
+
+---
+
+### 2. handleInfo() Crashes Don't Remove Handler
+
+```java
+@Override
+public void handleInfo(Object info) {
+    throw new RuntimeException("Boom!");
+    // Handler NOT removed - error swallowed
+}
+```
+
+---
+
+### 3. syncNotify() Times Out
+
+```java
+// If handler takes too long:
+manager.syncNotify(event, Duration.ofSeconds(5));
+// Throws RuntimeException wrapping TimeoutException
+```
+
+---
+
+## See Also
+
+- [Proc API](./proc.mdx) — Lightweight process primitive
+- [Supervisor API](./supervisor.mdx) — Hierarchical supervision
+- [Erlang gen_event Documentation](https://erlang.org/doc/man/gen_event.html) — OTP reference

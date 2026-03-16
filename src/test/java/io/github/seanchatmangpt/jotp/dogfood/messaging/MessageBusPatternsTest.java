@@ -3,6 +3,8 @@ package io.github.seanchatmangpt.jotp.dogfood.messaging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,12 +13,14 @@ import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@DtrTest
 class MessageBusPatternsTest implements WithAssertions {
 
     private MessageBusPatterns<String> bus;
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         bus = MessageBusPatterns.create();
     }
 

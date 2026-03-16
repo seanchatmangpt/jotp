@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.LivingDocGenerator.DocElement;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
@@ -21,6 +22,7 @@ class LivingDocGeneratorTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         generator = new LivingDocGenerator();
     }
 

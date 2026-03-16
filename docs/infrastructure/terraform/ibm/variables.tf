@@ -1,4 +1,4 @@
-# Java Maven Template - IBM Cloud Variables
+# JOTP - IBM Cloud Variables
 
 variable "ibmcloud_api_key" {
   type        = string
@@ -21,7 +21,7 @@ variable "resource_group" {
 
 variable "app_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Application name"
 }
 
@@ -33,19 +33,19 @@ variable "environment" {
 
 variable "vpc_name" {
   type        = string
-  default     = "java-maven-vpc"
+  default     = "jotp-vpc"
   description = "VPC name"
 }
 
 variable "subnet_name" {
   type        = string
-  default     = "java-maven-subnet"
+  default     = "jotp-subnet"
   description = "Subnet name"
 }
 
 variable "instance_name" {
   type        = string
-  default     = "java-maven-template"
+  default     = "jotp"
   description = "Instance name"
 }
 

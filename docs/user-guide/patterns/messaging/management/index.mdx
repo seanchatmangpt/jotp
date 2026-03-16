@@ -1,0 +1,793 @@
+# Management Patterns
+
+Management patterns provide operational control and monitoring capabilities for messaging systems. They enable observability, debugging, and runtime management without stopping the system.
+
+## Overview
+
+JOTP implements four core management patterns from the Enterprise IntegrationPatterns catalog:
+
+1. **Wire Tap** - Observe messages without affecting flow
+2. **Control Bus** - Management and monitoring interface
+3. **Detour** - Conditional routing for maintenance/debugging
+4. **Pipes and Filters** - Linear processing pipeline
+
+These patterns leverage JOTP's process introspection (`ProcSys`) for deep observability and runtime control.
+
+## Wire Tap
+
+### Pattern Description
+
+The Wire Tap pattern observes messages flowing through a channel without affecting the primary message flow. It's the messaging equivalent of a network tap - all messages are copied to a secondary destination (typically a logger or monitor) while the primary flow continues unaffected.
+
+### Implementation
+
+```java
+public final class WireTap<T> {
+    private final Consumer<T> primary;
+    private final Consumer<T> tap;
+    private final Proc<Void, T> proc;
+    private volatile boolean tapActive = true;
+
+    public WireTap(Consumer<T> primary, Consumer<T> tap) {
+        this.primary = primary;
+        this.tap = tap;
+        this.proc = new Proc<>(
+            null,
+            (state, msg) -> {
+                if (tapActive) {
+                    try {
+                        tap.accept(msg);
+                    } catch (Exception e) {
+                        // Tap failures must not affect primary flow
+                    }
+                }
+                primary.accept(msg);
+                return state;
+            }
+        );
+    }
+
+    public void send(T message) {
+        proc.tell(message);
+    }
+
+    public void activate() {
+        tapActive = true;
+    }
+
+    public void deactivate() {
+        tapActive = false;
+    }
+
+    public boolean isActive() {
+        return tapActive;
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Wire tap for logging all orders
+var orderProcessor = new Proc<Void, Order>(
+    null,
+    (state, order) -> {
+        orderService.process(order);
+        return state;
+    }
+);
+
+var wireTap = new WireTap<Order>(
+    order -> orderProcessor.tell(order),
+    order -> {
+        // Log to monitoring system
+        logger.info("Order received: " + order.id());
+        metrics.increment("orders.received");
+        metrics.record("orders.value", order.total());
+    }
+);
+
+// All orders flow through processor AND logged
+wireTap.send(new Order("order-123", customer, items));
+```
+
+### Dynamic Tap Control
+
+```java
+// Activate/deactivate tap at runtime
+var wireTap = new WireTap<String>(
+    primary::process,
+    msg -> auditLog.append(msg)
+);
+
+// Normal operation - tap inactive
+wireTap.deactivate();
+
+// Enable debugging for specific customer
+if (customer.id().equals("debug-customer")) {
+    wireTap.activate();
+}
+
+// Or control via admin interface
+adminInterface.registerCommand("debug-on", () -> wireTap.activate());
+adminInterface.registerCommand("debug-off", () -> wireTap.deactivate());
+```
+
+### Conditional Tapping
+
+```java
+// Tap only specific message types
+var selectiveTap = new WireTap<Order>(
+    orderProcessor::tell,
+    order -> {
+        // Only tap high-value orders
+        if (order.total().compareTo(new BigDecimal("10000")) > 0) {
+            alertSystem.sendAlert("High value order: " + order.id());
+        }
+    }
+);
+
+// Tap only specific customers
+var customerTap = new WireTap<Order>(
+    orderProcessor::tell,
+    order -> {
+        if (order.customerId().equals("vip-customer")) {
+            vipChannel.send(order);
+        }
+    }
+);
+```
+
+### Sampling Taps
+
+```java
+// Tap only a percentage of messages to reduce overhead
+var samplingTap = new WireTap<Order>(
+    orderProcessor::tell,
+    order -> {
+        if (ThreadLocalRandom.current().nextDouble() < 0.1) { // 10% sample
+            sampleCollector.add(order);
+        }
+    }
+);
+```
+
+### Tap Chaining
+
+```java
+// Multiple taps for different purposes
+var loggerTap = new WireTap<Order>(
+    order -> processor.tell(order),
+    order -> logger.info("Order: " + order.id())
+);
+
+var metricsTap = new WireTap<Order>(
+    order -> loggerTap.send(order),
+    order -> metrics.increment("orders.count")
+);
+
+var auditTap = new WireTap<Order>(
+    order -> metricsTap.send(order),
+    order -> auditSystem.record(order)
+);
+
+// All three taps run in sequence
+auditTap.send(order);
+```
+
+## Control Bus
+
+### Pattern Description
+
+The Control Bus pattern provides a dedicated channel for system management and monitoring. It separates operational concerns (health checks, metrics, configuration changes) from business logic, providing a clean interface for runtime management.
+
+### Implementation
+
+```java
+public final class ControlBus<M> {
+    private final Map<String, Proc<?, M>> processes = new ConcurrentHashMap<>();
+
+    public void register(String name, Proc<?, M> process) {
+        processes.put(name, process);
+    }
+
+    public void unregister(String name) {
+        processes.remove(name);
+    }
+
+    public List<String> listProcesses() {
+        return List.copyOf(processes.keySet());
+    }
+
+    public Map<String, ProcessStats> getStats() {
+        var stats = new HashMap<String, ProcessStats>();
+        for (var entry : processes.entrySet()) {
+            var proc = entry.getValue();
+            var sysStats = ProcSys.getStats(proc);
+            stats.put(entry.getKey(), new ProcessStats(
+                entry.getKey(),
+                sysStats.messagesProcessed(),
+                sysStats.avgProcessingTimeNs() / 1_000_000.0 // Convert to ms
+            ));
+        }
+        return stats;
+    }
+
+    public record ProcessStats(
+        String name,
+        long messagesProcessed,
+        double avgProcessingTime
+    ) {}
+}
+```
+
+### Usage Example
+
+```java
+// Create control bus
+var controlBus = new ControlBus<String>();
+
+// Register processes for monitoring
+controlBus.register("order-processor", orderProcessor);
+controlBus.register("payment-handler", paymentHandler);
+controlBus.register("notification-service", notificationService);
+
+// List all processes
+var processes = controlBus.listProcesses();
+System.out.println("Registered processes: " + processes);
+
+// Get statistics
+var stats = controlBus.getStats();
+stats.forEach((name, stat) -> {
+    System.out.println(name + ":");
+    System.out.println("  Messages: " + stat.messagesProcessed());
+    System.out.println("  Avg time: " + stat.avgProcessingTime() + "ms");
+});
+```
+
+### Health Checks
+
+```java
+// Add health check capabilities
+interface HealthCheckable {
+    HealthStatus getHealth();
+}
+
+record HealthStatus(
+    boolean healthy,
+    String message,
+    Map<String, Object> details
+) {}
+
+class HealthControlBus {
+    private final Map<String, HealthCheckable> services = new ConcurrentHashMap<>();
+
+    public void register(String name, HealthCheckable service) {
+        services.put(name, service);
+    }
+
+    public Map<String, HealthStatus> healthStatus() {
+        var status = new HashMap<String, HealthStatus>();
+        services.forEach((name, service) -> {
+            status.put(name, service.getHealth());
+        });
+        return status;
+    }
+}
+
+// Use in health check endpoint
+@GET
+@Path("/health")
+public Response healthCheck() {
+    var status = healthControlBus.healthStatus();
+    var allHealthy = status.values().stream()
+        .allMatch(HealthStatus::healthy);
+
+    return Response
+        .status(allHealthy ? 200 : 503)
+        .entity(status)
+        .build();
+}
+```
+
+### Dynamic Configuration
+
+```java
+// Control bus for configuration updates
+record ConfigUpdate(String key, String value) {}
+
+var configBus = new ControlBus<ConfigUpdate>();
+
+configBus.register("config-updater", new Proc<Config, ConfigUpdate>(
+    currentConfig,
+    (config, update) -> {
+        var updated = config.with(update.key(), update.value());
+        logger.info("Config updated: " + update.key() + " = " + update.value());
+        return updated;
+    }
+);
+
+// Update configuration
+configBus.send(new ConfigUpdate("order.timeout", "30000"));
+configBus.send(new ConfigUpdate("payment.maxRetries", "3"));
+```
+
+### Metrics Collection
+
+```java
+// Collect metrics from all processes
+class MetricsControlBus {
+    private final Map<String, Proc<?, ?>> processes = new ConcurrentHashMap<>();
+
+    public MetricsSnapshot collectMetrics() {
+        var snapshot = new MetricsSnapshot();
+
+        processes.forEach((name, proc) -> {
+            var stats = ProcSys.getStats(proc);
+            snapshot.add(name, stats);
+        });
+
+        return snapshot;
+    }
+
+    public static class MetricsSnapshot {
+        private final Map<String, ProcessMetrics> metrics = new HashMap<>();
+
+        void add(String name, ProcessMetrics stats) {
+            metrics.put(name, stats);
+        }
+
+        public void exportTo(PrometheusRegistry registry) {
+            metrics.forEach((name, stats) -> {
+                registry.gauge("proc_messages_total", stats.messagesProcessed());
+                registry.gauge("proc_mailbox_size", stats.mailboxSize());
+                registry.gauge("proc_processing_time_ms", stats.avgProcessingTimeNs() / 1_000_000.0);
+            });
+        }
+    }
+}
+```
+
+### Graceful Shutdown
+
+```java
+// Control bus for coordinated shutdown
+class ShutdownControlBus {
+    private final List<AutoCloseable> services = new ArrayList<>();
+
+    public void register(AutoCloseable service) {
+        services.add(service);
+    }
+
+    public void shutdownAll() {
+        logger.info("Initiating graceful shutdown...");
+
+        // Reverse order for dependencies
+        Collections.reverse(services);
+
+        for (var service : services) {
+            try {
+                logger.info("Stopping: " + service.getClass().getSimpleName());
+                service.close();
+            } catch (Exception e) {
+                logger.error("Error stopping service", e);
+            }
+        }
+
+        logger.info("Shutdown complete");
+    }
+}
+
+// Register shutdown hook
+Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+    shutdownBus.shutdownAll();
+}));
+```
+
+## Detour
+
+### Pattern Description
+
+The Detour pattern conditionally routes messages to a detour channel for special handling (validation, debugging, transformation) before returning to the primary flow. It's useful for maintenance mode, feature flags, or A/B testing.
+
+### Implementation
+
+```java
+public final class Detour<M> {
+    private final Predicate<M> predicate;
+    private final MessageChannel<M> detourChannel;
+    private final MessageChannel<M> primaryChannel;
+
+    public Detour(
+        Predicate<M> predicate,
+        MessageChannel<M> detourChannel,
+        MessageChannel<M> primaryChannel
+    ) {
+        this.predicate = predicate;
+        this.detourChannel = detourChannel;
+        this.primaryChannel = primaryChannel;
+    }
+
+    public void send(M message) {
+        if (predicate.test(message)) {
+            detourCount.incrementAndGet();
+            detourChannel.send(message);
+        } else {
+            primaryCount.incrementAndGet();
+            primaryChannel.send(message);
+        }
+    }
+
+    public long detourCount() {
+        return detourCount.get();
+    }
+
+    public long primaryCount() {
+        return primaryCount.get();
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Detour for validation
+var validatedOrders = new PointToPointChannel<Order>(orderProcessor);
+var rawOrders = new PointToPointChannel<Order>(validator -> {
+    if (!validator.isValid(order)) {
+        throw new ValidationException("Invalid order");
+    }
+    validatedOrders.send(order);
+});
+
+var detour = new Detour<>(
+    order -> !order.isValid(), // Detour invalid orders
+    rawOrders,
+    validatedOrders
+);
+
+// Valid orders go direct, invalid go through validation
+detour.send(validOrder); // → validatedOrders
+detour.send(invalidOrder); // → rawOrders → validatedOrders
+```
+
+### Feature Flags
+
+```java
+// Detour based on feature flags
+var newImplementation = new PointToPointChannel<Order>(newHandler);
+var oldImplementation = new PointToPointChannel<Order>(legacyHandler);
+
+var featureFlagDetour = new Detour<>(
+    order -> featureFlags.isActive("new-order-processing", order.customerId()),
+    newImplementation,
+    oldImplementation
+);
+
+// Different customers get different implementations
+featureFlagDetour.send(order); // Routes based on feature flag
+```
+
+### A/B Testing
+
+```java
+// Detour for A/B testing
+var variantA = new PointToPointChannel<Order>(handlerA);
+var variantB = new PointToPointChannel<Order>(handlerB);
+
+var abTestDetour = new Detour<>(
+    order -> {
+        // Hash customer ID for consistent assignment
+        var hash = Hashing.sha256().hashString(order.customerId(), StandardCharsets.UTF_8);
+        var bucket = hash.asInt() % 100;
+        return bucket < 50; // 50% to A, 50% to B
+    },
+    variantA,
+    variantB
+);
+
+// Track metrics per variant
+class TrackedHandler implements Consumer<Order> {
+    private final String variant;
+    private final Consumer<Order> delegate;
+
+    TrackedHandler(String variant, Consumer<Order> delegate) {
+        this.variant = variant;
+        this.delegate = delegate;
+    }
+
+    public void accept(Order order) {
+        var start = System.nanoTime();
+        try {
+            delegate.accept(order);
+            metrics.increment("order." + variant + ".success");
+        } catch (Exception e) {
+            metrics.increment("order." + variant + ".error");
+            throw e;
+        } finally {
+            var duration = System.nanoTime() - start;
+            metrics.record("order." + variant + ".duration_ns", duration);
+        }
+    }
+}
+```
+
+### Maintenance Mode
+
+```java
+// Detour for maintenance mode
+var maintenanceChannel = new PointToPointChannel<Order>(order -> {
+    // Return maintenance message
+    notificationService.send(order.customerId(), "System under maintenance");
+    maintenanceQueue.add(order);
+});
+
+var normalChannel = new PointToPointChannel<Order>(orderProcessor);
+
+var maintenanceDetour = new Detour<>(
+    order -> maintenanceModeActive.get(),
+    maintenanceChannel,
+    normalChannel
+);
+
+// Toggle maintenance mode
+AtomicBoolean maintenanceModeActive = new AtomicBoolean(false);
+
+adminInterface.registerCommand("maintenance-on", () -> {
+    maintenanceModeActive.set(true);
+    logger.warn("Maintenance mode activated");
+});
+
+adminInterface.registerCommand("maintenance-off", () -> {
+    maintenanceModeActive.set(false);
+    logger.info("Maintenance mode deactivated");
+
+    // Process queued orders
+    maintenanceQueue.drain().forEach(order -> normalChannel.send(order));
+});
+```
+
+## Pipes and Filters
+
+### Pattern Description
+
+The Pipes and Filters pattern processes messages through a linear sequence of processing stages. Each filter (stage) performs a specific transformation, and pipes connect the filters. This enables modular, composable message processing pipelines.
+
+### Implementation
+
+```java
+public final class PipesAndFilters<Input, Output> {
+    private final List<Filter<?, ?>> filters;
+
+    public interface Filter<I, O> {
+        O process(I input);
+    }
+
+    public Output process(Input input) {
+        Object current = input;
+        for (var filter : filters) {
+            current = filter.process(current);
+        }
+        return (Output) current;
+    }
+
+    public static <I, O> Builder<I, O> builder() {
+        return new Builder<>();
+    }
+
+    public static class Builder<I, O> {
+        private final List<Filter<?, ?>> filters = new ArrayList<>();
+
+        public <T> Builder<I, T> filter(Filter<I, T> filter) {
+            filters.add(filter);
+            return (Builder<I, T>) this;
+        }
+
+        public PipesAndFilters<I, O> build() {
+            return new PipesAndFilters<>(filters);
+        }
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Build order processing pipeline
+var pipeline = PipesAndFilters.<CreateOrderRequest, ProcessedOrder>builder()
+    .filter(request -> {
+        // Validate request
+        if (request.items().isEmpty()) {
+            throw new ValidationException("Order must have items");
+        }
+        return request;
+    })
+    .filter(request -> {
+        // Enrich with customer data
+        var customer = customerService.getById(request.customerId());
+        return new EnrichedOrder(request, customer);
+    })
+    .filter(enriched -> {
+        // Calculate pricing
+        var pricing = pricingService.calculate(enriched);
+        return new PricedOrder(enriched, pricing);
+    })
+    .filter(priced -> {
+        // Reserve inventory
+        var reserved = inventoryService.reserve(priced);
+        return new ReservedOrder(priced, reserved);
+    })
+    .filter(reserved -> {
+        // Create order entity
+        var order = orderRepository.save(reserved);
+        return new ProcessedOrder(order);
+    })
+    .build();
+
+// Execute pipeline
+try {
+    var processed = pipeline.process(new CreateOrderRequest("cust-123", items));
+    System.out.println("Order created: " + processed.order().id());
+} catch (PipelineException e) {
+    System.err.println("Pipeline failed: " + e.getMessage());
+}
+```
+
+### Error Handling
+
+```java
+// Filter that catches and wraps exceptions
+class SafeFilter<I, O> implements PipesAndFilters.Filter<I, O> {
+    private final PipesAndFilters.Filter<I, O> delegate;
+    private final String stageName;
+
+    public O process(I input) {
+        try {
+            return delegate.process(input);
+        } catch (Exception e) {
+            throw new PipelineException(
+                "Pipeline failed at stage: " + stageName,
+                e
+            );
+        }
+    }
+}
+
+// Use in pipeline
+var pipeline = PipesAndFilters.<Request, Response>builder()
+    .filter(new SafeFilter<>(this::validate, "validation"))
+    .filter(new SafeFilter<>(this::enrich, "enrichment"))
+    .filter(new SafeFilter<>(this::process, "processing"))
+    .build();
+```
+
+### Parallel Filters
+
+```java
+// Execute filters in parallel using structured concurrency
+class ParallelFilter<I, O> implements PipesAndFilters.Filter<I, O> {
+    private final List<PipesAndFilters.Filter<I, O>> filters;
+
+    public O process(I input) {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            var tasks = filters.stream()
+                .map(filter -> scope.fork(() -> filter.process(input)))
+                .toList();
+
+            scope.join().throwIfFailed();
+
+            // Combine results
+            return combineResults(tasks.stream().map(Future::get).toList());
+        }
+    }
+}
+```
+
+### Conditional Filters
+
+```java
+// Filter that conditionally processes
+class ConditionalFilter<I, O> implements PipesAndFilters.Filter<I, O> {
+    private final Predicate<I> condition;
+    private final PipesAndFilters.Filter<I, O> whenTrue;
+    private final PipesAndFilters.Filter<I, O> whenFalse;
+
+    public O process(I input) {
+        if (condition.test(input)) {
+            return whenTrue.process(input);
+        } else {
+            return whenFalse.process(input);
+        }
+    }
+}
+
+// Use in pipeline
+var pipeline = PipesAndFilters.<Order, Order>builder()
+    .filter(new ConditionalFilter<>(
+        Order::isInternational,
+        this::applyInternationalRules,
+        this::applyDomesticRules
+    ))
+    .build();
+```
+
+## Best Practices
+
+### 1. Keep Taps Non-Invasive
+
+```java
+// Good: Tap never affects primary flow
+var tap = new WireTap<>(primary, msg -> {
+    try {
+        logger.log(msg);
+    } catch (Exception e) {
+        // Never propagate to primary
+    }
+});
+
+// Bad: Tap can crash primary
+var badTap = new WireTap<>(primary, msg -> {
+    logger.log(msg); // Can throw and crash primary
+});
+```
+
+### 2. Use Control Bus for All Management
+
+```java
+// Good: All management through control bus
+controlBus.register("order-processor", orderProcessor);
+controlBus.getStats(); // Centralized monitoring
+
+// Bad: Scattered management code
+orderProcessor.getStats();
+paymentHandler.getStats();
+notificationService.getStats();
+```
+
+### 3. Make Detours Configurable
+
+```java
+// Good: Configurable detour predicate
+var detour = new Detour<>(
+    order -> config.getBoolean("detour.enabled", false),
+    detourChannel,
+    primaryChannel
+);
+
+// Bad: Hard-coded detour logic
+var detour = new Detour<>(
+    order -> true, // Always detours!
+    detourChannel,
+    primaryChannel
+);
+```
+
+### 4. Compose Filters from Small Units
+
+```java
+// Good: Small, focused filters
+.filter(this::validate)
+.filter(this::enrich)
+.filter(this::process)
+
+// Bad: Monolithic filter
+.filter(this::validateEnrichAndProcess)
+```
+
+## Summary
+
+Management patterns provide operational control:
+
+- **Wire Tap**: Observe messages without affecting flow
+- **Control Bus**: Centralized management and monitoring
+- **Detour**: Conditional routing for maintenance/features
+- **Pipes and Filters**: Composable processing pipelines
+
+These patterns enable observability, debugging, and runtime management without stopping the system, critical for production operations.
+
+## Further Reading
+
+- [Enterprise Integration Patterns: Chapter 11](https://www.enterpriseintegrationpatterns.com/patterns/messaging/) - Original EIP management patterns
+- [Observability Patterns](https://www.bitscope.io/observability-patterns/) - Monitoring best practices
+- [JOTP ProcSys](../../../concurrency/proc/#procsys-introspection) - Process introspection
+- [Feature Flag Best Practices](https://martinfowler.com/articles/feature-toggles.html) - Feature flags

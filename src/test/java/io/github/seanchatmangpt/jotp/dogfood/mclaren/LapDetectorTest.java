@@ -1,7 +1,9 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -12,6 +14,11 @@ import org.junit.jupiter.api.Test;
 class LapDetectorTest implements WithAssertions {
 
     private LapDetector detector;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @AfterEach
     void tearDown() throws InterruptedException {

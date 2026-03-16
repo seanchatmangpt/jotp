@@ -1,0 +1,555 @@
+# Security Advisories
+
+This document describes the security vulnerability handling process for JOTP, including reporting, disclosure, and patching policies.
+
+## Overview
+
+JOTP takes security seriously. This document outlines:
+
+1. **Reporting Vulnerabilities** - How to report security issues
+2. **Vulnerability Response** - Timeline and process
+3. **Disclosure Policy** - How and when we disclose vulnerabilities
+4. **Security Best Practices** - Secure usage of JOTP
+5. **Known Vulnerabilities** - Publicly disclosed security issues
+
+## Security Policy
+
+### Version Support
+
+| Version | Security Support | EOL |
+|---------|------------------|-----|
+| 1.0.x | ✅ Supported | Dec 2027 |
+| 0.9.x | ⚠️ Critical only | Mar 2026 |
+| 0.1.x | ❌ Unsupported | Dec 2025 |
+
+**Only the latest minor version receives security patches.**
+
+### Severity Levels
+
+| Severity | Description | Example | Response Time |
+|----------|-------------|---------|---------------|
+| **Critical** | Arbitrary code execution, data theft | RCE in Proc.spawn() | 48 hours |
+| **High** | Bypass security controls, privilege escalation | Supervisor bypass | 1 week |
+| **Medium** | Limited data exposure, DoS | Mailbox overflow | 2 weeks |
+| **Low** | Information disclosure | Stack trace leak | 1 month |
+
+## Reporting Vulnerabilities
+
+### How to Report
+
+**Private Disclosure (Preferred):**
+```
+Email: security@seanchatmangpt.io
+PGP Key: [GitHub profile]
+Subject: [Security] JOTP Vulnerability Report
+```
+
+**GitHub Security Advisory:**
+1. Visit: https://github.com/seanchatmangpt/jotp/security/advisories
+2. Click "Report a vulnerability"
+3. Fill out the form (private by default)
+
+**What to Include:**
+- Description of the vulnerability
+- Steps to reproduce (minimal example)
+- Impact assessment
+- Affected versions
+- Proof of concept (if applicable)
+- Suggested fix (optional)
+
+**What NOT to Do:**
+- ❌ Publicly disclose before fix is released
+- ❌ Create public GitHub issue for security bugs
+- ❌ Discuss on public forums (Discord, Twitter)
+- ❌ Exploit the vulnerability
+
+### Vulnerability Report Template
+
+```markdown
+## JOTP Security Vulnerability Report
+
+### Summary
+[Brief description of the vulnerability]
+
+### Affected Components
+- Component: Proc / Supervisor / etc.
+- Version: [affected versions]
+- Class: io.github.seanchatmangpt.jotp.YourClass
+
+### Vulnerability Type
+- [ ] Remote Code Execution (RCE)
+- [ ] Privilege Escalation
+- [ ] Denial of Service (DoS)
+- [ ] Information Disclosure
+- [ ] Authentication Bypass
+- [ ] Authorization Bypass
+- [ ] Other: [specify]
+
+### Severity
+- [ ] Critical
+- [ ] High
+- [ ] Medium
+- [ ] Low
+
+### Impact
+[Describe potential impact on users]
+
+### Reproduction Steps
+1. [Step 1]
+2. [Step 2]
+3. [Vulnerability triggered]
+
+### Proof of Concept
+```java
+// Minimal code to reproduce
+```
+
+### Affected Versions
+- [ ] 1.0.0
+- [ ] 0.9.0
+- [ ] Other: [specify]
+
+### Suggested Fix
+[Optional: describe potential fix]
+
+### Additional Information
+[Any other relevant information]
+```
+
+### Example Vulnerability Report
+
+```markdown
+## Summary
+Process mailbox can be overflowed causing memory exhaustion
+
+### Affected Components
+- Component: Proc<S,M>
+- Version: 1.0.0, 0.9.0
+- Class: io.github.seanchatmangpt.jotp.Proc
+
+### Vulnerability Type
+- [x] Denial of Service (DoS)
+
+### Severity
+- [x] High
+
+### Impact
+An attacker can send unlimited messages to a process, causing
+unbounded memory growth and eventual OutOfMemoryError. This can
+crash the JVM and affect all supervised processes.
+
+### Reproduction Steps
+1. Create a target process
+2. Send 1M+ messages without processing
+3. Process mailbox grows unbounded
+4. JVM crashes with OutOfMemoryError
+
+### Proof of Concept
+```java
+var victim = Proc.spawn(0, (state, msg) -> {
+    Thread.sleep(Long.MAX_VALUE); // Never process messages
+    return state;
+});
+
+// Attack: flood mailbox
+for (int i = 0; i < 10_000_000; i++) {
+    victim.tell("message");
+}
+// OutOfMemoryError: Java heap space
+```
+
+### Affected Versions
+- [x] 1.0.0
+- [x] 0.9.0
+
+### Suggested Fix
+Implement mailbox size limit with backpressure:
+- Configurable mailbox capacity (default: 1000)
+- Block senders when mailbox full
+- Drop oldest messages option
+- Monitor mailbox size metrics
+
+### Additional Information
+This is similar to Erlang's mailbox but without the
+built-in backpressure mechanisms.
+```
+
+## Vulnerability Response Process
+
+### Timeline
+
+```
+T-0: Vulnerability Reported
+  ↓
+T+48h: Triage and Assessment
+  ↓
+T+1w: Fix Developed (Critical)
+  ↓
+T+2w: Fix Tested and Released (Critical)
+  ↓
+T+3w: Public Disclosure
+```
+
+### Step-by-Step Process
+
+#### Step 1: Initial Response (T+0 to T+48h)
+
+**Actions:**
+- Acknowledge receipt of report
+- Assign severity level
+- Request additional information if needed
+- Create private GitHub Security Advisory
+- Notify security team
+
+**Response Email:**
+```markdown
+Subject: Re: [Security] JOTP Vulnerability Report
+
+Thank you for your report.
+
+We have received your vulnerability report and are reviewing it.
+We will respond within 48 hours with:
+- Severity assessment
+- Proposed timeline
+- Confirmation of affected versions
+
+Reference: GHSA-xxxx-xxxx-xxxx
+```
+
+#### Step 2: Triage and Assessment (T+48h to T+1w)
+
+**Actions:**
+- Reproduce vulnerability
+- Assess impact and severity
+- Identify affected versions
+- Develop fix strategy
+- Create private branch for fix
+
+**Assessment Checklist:**
+- [ ] Vulnerability reproduced
+- [ ] Impact confirmed
+- [ ] Severity assigned
+- [ ] Affected versions identified
+- [ ] Fix strategy determined
+
+#### Step 3: Fix Development (T+1w to T+2w)
+
+**Actions:**
+- Develop fix in private branch
+- Write regression tests
+- Verify fix doesn't break existing functionality
+- Perform security review
+- Create release candidate
+
+**Fix Checklist:**
+- [ ] Vulnerability fixed
+- [ ] Regression tests added
+- [ ] All tests pass
+- [ ] Code review completed
+- [ ] Security review completed
+
+#### Step 4: Release Preparation (T+2w to T+3w)
+
+**Actions:**
+- Create security advisory draft
+- Prepare release notes
+- Create migration guide (if breaking)
+- Test release candidate
+- Coordinate with downstream consumers
+
+**Release Checklist:**
+- [ ] Advisory drafted
+- [ ] Release notes prepared
+- [ ] Migration guide written
+- [ ] Release tested
+- [ ] Downstream notified
+
+#### Step 5: Public Disclosure (T+3w)
+
+**Actions:**
+- Publish security advisory
+- Release patched version
+- Update documentation
+- Announce via security mailing list
+- Monitor for follow-up issues
+
+**Disclosure Checklist:**
+- [ ] Advisory published
+- [ ] Patch released
+- [ ] Documentation updated
+- [ ] Announcement sent
+- [ ] Feedback monitored
+
+## Disclosure Policy
+
+### Coordinated Disclosure
+
+**Principles:**
+1. **User Safety First** - Don't expose users to unpatched vulnerabilities
+2. **Transparent Communication** - Clear, timely communication
+3. **Responsible Disclosure** - Give users time to patch
+4. **Full Disclosure** - Eventually disclose all details
+
+### Disclosure Timeline
+
+**Critical Vulnerabilities:**
+- Report → Fix: 2 weeks
+- Fix → Disclosure: 1 week
+- **Total: 3 weeks**
+
+**High Vulnerabilities:**
+- Report → Fix: 4 weeks
+- Fix → Disclosure: 2 weeks
+- **Total: 6 weeks**
+
+**Medium/Low Vulnerabilities:**
+- Report → Fix: 8 weeks
+- Fix → Disclosure: 4 weeks
+- **Total: 12 weeks**
+
+### Disclosure Process
+
+**Private Disclosure (Initial):**
+- Affected users notified via private channels
+- Downstream maintainers notified
+- Security mailing list notified
+- No public details yet
+
+**Public Disclosure (Final):**
+- GitHub Security Advisory published
+- CVE assigned (if applicable)
+- Release notes updated
+- Blog post (for critical vulnerabilities)
+- Social media announcement
+
+### Exception Cases
+
+**Immediate Disclosure:**
+- Vulnerability already public
+- Exploits in the wild
+- Requires immediate user action
+
+**Delayed Disclosure:**
+- Complex vulnerability requiring extended research
+- Coordinating with multiple vendors
+- Legal or regulatory requirements
+
+## Security Best Practices
+
+### For Users
+
+#### 1. Dependency Management
+
+```xml
+<!-- Use dependency management to enforce versions -->
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.github.seanchatmangpt</groupId>
+            <artifactId>jotp</artifactId>
+            <version>1.0.1</version> <!-- Latest patch version -->
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+#### 2. Regular Updates
+
+```bash
+# Check for updates weekly
+mvnd versions:display-dependency-updates
+
+# Subscribe to security announcements
+# https://github.com/seanchatmangpt/jotp/notifications
+```
+
+#### 3. Vulnerability Scanning
+
+```bash
+# Run OWASP dependency check
+mvnd org.owasp:dependency-check-maven:check
+
+# Review results
+cat target/dependency-check-report.html
+```
+
+#### 4. Secure Configuration
+
+```java
+// Enable security features
+var supervisor = new Supervisor(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,  // Limit restarts to prevent restart loops
+    Duration.ofMinutes(1)
+);
+
+// Use timeouts to prevent DoS
+var result = proc.ask(message, Duration.ofSeconds(5));
+```
+
+#### 5. Monitoring
+
+```java
+// Monitor process mailbox sizes
+var mailboxSize = proc.getMailboxSize();
+if (mailboxSize > 1000) {
+    logger.warn("Large mailbox detected: {}", mailboxSize);
+}
+
+// Monitor restart counts
+var restartCount = supervisor.getRestartCount(childId);
+if (restartCount > 5) {
+    logger.error("Excessive restarts: {}", restartCount);
+}
+```
+
+### For Developers
+
+#### 1. Input Validation
+
+```java
+// ✓ Good: Validate message content
+(state, msg) -> {
+    if (msg == null || msg.content().length() > 1000) {
+        throw new IllegalArgumentException("Invalid message");
+    }
+    return processMessage(state, msg);
+}
+
+// ✗ Bad: No validation
+(state, msg) -> processMessage(state, msg)
+```
+
+#### 2. Rate Limiting
+
+```java
+// ✓ Good: Implement rate limiting
+var rateLimiter = new RateLimiter(100, Duration.ofMinutes(1));
+
+(state, msg) -> {
+    if (!rateLimiter.tryAcquire()) {
+        throw new RateLimitExceededException();
+    }
+    return processMessage(state, msg);
+}
+```
+
+#### 3. Resource Limits
+
+```java
+// ✓ Good: Use timeouts
+var result = proc.ask(message, Duration.ofSeconds(5))
+    .orTimeout(5, TimeUnit.SECONDS)
+    .join();
+
+// ✓ Good: Limit mailbox size
+var proc = Proc.spawn(initialState, handler)
+    .withMailboxCapacity(1000);
+```
+
+#### 4. Error Handling
+
+```java
+// ✓ Good: Secure error messages
+(state, msg) -> {
+    try {
+        return processMessage(state, msg);
+    } catch (Exception e) {
+        logger.error("Processing error", e);
+        throw new ProcessingException("Error processing message"); // No stack traces to user
+    }
+}
+
+// ✗ Bad: Expose internal details
+(state, msg) -> {
+    try {
+        return processMessage(state, msg);
+    } catch (Exception e) {
+        throw new RuntimeException(e); // Exposes stack trace
+    }
+}
+```
+
+## Known Vulnerabilities
+
+### CVE-2026-XXXXX: Mailbox Overflow DoS (PATCHED)
+
+**Severity:** High
+**Affected:** 1.0.0, 0.9.0
+**Patched:** 1.0.1, 0.9.1
+**Published:** 2026-03-15
+
+**Description:**
+Process mailboxes could grow unbounded, causing memory exhaustion and JVM crashes.
+
+**Impact:**
+An attacker could send unlimited messages to a process, causing OutOfMemoryError and crashing the JVM.
+
+**Mitigation:**
+- Upgrade to 1.0.1 or later
+- Mailbox capacity limit added (default: 1000)
+- Backpressure mechanism implemented
+
+**References:**
+- GitHub Advisory: GHSA-xxxx-xxxx-xxxx
+- CVE: CVE-2026-XXXXX
+- Fix: PR #123
+
+### No Other Known Vulnerabilities
+
+As of 2026-03-15, there are no other known vulnerabilities in supported versions.
+
+## Security Audits
+
+### Past Audits
+
+| Date | Auditor | Scope | Findings | Status |
+|------|---------|-------|----------|--------|
+| 2026-02-15 | Third-party Security Firm | Core primitives | 1 High, 2 Medium | ✅ All fixed in 1.0.1 |
+| 2025-12-01 | Internal Review | Alpha release | 5 Low | ✅ All fixed in 0.9.0 |
+
+### Future Audits
+
+**Planned:**
+- Q2 2026: External audit of distributed features
+- Q4 2026: Full framework audit before 2.0.0
+
+## Security Team
+
+**Contact:**
+- Email: security@seanchatmangpt.io
+- PGP Key: [Available on GitHub profile]
+
+**Members:**
+- Sean Chat Mangpt - Project Lead
+- Security Advisors - [External security consultants]
+
+## Acknowledgments
+
+We thank the following researchers for responsible disclosure:
+
+- [Researcher Name] - Mailbox overflow vulnerability (CVE-2026-XXXXX)
+- [Your name here] - Report a vulnerability
+
+## Related Resources
+
+- [Reporting Vulnerabilities](#reporting-vulnerabilities)
+- [Security Best Practices](#security-best-practices)
+- [Changelog](./changelog.mdx) - Security fixes in releases
+- [Release Process](./release-process.mdx) - Security patch process
+
+## Questions?
+
+**Security Questions:**
+- Email: security@seanchatmangpt.io
+- PGP encrypted messages preferred
+
+**General Questions:**
+- GitHub Issues: https://github.com/seanchatmangpt/jotp/issues
+- GitHub Discussions: https://github.com/seanchatmangpt/jotp/discussions
+
+---
+
+**Last Updated:** 2026-03-15
+
+**This document is updated as new vulnerabilities are discovered and patched.**

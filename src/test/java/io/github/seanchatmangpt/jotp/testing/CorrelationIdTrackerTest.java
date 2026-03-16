@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.testing;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.testing.util.CorrelationIdTracker;
 import java.util.Set;
 import org.assertj.core.api.WithAssertions;
@@ -17,6 +18,7 @@ class CorrelationIdTrackerTest implements WithAssertions {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         tracker = new CorrelationIdTracker();
     }
 

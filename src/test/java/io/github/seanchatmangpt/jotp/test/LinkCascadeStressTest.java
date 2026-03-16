@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ExitSignal;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcLink;
@@ -38,7 +40,11 @@ import org.junit.jupiter.api.Timeout;
  *   <li><b>Property: crash count ≤ link count + 1</b> — in any star topology with N workers linked
  *       to a hub, exactly N+1 processes must die when the hub crashes (hub + N workers).
  * </ol>
+ *
+ * <p><strong>DTR Documentation:</strong> This test class provides living documentation of ProcLink
+ * cascade behavior and failure propagation. Run with DTR to see blast radius and propagation times.
  */
+@DtrTest
 @Timeout(30)
 class LinkCascadeStressTest implements WithAssertions {
 
@@ -68,7 +74,14 @@ class LinkCascadeStressTest implements WithAssertions {
      * real latency problem (each hop is just a thread interrupt, should be < 1ms).
      */
     @Test
-    void chainCascade_500deep_allDieWithin5s() throws Exception {
+    void chainCascade_500deep_allDieWithin5s(DtrContext ctx) throws Exception {
+        ctx.say("ProcLink cascade stress test: chain depth propagation");
+        ctx.say("Tests O(N) cascade propagation through linked chain.");
+        ctx.say("");
+        ctx.say("Breaking point under investigation:");
+        ctx.say("- Chain depth: 500 processes (A→B→C→...→N)");
+        ctx.say("- Crash head, measure propagation to tail");
+        ctx.say("- Expected: <10ms per hop (<5s total)");
         int depth = 500;
         var procs = new ArrayList<Proc<Integer, Msg>>(depth);
 
@@ -92,6 +105,14 @@ class LinkCascadeStressTest implements WithAssertions {
 
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
         System.out.printf("[chain-cascade] depth=%d elapsed=%d ms%n", depth, elapsedMs);
+
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Chain depth", String.valueOf(depth),
+                        "Propagation time", String.format("%d ms", elapsedMs),
+                        "Per-hop latency", String.format("%.2f ms", elapsedMs / (double) depth),
+                        "Threshold", "<10ms per hop",
+                        "Result", elapsedMs < 5000 ? "PASS" : "FAIL"));
     }
 
     // ── 2. Death star: hub + N workers, hub crash kills all ───────────────
@@ -108,7 +129,14 @@ class LinkCascadeStressTest implements WithAssertions {
      * degrades to O(N × interrupt_latency).
      */
     @Test
-    void deathStar_1000workers_hubCrashKillsAll() throws Exception {
+    void deathStar_1000workers_hubCrashKillsAll(DtrContext ctx) throws Exception {
+        ctx.say("ProcLink cascade stress test: death star topology");
+        ctx.say("Tests JVM scheduler under 1000 simultaneous thread interrupts.");
+        ctx.say("");
+        ctx.say("Breaking point under investigation:");
+        ctx.say("- Hub linked to 1000 workers");
+        ctx.say("- Hub crash triggers 1000 concurrent interrupts");
+        ctx.say("- Tests crash callback loop bottleneck");
         int workerCount = 1000;
         var hub = new Proc<>(0, LinkCascadeStressTest::handle);
         var workers = new ArrayList<Proc<Integer, Msg>>(workerCount);
@@ -130,6 +158,19 @@ class LinkCascadeStressTest implements WithAssertions {
 
         // Verify every worker is actually dead
         assertThat(workers).noneMatch(w -> w.thread().isAlive());
+
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Workers",
+                        String.valueOf(workerCount),
+                        "Propagation time",
+                        String.format("%d ms", elapsedMs),
+                        "Interrupts fired",
+                        "1000 concurrent",
+                        "Dead workers verified",
+                        "100%",
+                        "Result",
+                        elapsedMs < 5000 ? "PASS" : "FAIL"));
     }
 
     // ── 3. Exit signal flood to trapping process ──────────────────────────

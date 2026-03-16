@@ -1,0 +1,230 @@
+---
+title: Use Event Bus
+description: Implement pub/sub messaging for loose coupling
+sidebar_position: 4
+---
+
+# Use Event Bus
+
+Learn how to use JOTP's EventManager for type-safe, fault-isolated pub/sub messaging.
+
+## Quick Start
+
+### Create Event Bus
+
+```java
+EventManager<DomainEvent> eventBus = EventManager.spawn("events");
+```
+
+### Define Events
+
+```java
+public sealed interface DomainEvent
+    permits DomainEvent.OrderCreated,
+           DomainEvent.PaymentProcessed,
+           DomainEvent.ShipmentDispatched {
+
+    record OrderCreated(String orderId, BigDecimal amount) implements DomainEvent {}
+    record PaymentProcessed(String orderId, String transactionId) implements DomainEvent {}
+    record ShipmentDispatched(String orderId, String trackingNumber) implements DomainEvent {}
+}
+```
+
+### Subscribe to Events
+
+```java
+Proc<SubscriberState, DomainEvent> subscriber = eventBus.subscribe(
+    "order-logger",
+    event -> switch(event) {
+        case OrderCreated(var orderId, var amount) -> {
+            logger.info("Order {} created for ${}", orderId, amount);
+            return SubscriberState.KEEP;
+        }
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+### Publish Events
+
+```java
+eventBus.publish(new OrderCreated("ORD-123", new BigDecimal("99.99")));
+```
+
+## Advanced Patterns
+
+### 1. Filtering Events
+
+```java
+eventBus.subscribe(
+    "payment-handler",
+    event -> {
+        if (event instanceof PaymentProcessed pp) {
+            handlePayment(pp);
+        }
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+### 2. Event Transformation
+
+```java
+eventBus.subscribe(
+    "analytics-aggregator",
+    event -> {
+        DomainEvent enriched = enrichWithMetadata(event);
+        analyticsBus.publish(enriched);
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+### 3. Conditional Subscription
+
+```java
+eventBus.subscribeConditional(
+    "high-value-handler",
+    event -> event instanceof OrderCreated(var _, var amount)
+             && amount.compareTo(new BigDecimal("1000")) > 0,
+    event -> {
+        // Handle high-value orders differently
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+## Fault Isolation
+
+Each subscriber runs in its own process:
+
+```java
+// This crash won't affect other subscribers or the bus
+eventBus.subscribe(
+    "risky-handler",
+    event -> {
+        if (event instanceof BadEvent) {
+            throw new RuntimeException("Oops!"); // Only this handler dies
+        }
+        return SubscriberState.KEEP;
+    }
+);
+```
+
+## Testing Event Systems
+
+### Verifying Publication
+
+```java
+@Test
+void testEventPublication() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    List<TestEvent> captured = new ArrayList<>();
+    bus.subscribe("capturer", event -> {
+        captured.add(event);
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    await().atMost(1, SECONDS).until(() ->
+        captured.size() == 1
+    );
+}
+```
+
+### Testing Handler Isolation
+
+```java
+@Test
+void testHandlerCrashIsolation() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    AtomicInteger healthyCount = new AtomicInteger(0);
+    bus.subscribe("crasher", event -> {
+        throw new RuntimeException("Crash!");
+    });
+
+    bus.subscribe("healthy", event -> {
+        healthyCount.incrementAndGet();
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    // Healthy handler still receives events
+    await().atMost(1, SECONDS).until(() ->
+        healthyCount.get() == 1
+    );
+}
+```
+
+## Best Practices
+
+### DO:
+- Use sealed interfaces for event types
+- Make events immutable (records)
+- Keep handlers fast and non-blocking
+- Subscribe early in application lifecycle
+- Use descriptive subscriber names
+
+### DON'T:
+- Throw exceptions in handlers (use Result types)
+- Block in handlers (offload work if needed)
+- Assume event delivery order
+- Publish null events
+- Forget to unsubscribe for temporary handlers
+
+## Common Patterns
+
+### CQRS with Event Sourcing
+
+```java
+// Write side: Command publishes events
+commandHandler.execute(cmd).forEach(eventBus::publish);
+
+// Read side: Projections subscribe to events
+eventBus.subscribe("read-model", event -> {
+    readModelUpdater.handle(event);
+    return SubscriberState.KEEP;
+});
+```
+
+### Saga Orchestration
+
+```java
+eventBus.subscribe("payment-saga", event -> switch(event) {
+    case OrderCreated(var orderId, var amount) -> {
+        paymentService.charge(orderId, amount);
+        return SubscriberState.KEEP;
+    }
+    case PaymentProcessed(var orderId, _) -> {
+        shippingService.dispatch(orderId);
+        return SubscriberState.KEEP;
+    }
+    // ... handle compensating events
+});
+```
+
+### Event Replay
+
+```java
+// Store all events to a log
+eventBus.subscribe("audit-log", event -> {
+    eventLog.append(event);
+    return SubscriberState.KEEP;
+});
+
+// Replay for testing or recovery
+eventLog.replaySince(instant).forEach(eventBus::publish);
+```
+
+## Related Tests
+- `EventManagerTest.java` - Core functionality
+- `EventManagerGenEventTest.java` - Generic event types
+- `EventSourcingAuditLogTest.java` - Event sourcing patterns
+
+## See Also
+- [Event-Driven Architecture](../tutorials/event-driven-architecture.mdx) - Tutorial
+- [EventManager API](../reference/event-manager-api.mdx) - API reference

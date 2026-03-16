@@ -1,4 +1,4 @@
-# Java Maven Template - Production Containerfile
+# JOTP - Production Containerfile
 # Multi-stage build: Maven 4 + Java 25 for build, JRE 25 for runtime
 
 # =============================================================================

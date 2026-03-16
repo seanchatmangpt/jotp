@@ -1,14 +1,14 @@
-# Java Maven Template - Minimal Runtime Containerfile
+# JOTP - Minimal Runtime Containerfile
 # For pre-built JAR files (CI/CD pipeline use)
 
 # Use Eclipse Temurin JRE 25 (minimal Alpine)
 FROM eclipse-temurin:25-jre-alpine
 
 # Labels for OCI compliance
-LABEL org.opencontainers.image.title="Java Maven Template" \
-      org.opencontainers.image.description="Java 25 Maven Template Application" \
+LABEL org.opencontainers.image.title="JOTP" \
+      org.opencontainers.image.description="Java 26 OTP Framework" \
       org.opencontainers.image.version="1.0.0" \
-      org.opencontainers.image.source="https://github.com/seanchatmangpt/java-maven-template"
+      org.opencontainers.image.source="https://github.com/seanchatmangpt/jotp"
 
 # Security: Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

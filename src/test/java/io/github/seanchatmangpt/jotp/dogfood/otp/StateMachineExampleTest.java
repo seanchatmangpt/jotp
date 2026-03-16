@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.otp.StateMachineExample.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,10 +16,12 @@ import org.junit.jupiter.api.Timeout;
  * <p>Verifies correct state transitions, event handling, data updates, and the distinction between
  * async send() and sync call() operations in the turnstile FSM.
  */
+@DtrTest
 class StateMachineExampleTest {
 
     @BeforeEach
     void setup() {
+        ApplicationController.reset();
         // Each test gets a fresh state machine
     }
 

@@ -2,9 +2,13 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.WithAssertions;
@@ -13,6 +17,13 @@ import org.junit.jupiter.api.Timeout;
 
 /**
  * Verifies OTP process-monitor semantics in Java 26.
+ *
+ * <p>Armstrong: "Monitors are one-way links. A monitor observes a process without being affected by
+ * its death."
+ *
+ * <p><strong>Living Documentation:</strong> Each test method generates executable documentation
+ * explaining OTP monitor semantics, unilateral observation, DOWN message delivery, and demonitor
+ * behavior. Run with DTR to see examples with actual output values.
  *
  * <p>Key OTP invariants under test:
  *
@@ -23,8 +34,11 @@ import org.junit.jupiter.api.Timeout;
  *   <li>{@code demonitor} prevents DOWN from firing after cancellation
  * </ol>
  */
+@DtrTest
 @Timeout(10)
 class ProcMonitorTest implements WithAssertions {
+
+    @DtrContextField private DtrContext ctx;
 
     sealed interface Msg permits Msg.Ping, Msg.Crash {
         record Ping() implements Msg {}
@@ -48,6 +62,46 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_abnormalExit_firesDownWithReason() {
+        ctx.sayNextSection("ProcMonitor: Abnormal Exit Detection");
+        ctx.say(
+                "ProcMonitor observes a process and fires a callback when it exits abnormally (crashes). The exception that caused the crash is passed as the reason.");
+        ctx.sayCode(
+                """
+            var target = counter();
+            var downReason = new AtomicReference<Throwable>();
+            var downFired = new AtomicBoolean(false);
+
+            ProcMonitor.monitor(target, reason -> {
+                downReason.set(reason);
+                downFired.set(true);
+            });
+
+            // Crash the target
+            target.tell(new Msg.Crash());
+
+            // Monitor callback fires with the exception
+            await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
+            // downReason.get().getMessage() == "BOOM"
+            """,
+                "java");
+        ctx.sayMermaid(
+                """
+            sequenceDiagram
+                participant M as Monitor
+                participant T as Target Process
+
+                M->>T: monitor(callback)
+                Note over M: Observing T
+
+                T->>T: Crash (RuntimeException)
+                T-->>M: DOWN(reason=exception)
+                Note over M: Callback invoked
+
+                style T fill:#ff6b6b
+            """);
+        ctx.sayNote(
+                "Unlike links, monitors are one-way. The monitoring side is NOT affected when the target crashes. The callback is invoked asynchronously.");
+
         var target = counter();
         var downReason = new AtomicReference<Throwable>();
         var downFired = new AtomicBoolean(false);
@@ -63,6 +117,17 @@ class ProcMonitorTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
         assertThat(downReason.get()).isNotNull().hasMessage("BOOM");
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Target Status",
+                        "Crashed",
+                        "Monitor Callback",
+                        "Invoked",
+                        "Reason Type",
+                        downReason.get().getClass().getSimpleName(),
+                        "Reason Message",
+                        downReason.get().getMessage()));
     }
 
     // -------------------------------------------------------------------------
@@ -71,6 +136,36 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_normalExit_firesDownWithNullReason() throws InterruptedException {
+        ctx.sayNextSection("ProcMonitor: Normal Exit Detection");
+        ctx.say(
+                "Monitors also fire on normal exit (stop()), but with a null reason. This distinguishes graceful shutdown from crashes.");
+        ctx.sayCode(
+                """
+            var target = counter();
+            var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
+            var downFired = new AtomicBoolean(false);
+
+            ProcMonitor.monitor(target, reason -> {
+                downReason.set(reason); // should be null for normal exit
+                downFired.set(true);
+            });
+
+            // Graceful shutdown
+            target.stop();
+
+            await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
+            // downReason.get() == null (normal exit)
+            """,
+                "java");
+        ctx.sayTable(
+                new String[][] {
+                    {"Exit Type", "Reason Value", "Interpretation"},
+                    {"Normal (stop())", "null", "Graceful shutdown"},
+                    {"Abnormal (crash)", "Exception", "Process crashed"}
+                });
+        ctx.sayNote(
+                "This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.");
+
         var target = counter();
         var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
         var downFired = new AtomicBoolean(false);
@@ -78,14 +173,25 @@ class ProcMonitorTest implements WithAssertions {
         ProcMonitor.monitor(
                 target,
                 reason -> {
-                    downReason.set(reason); // should be null for normal exit
+                    downReason.set(reason);
                     downFired.set(true);
                 });
 
-        target.stop(); // graceful shutdown
+        target.stop();
 
         await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
-        assertThat(downReason.get()).isNull(); // null = normal exit reason
+        assertThat(downReason.get()).isNull();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Target Exit",
+                        "Normal (stop())",
+                        "Monitor Callback",
+                        "Invoked",
+                        "Reason Value",
+                        "null",
+                        "Interpretation",
+                        "Graceful shutdown"));
     }
 
     // -------------------------------------------------------------------------
@@ -94,6 +200,40 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_targetCrashes_monitoringSideKeepsRunning() throws InterruptedException {
+        ctx.sayNextSection("ProcMonitor: Unilateral Observation");
+        ctx.say(
+                "Monitors are unilateral - the monitoring side is NOT affected when the target crashes. Unlike links, crashes don't propagate through monitors.");
+        ctx.sayCode(
+                """
+            var target = counter();
+            var watcher = counter();
+
+            ProcMonitor.monitor(target, reason -> {
+                // Watcher still runs — tell it a Ping to confirm
+                watcher.tell(new Msg.Ping());
+            });
+
+            // Target crashes
+            target.tell(new Msg.Crash());
+
+            // Watcher is still alive and responsive
+            await().atMost(Duration.ofSeconds(3))
+                .until(() -> watcher.ask(new Msg.Ping()).join() >= 1);
+            """,
+                "java");
+        ctx.sayMermaid(
+                """
+            graph LR
+                W[Watcher] -->|monitor| T[Target]
+                T -->|Crash| X[Exception]
+                X -->|DOWN callback| W
+                style T fill:#ff6b6b
+                style W fill:#51cf66
+                style X fill:#ffd43b
+            """);
+        ctx.sayNote(
+                "This is key difference from links: links are bidirectional (both die), monitors are unilateral (only callback fires). Monitors are for observation, links are for coupling.");
+
         var target = counter();
         var watcher = counter();
         var aliveAfterCrash = new AtomicBoolean(false);
@@ -101,17 +241,27 @@ class ProcMonitorTest implements WithAssertions {
         ProcMonitor.monitor(
                 target,
                 reason -> {
-                    // Watcher still runs — tell it a Ping to confirm
                     watcher.tell(new Msg.Ping());
                 });
 
-        target.tell(new Msg.Crash()); // target crashes
+        target.tell(new Msg.Crash());
 
         await().atMost(Duration.ofSeconds(3)).until(() -> watcher.ask(new Msg.Ping()).join() >= 1);
         aliveAfterCrash.set(true);
 
         watcher.stop();
         assertThat(aliveAfterCrash.get()).isTrue();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Target Status",
+                        "Crashed",
+                        "Watcher Status",
+                        "Still Running",
+                        "Relationship",
+                        "Unilateral (one-way)",
+                        "Callback Invoked",
+                        "Yes"));
     }
 
     // -------------------------------------------------------------------------
@@ -120,19 +270,61 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void demonitor_preventsDownOnSubsequentCrash() throws InterruptedException {
+        ctx.sayNextSection("ProcMonitor: Demonitor (Cancel Monitoring)");
+        ctx.say(
+                "demonitor() cancels an active monitor. After cancellation, the DOWN callback will not fire, even if the target crashes later.");
+        ctx.sayCode(
+                """
+            var target = counter();
+            var downFired = new AtomicBoolean(false);
+
+            var ref = ProcMonitor.monitor(target, _ -> downFired.set(true));
+
+            // Cancel the monitor before crash
+            ProcMonitor.demonitor(ref);
+
+            // Target crashes - no callback fires
+            target.tell(new Msg.Crash());
+
+            // downFired stays false
+            Thread.sleep(100);
+            assertThat(downFired.get()).isFalse();
+            """,
+                "java");
+        ctx.sayMermaid(
+                """
+            stateDiagram-v2
+                [*] --> Monitoring: monitor()
+                Monitoring --> Cancelled: demonitor()
+                Cancelled --> TargetCrashes: target.crash()
+                TargetCrashes --> [*]: NO callback
+            """);
+        ctx.sayNote(
+                "demonitor is useful for temporary monitoring. Monitor only during specific operations, then cancel when no longer needed.");
+
         var target = counter();
         var downFired = new AtomicBoolean(false);
 
         var ref = ProcMonitor.monitor(target, _ -> downFired.set(true));
 
-        ProcMonitor.demonitor(ref); // cancel before crash
+        ProcMonitor.demonitor(ref);
 
         target.tell(new Msg.Crash());
         target.thread().join();
 
-        // Give a moment for any spurious callback
         Thread.sleep(100);
         assertThat(downFired.get()).isFalse();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Monitor Status",
+                        "Cancelled (demonitor)",
+                        "Target Status",
+                        "Crashed",
+                        "Callback Fired",
+                        "No",
+                        "Reason",
+                        "Monitor cancelled before crash"));
     }
 
     // -------------------------------------------------------------------------
@@ -141,6 +333,42 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_multipleMonitors_allFire() {
+        ctx.sayNextSection("ProcMonitor: Multiple Independent Monitors");
+        ctx.say(
+                "Multiple processes can monitor the same target. All monitors fire independently when the target exits.");
+        ctx.sayCode(
+                """
+            var target = counter();
+            var fired1 = new AtomicBoolean(false);
+            var fired2 = new AtomicBoolean(false);
+
+            // Two independent monitors
+            ProcMonitor.monitor(target, _ -> fired1.set(true));
+            ProcMonitor.monitor(target, _ -> fired2.set(true));
+
+            // Target crashes - both callbacks fire
+            target.tell(new Msg.Crash());
+
+            await().atMost(Duration.ofSeconds(3))
+                .until(() -> fired1.get() && fired2.get());
+            """,
+                "java");
+        ctx.sayMermaid(
+                """
+            graph TB
+                T[Target] --> M1[Monitor 1]
+                T --> M2[Monitor 2]
+                T -->|Crash| X[Exception]
+                X -->|DOWN| M1
+                X -->|DOWN| M2
+
+                style T fill:#ff6b6b
+                style M1 fill:#51cf66
+                style M2 fill:#51cf66
+            """);
+        ctx.sayNote(
+                "Each monitor is independent. Canceling one monitor doesn't affect others. This enables multiple observers of the same process.");
+
         var target = counter();
         var fired1 = new AtomicBoolean(false);
         var fired2 = new AtomicBoolean(false);
@@ -151,5 +379,18 @@ class ProcMonitorTest implements WithAssertions {
         target.tell(new Msg.Crash());
 
         await().atMost(Duration.ofSeconds(3)).until(() -> fired1.get() && fired2.get());
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Monitors Registered",
+                        "2",
+                        "Target Status",
+                        "Crashed",
+                        "Monitor 1 Fired",
+                        String.valueOf(fired1.get()),
+                        "Monitor 2 Fired",
+                        String.valueOf(fired2.get()),
+                        "Independence",
+                        "Yes"));
     }
 }

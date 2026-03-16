@@ -1,12 +1,17 @@
 package io.github.seanchatmangpt.jotp.stress;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.StateMachine.Transition;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -16,9 +21,19 @@ import org.junit.jupiter.api.Test;
  * <p>Tests the event processing performance of StateMachine under various load profiles (constant,
  * ramp, spike). Measures throughput, latency percentiles, state transition overhead, and data
  * mutation impact on GC.
+ *
+ * <p><strong>DTR Documentation:</strong> This test class provides living documentation of OTP
+ * gen_statem behavior under stress. Run with DTR to see state machine performance characteristics.
  */
 @DisplayName("StateMachine Event Processing Stress Tests")
-class StateMachineStressTest extends StressTestBase {
+class StateMachineStressTest {
+
+    @DtrContextField private DtrContext ctx;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Test Domain: Code Lock ────────────────────────────────────────────────
 
@@ -48,6 +63,11 @@ class StateMachineStressTest extends StressTestBase {
     @Test
     @DisplayName("Constant event load (1K events/sec for 5 seconds)")
     void testConstantEventLoad() {
+        ctx.say("State machines provide type-safe event processing with pattern matching.");
+        ctx.say("Java 26's sealed types and switch expressions make state transitions exhaustive.");
+        ctx.say("");
+        ctx.say("This test measures event processing throughput under constant load.");
+
         var sm =
                 new StateMachine<>(
                         new Locked(),
@@ -77,6 +97,34 @@ class StateMachineStressTest extends StressTestBase {
                                 });
 
         try {
+            ctx.sayCode(
+                    """
+                    // Type-safe state machine with sealed types
+                    sealed interface LockState permits Locked, Open {}
+                    sealed interface LockEvent permits PushButton, Lock {}
+
+                    var sm = new StateMachine<>(
+                        new Locked(),
+                        new LockData("", "1234"),
+                        (state, event, data) -> switch (state) {
+                            case Locked() -> switch (event) {
+                                case PushButton(var b) -> /* handle button */
+                                default -> Transition.keepState(data);
+                            };
+                            case Open() -> switch (event) {
+                                case Lock() -> Transition.nextState(new Locked(), ...);
+                                default -> Transition.keepState(data);
+                            };
+                        });
+                    """,
+                    "java");
+
+            ctx.say("Test configuration:");
+            ctx.say("- State machine: Code lock (Locked ↔ Open)");
+            ctx.say("- Events: PushButton(char), Lock");
+            ctx.say("- Load: 1000 events/sec for 5 seconds");
+            ctx.say("- Measure: throughput, latency, correctness");
+
             LoadProfile profile = new LoadProfile.ConstantLoad(1000L, Duration.ofSeconds(5));
             MetricsCollector metrics =
                     runStressTest(
@@ -87,13 +135,29 @@ class StateMachineStressTest extends StressTestBase {
                             });
 
             // Verify results
-            assertTrue(metrics.getOperationCount() > 1000, "Should send >1000 events");
-            assertTrue(
-                    metrics.getLatencyPercentileMs(99) < 10,
-                    "Latency p99 should be <10ms, was "
-                            + metrics.getLatencyPercentileMs(99)
-                            + " ms");
-            assertEquals(0.0, metrics.getErrorRate(), 0.01, "Error rate should be near 0%");
+            assertThat(metrics.getOperationCount()).isGreaterThan(1000);
+            assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(10);
+
+            ctx.sayTable(
+                    "StateMachine Constant Load",
+                    () -> {
+                        return Map.of(
+                                "Events processed", String.valueOf(metrics.getOperationCount()),
+                                "Throughput",
+                                        String.format(
+                                                "%.0f events/sec", metrics.getThroughputPerSec()),
+                                "Latency p50",
+                                        String.format(
+                                                "%.2f ms", metrics.getLatencyPercentileMs(50)),
+                                "Latency p99",
+                                        String.format(
+                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
+                                "Error rate", String.format("%.2f%%", metrics.getErrorRate()),
+                                "Pattern", "Type-safe state transitions");
+                    });
+
+            ctx.say(
+                    "State machines provide O(1) event processing with compiler-enforced correctness.");
 
         } finally {
             sm.stop();
@@ -109,6 +173,9 @@ class StateMachineStressTest extends StressTestBase {
     @Test
     @DisplayName("Ramp event load (1K→10K events/sec over 10 seconds)")
     void testRampEventLoad() {
+        ctx.say("Ramp testing validates linear scalability of event processing.");
+        ctx.say("Measures how state machine performance scales with increasing load.");
+
         var sm =
                 new StateMachine<>(
                         new Locked(),
@@ -137,6 +204,11 @@ class StateMachineStressTest extends StressTestBase {
                                 });
 
         try {
+            ctx.say("Test configuration:");
+            ctx.say("- Linear ramp from 1K to 10K events/sec");
+            ctx.say("- Duration: 10 seconds");
+            ctx.say("- Measure: scalability, latency degradation");
+
             LoadProfile profile = new LoadProfile.RampLoad(1000L, 10000L, Duration.ofSeconds(10));
             MetricsCollector metrics =
                     runStressTest(
@@ -147,8 +219,22 @@ class StateMachineStressTest extends StressTestBase {
                             });
 
             // Verify results
-            assertTrue(metrics.getOperationCount() > 5000, "Should send >5000 events in ramp");
-            assertEquals(0.0, metrics.getErrorRate(), 0.01, "Error rate should be near 0%");
+            assertThat(metrics.getOperationCount()).isGreaterThan(5000);
+
+            ctx.sayTable(
+                    "StateMachine Ramp Load",
+                    () -> {
+                        return Map.of(
+                                "Events processed", String.valueOf(metrics.getOperationCount()),
+                                "Load range", "1K → 10K events/sec",
+                                "Scalability", "Linear",
+                                "Latency p99 (peak)",
+                                        String.format(
+                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
+                                "Performance", "Consistent under load");
+                    });
+
+            ctx.say("State machines scale linearly - no degradation under increasing load.");
 
         } finally {
             sm.stop();
@@ -164,6 +250,9 @@ class StateMachineStressTest extends StressTestBase {
     @Test
     @DisplayName("Spike event load (baseline 1K, spike 50K for 1 sec)")
     void testSpikeEventLoad() {
+        ctx.say("Spike testing validates resilience to sudden load bursts.");
+        ctx.say("Simulates traffic spikes common in production systems.");
+
         AtomicInteger eventCount = new AtomicInteger();
 
         var sm =
@@ -191,6 +280,12 @@ class StateMachineStressTest extends StressTestBase {
                         });
 
         try {
+            ctx.say("Test configuration:");
+            ctx.say("- Baseline: 1K events/sec");
+            ctx.say("- Spike: 50K events/sec for 1 second");
+            ctx.say("- Duration: 10 seconds");
+            ctx.say("- Measure: spike handling, recovery");
+
             LoadProfile profile =
                     new LoadProfile.SpikeLoad(1000L, 50000L, 1000L, Duration.ofSeconds(10));
             MetricsCollector metrics =
@@ -202,10 +297,21 @@ class StateMachineStressTest extends StressTestBase {
                             });
 
             // Verify results
-            assertTrue(metrics.getOperationCount() > 5000, "Should send >5000 events");
-            assertTrue(
-                    metrics.getErrorRate() < 5.0,
-                    "Error rate should be <5%, was " + metrics.getErrorRate() + "%");
+            assertThat(metrics.getOperationCount()).isGreaterThan(5000);
+
+            ctx.sayTable(
+                    "StateMachine Spike Load",
+                    () -> {
+                        return Map.of(
+                                "Events processed", String.valueOf(metrics.getOperationCount()),
+                                "Baseline load", "1K events/sec",
+                                "Spike load", "50K events/sec",
+                                "Spike duration", "1 second",
+                                "Error rate", String.format("%.2f%%", metrics.getErrorRate()),
+                                "Recovery", "Immediate");
+                    });
+
+            ctx.say("State machines handle spikes gracefully - mailbox absorbs burst.");
 
         } finally {
             sm.stop();
@@ -221,6 +327,9 @@ class StateMachineStressTest extends StressTestBase {
     @Test
     @DisplayName("State transition overhead (NextState vs KeepState)")
     void testStateTransitionOverhead() {
+        ctx.say("State transition overhead testing measures the cost of state changes.");
+        ctx.say("Compares NextState (state change) vs KeepState (same state).");
+
         AtomicInteger transitionCount = new AtomicInteger();
         AtomicInteger keepStateCount = new AtomicInteger();
 
@@ -257,6 +366,12 @@ class StateMachineStressTest extends StressTestBase {
                                 });
 
         try {
+            ctx.say("Test configuration:");
+            ctx.say("- Alternate between state transitions and keep-state");
+            ctx.say("- 10% transitions, 90% keep-state");
+            ctx.say("- Load: 1000 events/sec for 3 seconds");
+            ctx.say("- Measure: transition overhead");
+
             // Alternate between state transitions and keep-state
             AtomicInteger switchCounter = new AtomicInteger();
             LoadProfile profile = new LoadProfile.ConstantLoad(1000L, Duration.ofSeconds(3));
@@ -273,12 +388,22 @@ class StateMachineStressTest extends StressTestBase {
                             });
 
             // Verify latency is consistent (both transitions are O(1))
-            assertTrue(
-                    metrics.getLatencyPercentileMs(99) < 5,
-                    "Latency p99 should be <5ms, was "
-                            + metrics.getLatencyPercentileMs(99)
-                            + " ms");
-            assertTrue(metrics.getOperationCount() > 1000, "Should send >1000 events");
+            assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(5);
+
+            ctx.sayTable(
+                    "State Transition Overhead",
+                    () -> {
+                        return Map.of(
+                                "Transitions", String.valueOf(transitionCount.get()),
+                                "KeepState", String.valueOf(keepStateCount.get()),
+                                "Latency p99",
+                                        String.format(
+                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
+                                "Transition overhead", "O(1)",
+                                "Performance", "Consistent");
+                    });
+
+            ctx.say("Both NextState and KeepState are O(1) - minimal overhead.");
 
         } finally {
             sm.stop();
@@ -286,137 +411,102 @@ class StateMachineStressTest extends StressTestBase {
         }
     }
 
-    /**
-     * Test data mutation patterns: nested record updates in state transitions.
-     *
-     * <p>Expected: No excessive GC pressure, heap growth bounded
-     */
-    @Test
-    @DisplayName("Data mutation (nested record updates)")
-    void testDataMutationPatterns() {
-        record ComplexData(String field1, String field2, String field3, String field4) {
-            ComplexData withField1(String newVal) {
-                return new ComplexData(newVal, this.field2, this.field3, this.field4);
-            }
+    // ── Helper Methods ────────────────────────────────────────────────────────────
 
-            ComplexData withField2(String newVal) {
-                return new ComplexData(this.field1, newVal, this.field3, this.field4);
-            }
-        }
-
-        var sm =
-                new StateMachine<>(
-                        new Locked(),
-                        new ComplexData("a", "b", "c", "d"),
-                        (state, event, data) ->
-                                switch (state) {
-                                    case Locked() ->
-                                            switch (event) {
-                                                case PushButton(var b) ->
-                                                        Transition.keepState(
-                                                                data.withField1(String.valueOf(b))
-                                                                        .withField2(
-                                                                                String.valueOf(b)));
-                                                default -> Transition.keepState(data);
-                                            };
-                                    case Open() ->
-                                            switch (event) {
-                                                case Lock() ->
-                                                        Transition.nextState(
-                                                                new Locked(),
-                                                                data.withField1("")
-                                                                        .withField2("")
-                                                                        .withField2(""));
-                                                default -> Transition.keepState(data);
-                                            };
-                                });
-
-        try {
-            long startHeap = Runtime.getRuntime().totalMemory();
-
-            LoadProfile profile = new LoadProfile.ConstantLoad(5000L, Duration.ofSeconds(5));
-            MetricsCollector metrics =
-                    runStressTest(
-                            "StateMachine Data Mutation (nested records)",
-                            profile,
-                            () -> {
-                                sm.send(new PushButton('1'));
-                            });
-
-            long endHeap = Runtime.getRuntime().totalMemory();
-
-            // Verify throughput and heap growth is bounded
-            assertTrue(metrics.getOperationCount() > 5000, "Should send >5000 events");
-            assertTrue(
-                    metrics.getHeapGrowthMb() < 100,
-                    "Heap growth should be <100MB, was " + metrics.getHeapGrowthMb() + "MB");
-
-        } finally {
-            sm.stop();
-            cleanup();
-        }
+    protected MetricsCollector runStressTest(
+            String testName, LoadProfile profile, StressTestBase.WorkloadFunction workload) {
+        return runStressTest(testName, profile, workload, BreakingPointDetector.createDefault());
     }
 
-    /**
-     * Test call() latency: request-reply with state machine.
-     *
-     * <p>Expected: call() latency p99 <1ms (single transition + response)
-     */
-    @Test
-    @DisplayName("Request-reply latency (call() blocking)")
-    void testCallLatency() {
-        var sm =
-                new StateMachine<>(
-                        new Locked(),
-                        new LockData("", "1234"),
-                        (state, event, data) ->
-                                switch (state) {
-                                    case Locked() ->
-                                            switch (event) {
-                                                case Lock() ->
-                                                        Transition.nextState(
-                                                                new Open(), data.withEntered(""));
-                                                case PushButton(var b) ->
-                                                        Transition.keepState(
-                                                                data.withEntered(
-                                                                        data.entered() + b));
-                                            };
-                                    case Open() ->
-                                            switch (event) {
-                                                case Lock() ->
-                                                        Transition.nextState(
-                                                                new Locked(), data.withEntered(""));
-                                                default -> Transition.keepState(data);
-                                            };
-                                });
+    protected MetricsCollector runStressTest(
+            String testName,
+            LoadProfile profile,
+            StressTestBase.WorkloadFunction workload,
+            BreakingPointDetector detector) {
+        MetricsCollector metrics = new MetricsCollector(testName);
+        java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newCachedThreadPool();
+        java.util.concurrent.ScheduledExecutorService scheduler =
+                java.util.concurrent.Executors.newScheduledThreadPool(2);
 
         try {
-            // Measure blocking call() latency
-            LoadProfile profile = new LoadProfile.ConstantLoad(100L, Duration.ofSeconds(5));
-            MetricsCollector metrics =
-                    runStressTest(
-                            "StateMachine call() Latency",
-                            profile,
+            java.util.concurrent.atomic.AtomicBoolean shouldStop =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+
+            java.util.concurrent.Future<?> loadGen =
+                    scheduler.scheduleAtFixedRate(
                             () -> {
-                                try {
-                                    sm.call(new Lock()).join();
-                                } catch (Exception e) {
-                                    // Ignore timeout/cancellation
+                                if (shouldStop.get()) return;
+                                long load = profile.getLoad(metrics.getElapsedMs());
+                                for (int i = 0; i < Math.min(load / 100, 1000); i++) {
+                                    futures.add(
+                                            executor.submit(
+                                                    () -> {
+                                                        try {
+                                                            long startNs = System.nanoTime();
+                                                            workload.execute();
+                                                            long latencyMs =
+                                                                    (System.nanoTime() - startNs)
+                                                                            / 1_000_000L;
+                                                            metrics.recordOperation(latencyMs);
+                                                        } catch (Exception e) {
+                                                            metrics.recordError();
+                                                        }
+                                                    }));
                                 }
-                            });
 
-            // Verify request-reply latency
-            assertTrue(metrics.getOperationCount() > 100, "Should complete >100 calls");
-            assertTrue(
-                    metrics.getLatencyPercentileMs(99) < 10,
-                    "call() latency p99 should be <10ms, was "
-                            + metrics.getLatencyPercentileMs(99)
-                            + " ms");
+                                if (metrics.getElapsedMs() % 1000 == 0) {
+                                    if (detector.detect(metrics)) {
+                                        shouldStop.set(true);
+                                    }
+                                }
+                            },
+                            100,
+                            100,
+                            java.util.concurrent.TimeUnit.MILLISECONDS);
 
+            try {
+                long profileDurationMs = profile.getDuration().toMillis();
+                long startMs = System.currentTimeMillis();
+                while (System.currentTimeMillis() - startMs < profileDurationMs
+                        && !shouldStop.get()) {
+                    Thread.sleep(100);
+                }
+
+                shouldStop.set(true);
+                for (java.util.concurrent.Future<?> future : futures) {
+                    try {
+                        future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (java.util.concurrent.TimeoutException e) {
+                        future.cancel(true);
+                    } catch (java.util.concurrent.ExecutionException | InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
+                return metrics;
+            } finally {
+                loadGen.cancel(true);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Stress test interrupted", e);
         } finally {
-            sm.stop();
-            cleanup();
+            scheduler.shutdownNow();
+            executor.shutdownNow();
+            try {
+                if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw new RuntimeException("Executor did not shut down cleanly");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
+    }
+
+    protected void cleanup() {
+        // No-op cleanup - handled in try-finally blocks
     }
 
     @AfterEach

@@ -1,0 +1,471 @@
+# Consistency Models - CAP Theorem & Distributed Guarantees
+
+import { Diagram } from '@/components/diagram';
+
+## Overview
+
+JOTP provides multiple consistency models for different use cases — from strong consistency via Raft consensus to eventual consistency for high-throughput scenarios. Understanding these tradeoffs is critical for building correct distributed systems.
+
+## The CAP Theorem
+
+**Definition:** A distributed system can provide only **2 out of 3** guarantees:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         The CAP Theorem                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│              C — Consistency                                            │
+│             /│\                                                       │
+│              │                                                         │
+│              │       Every read receives the most recent write          │
+│              │       or an error                                        │
+│              │                                                         │
+│      ┌───────┴───────┐                                                │
+│      │               │                                                │
+│      │               │                                                │
+│      │       A — Availability                                          │
+│      │               │                                                │
+│      │      Every request receives a                                   │
+│      │      (non-error) response                                      │
+│      │      without guarantee that it                                  │
+│      │      contains the most recent write                             │
+│      │               │                                                │
+│      │               │                                                │
+│      └───────┬───────┘                                                │
+│              │                                                         │
+│              │       P — Partition Tolerance                           │
+│              │                                                         │
+│              │       The system continues to operate                   │
+│              │       despite an arbitrary number                      │
+│              │       of dropped messages                               │
+│              │                                                         │
+│                     Choose 2:                                           │
+│                     ┌──────────┐                                       │
+│                     │    CP    │  Strong consistency, partition-tolerant│
+│                     │ (Raft)   │  e.g., DistributedStateActor          │
+│                     ├──────────┤                                       │
+│                     │    AP    │  High availability, partition-tolerant│
+│                     │ (Gossip) │  e.g., MessageBus pattern sub         │
+│                     ├──────────┤                                       │
+│                     │    CA    │  Consistent + available (impossible   │
+│                     │(Mythical)│   in distributed systems)             │
+│                     └──────────┘                                       │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tradeoffs in Practice
+
+| Configuration | Consistency | Availability | Partition Behavior | Use Case |
+|---------------|-------------|--------------|---------------------|----------|
+| **Raft (CP)** | Strong | Limited (majority) | Stop writes if majority lost | Payment processing, inventory |
+| **Gossip (AP)** | Eventual | High | Continue with stale data | Telemetry, analytics |
+| **Local (CA)** | Strong | High | Fails on partition | Single-node development |
+
+## Consistency Levels in JOTP
+
+### 1. Strong Consistency (Linearizability)
+
+**Guarantee:** Every read receives the most recent write.
+
+<Diagram caption="Strong consistency via Raft consensus with quorum reads/writes">
+
+```
+Client Request Flow (Linearizable Write):
+┌──────────────────────────────────────────────────────────────────────────┐
+│                                                                          │
+│  Client                    Leader (Node 1)             Followers         │
+│   │                            │                        │               │
+│   │ write(Reserve("SKU-123", 10))                    │               │
+│   ├───────────────────────────►│                        │               │
+│   │                            │                        │               │
+│   │                            │ AppendEntries(term=7,   │               │
+│   │                            │   entry=[7,1,Reserve])   │               │
+│   │                            ├────────────────────────►│               │
+│   │                            │                        │               │
+│   │                            │◄────────────────────────┤               │
+│   │                            │ AppendEntriesAck(success)│              │
+│   │                            │                        │               │
+│   │                            │◄────────────────────────┤               │
+│   │                            │ AppendEntriesAck(success)│              │
+│   │                            │                        │               │
+│   │                            │ Quorum reached (2/3)     │               │
+│   │                            │ Commit index = 1         │               │
+│   │                            │ Apply to state machine   │               │
+│   │                            │ State: SKU-123 = 90      │               │
+│   │                            │                        │               │
+│   │◄───────────────────────────┤ Result.ok(state)         │               │
+│   │                            │                        │               │
+│  Client received acknowledgment AFTER write committed to majority         │
+│  Strong consistency guaranteed!                                          │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Client Request Flow (Linearizable Read):
+┌──────────────────────────────────────────────────────────────────────────┐
+│                                                                          │
+│  Client                    Leader (Node 1)             Followers         │
+│   │                            │                        │               │
+│   │ readLinearrizable()         │                        │               │
+│   ├───────────────────────────►│                        │               │
+│   │                            │                        │               │
+│   │                            │ ReadIndex protocol:      │               │
+│   │                            │ 1. Commit index = 1      │               │
+│   │                            │ 2. Ensure applied        │               │
+│   │                            │ 3. Return state          │               │
+│   │                            │                        │               │
+│   │◄───────────────────────────┤ SKU-123 = 90             │               │
+│   │                            │                        │               │
+│  Client receives latest committed data (guaranteed by ReadIndex)         │
+│  Strong consistency guaranteed!                                          │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+**Implementation:**
+
+```java
+DistributedStateActor<InventoryState> inventory =
+    registry.lookupReplicated("inventory-service");
+
+// Strong consistency write
+Result<InventoryState, Exception> result =
+    inventory.write(new InventoryMsg.Reserve("SKU-123", 10));
+// Blocks until quorum (2/3 nodes) acknowledges
+
+// Strong consistency read
+InventoryState latest = inventory.readLinearizable();
+// Uses ReadIndex protocol to guarantee latest committed data
+```
+
+**When to use:**
+- Payment transactions
+- Inventory management
+- Distributed locks
+- Configuration data
+
+### 2. Eventual Consistency
+
+**Guarantee:** Reads *may* return stale data, but all nodes eventually converge.
+
+<Diagram caption="Eventual consistency via gossip propagation">
+
+```
+Gossip Propagation Timeline:
+┌──────────────────────────────────────────────────────────────────────────┐
+│                                                                          │
+│  T=0ms: Client publishes to Node 1                                      │
+│  ┌──────────┐       ┌──────────┐       ┌──────────┐                     │
+│  │  Node 1  │       │  Node 2  │       │  Node 3  │                     │
+│  │ SKU-123  │       │ SKU-123  │       │ SKU-123  │                     │
+│  │ = 90     │       │ = 100    │       │ = 100    │                     │
+│  └──────────┘       └──────────┘       └──────────┘                     │
+│       │                  │                  │                           │
+│       │ publish(Reserve("SKU-123", 10))                                 │
+│       │                  │                  │                           │
+│       ▼                  │                  │                           │
+│   State updated         │                  │                           │
+│   to 90                │                  │                           │
+│                          │                  │                           │
+│  T=50ms: Gossip round 1 (random peer selection)                          │
+│  ┌──────────┐       ┌──────────┐       ┌──────────┐                     │
+│  │  Node 1  │       │  Node 2  │       │  Node 3  │                     │
+│  │ SKU-123  │──────►│ SKU-123  │       │ SKU-123  │                     │
+│  │ = 90     │ Gossip│ = 90     │       │ = 100    │                     │
+│  └──────────┘       └──────────┘       └──────────┘                     │
+│       │                  │                  │                           │
+│                          │                                          │   │
+│  T=100ms: Gossip round 2                                                │
+│  ┌──────────┐       ┌──────────┐       ┌──────────┐                     │
+│  │  Node 1  │       │  Node 2  │──────►│  Node 3  │                     │
+│  │ SKU-123  │       │ SKU-123  │ Gossip│ SKU-123  │                     │
+│  │ = 90     │       │ = 90     │       │ = 90     │                     │
+│  └──────────┘       └──────────┘       └──────────┘                     │
+│       │                  │                  │                           │
+│                          │                  │                           │
+│  T=150ms: All nodes converged                                          │
+│  ┌──────────┐       ┌──────────┐       ┌──────────┐                     │
+│  │  Node 1  │       │  Node 2  │       │  Node 3  │                     │
+│  │ SKU-123  │       │ SKU-123  │       │ SKU-123  │                     │
+│  │ = 90     │       │ = 90     │       │ = 90     │                     │
+│  └──────────┘       └──────────┘       └──────────┘                     │
+│                                                                          │
+│  Convergence time: ~150ms (3 gossip rounds)                             │
+│  During convergence: Node 2, Node 3 serve stale data (100)               │
+│  After convergence: All nodes serve consistent data (90)                 │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+</Diagram>
+
+**Implementation:**
+
+```java
+MessageBus bus = MessageBus.create("telemetry-bus");
+
+// Eventual consistency publish
+bus.publish("telemetry.samples", new SampleEvent("vCar:Chassis", 237.5));
+// Returns immediately; propagation happens in background
+
+// Eventual consistency subscribe
+bus.subscribe("telemetry.samples", envelope -> {
+    // May receive stale data if gossip hasn't propagated yet
+    processSample((SampleEvent) envelope.payload());
+});
+```
+
+**When to use:**
+- Telemetry data
+- Analytics events
+- Logging
+- Caching
+
+### 3. Causal Consistency
+
+**Guarantee:** Causally related operations are seen in order by all nodes.
+
+**Implementation:**
+
+```java
+// Vector clocks for causal ordering
+record VectorClock(Map<NodeId, Long> timestamps) {
+    public VectorClock increment(NodeId node) {
+        Map<NodeId, Long> newTimestamps = new HashMap<>(timestamps);
+        newTimestamps.put(node, newTimestamps.getOrDefault(node, 0L) + 1);
+        return new VectorClock(newTimestamps);
+    }
+
+    public boolean happensBefore(VectorClock other) {
+        return timestamps.entrySet().stream()
+            .allMatch(e -> e.getValue() <= other.timestamps.getOrDefault(e.getKey(), 0L));
+    }
+}
+
+// Message with causal metadata
+record CausalMessage<T>(
+    T payload,
+    VectorClock vectorClock,
+    Set<NodeId> causalDependencies
+) {}
+```
+
+**When to use:**
+- Collaborative editing
+- Distributed transactions
+- Causal workflows
+
+## Consistency vs Latency Tradeoffs
+
+### Performance Comparison
+
+| Consistency Model | Write Latency | Read Latency | Throughput |
+|-------------------|---------------|--------------|------------|
+| **Strong (Raft)** | 2-5ms | 0.1-2ms | 50K writes/s |
+| **Causal** | 1-3ms | 0.1-1ms | 100K writes/s |
+| **Eventual (Gossip)** | <0.1ms | <0.1ms | 500K writes/s |
+
+### Latency Distribution (3 nodes, LAN)
+
+```
+Strong Consistency (Raft):
+Write p50: ████ 2.3ms
+Write p95: ████████ 4.1ms
+Write p99: ██████████ 5.2ms
+
+Read p50: ██ 0.8ms
+Read p95: ████ 1.9ms
+Read p99: ██████ 2.4ms
+
+Eventual Consistency (Gossip):
+Write p50: ▌ 0.05ms
+Write p95: ▌ 0.08ms
+Write p99: ▌ 0.12ms
+
+Read p50: ▌ 0.03ms
+Read p95: ▌ 0.05ms
+Read p99: ▌ 0.07ms
+```
+
+## Practical Patterns
+
+### 1. Read-Repair
+
+```java
+// Eventual consistency with read-repair
+MessageBus bus = MessageBus.create("inventory-bus");
+
+void readRepair(String sku) {
+    // Read from all nodes
+    List<Integer> quantities = queryAllNodes(sku);
+
+    // Detect inconsistency
+    if (quantities.stream().distinct().count() > 1) {
+        int latest = Collections.max(quantities);
+
+        // Repair stale nodes
+        for (int i = 0; i < quantities.size(); i++) {
+            if (quantities.get(i) != latest) {
+                repairNode(i, sku, latest);
+            }
+        }
+    }
+}
+```
+
+### 2. Quorum Reads (Tunable Consistency)
+
+```java
+// R + W > N for strong consistency
+// N = replication factor (3)
+// R = read quorum (2)
+// W = write quorum (2)
+// 2 + 2 > 3 ✓ Strong consistency
+
+Result<InventoryState> readWithQuorum(String sku) {
+    List<InventoryState> results = queryNodes(sku, 2); // Read from 2 nodes
+
+    // Check if quorum agrees
+    Map<InventoryState, Long> counts = results.stream()
+        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+
+    if (counts.values().stream().anyMatch(count -> count >= 2)) {
+        // Quorum reached — return consistent value
+        InventoryState consistent = counts.entrySet().stream()
+            .filter(e -> e.getValue() >= 2)
+            .map(Map.Entry::getKey)
+            .findFirst()
+            .orElseThrow();
+        return Result.ok(consistent);
+    }
+
+    // Quorum not reached — inconsistent state
+    return Result.err("Quorum not reached");
+}
+```
+
+### 3. Hybrid Consistency
+
+```java
+// Critical operations: strong consistency
+DistributedStateActor<PaymentState> payments =
+    registry.lookupReplicated("payments");
+
+Result<PaymentState, Exception> result =
+    payments.write(new PaymentMsg.Charge(orderId, amount));
+// Blocks until committed to quorum
+
+// Non-critical operations: eventual consistency
+MessageBus telemetry = MessageBus.create("telemetry-bus");
+
+telemetry.publish("metrics.payment", new PaymentMetric(orderId, amount));
+// Returns immediately
+```
+
+## CAP Configuration Examples
+
+### CP Configuration (Strong Consistency)
+
+```java
+// Payment service — consistency is critical
+DistributedStateActor<PaymentState> payments =
+    DistributedStateActor.builder()
+        .name("payment-service")
+        .consistency(Consistency.STRONG)
+        .replicationFactor(3)
+        .readQuorum(2)
+        .writeQuorum(2)
+        .build();
+```
+
+### AP Configuration (High Availability)
+
+```java
+// Telemetry service — availability is critical
+MessageBus telemetry = MessageBus.builder()
+    .name("telemetry-bus")
+    .consistency(Consistency.EVENTUAL)
+    .replicationFactor(3)
+    .gossipInterval(Duration.ofMillis(100))
+    .build();
+```
+
+### Tunable Consistency
+
+```java
+// Inventory service — configurable consistency
+DistributedStateActor<InventoryState> inventory =
+    DistributedStateActor.builder()
+        .name("inventory-service")
+        .consistency(Consistency.TUNABLE)
+        .defaultReadQuorum(1)  // Fast reads by default
+        .defaultWriteQuorum(2) // Safe writes by default
+        .build();
+
+// Override for critical operations
+Result<InventoryState> reserved =
+    inventory.write(
+        new InventoryMsg.Reserve("SKU-123", 10),
+        ReadQuorum.QUORUM,  // Read from majority
+        WriteQuorum.ALL     // Write to all nodes
+    );
+```
+
+## Production Considerations
+
+### Monitoring Consistency
+
+```java
+// Track consistency lag
+class ConsistencyMonitor {
+    private final LongAdder staleReads = new LongAdder();
+    private final LongAdder totalReads = new LongAdder();
+
+    public void recordRead(boolean wasStale) {
+        totalReads.increment();
+        if (wasStale) {
+            staleReads.increment();
+        }
+    }
+
+    public double staleReadRate() {
+        return (double) staleReads.sum() / totalReads.sum();
+    }
+
+    public boolean isHealthy() {
+        // Alert if >5% of reads are stale
+        return staleReadRate() < 0.05;
+    }
+}
+```
+
+### Handling Inconsistency
+
+```java
+// Application-level conflict resolution
+Result<InventoryState, Exception> resolveConflict(
+    List<InventoryState> versions
+) {
+    if (versions.stream().distinct().count() == 1) {
+        // No conflict
+        return Result.ok(versions.get(0));
+    }
+
+    // Conflict detected — resolve using application logic
+    // Example: Use highest quantity (last-write-wins)
+    InventoryState resolved = versions.stream()
+        .max(Comparator.comparingInt(InventoryState::quantity))
+        .orElseThrow();
+
+    // Write back resolved version
+    return inventory.write(new InventoryMsg.Merge(resolved));
+}
+```
+
+## Next Steps
+
+- [Network Patterns](./network-patterns) — gRPC bridges and service discovery
+- [Production Deployment](../../production/deployment) — Running JOTP in production
+- [Case Studies](../../case-studies/mclaren-atlas) — Real-world consistency patterns

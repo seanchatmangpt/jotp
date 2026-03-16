@@ -359,10 +359,11 @@ public class CircuitBreakerPattern {
         // Simulate successful requests
         System.out.println("\n1. Sending successful requests...");
         for (int i = 0; i < 2; i++) {
+            final int requestNum = i + 1;
             Result<String> result =
                     breaker.execute(
                             timeout -> {
-                                System.out.println("   Request " + (i + 1) + ": SUCCESS");
+                                System.out.println("   Request " + requestNum + ": SUCCESS");
                                 return "OK";
                             },
                             Duration.ofSeconds(1));
@@ -371,6 +372,7 @@ public class CircuitBreakerPattern {
         // Simulate failures to trip the circuit
         System.out.println("\n2. Simulating failures to trip circuit...");
         for (int i = 0; i < 4; i++) {
+            final int requestNum = i + 1;
             Result<String> result =
                     breaker.execute(
                             timeout -> {
@@ -380,7 +382,7 @@ public class CircuitBreakerPattern {
 
             if (result instanceof Result.Failure<?> f) {
                 System.out.println(
-                        "   Request " + (i + 1) + ": FAILED - " + f.error().getMessage());
+                        "   Request " + requestNum + ": FAILED - " + f.error().getMessage());
             }
 
             // After 3 failures, circuit should open

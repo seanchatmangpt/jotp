@@ -367,7 +367,7 @@ public final class ArmstrongAgiEngine {
         Objects.requireNonNull(className, "className must not be null");
 
         var sm =
-                new StateMachine<AgiState, AgiEvent, AgiData>(
+                StateMachine.of(
                         new AgiState.Idle(),
                         AgiData.initial(javaSource, className),
                         ArmstrongAgiEngine::transition);

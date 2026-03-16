@@ -1,8 +1,11 @@
 package io.github.seanchatmangpt.jotp;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -11,8 +14,14 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>"The sender monitors the node, detects DOWN, and resends." — Joe Armstrong
  */
+@DtrTest
 @Timeout(10)
 class AckRetryTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Domain messages ────────────────────────────────────────────────────────
 
@@ -35,7 +44,14 @@ class AckRetryTest implements WithAssertions {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    void send_succeedsOnFirstAttempt() throws InterruptedException {
+    void send_succeedsOnFirstAttempt(DtrContext ctx) throws InterruptedException {
+        ctx.sayNextSection("AckRetry: Joe Armstrong's Idempotent Retry Pattern");
+        ctx.say(
+                """
+                AckRetry implements Joe Armstrong's advice: "The sender monitors the node, detects DOWN, and resends."
+                It provides automatic retry with configurable timeout and max attempts.
+                When the first attempt succeeds, the result is returned immediately without additional retries.
+                """);
         var proc = echoProc();
         try {
             var result = AckRetry.send(proc, new Cmd.Echo("hello"), Duration.ofSeconds(2), 3);
@@ -48,7 +64,13 @@ class AckRetryTest implements WithAssertions {
     }
 
     @Test
-    void send_retriesOnTimeoutAndEventuallySucceeds() throws InterruptedException {
+    void send_retriesOnTimeoutAndEventuallySucceeds(DtrContext ctx) throws InterruptedException {
+        ctx.say(
+                """
+                When an attempt fails (timeout or exception), AckRetry automatically retries.
+                Each retry is a fresh attempt with the same message.
+                This pattern is essential for distributed systems where transient failures are common.
+                """);
         // A proc that ignores the first two messages (simulating timeout by never completing ask),
         // then handles the third normally.  We simulate this by using a proc whose handler
         // throws on the first two calls, then succeeds.
@@ -109,7 +131,13 @@ class AckRetryTest implements WithAssertions {
     }
 
     @Test
-    void sendWithBackoff_respectsBackoffDelay() throws InterruptedException {
+    void sendWithBackoff_respectsBackoffDelay(DtrContext ctx) throws InterruptedException {
+        ctx.say(
+                """
+                sendWithBackoff adds exponential backoff between retries to avoid thundering herd problems.
+                After each failure, the system waits before retrying, giving the target time to recover.
+                This is crucial for avoiding cascading failures in distributed systems.
+                """);
         // Two attempts: first fails, second succeeds.
         // We measure elapsed wall time and verify it is >= initialDelay.
         var callCount = new AtomicInteger(0);

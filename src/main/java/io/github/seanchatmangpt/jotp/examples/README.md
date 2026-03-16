@@ -117,12 +117,12 @@ Read these in order:
    - Real system example (distributed cache)
    - Enterprise patterns (bulkheads, circuit breakers, sagas)
 
-3. **`docs/.claude/ARCHITECTURE.md`** (10 min read)
+3. **`docs/architecture/README.md`** (10 min read)
    - Executive summary
    - Competitive analysis matrix
    - Seven enterprise fault-tolerance patterns
 
-4. **`docs/.claude/SLA-PATTERNS.md`** (15 min read)
+4. **`docs/architecture/enterprise/sla-patterns.md`** (15 min read)
    - Operational runbooks
    - 99.95%+ SLA patterns
    - Incident responses
@@ -332,7 +332,7 @@ Heavy-duty tests (excluded from CI for speed):
 ### For Architects (Week 2-3)
 
 1. ✅ Read `building-autonomous-systems.md` — Deep dive
-2. ✅ Read `.claude/ARCHITECTURE.md` — Competitive analysis
+2. ✅ Read `docs/architecture/README.md` — Competitive analysis
 3. ✅ Identify 1-2 pilot services (high-traffic, fault-prone)
 
 ### For Pilot Team (Week 4+)
@@ -344,7 +344,7 @@ Heavy-duty tests (excluded from CI for speed):
 
 ### For Executive Leadership
 
-1. ✅ Read `VISION-2030.md` → `docs/.claude/ARCHITECTURE.md`
+1. ✅ Read `VISION-2030.md` → `docs/architecture/README.md`
 2. ✅ Watch `ChaosDemo` output (5 min)
 3. ✅ Understand: Zero on-call, 99.99%+ SLAs, 10x smaller ops teams
 
@@ -441,7 +441,7 @@ Until then: Use supervisor trees for extreme scalability within one JVM (1M+ age
 - **JOTP Repository:** https://github.com/seanchatmangpt/jotp
 - **Vision 2030:** `docs/VISION-2030.md`
 - **Building Autonomous Systems:** `docs/how-to/building-autonomous-systems.md`
-- **Architecture Whitepaper:** `docs/.claude/ARCHITECTURE.md`
+- **Architecture Whitepaper:** `docs/architecture/README.md`
 - **SLA & Operations:** `docs/.claude/SLA-PATTERNS.md`
 - **PhD Thesis:** `docs/phd-thesis-otp-java26.md` (formal OTP equivalence)
 

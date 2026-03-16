@@ -1,0 +1,1174 @@
+# Distributed Systems Setup Guide
+
+**Version:** 1.0
+**Last Updated:** 2026-03-15
+**Target Audience:** Systems architects, DevOps engineers, platform engineers
+
+## Overview
+
+This guide covers deploying and operating JOTP distributed systems across multiple nodes using the `DistributedNode` API. JOTP implements Erlang/OTP's distributed application controller semantics, providing leader election, automatic failover, and takeover capabilities for highly available applications.
+
+---
+
+## Table of Contents
+
+1. [DistributedNode Architecture Overview](#1-distributednode-architecture-overview)
+2. [Cluster Formation and Discovery](#2-cluster-formation-and-discovery)
+3. [Configuration Options](#3-configuration-options)
+4. [Network Setup and Firewalls](#4-network-setup-and-firewalls)
+5. [Failure Scenarios and Handling](#5-failure-scenarios-and-handling)
+6. [Deployment Patterns](#6-deployment-patterns)
+7. [Monitoring Distributed Systems](#7-monitoring-distributed-systems)
+8. [Security Considerations](#8-security-considerations)
+9. [Testing Distributed Systems](#9-testing-distributed-systems)
+10. [Troubleshooting Common Issues](#10-troubleshooting-common-issues)
+
+---
+
+## 1. DistributedNode Architecture Overview
+
+### 1.1 Core Components
+
+The JOTP distributed system is built around these key components:
+
+```java
+// Node identity - unique identifier for each cluster member
+public record NodeId(String name, String host, int port)
+
+// Node configuration - startup synchronization settings
+public record NodeConfig(
+    List<NodeId> syncNodesMandatory,
+    List<NodeId> syncNodesOptional,
+    Duration syncNodesTimeout
+)
+
+// Application specification - priority and failover settings
+public record DistributedAppSpec(
+    String name,
+    List<List<NodeId>> nodes,  // Priority-ordered groups
+    Duration failoverTimeout
+)
+```
+
+### 1.2 Leader Election Algorithm
+
+JOTP uses deterministic leader election without distributed consensus:
+
+1. **Priority Scanning**: Each node scans the priority list from highest to lowest
+2. **Higher-Priority Check**: If a higher-priority node is alive, become standby
+3. **Leadership Claim**: If no higher-priority node is alive, become leader
+4. **Takeover Detection**: Check if lower-priority node is running (takeover scenario)
+
+```java
+// Election logic (simplified)
+for (NodeId candidate : priorityList) {
+    if (candidate.equals(self)) break;  // No higher-priority node found
+    if (ping(candidate)) {
+        // Higher-priority node alive → become standby
+        entry.status.set(AppStatus.STANDBY);
+        entry.currentLeader = candidate;
+        startMonitor(entry, appName);
+        return;
+    }
+}
+// Become leader if we reach here
+entry.status.set(AppStatus.RUNNING);
+entry.currentLeader = self;
+```
+
+### 1.3 Communication Protocol
+
+**Wire Protocol** (newline-terminated TCP):
+
+```
+PING                                → PONG
+STATUS appName                      → RUNNING | STOPPED
+START appName normal                → OK | ERROR reason
+START appName failover fromWire     → OK | ERROR reason
+START appName takeover fromWire     → OK | ERROR reason
+STOP appName                        → OK | ERROR reason
+```
+
+**Transport**: Raw TCP sockets with virtual threads
+- **Connection Timeout**: 300ms per connection attempt
+- **Monitor Interval**: 200ms between health checks
+- **Port Allocation**: OS-assigned (use `port=0` for automatic assignment)
+
+---
+
+## 2. Cluster Formation and Discovery
+
+### 2.1 Basic Three-Node Cluster
+
+```java
+public class ClusterSetup {
+    public static void main(String[] args) throws IOException {
+        // Create three nodes on localhost
+        var node1 = new DistributedNode("cp1", "localhost", 0, NodeConfig.defaults());
+        var node2 = new DistributedNode("cp2", "localhost", 0, NodeConfig.defaults());
+        var node3 = new DistributedNode("cp3", "localhost", 0, NodeConfig.defaults());
+
+        // Define application with priority: node1 > node2 > node3
+        var spec = new DistributedAppSpec("myapp",
+            List.of(
+                List.of(node1.nodeId()),  // Highest priority
+                List.of(node2.nodeId()),  // Medium priority
+                List.of(node3.nodeId())   // Lowest priority
+            ),
+            Duration.ZERO  // Immediate failover
+        );
+
+        // Register application callbacks
+        node1.register(spec, new MyAppCallbacks());
+        node2.register(spec, new MyAppCallbacks());
+        node3.register(spec, new MyAppCallbacks());
+
+        // Start application on all nodes
+        node1.start("myapp");  // Becomes leader (Normal start)
+        node2.start("myapp");  // Becomes standby
+        node3.start("myapp");  // Becomes standby
+
+        System.out.println("Cluster formed:");
+        System.out.println("Node1: " + node1.nodeId());
+        System.out.println("Node2: " + node2.nodeId());
+        System.out.println("Node3: " + node3.nodeId());
+    }
+}
+```
+
+### 2.2 Multi-Datacenter Deployment
+
+```java
+public class MultiDatacenterSetup {
+    public static void main(String[] args) throws IOException {
+        // Datacenter 1 (Primary)
+        var dc1Node1 = new DistributedNode("dc1-cp1", "dc1-host1", 9001, NodeConfig.defaults());
+        var dc1Node2 = new DistributedNode("dc1-cp2", "dc1-host2", 9002, NodeConfig.defaults());
+
+        // Datacenter 2 (Secondary)
+        var dc2Node1 = new DistributedNode("dc2-cp1", "dc2-host1", 9001, NodeConfig.defaults());
+        var dc2Node2 = new DistributedNode("dc2-cp2", "dc2-host2", 9002, NodeConfig.defaults());
+
+        // Priority: DC1 nodes > DC2 nodes
+        var spec = new DistributedAppSpec("global-app",
+            List.of(
+                List.of(dc1Node1.nodeId(), dc1Node2.nodeId()),  // Primary DC
+                List.of(dc2Node1.nodeId(), dc2Node2.nodeId())   // Secondary DC
+            ),
+            Duration.ofSeconds(5)  // Wait 5s before cross-DC failover
+        );
+
+        // Register and start
+        dc1Node1.register(spec, new GlobalAppCallbacks());
+        dc1Node2.register(spec, new GlobalAppCallbacks());
+        dc2Node1.register(spec, new GlobalAppCallbacks());
+        dc2Node2.register(spec, new GlobalAppCallbacks());
+
+        dc1Node1.start("global-app");
+        dc1Node2.start("global-app");
+        dc2Node1.start("global-app");
+        dc2Node2.start("global-app");
+    }
+}
+```
+
+### 2.3 Node Discovery Patterns
+
+**Static Configuration** (recommended for production):
+```java
+var config = new NodeConfig(
+    List.of(
+        new NodeId("cp2", "host2", 9002),
+        new NodeId("cp3", "host3", 9003)
+    ),  // Mandatory nodes
+    List.of(),  // Optional nodes
+    Duration.ofSeconds(30)  // Timeout
+);
+```
+
+**DNS-Based Discovery**:
+```java
+// Resolve node addresses from DNS
+String dnsName = "jotp-cluster.internal";
+InetAddress[] addresses = InetAddress.getAllByName(dnsName);
+
+List<NodeId> nodes = Arrays.stream(addresses)
+    .map(addr -> new NodeId(
+        "node-" + addr.getHostAddress(),
+        addr.getHostAddress(),
+        9000
+    ))
+    .toList();
+```
+
+---
+
+## 3. Configuration Options
+
+### 3.1 Node Configuration
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `syncNodesMandatory` | `List<NodeId>` | Empty | Nodes that must be reachable before startup |
+| `syncNodesOptional` | `List<NodeId>` | Empty | Nodes to wait for but not required |
+| `syncNodesTimeout` | `Duration` | `Duration.ZERO` | Maximum time to wait for peer nodes |
+
+**Note**: Synchronization is currently stored but not enforced at startup. Nodes begin leader election immediately without waiting for peers.
+
+### 3.2 Application Configuration
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Application identifier (must match across nodes) |
+| `nodes` | `List<List<NodeId>>` | Priority-ordered node groups |
+| `failoverTimeout` | `Duration` | Delay before failover after leader failure |
+
+### 3.3 Timeout Tuning Guidelines
+
+| Scenario | Recommended Timeout | Rationale |
+|----------|-------------------|-----------|
+| **Local LAN** | 0-500ms | Fast network, quick failover |
+| **Same region** | 1-2s | Account for network jitter |
+| **Cross-region** | 5-10s | Avoid spurious failover during latency spikes |
+| **Multi-DC** | 10-30s | Allow time for network partition recovery |
+
+```java
+// Example: Cross-region configuration
+var crossRegionSpec = new DistributedAppSpec("global-app",
+    priorityList,
+    Duration.ofSeconds(15)  // Wait 15s before failover
+);
+```
+
+---
+
+## 4. Network Setup and Firewalls
+
+### 4.1 Firewall Configuration
+
+**Required Ports**:
+```bash
+# JOTP inter-node communication
+--dport 9000:9100 -j ACCEPT  # Adjust port range as needed
+
+# Example: firewalld
+firewall-cmd --permanent --add-port=9000-9100/tcp
+firewall-cmd --reload
+
+# Example: ufw
+ufw allow 9000:9100/tcp
+```
+
+### 4.2 Kubernetes NetworkPolicy
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jotp-cluster-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: jotp-node
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: jotp-node
+      ports:
+        - protocol: TCP
+          port: 9000  # JOTP communication port
+```
+
+### 4.3 Cloud Security Groups
+
+**AWS Security Group**:
+```json
+{
+  "Type": "AWS::EC2::SecurityGroupIngress",
+  "Properties": {
+    "GroupId": {"Ref": "JOTPSecurityGroup"},
+    "IpProtocol": "tcp",
+    "FromPort": 9000,
+    "ToPort": 9100,
+    "SourceSecurityGroupId": {"Ref": "JOTPSecurityGroup"}
+  }
+}
+```
+
+**GCP Firewall Rule**:
+```bash
+gcloud compute firewall-rules create jotp-cluster-allow \
+    --allow tcp:9000-9100 \
+    --source-tags=jotp-node \
+    --target-tags=jotp-node
+```
+
+### 4.4 Network Latency Requirements
+
+| Deployment | Target Latency | Maximum Acceptable |
+|-----------|---------------|-------------------|
+| **Same rack** | <1ms | 5ms |
+| **Same zone** | <5ms | 20ms |
+| **Same region** | <20ms | 100ms |
+| **Cross-region** | <100ms | 300ms |
+
+**Testing network latency**:
+```bash
+# Using ping
+ping -c 100 target-host | tail -1
+
+# Using netcat (more accurate for TCP)
+nc -zv target-host 9000
+```
+
+---
+
+## 5. Failure Scenarios and Handling
+
+### 5.1 Node Failure Detection
+
+**Detection Timeline**:
+1. **Monitor Interval**: 200ms between health checks
+2. **Failure Detection**: 2 consecutive failed pings (~400ms)
+3. **Failover Timeout**: Configurable (default: 0ms)
+4. **Total Failover Time**: Detection + Timeout + Election (~500ms)
+
+**Example**:
+```java
+var spec = new DistributedAppSpec("myapp",
+    priorityList,
+    Duration.ofSeconds(2)  // Fail after 2s
+);
+
+// Timeline:
+// T+0ms: Leader fails
+// T+400ms: Detected by standby
+// T+2400ms: Failover timeout expires
+// T+2500ms: New leader elected
+```
+
+### 5.2 Cascading Failures
+
+**Scenario**: Multiple nodes fail in sequence
+
+```java
+// Initial state: node1 (leader), node2 (standby), node3 (standby)
+node1.shutdown();  // node2 becomes leader
+node2.shutdown();  // node3 becomes leader
+node3.shutdown();  // No nodes remaining → app stops
+```
+
+**Handling Strategy**:
+```java
+public class ResilientCallbacks implements ApplicationCallbacks {
+    private final List<NodeId> allNodes;
+
+    @Override
+    public void onStart(StartMode mode) {
+        if (mode instanceof StartMode.Failover failover) {
+            System.out.println("Taking over from: " + failover.from());
+            // Check if we're the last node
+            if (getLiveNodeCount() == 1) {
+                System.out.println("WARNING: Last node standing");
+                // Trigger alert, initiate recovery
+            }
+        }
+    }
+
+    private int getLiveNodeCount() {
+        return (int) allNodes.stream()
+            .filter(this::isNodeAlive)
+            .count();
+    }
+}
+```
+
+### 5.3 Network Partitions
+
+**Split-Brain Scenario**: Network splits cluster into two partitions
+
+**JOTP Approach**: Deterministic priority resolution
+- Each partition independently runs leader election
+- Partition containing highest-priority live node wins
+- No distributed consensus required
+
+**Example**:
+```java
+// Initial: node1 > node2 > node3 (all in same cluster)
+// Network partition: {node1, node2} | {node3}
+// Partition 1: node1 wins (highest priority)
+// Partition 2: node3 wins (only node in partition)
+// When network heals: node1 takes over from node3
+```
+
+### 5.4 Failover Timeout Tuning
+
+**Too Short** (<1s):
+- ✅ Quick failover
+- ⚠️ Spurious failover during temporary network issues
+- ⚠️ Potential for flapping
+
+**Too Long** (>30s):
+- ✅ Resistant to network blips
+- ⚠️ Extended downtime during real failures
+- ⚠️ Poor user experience
+
+**Recommended**:
+```java
+// Production settings by scenario
+var lanTimeout = Duration.ofMillis(500);      // LAN
+var regionTimeout = Duration.ofSeconds(5);    // Same region
+var globalTimeout = Duration.ofSeconds(15);   // Multi-region
+```
+
+---
+
+## 6. Deployment Patterns
+
+### 6.1 Kubernetes StatefulSet
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jotp-cluster
+spec:
+  serviceName: jotp-cluster
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp-node
+  template:
+    metadata:
+      labels:
+        app: jotp-node
+    spec:
+      containers:
+        - name: jotp
+          image: jotp-app:1.0
+          ports:
+            - containerPort: 9000
+              name: jotp-port
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+```
+
+### 6.2 Docker Compose Deployment
+
+```yaml
+version: "3.9"
+services:
+  node1:
+    image: jotp-app:1.0
+    container_name: jotp-node1
+    ports:
+      - "9001:9000"
+    environment:
+      - NODE_NAME=cp1
+      - NODE_HOST=localhost
+      - NODE_PORT=9000
+    networks:
+      - jotp-net
+    restart: unless-stopped
+
+  node2:
+    image: jotp-app:1.0
+    container_name: jotp-node2
+    ports:
+      - "9002:9000"
+    environment:
+      - NODE_NAME=cp2
+      - NODE_HOST=localhost
+      - NODE_PORT=9000
+    networks:
+      - jotp-net
+    restart: unless-stopped
+
+  node3:
+    image: jotp-app:1.0
+    container_name: jotp-node3
+    ports:
+      - "9003:9000"
+    environment:
+      - NODE_NAME=cp3
+      - NODE_HOST=localhost
+      - NODE_PORT=9000
+    networks:
+      - jotp-net
+    restart: unless-stopped
+
+networks:
+  jotp-net:
+    driver: bridge
+```
+
+### 6.3 Bare Metal Deployment
+
+**Systemd Service** (`/etc/systemd/system/jotp.service`):
+```ini
+[Unit]
+Description=JOTP Distributed Node
+After=network.target
+
+[Service]
+Type=simple
+User=jotp
+Group=jotp
+WorkingDirectory=/opt/jotp
+ExecStart=/usr/bin/java \
+  --enable-preview \
+  -XX:+UseZGC \
+  -Xmx4g \
+  -jar /opt/jotp/app.jar \
+  --node.name=cp1 \
+  --node.host=$(hostname -I | awk '{print $1}') \
+  --node.port=9000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Enable and start**:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable jotp
+sudo systemctl start jotp
+sudo systemctl status jotp
+```
+
+### 6.4 Cloud Provider Guides
+
+**AWS EC2**:
+```bash
+# Launch instances
+aws ec2 run-instances \
+  --image-id ami-0abcdef1234567890 \
+  --instance-type t3.large \
+  --count 3 \
+  --key-name my-key-pair \
+  --security-group-ids sg-903004f8 \
+  --user-data file://user-data.sh
+
+# user-data.sh
+#!/bin/bash
+yum install -y java-26-amazon-corretto
+yum install -y jotp
+systemctl start jotp
+```
+
+**Google Cloud GCE**:
+```bash
+gcloud compute instances create jotp-node-1 \
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud-cloud \
+  --machine-type=e2-highmem-4 \
+  --zone=us-central1-a \
+  --tags=jotp-node \
+  --metadata-from-file=startup-script=start-jotp.sh
+```
+
+**Azure VM**:
+```bash
+az vm create \
+  --resource-group jotp-rg \
+  --name jotp-node-1 \
+  --image Ubuntu2204 \
+  --size Standard_D4s_v3 \
+  --admin-username azureuser \
+  --ssh-key-values ~/.ssh/id_rsa.pub \
+  --custom-data cloud-init.yaml
+```
+
+---
+
+## 7. Monitoring Distributed Systems
+
+### 7.1 Health Check Endpoints
+
+**Node Health**:
+```java
+@GetMapping("/health/node")
+public ResponseEntity<Map<String, Object>> nodeHealth() {
+    Map<String, Object> health = new HashMap<>();
+    health.put("nodeId", distributedNode.nodeId());
+    health.put("status", "UP");
+    health.put("timestamp", Instant.now());
+    health.put("applications", getAppStatus());
+    return ResponseEntity.ok(health);
+}
+
+private Map<String, String> getAppStatus() {
+    Map<String, String> status = new HashMap<>();
+    for (String app : distributedNode.getRegisteredApps()) {
+        status.put(app, distributedNode.getAppStatus(app));
+    }
+    return status;
+}
+```
+
+**Cluster Health**:
+```java
+@GetMapping("/health/cluster")
+public ResponseEntity<Map<String, Object>> clusterHealth() {
+    Map<String, Object> health = new HashMap<>();
+    health.put("nodes", getClusterNodes());
+    health.put("leader", getCurrentLeader());
+    health.put("standbyNodes", getStandbyNodes());
+    health.put("lastElection", getLastElectionTime());
+    return ResponseEntity.ok(health);
+}
+```
+
+### 7.2 Distributed Tracing
+
+**OpenTelemetry Integration**:
+```java
+// Trace leader election
+Span electionSpan = tracer.spanBuilder("distributed.leader_election")
+    .setAttribute("app.name", appName)
+    .setAttribute("node.id", self.nodeId())
+    .startSpan();
+
+try (Scope scope = electionSpan.makeCurrent()) {
+    electLeader(entry, appName);
+    electionSpan.setStatus(StatusCode.OK);
+    electionSpan.setAttribute("elected_leader", entry.currentLeader.name());
+} catch (Exception e) {
+    electionSpan.recordException(e);
+    electionSpan.setStatus(StatusCode.ERROR);
+} finally {
+    electionSpan.end();
+}
+```
+
+### 7.3 Metrics Collection
+
+**Prometheus Metrics**:
+```java
+// Leader election counter
+Counter.builder("jotp_leader_election_total")
+    .description("Total leader elections")
+    .tag("app", appName)
+    .tag("node", self.nodeId().name())
+    .tag("outcome", "won")  // or "lost"
+    .register(meterRegistry)
+    .increment();
+
+// Failover timer
+Timer.builder("jotp_failover_duration")
+    .description("Time to complete failover")
+    .tag("app", appName)
+    .tag("from_node", failedNode.name())
+    .register(meterRegistry)
+    .record(Duration.ofMillis(failoverTimeMs));
+
+// Node health gauge
+Gauge.builder("jotp_node_alive")
+    .description("Node alive status")
+    .tag("node", nodeId.name())
+    .register(meterRegistry, () -> ping(nodeId) ? 1 : 0);
+```
+
+### 7.4 Alerting Rules
+
+**Prometheus Alertmanager**:
+```yaml
+groups:
+  - name: jotp_distributed
+    rules:
+      - alert: JOTPLeaderElectionStorm
+        expr: rate(jotp_leader_election_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frequent leader elections for {{ $labels.app }}"
+          description: "Leader election rate is {{ $value }}/sec"
+
+      - alert: JOTPNodeDown
+        expr: jotp_node_alive == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node {{ $labels.node }} is down"
+          description: "Node has been unreachable for 2 minutes"
+
+      - alert: JOTPFailoverDelayed
+        expr: jotp_failover_duration_seconds > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow failover for {{ $labels.app }}"
+          description: "Failover took {{ $value }}s"
+```
+
+---
+
+## 8. Security Considerations
+
+### 8.1 Network Security
+
+**TLS/SSL Encryption** (future enhancement):
+```java
+// Currently, JOTP uses plain TCP
+// For production, use VPN or service mesh for encryption
+
+//推荐的临时方案:
+// 1. 部署在私有网络中
+// 2. 使用 WireGuard/IPsec VPN
+// 3. 使用服务网格 (Istio, Linkerd)
+```
+
+### 8.2 Authentication
+
+**Node Authentication** (recommended pattern):
+```java
+public class AuthenticatedNodeConfig {
+    private final String sharedSecret;
+
+    public boolean isNodeTrusted(NodeId nodeId) {
+        // Implement node authentication:
+        // 1. Pre-shared key
+        // 2. Certificate validation
+        // 3. Token-based auth
+        return validateNode(nodeId);
+    }
+}
+```
+
+### 8.3 Authorization
+
+**Application-Level Authorization**:
+```java
+public class SecureCallbacks implements ApplicationCallbacks {
+    private final Set<NodeId> authorizedNodes;
+
+    @Override
+    public void onStart(StartMode mode) {
+        if (mode instanceof StartMode.Takeover takeover) {
+            if (!authorizedNodes.contains(takeover.from())) {
+                throw new SecurityException(
+                    "Unauthorized takeover attempt from: " + takeover.from()
+                );
+            }
+        }
+    }
+}
+```
+
+### 8.4 Secret Management
+
+**Kubernetes Secrets**:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jotp-secrets
+type: Opaque
+data:
+  shared-secret: c2VjcmV0LXZhbHVlLWJhc2U2NC1lbmNvZGVk
+```
+
+**Environment Variables**:
+```bash
+export JOTP_SHARED_SECRET=$(kubectl get secret jotp-secrets -o jsonpath='{.data.shared-secret}' | base64 -d)
+```
+
+---
+
+## 9. Testing Distributed Systems
+
+### 9.1 Unit Testing
+
+```java
+@Test
+@DisplayName("Application starts on highest-priority node only")
+void testLeaderElection() throws IOException {
+    var node1 = new DistributedNode("cp1", "localhost", 0, NodeConfig.defaults());
+    var node2 = new DistributedNode("cp2", "localhost", 0, NodeConfig.defaults());
+    var node3 = new DistributedNode("cp3", "localhost", 0, NodeConfig.defaults());
+
+    var spec = new DistributedAppSpec("myapp",
+        List.of(
+            List.of(node1.nodeId()),
+            List.of(node2.nodeId()),
+            List.of(node3.nodeId())
+        ),
+        Duration.ZERO
+    );
+
+    var callbacks1 = new TrackingCallbacks();
+    var callbacks2 = new TrackingCallbacks();
+    var callbacks3 = new TrackingCallbacks();
+
+    node1.register(spec, callbacks1);
+    node2.register(spec, callbacks2);
+    node3.register(spec, callbacks3);
+
+    node1.start("myapp");
+    node2.start("myapp");
+    node3.start("myapp");
+
+    await().atMost(5, SECONDS).until(callbacks1::hasStarted);
+    assertThat(callbacks1.startMode.get()).isInstanceOf(StartMode.Normal.class);
+    assertThat(callbacks2.hasStarted()).isFalse();
+    assertThat(callbacks3.hasStarted()).isFalse();
+}
+```
+
+### 9.2 Integration Testing
+
+```java
+@Test
+@DisplayName("Failover to node2 when node1 goes down")
+void testFailover() throws IOException {
+    var node1 = new DistributedNode("cp1", "localhost", 0, NodeConfig.defaults());
+    var node2 = new DistributedNode("cp2", "localhost", 0, NodeConfig.defaults());
+    var node3 = new DistributedNode("cp3", "localhost", 0, NodeConfig.defaults());
+
+    var spec = immediateSpec(node1, node2, node3);
+
+    var callbacks1 = new TrackingCallbacks();
+    var callbacks2 = new TrackingCallbacks();
+    var callbacks3 = new TrackingCallbacks();
+
+    node1.register(spec, callbacks1);
+    node2.register(spec, callbacks2);
+    node3.register(spec, callbacks3);
+
+    node1.start("myapp");
+    node2.start("myapp");
+    node3.start("myapp");
+
+    await().atMost(5, SECONDS).until(callbacks1::hasStarted);
+
+    // Simulate node1 crash
+    node1.shutdown();
+
+    // node2 should failover
+    await().atMost(10, SECONDS).until(callbacks2::hasStarted);
+    assertThat(callbacks2.startMode.get()).isInstanceOf(StartMode.Failover.class);
+}
+```
+
+### 9.3 Chaos Testing
+
+```java
+@Test
+@DisplayName("Random node failures")
+void testChaos() throws IOException, InterruptedException {
+    var nodes = createNodes(5);
+    var spec = createSpec(nodes);
+    var callbacks = registerCallbacks(nodes, spec);
+
+    // Start all nodes
+    nodes.forEach(n -> n.start("myapp"));
+
+    // Randomly kill nodes
+    Random random = new Random();
+    for (int i = 0; i < 10; i++) {
+        Thread.sleep(1000);
+        var victim = nodes.get(random.nextInt(nodes.size()));
+        victim.shutdown();
+        nodes.remove(victim);
+    }
+
+    // Verify system still running
+    var aliveCallbacks = callbacks.stream()
+        .filter(cb -> cb.hasStarted())
+        .toList();
+    assertThat(aliveCallbacks).hasSize(1);
+}
+```
+
+### 9.4 Load Testing
+
+```java
+@Test
+@DisplayName("High-throughput messaging under failover")
+void testLoadDuringFailover() throws IOException, InterruptedException {
+    var node1 = new DistributedNode("cp1", "localhost", 0, NodeConfig.defaults());
+    var node2 = new DistributedNode("cp2", "localhost", 0, NodeConfig.defaults());
+
+    var spec = immediateSpec(node1, node2);
+
+    // Start application
+    node1.register(spec, new LoadTestCallbacks());
+    node2.register(spec, new LoadTestCallbacks());
+    node1.start("myapp");
+    node2.start("myapp");
+
+    // Send high load
+    ExecutorService executor = Executors.newFixedThreadPool(100);
+    for (int i = 0; i < 10000; i++) {
+        executor.submit(() -> sendMessage("myapp", new PayloadMessage()));
+    }
+
+    // Trigger failover under load
+    Thread.sleep(100);
+    node1.shutdown();
+
+    // Verify no message loss
+    await().atMost(30, SECONDS).until(() ->
+        getMessageCount() == 10000
+    );
+
+    executor.shutdown();
+}
+```
+
+---
+
+## 10. Troubleshooting Common Issues
+
+### 10.1 Node Won't Start
+
+**Symptoms**:
+- `IOException: Address already in use`
+- Node fails to bind to port
+
+**Diagnosis**:
+```bash
+# Check port usage
+netstat -tuln | grep 9000
+lsof -i :9000
+
+# Test port availability
+nc -l localhost 9000
+```
+
+**Solutions**:
+1. Use `port=0` for OS-assigned port
+2. Check firewall rules
+3. Verify no other process using port
+4. Check `ulimit` for file descriptor limits
+
+### 10.2 Failover Not Triggering
+
+**Symptoms**:
+- Leader fails but standby doesn't take over
+- Application unavailable after node failure
+
+**Diagnosis**:
+```java
+// Check monitor thread status
+entry.monitorThread.getState();  // Should be THREAD_WAITING or RUNNABLE
+
+// Check if coordinated stop is set
+entry.coordinatedStop;  // Should be false
+
+// Manual ping test
+boolean alive = ping(targetNode);
+```
+
+**Solutions**:
+1. Verify `failoverTimeout` is not too long
+2. Check network connectivity
+3. Ensure monitor thread not interrupted
+4. Verify `coordinatedStop` flag is false
+
+### 10.3 Split-Brain Occurred
+
+**Symptoms**:
+- Multiple nodes think they are leader
+- Application state inconsistencies
+- Duplicate processing
+
+**Diagnosis**:
+```java
+// Query all nodes for app status
+for (NodeId node : allNodes) {
+    String status = queryStatus(node, "myapp");
+    System.out.println(node + ": " + status);
+    // Should only see one "RUNNING"
+}
+```
+
+**Solutions**:
+1. Manual intervention: Stop all nodes
+2. Restart cluster with clear priority
+3. Use deterministic tiebreakers
+4. Implement external coordination (ZooKeeper, etcd)
+
+### 10.4 High Memory Usage
+
+**Symptoms**:
+- JVM OutOfMemoryError
+- Frequent GC pauses
+- Slow response times
+
+**Diagnosis**:
+```bash
+# Check JVM memory
+jmap -heap <pid>
+jstat -gcutil <pid> 1000
+
+# Check process count
+jconsole → MBeans → jotp → process_count
+```
+
+**Solutions**:
+1. Reduce mailbox capacity: `-Djotp.mailbox.capacity=1024`
+2. Increase heap size: `-Xmx8g`
+3. Use ZGC: `-XX:+UseZGC`
+4. Reduce process count
+5. Profile for memory leaks
+
+### 10.5 Network Latency Issues
+
+**Symptoms**:
+- Slow leader election
+- Delayed failover
+- Intermittent timeouts
+
+**Diagnosis**:
+```bash
+# Measure latency
+ping -c 1000 target-host | tail -1
+
+# Check TCP connection time
+time nc -zv target-host 9000
+
+# Monitor packet loss
+mtr -r -c 100 target-host
+```
+
+**Solutions**:
+1. Increase connection timeout
+2. Use hosts in same region/AZ
+3. Optimize network routing
+4. Increase monitor interval
+5. Adjust failover timeout
+
+### 10.6 Troubleshooting Checklist
+
+**Startup Issues**:
+- [ ] Java 26 installed with `--enable-preview`
+- [ ] Ports not already in use
+- [ ] Firewall allows inter-node communication
+- [ ] DNS resolution working
+- [ ] Sufficient memory and CPU
+- [ ] Node configuration valid
+
+**Runtime Issues**:
+- [ ] All nodes can ping each other
+- [ ] Monitor threads running
+- [ ] No network partitions
+- [ ] Failover timeout appropriate
+- [ ] Sufficient JVM heap
+- [ ] GC not pausing excessively
+
+**Failover Issues**:
+- [ ] Standby nodes alive
+- [ ] Leader election working
+- [ ] No split-brain condition
+- [ ] Application callbacks not throwing
+- [ ] Network latency acceptable
+- [ ] Timeout configuration correct
+
+---
+
+## Quick Reference
+
+### Essential Commands
+
+```bash
+# Start node
+java --enable-preview -jar jotp-app.jar \
+  --node.name=cp1 \
+  --node.host=localhost \
+  --node.port=9000
+
+# Check node status
+curl http://localhost:8080/health/node
+
+# Test cluster connectivity
+for node in node1 node2 node3; do
+  ping -c 1 $node
+done
+
+# Monitor logs
+tail -f /var/log/jotp/node.log
+
+# Check JVM stats
+jstat -gcutil <pid> 1000
+```
+
+### Configuration Template
+
+```java
+// Production-ready configuration
+var config = new NodeConfig(
+    List.of(  // Mandatory nodes
+        new NodeId("cp2", "host2", 9002),
+        new NodeId("cp3", "host3", 9003)
+    ),
+    List.of(),  // Optional nodes
+    Duration.ofSeconds(30)  // Startup timeout
+);
+
+var spec = new DistributedAppSpec(
+    "myapp",
+    List.of(
+        List.of(new NodeId("cp1", "host1", 9001)),  // Primary
+        List.of(new NodeId("cp2", "host2", 9002)),  // Secondary
+        List.of(new NodeId("cp3", "host3", 9003))   // Tertiary
+    ),
+    Duration.ofSeconds(5)  // Failover timeout
+);
+```
+
+### Monitoring Endpoints
+
+| Endpoint | Purpose | Response |
+|----------|---------|----------|
+| `/health/node` | Node health | JSON with node status |
+| `/health/cluster` | Cluster health | JSON with cluster view |
+| `/metrics` | Prometheus metrics | Prometheus text format |
+| `/health/ready` | Readiness probe | 200/503 status code |
+
+---
+
+**Related Documentation**:
+- [Deployment Guide](../system/deployment-guide.md)
+- [Production Monitoring](../performance/production-monitoring.md)
+- [Advanced Distributed Systems](../tutorials/advanced/distributed-systems.md)
+- [Architecture Overview](../explanations/architecture-overview.md)
+
+---
+
+**Need Help?**
+- Check the [troubleshooting guide](../troubleshooting/debugging-techniques.md)
+- Review [test examples](https://github.com/seanchatmangpt/jotp/tree/main/src/test/java/io/github/seanchatmangpt/jotp/distributed)
+- Open an [issue on GitHub](https://github.com/seanchatmangpt/jotp/issues)

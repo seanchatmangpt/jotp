@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,11 @@ class EventManagerTimeoutTest implements WithAssertions {
 
     /** Simple test event. */
     record TestEvent(String message) {}
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @Nested
     @DisplayName("EventManager.start() — default timeout factory")

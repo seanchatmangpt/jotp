@@ -19,10 +19,11 @@ package io.github.seanchatmangpt.jotp.benchmark;
 /**
  * Ideal zero-cost abstraction reference implementation.
  *
- * <p>This represents the theoretical minimum overhead for a feature-flagged event bus.
- * The fast path should compile to a single branch instruction that returns immediately.
+ * <p>This represents the theoretical minimum overhead for a feature-flagged event bus. The fast
+ * path should compile to a single branch instruction that returns immediately.
  *
  * <p><strong>Expected Assembly (fast path, disabled):</strong>
+ *
  * <pre>
  *   test byte [ENABLED], 1           ; Check static final boolean
  *   je   return                       ; Branch if not enabled
@@ -31,16 +32,16 @@ package io.github.seanchatmangpt.jotp.benchmark;
  *
  * <p><strong>Expected Cost:</strong> <50ns (single CPU cycle, branch prediction friendly)
  *
- * <p>This implementation serves as the "north star" for optimizing FrameworkEventBus.
- * Any deviation from this ideal should be justified by necessary functionality.
+ * <p>This implementation serves as the "north star" for optimizing FrameworkEventBus. Any deviation
+ * from this ideal should be justified by necessary functionality.
  */
 public final class IdealEventBus {
 
     /**
      * Feature flag: compile-time constant for zero-cost fast path.
      *
-     * <p><strong>Key optimization:</strong> {@code static final} allows JIT to inline
-     * and eliminate dead code. When {@code false}, the entire body becomes unreachable.
+     * <p><strong>Key optimization:</strong> {@code static final} allows JIT to inline and eliminate
+     * dead code. When {@code false}, the entire body becomes unreachable.
      */
     static final boolean ENABLED = false;
 
@@ -48,15 +49,17 @@ public final class IdealEventBus {
      * Ideal publish method - single branch check, zero overhead when disabled.
      *
      * <p><strong>Fast path (disabled):</strong>
+     *
      * <ul>
-     *   <li>Single boolean check (branch prediction friendly)</li>
-     *   <li>No method calls</li>
-     *   <li>No memory accesses</li>
-     *   <li>No allocations</li>
-     *   <li>Compiles to ~2 CPU instructions</li>
+     *   <li>Single boolean check (branch prediction friendly)
+     *   <li>No method calls
+     *   <li>No memory accesses
+     *   <li>No allocations
+     *   <li>Compiles to ~2 CPU instructions
      * </ul>
      *
      * <p><strong>Expected assembly:</strong>
+     *
      * <pre>
      *   # When ENABLED = false (JIT optimizes to:)
      *   return

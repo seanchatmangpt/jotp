@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.io.Serializable;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.Test;
  * @see DistributedActorBridge.ActorLocation
  * @see DistributedActorBridge.RemoteActorHandle
  */
+@DtrTest
 @DisplayName("DistributedActorBridge: Location-Transparent Actor Routing")
 class DistributedActorBridgeTest {
 
@@ -71,6 +74,7 @@ class DistributedActorBridgeTest {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         ProcRegistry.reset();
         bridge = new DistributedActorBridge("localhost", 9000);
     }
@@ -81,7 +85,9 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("ActorLocation.Local: Represents a local actor")
-    void testActorLocationLocal() {
+    void testActorLocationLocal(DtrContext ctx) {
+        ctx.say(
+                "ActorLocation is a sealed interface with Local and Remote variants for exhaustive pattern matching.");
         var local = new DistributedActorBridge.ActorLocation.Local("my-actor");
         assertThat(local.name()).isEqualTo("my-actor");
     }
@@ -117,7 +123,10 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("ActorLocation sealed pattern matching: Dispatch on Local vs Remote")
-    void testActorLocationPatternMatching() {
+    void testActorLocationPatternMatching(DtrContext ctx) {
+        ctx.say(
+                "Sealed interface pattern matching enables exhaustive switch on ActorLocation variants.");
+        ctx.say("The compiler ensures all cases are handled: Local and Remote.");
         DistributedActorBridge.ActorLocation local =
                 new DistributedActorBridge.ActorLocation.Local("actor-1");
         DistributedActorBridge.ActorLocation remote =
@@ -147,7 +156,10 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("JavaSerializationCodec: Encodes and decodes messages")
-    void testJavaSerializationCodec() throws Exception {
+    void testJavaSerializationCodec(DtrContext ctx) throws Exception {
+        ctx.say(
+                "JavaSerializationCodec uses Java's built-in serialization for message encoding/decoding.");
+        ctx.say("Custom MessageCodec implementations can use protobuf, JSON, or other formats.");
         var codec = new DistributedActorBridge.JavaSerializationCodec<TestActorMsg>();
 
         var msg = new TestActorMsg.SetValue(42);
@@ -214,7 +226,10 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("localRef: Resolves local actor from ProcRegistry")
-    void testLocalRefResolvesFromRegistry() throws Exception {
+    void testLocalRefResolvesFromRegistry(DtrContext ctx) throws Exception {
+        ctx.say(
+                "localRef() looks up actors by name in ProcRegistry and returns a RemoteActorHandle.");
+        ctx.say("The handle provides tell() and ask() methods for location-transparent messaging.");
         // Create a local actor
         var proc = new Proc<>(new CounterState(10), this::handleCounterMessage);
         ProcRegistry.register("counter-1", proc);
@@ -269,7 +284,10 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("RemoteActorHandle: Routes local tell() through ProcRegistry")
-    void testRemoteActorHandleLocalTell() throws Exception {
+    void testRemoteActorHandleLocalTell(DtrContext ctx) throws Exception {
+        ctx.say(
+                "RemoteActorHandle abstracts location: same API for local (ProcRegistry) and remote (gRPC) actors.");
+        ctx.say("tell() sends a fire-and-forget message to the actor regardless of location.");
         var proc = new Proc<>(new CounterState(5), this::handleCounterMessage);
         ProcRegistry.register("local-actor", proc);
 
@@ -376,7 +394,10 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("exportActor: Registers actor in ProcRegistry")
-    void testExportActorRegistersInRegistry() {
+    void testExportActorRegistersInRegistry(DtrContext ctx) {
+        ctx.say(
+                "exportActor() registers a Proc in ProcRegistry, making it discoverable by other nodes.");
+        ctx.say("Returns Result.Ok on success, Result.Err if the name is already registered.");
         var proc = new Proc<>(new CounterState(0), this::handleCounterMessage);
 
         var result = bridge.exportActor("exported-actor", proc);
@@ -445,7 +466,10 @@ class DistributedActorBridgeTest {
 
     @Test
     @DisplayName("Example: Simulated two-JVM communication via bridges")
-    void testTwoJvmCommunicationSimulation() throws Exception {
+    void testTwoJvmCommunicationSimulation(DtrContext ctx) throws Exception {
+        ctx.say(
+                "Two-JVM simulation: Server exports actor, client resolves via bridge and sends messages.");
+        ctx.say("In production, the bridge would use gRPC for cross-JVM communication.");
         // JVM-1: Server exposing an actor
         var serverBridge = new DistributedActorBridge("localhost", 9000);
         var serverProc = new Proc<>(new CounterState(100), this::handleCounterMessage);

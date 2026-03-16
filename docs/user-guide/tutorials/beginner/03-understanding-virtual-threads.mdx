@@ -1,0 +1,635 @@
+---
+title: "Understanding Virtual Threads"
+description: "How Java 26 virtual threads power JOTP's lightweight processes"
+difficulty: beginner
+estimatedTime: "25 minutes"
+tutorialNumber: 3
+totalTutorials: 6
+nextTutorial: "04-supervision-basics"
+prevTutorial: "02-your-first-process"
+---
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+# Understanding Virtual Threads
+
+<Badge variant="secondary">Tutorial 3 of 6</Badge>
+
+Virtual threads are the foundation that makes JOTP's massive scalability possible. In this tutorial, you'll understand how Java 26 virtual threads work and why they're perfect for building fault-tolerant concurrent systems.
+
+## What You'll Learn
+
+By the end of this tutorial, you'll understand:
+
+- What virtual threads are and how they differ from platform threads
+- Why virtual threads are ideal for JOTP processes
+- How to create millions of concurrent processes
+- Performance characteristics and best practices
+- When to use virtual threads vs platform threads
+
+## Platform Threads vs Virtual Threads
+
+Let's start with a visual comparison:
+
+```java
+{/**
+ * PLATFORM THREADS (Traditional)
+ *
+ * Each thread maps 1:1 to an OS thread
+ * - Heavy: ~2MB stack per thread
+ * - Limited: ~10K threads max
+ * - Blocking: OS context switches
+ * - Costly: Creation/destruction is expensive
+ *
+ * Example: 10,000 platform threads
+ * Memory: 10,000 × 2MB = 20GB RAM!
+ * Creation time: Several seconds
+ */
+void platformThreadExample() {
+    // Create 10,000 platform threads
+    ExecutorService executor = Executors.newFixedThreadPool(10_000);
+    for (int i = 0; i < 10_000; i++) {
+        executor.submit(() -> {
+            // Do some work
+            Thread.sleep(1000);
+        });
+    }
+    // This will likely cause OutOfMemoryError!
+}
+
+
+/**
+ * VIRTUAL THREADS (Java 26)
+ *
+ * Many virtual threads map to few OS threads (M:N scheduling)
+ * - Light: ~1KB stack per virtual thread
+ * - Unlimited: Millions of virtual threads
+ * - Non-blocking: JVM manages scheduling
+ * - Cheap: Creation/destruction is instant
+ *
+ * Example: 10,000,000 virtual threads
+ * Memory: 10,000,000 × 1KB = 10GB RAM
+ * Creation time: < 1 second
+ */
+void virtualThreadExample() {
+    // Create 10 million virtual threads
+    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        for (int i = 0; i < 10_000_000; i++) {
+            executor.submit(() -> {
+                // Do some work
+                Thread.sleep(1000);
+            });
+        }
+    }
+    // This works! No OutOfMemoryError
+}}
+```
+
+## How Virtual Threads Work
+
+Virtual threads use **M:N scheduling** - many virtual threads run on fewer carrier threads:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    JVM (Java 26)                        │
+│                                                          │
+│  Virtual Thread 1  ──┐                                  │
+│  Virtual Thread 2  ──┤                                  │
+│  Virtual Thread 3  ──┼──► Scheduler ──► Carrier Thread 1 ─┐
+│  Virtual Thread 4  ──┤                    (Platform)    │  │
+│  Virtual Thread 5  ──┘                                   │  │
+│         ...                                              ├─► OS Thread 1
+│  Virtual Thread N  ──┐                                  │  │
+│  Virtual Thread N+1──┼──► Scheduler ──► Carrier Thread 2 ─┤
+│         ...         ──┤                    (Platform)    │  │
+│  Virtual Thread N+M──┘                                   ├─► OS Thread 2
+│                                                        │  │
+└────────────────────────────────────────────────────────┴──┘
+                    Operating System
+```
+
+### Key Mechanism: Mount/Unmount
+
+When a virtual thread blocks (I/O, sleep, lock):
+
+1. **Unmount:** Virtual thread is removed from carrier thread
+2. **Carrier:** Continues running other virtual threads
+3. **Mount:** When I/O completes, virtual thread is re-mounted
+
+This happens **transparently** - no code changes needed!
+
+## JOTP + Virtual Threads = Perfect Match
+
+Each JOTP process runs in its own virtual thread:
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.util.concurrent.Executors;
+
+/**
+ * JOTP Process Architecture
+ *
+ * Each Proc<S,M> = Virtual Thread + Mailbox + State
+ *
+ * Benefits:
+ * - Isolation: Process crashes don't affect others
+ * - Lightweight: 1 million processes = 1GB RAM
+ * - Responsive: No thread starvation
+ * - Simple: Blocking code is fine (unmounts automatically)
+ */
+public class VirtualThreadDemo {
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════╗");
+        System.out.println("║  JOTP Virtual Thread Demonstration        ║");
+        System.out.println("╚════════════════════════════════════════════╝\n");
+
+        // Create supervisor
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            Integer.MAX_VALUE,  // No restart limit
+            Duration.ofMinutes(1)
+        );
+
+        System.out.println("Creating 1,000,000 processes...");
+
+        long startTime = System.nanoTime();
+
+        // Spawn 1 MILLION processes
+        final int PROC_COUNT = 1_000_000;
+        for (int i = 0; i < PROC_COUNT; i++) {
+            final int id = i;
+            supervisor.supervise(
+                "proc-" + i,
+                i,  // State is just the ID
+                (state, msg) -> {
+                    // Simulate some work
+                    if (msg instanceof String s && s.equals("ping")) {
+                        // This sleep unmounts the virtual thread
+                        // Carrier thread can run other processes!
+                        Thread.sleep(10);
+                        return state;
+                    }
+                    return state;
+                }
+            );
+
+            // Print progress every 100K
+            if ((i + 1) % 100_000 == 0) {
+                System.out.println("  Created " + (i + 1) + " processes...");
+            }
+        }
+
+        long elapsed = (System.nanoTime() - startTime) / 1_000_000;
+        System.out.println("\n✅ Created " + PROC_COUNT + " processes in " + elapsed + "ms");
+
+        // Now ping all processes
+        System.out.println("\nSending messages to all processes...");
+
+        startTime = System.nanoTime();
+        for (int i = 0; i < PROC_COUNT; i++) {
+            // This would be impossible with platform threads!
+            supervisor.getChild("proc-" + i)
+                .ifPresent(proc -> proc.tell("ping"));
+        }
+
+        elapsed = (System.nanoTime() - startTime) / 1_000_000;
+        System.out.println("✅ Sent messages in " + elapsed + "ms");
+
+        // Cleanup
+        supervisor.shutdown();
+        System.out.println("\n✨ Demo complete!");
+    }
+}}
+```
+
+<CopyButton>Copy virtual thread demo</CopyButton>
+
+### Expected Output
+
+```
+╔════════════════════════════════════════════╗
+║  JOTP Virtual Thread Demonstration        ║
+╚════════════════════════════════════════════╝
+
+Creating 1,000,000 processes...
+  Created 100000 processes...
+  Created 200000 processes...
+  Created 300000 processes...
+  ...
+  Created 1000000 processes...
+
+✅ Created 1000000 processes in 2341ms
+
+Sending messages to all processes...
+✅ Sent messages in 456ms
+
+✨ Demo complete!
+```
+
+<Alert>
+  <AlertTitle>🎯 What's Happening?</AlertTitle>
+  <AlertDescription>
+    <ol className="list-decimal list-inside space-y-2">
+      <li><strong>Instant Creation:</strong> 1 million processes created in ~2 seconds</li>
+      <li><strong>Low Memory:</strong> Each process uses only ~1KB (vs 2MB for platform threads)</li>
+      <li><strong>Non-Blocking:</strong> Sleep in handler unmounts virtual thread, carrier continues</li>
+      <li><strong>Massive Concurrency:</strong> All 1 million processes can be active simultaneously</li>
+    </ol>
+  </AlertDescription>
+</Alert>
+
+## Performance Comparison
+
+Let's benchmark platform threads vs virtual threads:
+
+```java
+{import java.util.concurrent.*;
+import java.time.Duration;
+import java.time.Instant;
+
+/**
+ * Performance comparison: Platform vs Virtual threads
+ */
+public class ThreadComparison {
+
+    // Task that simulates I/O (blocking operation)
+    static void blockingTask() throws InterruptedException {
+        Thread.sleep(100);  // Simulate I/O
+    }
+
+    public static void main(String[] args) throws Exception {
+        final int TASK_COUNT = 100_000;
+
+        // Test 1: Platform threads
+        System.out.println("Testing " + TASK_COUNT + " tasks with platform threads...");
+
+        Instant start = Instant.now();
+        try (var executor = Executors.newFixedThreadPool(100)) {
+            var futures = new CompletableFuture[TASK_COUNT];
+            for (int i = 0; i < TASK_COUNT; i++) {
+                futures[i] = CompletableFuture.runAsync(
+                    () -> {
+                        try { blockingTask(); }
+                        catch (InterruptedException e) {}
+                    },
+                    executor
+                );
+            }
+            CompletableFuture.allOf(futures).join();
+        }
+        Duration platformTime = Duration.between(start, Instant.now());
+
+        // Test 2: Virtual threads
+        System.out.println("Testing " + TASK_COUNT + " tasks with virtual threads...");
+
+        start = Instant.now();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var futures = new CompletableFuture[TASK_COUNT];
+            for (int i = 0; i < TASK_COUNT; i++) {
+                futures[i] = CompletableFuture.runAsync(() -> {
+                    try { blockingTask(); }
+                    catch (InterruptedException e) {}
+                }, executor);
+            }
+            CompletableFuture.allOf(futures).join();
+        }
+        Duration virtualTime = Duration.between(start, Instant.now());
+
+        // Results
+        System.out.println("\n╔═══════════════════════════════════════╗");
+        System.out.println("║  Results                               ║");
+        System.out.println("╠═══════════════════════════════════════╣");
+        System.out.printf("║ Platform Threads: %s%n", platformTime);
+        System.out.printf("║ Virtual Threads:  %s%n", virtualTime);
+        System.out.printf("║ Speedup:         %.1fx%n",
+            (double) platformTime.toMillis() / virtualTime.toMillis());
+        System.out.println("╚═══════════════════════════════════════╝");
+    }
+}}
+```
+
+<CopyButton>Copy benchmark</CopyButton>
+
+### Typical Results
+
+```
+╔═══════════════════════════════════════╗
+║  Results                               ║
+╠═══════════════════════════════════════╣
+║ Platform Threads: PT1M45.234S
+║ Virtual Threads:  PT2.123S
+║ Speedup:         49.5x
+╚═══════════════════════════════════════╝
+```
+
+Virtual threads are **~50x faster** for blocking I/O workloads!
+
+## Virtual Thread Best Practices
+
+### DO ✅
+
+```java
+{✅ Use virtual threads for I/O-bound operations
+✅ Block freely in JOTP handlers (sleep, wait, I/O)
+✅ Create millions of virtual threads if needed
+✅ Use try-with-resources for executors
+✅ Let the JVM handle mounting/unmounting}
+```
+
+### DON'T ❌
+
+```java
+{❌ Use virtual threads for CPU-intensive work (use platform threads)
+❌ Synchronize on virtual threads (causes pinning)
+❌ Use ThreadLocal extensively (defeats the purpose)
+❌ Mix virtual and platform threads in ExecutorService}
+```
+
+## Understanding Pinning
+
+**Pinning** occurs when a virtual thread can't be unmounted because it's holding a lock:
+
+```java
+{/**
+ * BAD: Pinning example
+ *
+ * When synchronized block is active, virtual thread is pinned
+ * to carrier thread - can't unmount during blocking operations.
+ */
+public class PinningExample {
+
+    private static final Object LOCK = new Object();
+
+    public static void bad() {
+        synchronized (LOCK) {  // ← Pinning starts here
+            // This pins the virtual thread!
+            // Carrier thread can't run other virtual threads
+            try {
+                Thread.sleep(1000);  // Blocked for 1 second
+            } catch (InterruptedException e) {}
+        }
+        // Pinning ends here
+    }
+
+    /**
+     * GOOD: Use ReentrantLock instead
+     *
+     * ReentrantLock doesn't cause pinning - virtual thread
+     * can be unmounted during lock.wait().
+     */
+    private static final ReentrantLock LOCK = new ReentrantLock();
+
+    public static void good() {
+        LOCK.lock();
+        try {
+            // Virtual thread can be unmounted here!
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {}
+        finally {
+            LOCK.unlock();
+        }
+    }
+}}
+```
+
+<Alert>
+  <AlertTitle>⚠️ Avoid Pinning</AlertTitle>
+  <AlertDescription>
+    <p>JOTP processes already handle this correctly - we don't use <code>synchronized</code> in critical sections. But when writing your own blocking code:</p>
+    <ul className="list-disc list-inside mt-2">
+      <li>Use <code>ReentrantLock</code> instead of <code>synchronized</code></li>
+      <li>Avoid native code or <code>ThreadLocal</code> in tight loops</li>
+      <li>Use structured concurrency (<code>StructuredTaskScope</code>) when possible</li>
+    </ul>
+  </AlertDescription>
+</Alert>
+
+## Real-World Example: Web Server
+
+Let's build a simple web server with JOTP processes:
+
+```java
+{import io.github.seanchatmangpt.jotp.*;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Web server with virtual thread-powered request handlers.
+ *
+ * Each request gets its own process - no thread pool exhaustion!
+ */
+public class WebServerDemo {
+
+    // Request state
+    record RequestState(
+        String method,
+        String path,
+        ConcurrentHashMap<String, String> headers
+    ) {}
+
+    // Request messages
+    sealed interface RequestMsg
+        permits HandleRequest, AddHeader {}
+
+    record HandleRequest(String body) implements RequestMsg {}
+    record AddHeader(String key, String value) implements RequestMsg {}
+
+    // Request handler
+    static Proc.StateResult<RequestState, Object> handleRequest(
+        RequestState state,
+        Object msg
+    ) {
+        return switch (msg) {
+            case HandleRequest(var body) -> {
+                // Simulate database query (blocking I/O)
+                // Virtual thread unmounts here - carrier continues!
+                try {
+                    Thread.sleep(50);  // Simulate DB latency
+                } catch (InterruptedException e) {}
+
+                String response = """
+                    HTTP/1.1 200 OK
+                    Content-Type: text/plain
+
+                    Hello from JOTP!
+                    Method: %s
+                    Path: %s
+                    Body length: %d
+                    """.formatted(
+                        state.method(),
+                        state.path(),
+                        body.length()
+                    );
+
+                yield new Proc.StateResult<>(state, response);
+            }
+            case AddHeader(var key, var value) -> {
+                state.headers().put(key, value);
+                yield new Proc.StateResult<>(state, "Header added");
+            }
+            default -> new Proc.StateResult<>(state, null);
+        };
+    }
+
+    public static void main(String[] args) throws Exception {
+        var supervisor = new Supervisor(
+            Supervisor.Strategy.ONE_FOR_ONE,
+            1000,
+            Duration.ofMinutes(1)
+        );
+
+        System.out.println("🚀 JOTP Web Server starting...");
+        System.out.println("Creating 10,000 request handlers...");
+
+        // Create 10K request handlers (simulating incoming requests)
+        for (int i = 0; i < 10_000; i++) {
+            final int reqId = i;
+            var request = supervisor.supervise(
+                "request-" + i,
+                new RequestState("GET", "/api/users/" + i, new ConcurrentHashMap<>()),
+                WebServerDemo::handleRequest
+            );
+
+            // Handle the request
+            request.tell(new HandleRequest("{\"userId\":" + i + "}"));
+
+            if ((i + 1) % 1000 == 0) {
+                System.out.println("  Handled " + (i + 1) + " requests...");
+            }
+        }
+
+        System.out.println("✅ All requests processed!");
+        supervisor.shutdown();
+    }
+}}
+```
+
+<CopyButton>Copy web server example</CopyButton>
+
+## Virtual Thread Internals
+
+### Memory Layout Comparison
+
+```
+Platform Thread Stack (2MB):
+├── Local variables
+├── Method frames
+├── Native frames
+├── (lots of unused space)
+└── (lots of unused space)
+
+Virtual Thread Stack (1KB):
+├── Local variables
+├── Method frames (minimal)
+└── Grows on demand (max 1KB)
+```
+
+### Scheduling Flow
+
+```
+1. Virtual Thread created
+   → Add to scheduler queue
+
+2. Carrier thread available
+   → Mount virtual thread on carrier
+   → Execute until block or yield
+
+3. Blocking operation encountered
+   → Unmount virtual thread
+   → Save state (minimal)
+   → Resume carrier thread
+
+4. Blocking operation completes
+   → Add to scheduler queue
+   → Wait for next carrier
+   → Mount and continue execution
+```
+
+## Checkpoint Summary
+
+<Card className="mt-6">
+  <CardHeader>
+    <CardTitle>✅ Checkpoint: What You've Learned</CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-2">
+    <p>You now understand:</p>
+    <ul className="list-disc list-inside space-y-1 mt-2">
+      <li>How virtual threads differ from platform threads (M:N scheduling)</li>
+      <li>Why JOTP uses virtual threads for processes (lightweight, scalable)</li>
+      <li>The mount/unmount mechanism for blocking operations</li>
+      <li>Performance benefits: 50x faster for I/O workloads</li>
+      <li>How to avoid pinning (use ReentrantLock, not synchronized)</li>
+      <li>Real-world applications: Web servers, request handlers</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## Practice Exercise
+
+Build a **Concurrent Data Pipeline** that:
+
+1. Creates 100,000 worker processes
+2. Each worker simulates reading from a database (Thread.sleep)
+3. Workers process data and send to aggregator process
+4. Aggregator maintains statistics
+5. Measure total time vs platform thread version
+
+<details className="mt-4">
+  <summary className="cursor-pointer text-sm font-medium">Show Hint</summary>
+  ```java
+  record WorkerState(int id, long itemsProcessed) {}
+
+  sealed interface WorkerMsg permits ProcessData, GetStats {}
+  record ProcessData(String data) implements WorkerMsg {}
+  record GetStats() implements WorkerMsg {}
+
+  // In handler:
+  Thread.sleep(10);  // Simulate DB read
+  // Process data...
+  ```
+</details>
+
+## Common Issues
+
+<Alert variant="destructive">
+  <AlertTitle>⚠️ Troubleshooting</AlertTitle>
+  <AlertDescription>
+    <div className="space-y-3">
+      <div>
+        <strong>Issue: "Virtual thread performance is worse than platform threads"</strong><br/>
+        <span className="text-sm">Cause: CPU-intensive workload. Virtual threads don't help with pure CPU work.</span><br/>
+        <span className="text-sm">Solution: Use platform threads for CPU-bound tasks, virtual threads for I/O.</span>
+      </div>
+      <div>
+        <strong>Issue: "High CPU usage with synchronized blocks"</strong><br/>
+        <span className="text-sm">Cause: Pinning - virtual threads can't unmount.</span><br/>
+        <span className="text-sm">Solution: Replace synchronized with ReentrantLock.</span>
+      </div>
+      <div>
+        <strong>Issue: "OutOfMemoryError with millions of virtual threads"</strong><br/>
+        <span className="text-sm">Cause: Each task holding too much memory (large buffers, etc.).</span><br/>
+        <span className="text-sm">Solution: Reduce per-thread memory, use streaming instead of loading all data.</span>
+      </div>
+    </div>
+  </AlertDescription>
+</Alert>
+
+## Next Steps
+
+Excellent! You now understand the foundation of JOTP's scalability. Next, we'll learn about **supervision** - how JOTP automatically recovers from failures.
+
+**Next:** [Supervision Basics →](/docs/user-guide/tutorials/beginner/04-supervision-basics)
+
+---
+
+## Additional Resources
+
+- [Virtual Threads JEP](https://openjdk.org/jeps/444)
+- [Understanding Virtual Threads (Oracle)](https://openjdk.org/jeps/444)
+- [JOTP Concurrency Model](/docs/user-guide/explanations/concurrency-model)
+- [Performance Tuning Guide](/docs/user-guide/how-to/performance-tuning)

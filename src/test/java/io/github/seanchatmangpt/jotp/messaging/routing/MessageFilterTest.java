@@ -4,23 +4,36 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Tests for {@link MessageFilter} — Vernon's Message Filter pattern implemented with JOTP.
+ * Tests for {@link MessageFilter} with DTR documentation.
+ *
+ * <p>The Message Filter pattern (EIP) selectively forwards messages based on criteria. Messages
+ * that don't match the filter criteria are silently dropped.
  *
  * <p>Covers filtering correctness, chaining, edge cases, and performance characteristics.
  */
+@DtrTest
 @Timeout(10)
-@DisplayName("Message Filter Tests")
+@DisplayName("Message Filter Pattern (EIP)")
 class MessageFilterTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     record Message(String id, int value, String category) {}
 
@@ -29,7 +42,34 @@ class MessageFilterTest implements WithAssertions {
     class BasicFiltering {
 
         @Test
-        void forwardsMatchingMessages() throws InterruptedException {
+        void forwardsMatchingMessages(DtrContext ctx) throws InterruptedException {
+            ctx.sayNextSection("Message Filter Pattern");
+            ctx.say(
+                    "The Message Filter pattern selectively forwards messages based on criteria."
+                            + " Messages that don't match are silently dropped.");
+            ctx.sayCode(
+                    """
+                    MessageFilter<Message> filter = MessageFilter.create(
+                        msg -> msg.value() > 5,
+                        msg -> forwarded.incrementAndGet()
+                    );
+
+                    filter.filter(new Message("m1", 10, "A"));  // Forwarded
+                    filter.filter(new Message("m2", 3, "B"));   // Dropped
+
+                    assertThat(forwarded.get()).isEqualTo(1);
+                    """,
+                    "java");
+            ctx.sayMermaid(
+                    """
+                    graph LR
+                        A[Message] --> B{Filter: value > 5?}
+                        B -->|yes| C[Forward]
+                        B -->|no| D[Drop]
+                    """);
+            ctx.sayNote(
+                    "Use for spam filtering, content-based throttling, or routing only relevant"
+                            + " messages to downstream processors.");
             AtomicInteger forwarded = new AtomicInteger(0);
             CountDownLatch latch = new CountDownLatch(2);
 
@@ -97,7 +137,25 @@ class MessageFilterTest implements WithAssertions {
     class FilterChaining {
 
         @Test
-        void chainsMultipleFilters() throws InterruptedException {
+        void chainsMultipleFilters(DtrContext ctx) throws InterruptedException {
+            ctx.sayNextSection("Message Filter: Chaining");
+            ctx.say(
+                    "Filters can be chained to create multi-stage filtering pipelines. Each filter"
+                            + " in the chain can drop or forward to the next stage.");
+            ctx.sayCode(
+                    """
+                    // Create chain: value > 5 -> category == IMPORTANT -> final
+                    MessageFilter<Message> categoryFilter = MessageFilter.create(
+                        msg -> msg.category().equals("IMPORTANT"),
+                        msg -> final_count.incrementAndGet()
+                    );
+
+                    MessageFilter<Message> valueFilter = MessageFilter.create(
+                        msg -> msg.value() > 5,
+                        categoryFilter::filter
+                    );
+                    """,
+                    "java");
             AtomicInteger final_count = new AtomicInteger(0);
             CountDownLatch latch = new CountDownLatch(1);
 

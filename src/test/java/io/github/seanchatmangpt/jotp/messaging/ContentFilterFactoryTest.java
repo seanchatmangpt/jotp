@@ -2,12 +2,19 @@ package io.github.seanchatmangpt.jotp.messaging;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messagepatterns.transformation.ContentFilter;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 
 /** Test for ContentFilter factory method in Messaging. */
 class ContentFilterFactoryTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     record FullCustomer(String id, String name, String email, String phone, String address) {}
 

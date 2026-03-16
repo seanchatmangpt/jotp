@@ -21,7 +21,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -298,7 +297,7 @@ public class ObservabilityPerformanceTest {
 
     /** Creates a Supervisor instance for testing. */
     private Supervisor<String, String> createSupervisor() {
-        return Supervisor.createSimple(Supervisor.RestartStrategy.ONE_FOR_ONE, List.of());
+        return Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
     }
 
     /** Creates a test event for performance testing. */

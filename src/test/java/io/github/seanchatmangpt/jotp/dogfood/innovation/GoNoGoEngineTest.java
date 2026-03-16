@@ -1,14 +1,21 @@
 package io.github.seanchatmangpt.jotp.dogfood.innovation;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.GoNoGoEngine.Severity;
 import io.github.seanchatmangpt.jotp.dogfood.innovation.GoNoGoEngine.Verdict;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 @DisplayName("GoNoGoEngine")
 class GoNoGoEngineTest implements WithAssertions {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

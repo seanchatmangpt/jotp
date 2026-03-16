@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -21,6 +23,11 @@ import org.junit.jupiter.api.Test;
 class SessionEventBusTest implements WithAssertions {
 
     private SessionEventBus bus;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @AfterEach
     void tearDown() {

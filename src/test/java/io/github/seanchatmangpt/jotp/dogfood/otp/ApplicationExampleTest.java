@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.ApplicationInfo;
 import io.github.seanchatmangpt.jotp.RunType;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * <p>Each test starts with a clean {@link ApplicationController} state via {@code reset()} so that
  * the global static registry does not leak between tests.
  */
+@DtrTest
 @DisplayName("ApplicationController: OTP application lifecycle")
 @Execution(ExecutionMode.SAME_THREAD)
 class ApplicationExampleTest implements WithAssertions {

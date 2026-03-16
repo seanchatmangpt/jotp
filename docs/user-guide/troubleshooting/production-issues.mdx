@@ -1,0 +1,839 @@
+# Production Issues Troubleshooting Guide
+
+import { Tabs } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This guide covers production-specific issues including monitoring, debugging, diagnostics, and distributed system problems in JOTP applications.
+
+<Callout type="warning">
+  Production debugging requires careful planning. Always have a rollback strategy ready before making changes.
+</Callout>
+
+---
+
+## Production Monitoring Issues
+
+### Symptoms
+- Missing metrics or observability data
+- Health checks failing intermittently
+- No visibility into process state
+- Cannot diagnose production problems
+
+### Common Causes Checklist
+- [ ] Monitoring not configured
+- [ ] Metrics collection disabled
+- [ ] Health check endpoints not exposed
+- [ ] ProcSys introspection not enabled
+- [ ] Debug tracing disabled in production
+
+### Diagnostic Steps
+
+#### 1. Check Process Registry Health
+```bash
+# Via JMX or HTTP endpoint
+curl http://localhost:8080/admin/processes
+
+# Expected output:
+{
+  "totalProcesses": 42,
+  "runningProcesses": 40,
+  "exitedProcesses": 2,
+  "supervisors": 5
+}
+```
+
+#### 2. Verify Metrics Collection
+```java
+// Check if metrics are being collected
+@Autowired
+private MeterRegistry registry;
+
+public String getMetricsStatus() {
+    Gauge mailboxSize = registry.get("jotp.mailbox.size").gauge();
+    if (mailboxSize == null) {
+        return "NOT_CONFIGURED";
+    }
+    return "ACTIVE";
+}
+```
+
+#### 3. Test Health Check Endpoints
+```bash
+# Check liveness
+curl http://localhost:8080/health/live
+
+# Check readiness
+curl http://localhost:8080/health/ready
+
+# Check detailed health
+curl http://localhost:8080/health
+```
+
+### Solutions
+
+#### Solution 1: Enable Production Monitoring
+
+```java
+// In production configuration
+@Configuration
+public class ProductionMonitoringConfig {
+
+    @Bean
+    public ProcSysObservability observability(MeterRegistry registry) {
+        return ProcSysObservability.builder()
+            .meterRegistry(registry)
+            .enableProcessMetrics(true)
+            .enableMailboxMetrics(true)
+            .enableSupervisorMetrics(true)
+            .enableMessageMetrics(true)
+            .metricsScrapeInterval(Duration.ofSeconds(15))
+            .build();
+    }
+}
+```
+
+#### Solution 2: Implement Health Checks
+
+```java
+@Component
+public class JotpHealthIndicator implements HealthIndicator {
+
+    @Autowired
+    private Supervisor rootSupervisor;
+
+    @Override
+    public Health health() {
+        Health.Builder builder = new Health.Builder();
+
+        // Check supervisor is running
+        if (rootSupervisor.isAlive()) {
+            builder.up()
+                .withDetail("supervisor", "running")
+                .withDetail("children", rootSupervisor.childCount());
+        } else {
+            builder.down()
+                .withDetail("supervisor", "not running");
+        }
+
+        // Check critical processes
+        long criticalProcesses = ProcRegistry.stream()
+            .filter(p -> p.metadata().critical())
+            .filter(Proc::isAlive)
+            .count();
+
+        builder.withDetail("criticalProcesses", criticalProcesses);
+
+        return builder.build();
+    }
+}
+```
+
+#### Solution 3: Enable Debug Tracing (Safely)
+
+```java
+// Enable selective debug tracing in production
+DebugOptions options = DebugOptions.builder()
+    .traceExits(true)              // Track process exits
+    .traceExceptions(true)         // Track exceptions
+    .traceStateChanges(false)      // Too noisy
+    .traceMessages(false)          // Too noisy
+    .logDelivery(false)            // Performance impact
+    .samplingRate(0.01)            // Sample 1% of messages
+    .build();
+
+Proc.setGlobalDebugOptions(options);
+```
+
+#### Solution 4: Set Up Distributed Tracing
+
+```java
+@Configuration
+public class DistributedTracingConfig {
+
+    @Bean
+    public MessageTracing tracing(Tracer tracer) {
+        return MessageTracing.builder()
+            .tracer(tracer)
+            .traceAsk(true)
+            .traceSend(true)
+            .traceCast(true)
+            .injectContext(true)
+            .extractContext(true)
+            .build();
+    }
+}
+```
+
+### Prevention Strategies
+
+- Always enable monitoring in production
+- Set up alerting on critical metrics
+- Run health checks in load balancer
+- Implement distributed tracing for microservices
+- Use sampling for high-volume metrics
+
+---
+
+## Distributed System Issues
+
+### Symptoms
+- Inconsistent state across nodes
+- Split-brain scenarios
+- Network partitions causing problems
+- Message loss in distributed mode
+
+### Common Causes Checklist
+- [ ] Network partition
+- [ ] Clock skew between nodes
+- [ ] Distributed coordinator failure
+- [ ] Message serialization issues
+- [ ] gRPC connection problems
+
+### Diagnostic Steps
+
+#### 1. Check Network Connectivity
+
+```bash
+# Test connectivity between nodes
+for node in node1 node2 node3; do
+    echo "Testing $node"
+    ping -c 3 $node
+    curl http://$node:8080/health
+done
+
+# Check for packet loss
+netstat -i | grep -E "iface|rxpkt|txpkt"
+```
+
+#### 2. Verify Clock Synchronization
+
+```bash
+# Check NTP sync
+timedatectl status
+
+# Check clock skew
+for node in node1 node2 node3; do
+    echo "$node: $(ssh $node date)"
+done
+```
+
+#### 3. Inspect Distributed State
+
+```java
+// Check distributed registry state
+DistributedProcRegistry registry = DistributedProcRegistry.getInstance();
+
+Map<String, NodeState> nodes = registry.getNodeStates();
+nodes.forEach((nodeId, state) -> {
+    System.out.println("Node: " + nodeId);
+    System.out.println("  Leader: " + state.isLeader());
+    System.out.println("  Processes: " + state.processCount());
+    System.out.println("  Last heartbeat: " + state.lastHeartbeat());
+});
+```
+
+### Solutions
+
+#### Solution 1: Handle Network Partitions
+
+```java
+@Component
+public class PartitionHandler {
+
+    public void handlePartition(NetworkPartition partition) {
+        if (partition.weAreMinority()) {
+            // Stop accepting writes
+            enterReadOnlyMode();
+
+            // Wait for partition to heal
+            partition.awaitHeal(Duration.ofMinutes(5));
+
+            // Resync state
+            resyncFromLeader();
+        } else {
+            // Continue processing
+            // Minority nodes will reconnect
+        }
+    }
+}
+```
+
+#### Solution 2: Implement Distributed Locking
+
+```java
+public class DistributedSupervisorLock {
+
+    private final CuratorFramework zkClient;
+    private final InterProcessMutex lock;
+
+    public void superviseWithLock(String childId, Runnable action) {
+        try {
+            // Acquire distributed lock
+            if (lock.acquire(30, TimeUnit.SECONDS)) {
+                try {
+                    action.run();
+                } finally {
+                    lock.release();
+                }
+            } else {
+                log.warn("Failed to acquire lock for {}", childId);
+            }
+        } catch (Exception e) {
+            log.error("Lock error", e);
+        }
+    }
+}
+```
+
+#### Solution 3: Handle Clock Skew
+
+```java
+public class TimestampAdjuster {
+    private final Duration maxSkew;
+
+    public Instant adjustTimestamp(Instant timestamp, String nodeId) {
+        Instant now = Instant.now();
+        Duration skew = Duration.between(timestamp, now);
+
+        if (skew.abs().compareTo(maxSkew) > 0) {
+            log.warn("Excessive clock skew from {}: {}", nodeId, skew);
+            // Use our clock
+            return now;
+        }
+
+        return timestamp;
+    }
+}
+```
+
+#### Solution 4: Resilient gRPC Connections
+
+```java
+@Configuration
+public class GrpcConfig {
+
+    @Bean
+    public ManagedChannel grpcChannel() {
+        return ManagedChannelBuilder.forAddress("cluster", 9090)
+            .usePlaintext()
+            .enableRetry()
+            .maxRetryAttempts(3)
+            .retryBufferSize(10)
+            .build();
+    }
+
+    @Bean
+    public NodeServiceClient nodeServiceClient(ManagedChannel channel) {
+        return new NodeServiceClient(channel);
+    }
+}
+```
+
+### Prevention Strategies
+
+- Use distributed coordination (Zookeeper, etcd)
+- Implement circuit breakers for remote calls
+- Handle clock skew explicitly
+- Design for network partitions
+- Test chaos scenarios regularly
+
+---
+
+## Memory Issues in Production
+
+### Symptoms
+- OutOfMemoryError crashes
+- Heap exhaustion
+- Long GC pauses
+- Memory leaks over time
+
+### Common Causes Checklist
+- [ ] Unbounded mailboxes
+- [ ] Message retention
+- [ ] Process state bloat
+- [ ] Cache leaks
+- [ ] Native memory leaks
+
+### Diagnostic Steps
+
+#### 1. Capture Heap Dump
+
+```bash
+# On OOM (add to JVM args)
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/var/log/jotp/heap.hprof
+
+# Manual heap dump
+jmap -dump:format=b,file=/tmp/heap.hprof <pid>
+
+# Trigger dump via JMX
+jconsole -> MBeans -> com.sun.management -> HotSpotDiagnostic -> dumpHeap
+```
+
+#### 2. Analyze GC Logs
+
+```bash
+# Enable GC logging
+-Xlog:gc*:file=/var/log/jotp/gc.log:time,uptime:filecount=5,filesize=10m
+
+# Analyze GC behavior
+grep "Full GC" /var/log/jotp/gc.log
+
+# Check GC pause times
+grep "pause" /var/log/jotp/gc.log | awk '{print $NF}'
+```
+
+#### 3. Monitor Memory Trends
+
+```java
+@Component
+public class MemoryMonitor {
+
+    @Scheduled(fixedRate = 60000)
+    public void logMemoryStats() {
+        MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
+        MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+
+        log.info("Heap: {} MB used / {} MB max",
+            heapUsage.getUsed() / 1024 / 1024,
+            heapUsage.getMax() / 1024 / 1024);
+
+        // Alert if usage high
+        double usagePercent = (double) heapUsage.getUsed() / heapUsage.getMax();
+        if (usagePercent > 0.9) {
+            alerting.sendAlert("High heap usage: " + usagePercent);
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Bounded Mailbox with Overflow Handling
+
+```java
+ProcSpec<MyState, MyMsg> spec = ProcSpec.<MyState, MyMsg>builder()
+    .mailboxPolicy(MailboxPolicy.BOUNDED)
+    .mailboxSize(10000)
+    .onFull((msg) -> {
+        metrics.increment("mailbox.overflow");
+
+        // Send to dead letter queue instead of dropping
+        deadLetterChannel.send(new DeadLetter(msg, "mailbox.full"));
+
+        log.warn("Mailbox full, sent to DLQ: {}", msg);
+    })
+    .build();
+```
+
+#### Solution 2: Message Payload Clearing
+
+```java
+public class LargeMessageHandler {
+
+    public void handle(LargeMessage msg) {
+        try {
+            // Process large payload
+            processPayload(msg.payload());
+        } finally {
+            // Clear large payload to free memory
+            if (msg instanceof Clearable) {
+                ((Clearable) msg).clear();
+            }
+        }
+    }
+}
+```
+
+#### Solution 3: Process State Snapshotting
+
+```java
+// Instead of keeping full state in memory
+public class SnapshottingProc extends Proc<MyState, MyMsg> {
+
+    private final StateStorage storage;
+
+    @Override
+    protected void handle(MyMsg msg) {
+        MyState newState = process(msg, state);
+
+        // Periodically snapshot to disk
+        if (shouldSnapshot()) {
+            storage.saveSnapshot(self().id(), newState);
+            // Keep only minimal state in memory
+            state = newState.toMinimalState();
+        } else {
+            state = newState;
+        }
+    }
+}
+```
+
+#### Solution 4: Heap Dump Analysis
+
+```bash
+# Use Eclipse Memory Analyzer (MAT)
+# Open heap.hprof and run Leak Suspects Report
+
+# Or use jhat (simple HTTP viewer)
+jhat -port 7000 /tmp/heap.hprof
+# Open http://localhost:7000
+
+# Find biggest objects
+jmap -histo:live <pid> | head -20
+```
+
+### Prevention Strategies
+
+- Set heap size limits appropriately
+- Monitor GC pause times
+- Regular heap dump analysis in staging
+- Use bounded mailboxes
+- Clear large message payloads
+- Implement state snapshotting
+
+---
+
+## Performance Degradation Over Time
+
+### Symptoms
+- Throughput decreases over time
+- Latency increases gradually
+- System slows down after running for hours
+- Need to restart periodically
+
+### Common Causes Checklist
+- [ ] Thread leaks
+- [ ] Connection pool exhaustion
+- [ ] Cache bloat
+- [ ] Gradual memory leak
+- [ ] Resource exhaustion
+
+### Diagnostic Steps
+
+#### 1. Monitor Thread Counts
+
+```bash
+# Check thread count over time
+jcmd <pid> Thread.print | grep "java.lang.Thread" | wc -l
+
+# Monitor thread creation
+jstat -gcutil <pid> 1000 | tee threads.log
+```
+
+#### 2. Check Connection Pools
+
+```java
+@Component
+public class ConnectionPoolMonitor {
+
+    @Autowired
+    private DataSource dataSource;
+
+    @Scheduled(fixedRate = 30000)
+    public void checkConnectionPool() {
+        if (dataSource instanceof HikariDataSource) {
+            HikariPoolMXBean pool = ((HikariDataSource) dataSource)
+                .getHikariPoolMXBean();
+
+            log.info("Active connections: {} / {}",
+                pool.getActiveConnections(),
+                pool.getTotalConnections());
+
+            if (pool.getActiveConnections() == pool.getTotalConnections()) {
+                log.warn("Connection pool exhausted!");
+            }
+        }
+    }
+}
+```
+
+#### 3. Profile Resource Usage
+
+```bash
+# CPU profiling
+async-profiler profiler.sh -d 30 -f cpu.svg <pid>
+
+# Allocation profiling
+async-profiler profiler.sh -d 30 -e alloc -f alloc.svg <pid>
+
+# Lock profiling
+async-profiler profiler.sh -d 30 -e lock -f lock.svg <pid>
+```
+
+### Solutions
+
+#### Solution 1: Fix Thread Leaks
+
+```java
+// Bad: Creating thread per message
+protected void handle(Message msg) {
+    new Thread(() -> {
+        process(msg);
+    }).start();  // Thread never terminates
+}
+
+// Good: Use virtual thread pool
+private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+protected void handle(Message msg) {
+    executor.submit(() -> {
+        process(msg);
+    });
+}
+```
+
+#### Solution 2: Proper Connection Pool Sizing
+
+```java
+@Bean
+public DataSource dataSource() {
+    HikariConfig config = new HikariConfig();
+    config.setJdbcUrl(url);
+    config.setUsername(username);
+    config.setPassword(password);
+
+    // Size based on formula: connections = cores * 2 + effective_spindle_count
+    config.setMaximumPoolSize(20);
+    config.setMinimumIdle(5);
+
+    // Timeout to prevent hangs
+    setConnectionTimeout(5000);
+    setValidationTimeout(3000);
+
+    return new HikariDataSource(config);
+}
+```
+
+#### Solution 3: Implement Cache Expiration
+
+```java
+@Configuration
+public class CacheConfig {
+
+    @Bean
+    public CacheManager cacheManager() {
+        CaffeineCacheManager manager = new CaffeineCacheManager();
+
+        manager.setCaffeine(Caffeine.newBuilder()
+            .maximumSize(10000)
+            .expireAfterWrite(Duration.ofMinutes(10))
+            .recordStats());
+
+        return manager;
+    }
+}
+```
+
+#### Solution 4: Regular Process Restarts
+
+```java
+public class RotatingSupervisor {
+
+    public void rotateChild(String childId) {
+        // Graceful shutdown
+        childRef.send(new ShutdownGracefully());
+
+        // Wait for cleanup
+        await().atMost(30, TimeUnit.SECONDS)
+            .until(() -> !childRef.isAlive());
+
+        // Restart fresh
+        spawnChild(childId);
+    }
+
+    @Scheduled(cron = "0 0 3 * * ?")  // 3 AM daily
+    public void rotateNonCriticalChildren() {
+        children.stream()
+            .filter(c -> !c.critical())
+            .forEach(c -> rotateChild(c.id()));
+    }
+}
+```
+
+### Prevention Strategies
+
+- Profile regularly with production-like load
+- Monitor thread counts and connection pools
+- Implement cache expiration policies
+- Rotate long-running processes periodically
+- Set resource limits (ulimit, cgroups)
+
+---
+
+## Production Debugging Checklist
+
+### Before Debugging
+
+- [ ] Inform stakeholders of debugging session
+- [ ] Enable read-only mode if possible
+- [ ] Have rollback plan ready
+- [ ] Set time limit for debugging
+- [ ] Notify on-call team
+
+### Safe Debugging Commands
+
+```bash
+# Read-only operations (safe)
+jcmd <pid> VM.version
+jcmd <pid> VM.flags
+jcmd <pid> Thread.print
+jcmd <pid> GC.heap_info
+jcmd <pid> ProcSys.summary  # Custom JOTP command
+
+# Enable tracing temporarily
+jcmd <pid> ProcSys.setTraceLevel VERBOSE
+# Remember to reset: jcmd <pid> ProcSys.setTraceLevel WARN
+```
+
+### Dangerous Commands (Use with Caution)
+
+```bash
+# ⚠️ These can impact performance
+jcmd <pid> GC.run            # Forces GC
+jcmd <pid> Heap.dump         # Pauses JVM
+jcmd <pid> Compiler.codecache  # Clears code cache
+
+# ⚠️ These can crash the JVM
+jcmd <pid> System.exit        # Exits JVM
+jcmd <pid> ProcSys.crash      # Test crash (custom)
+```
+
+### Data Collection Script
+
+```bash
+#!/bin/bash
+# collect-diags.sh - Safe diagnostic collection
+
+PID=$1
+OUT_DIR="/tmp/jotp-diags-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$OUT_DIR"
+
+echo "Collecting diagnostics for PID $PID to $OUT_DIR"
+
+# Safe commands
+jcmd $PID Thread.print > "$OUT_DIR/threads.txt"
+jcmd $PID GC.heap_info > "$OUT_DIR/heap-info.txt"
+jcmd $PID VM.version > "$OUT_DIR/version.txt"
+jcmd $PID VM.flags > "$OUT_DIR/flags.txt"
+
+# JOTP-specific
+jcmd $PID ProcSys.summary > "$OUT_DIR/proc-summary.txt"
+jcmd $PID ProcSys.listProcesses > "$OUT_DIR/procs.txt"
+
+# System info
+ps aux | grep $PID > "$OUT_DIR/ps.txt"
+lsof -p $PID > "$OUT_DIR/lsof.txt"
+
+echo "Diagnostics collected. Tarball: $OUT_DIR.tar.gz"
+tar czf "$OUT_DIR.tar.gz" "$OUT_DIR"
+```
+
+---
+
+## Quick Reference: Production Commands
+
+<Tabs items={['Monitoring', 'Diagnostics', 'Emergency']}>
+
+<Tabs.Tab>
+```bash
+# Health checks
+curl http://localhost:8080/health
+curl http://localhost:8080/metrics
+
+# Process status
+jcmd <pid> ProcSys.summary
+jcmd <pid> ProcSys.listProcesses
+
+# Thread dump
+jcmd <pid> Thread.print
+
+# Memory info
+jcmd <pid> GC.heap_info
+jstat -gc <pid> 1000
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```bash
+# Thread dump to file
+jcmd <pid> Thread.print_to_file -file=/tmp/threads.txt
+
+# Heap dump (causes pause)
+jmap -dump:format=b,file=/tmp/heap.hprof <pid>
+
+# Flight recording (low overhead)
+jcmd <pid> JFR.start
+jcmd <pid> JFR.dump name=recording filename=/tmp/rec.jfr
+jcmd <pid> JFR.stop
+
+# GC logging
+-Xlog:gc*:file=/tmp/gc.log
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```bash
+# Graceful shutdown
+curl -X POST http://localhost:8080/admin/shutdown
+
+# Force kill (last resort)
+kill -9 <pid>
+
+# Enable emergency debug
+jcmd <pid> ProcSys.setTraceLevel TRACE
+
+# Clear all mailboxes
+jcmd <pid> ProcSys.clearAllMailboxes
+
+# Restart specific process
+jcmd <pid> ProcSys.restartProcess <proc-id>
+```
+</Tabs.Tab>
+
+</Tabs>
+
+---
+
+## Related Issues
+
+- **Runtime Issues:** See [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) for core runtime problems
+- **Performance Issues:** See [performance-issues.mdx](/docs/user-guide/troubleshooting/performance-issues) for performance tuning
+- **Supervision Issues:** See [supervision-issues.mdx](/docs/user-guide/troubleshooting/supervision-issues) for restart problems
+
+---
+
+## Getting Help
+
+When reporting production issues, collect:
+
+1. **System Information**
+   ```bash
+   java -version
+   uname -a
+   free -h
+   df -h
+   ```
+
+2. **JOTP Information**
+   ```bash
+   jcmd <pid> ProcSys.version
+   jcmd <pid> ProcSys.summary
+   ```
+
+3. **Diagnostic Data**
+   - Thread dumps
+   - Heap dumps (if OOM)
+   - GC logs
+   - Application logs
+
+4. **Timeline**
+   - When did issue start?
+   - What changed recently?
+   - Is it recurring?
+
+<Callout type="info">
+  For emergency production issues, contact the JOTP core team via the private support channel with "URGENT: Production Issue" in the subject.
+</Callout>

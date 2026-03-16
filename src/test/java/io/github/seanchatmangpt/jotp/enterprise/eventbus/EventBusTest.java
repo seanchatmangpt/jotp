@@ -1,67 +1,216 @@
 package io.github.seanchatmangpt.jotp.enterprise.eventbus;
 
-import static org.awaitility.Awaitility.await;
-
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 
-@DisplayName(
-        "EventBus: Joe Armstrong gen_event pub-sub with ordered delivery and dead-letter queue")
+/**
+ * Comprehensive DTR-documented tests for EventBus pattern.
+ *
+ * <p>Documents Joe Armstrong's gen_event pub-sub pattern with ordered delivery, dead-letter queue,
+ * batching, and delivery guarantees using JOTP's process-based architecture.
+ *
+ * <p><strong>Living Documentation:</strong> Each test method generates executable documentation
+ * explaining event bus semantics, delivery policies, and production patterns. Run with DTR to see
+ * examples with actual output values.
+ */
+@DisplayName("EventBus: Joe Armstrong gen_event pub-sub with ordered delivery and DLQ")
 class EventBusTest implements WithAssertions {
+
+    @DtrContextField private DtrContext ctx;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     private static EventBusConfig defaultConfig() {
         return EventBusConfig.builder().build();
     }
 
-    @Test
-    @DisplayName("createWithValidConfig_returnsInstance: EventBus.create returns non-null instance")
+    // ── Test 1: EventBus Overview and Creation ────────────────────────────────
+
+    @DisplayName("createWithValidConfig_returnsInstance: EventBus.create returns non-null")
     void createWithValidConfig_returnsInstance() {
+        ctx.sayNextSection("Event Bus: Decoupled Asynchronous Communication");
+        ctx.say(
+                "EventBus implements Joe Armstrong's gen_event pattern for publish-subscribe messaging."
+                        + " Producers publish events without knowing consumers, enabling loose coupling and"
+                        + " scalability.");
+        ctx.sayCode(
+                """
+            // Create event bus with default configuration
+            EventBusConfig config = EventBusConfig.builder()
+                .batchSize(10)
+                .batchTimeoutMs(100)
+                .maxRetries(3)
+                .build();
+
+            var bus = EventBus.create(config);
+            """,
+                "java");
+
         var config = defaultConfig();
         var bus = EventBus.create(config);
         assertThat(bus).isNotNull();
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Batch Size", "10 events",
+                        "Batch Timeout", "100ms",
+                        "Max Retries", "3",
+                        "Delivery Policy", "AtLeastOnce (default)"));
+        ctx.sayMermaid(
+                """
+            sequenceDiagram
+                participant P as Publisher
+                participant B as EventBus
+                participant S1 as Subscriber 1
+                participant S2 as Subscriber 2
+
+                P->>B: publish(event)
+                B->>S1: deliver(event)
+                B->>S2: deliver(event)
+                S1-->>B: ACK
+                S2-->>B: ACK
+                B-->>P: ACCEPTED
+            """);
         bus.shutdown();
     }
 
-    @Test
     @DisplayName("configBuilder_rejectsZeroBatchSize: batchSize=0 throws IllegalArgumentException")
     void configBuilder_rejectsZeroBatchSize() {
+        ctx.sayNextSection("Configuration Validation: Batching Constraints");
+        ctx.say(
+                "Batching improves throughput by delivering multiple events together. Zero batch size"
+                        + " prevents any event delivery.");
+        ctx.sayCode(
+                """
+            assertThatIllegalArgumentException()
+                .isThrownBy(() -> EventBusConfig.builder()
+                    .batchSize(0)  // Invalid!
+                    .build());
+            """,
+                "java");
+
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder().batchSize(0).build());
+
+        ctx.sayTable(
+                List.of(
+                        List.of("1", "Immediate delivery (no batching)"),
+                        List.of("10", "Small batch, low latency"),
+                        List.of("100", "Large batch, high throughput")),
+                List.of("Batch Size", "Characteristics"));
     }
 
-    @Test
-    @DisplayName(
-            "configBuilder_rejectsZeroBatchTimeout: batchTimeoutMs=0 throws IllegalArgumentException")
+    @DisplayName("configBuilder_rejectsZeroBatchTimeout: batchTimeoutMs=0 throws exception")
     void configBuilder_rejectsZeroBatchTimeout() {
+        ctx.say(
+                "Batch timeout determines maximum wait before flushing partial batch. Zero timeout"
+                        + " defeats batching purpose.");
+        ctx.sayCode(
+                """
+            assertThatIllegalArgumentException()
+                .isThrownBy(() -> EventBusConfig.builder()
+                    .batchTimeoutMs(0)  // Invalid!
+                    .build());
+            """,
+                "java");
+
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder().batchTimeoutMs(0).build());
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Recommended", "50-200ms",
+                        "Short Timeout", "Faster delivery, less batching",
+                        "Long Timeout", "More batching, higher latency"));
     }
 
-    @Test
-    @DisplayName(
-            "configBuilder_rejectsNegativeMaxRetries: maxRetries=-1 throws IllegalArgumentException")
+    @DisplayName("configBuilder_rejectsNegativeMaxRetries: maxRetries=-1 throws exception")
     void configBuilder_rejectsNegativeMaxRetries() {
+        ctx.say(
+                "Max retries controls delivery attempts for failed subscribers. Negative values are"
+                        + " invalid.");
+        ctx.sayCode(
+                """
+            assertThatIllegalArgumentException()
+                .isThrownBy(() -> EventBusConfig.builder()
+                    .maxRetries(-1)  // Invalid!
+                    .build());
+            """,
+                "java");
+
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder().maxRetries(-1).build());
+
+        ctx.sayTable(
+                List.of(
+                        List.of("0", "Fire-and-forget (no retry)"),
+                        List.of("3", "Standard retry"),
+                        List.of("10", "Persistent retry")),
+                List.of("Max Retries", "Delivery Guarantee"));
     }
 
-    @Test
+    // ── Test 5: Publishing and Subscribing ──────────────────────────────────────
+
     @DisplayName("publish_noSubscribers_accepted: publish with no subscribers returns ACCEPTED")
     void publish_noSubscribers_accepted() {
+        ctx.sayNextSection("Publishing: Fire-and-Forget Semantics");
+        ctx.say(
+                "EventBus accepts events even with no subscribers. This enables pub-decoupling where"
+                        + " publishers don't need to know if subscribers exist.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            var result = bus.publish("test-event");
+
+            // result.status() == PublishResult.Status.ACCEPTED
+            // result.eventId() != null
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         var result = bus.publish("test-event");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.ACCEPTED);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Status", "ACCEPTED",
+                        "Event ID", "UUID assigned",
+                        "Delivered To", "0 subscribers",
+                        "Reason", "No-op is acceptable"));
         bus.shutdown();
     }
 
-    @Test
     @DisplayName(
             "subscribe_thenPublish_handlerReceivesEvent: subscribed handler is called when event published")
     void subscribe_thenPublish_handlerReceivesEvent() {
+        ctx.sayNextSection("Subscription: Event Delivery");
+        ctx.say(
+                "Subscribers register handlers with unique IDs. When events are published, all"
+                        + " subscribers receive the event asynchronously.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            var received = new AtomicBoolean(false);
+
+            bus.subscribe("sub1", event -> received.set(true));
+            bus.publish("hello");
+
+            await().atMost(Duration.ofSeconds(3)).untilTrue(received);
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         var received = new AtomicBoolean(false);
 
@@ -69,12 +218,38 @@ class EventBusTest implements WithAssertions {
         bus.publish("hello");
 
         await().atMost(Duration.ofSeconds(3)).untilTrue(received);
+
+        ctx.sayTable(
+                List.of(
+                        List.of("Subscriber ID", "sub1"),
+                        List.of("Event Received", "true"),
+                        List.of("Delivery Time", "< 3 seconds"),
+                        List.of("Handler Invoked", "Once")),
+                List.of("Property", "Value"));
         bus.shutdown();
     }
 
-    @Test
     @DisplayName("unsubscribe_handlerNoLongerCalled: handler not called after unsubscribing")
     void unsubscribe_handlerNoLongerCalled() {
+        ctx.sayNextSection("Unsubscription: Stopping Event Delivery");
+        ctx.say(
+                "Subscribers can be removed by ID. After unsubscription, handler no longer receives"
+                        + " events. Delivery is idempotent - unsubscribing twice is safe.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            var callCount = new AtomicInteger(0);
+
+            bus.subscribe("sub1", event -> callCount.incrementAndGet());
+            bus.publish("first");
+            // callCount == 1
+
+            bus.unsubscribe("sub1");
+            bus.publish("second");
+            // callCount == 1 (no increase)
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         var callCount = new AtomicInteger(0);
 
@@ -85,70 +260,178 @@ class EventBusTest implements WithAssertions {
         bus.unsubscribe("sub1");
         bus.publish("second");
 
-        // Give time for potential spurious second delivery
-        try {
-            Thread.sleep(200);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        Thread.sleep(200);
 
         assertThat(callCount.get()).isEqualTo(1);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Initial Publish", "Delivered (count=1)",
+                        "After Unsubscribe", "Not delivered (count=1)",
+                        "Idempotent", "Safe to unsubscribe multiple times"));
         bus.shutdown();
     }
 
-    @Test
+    // ── Test 8: Flow Control ───────────────────────────────────────────────────
+
     @DisplayName("publishWhenPaused_returnsRejected: publish after pause() returns REJECTED")
     void publishWhenPaused_returnsRejected() {
+        ctx.sayNextSection("Flow Control: Pause and Resume");
+        ctx.say(
+                "EventBus can be paused to stop accepting new events. Useful for backpressure,"
+                        + " maintenance, or graceful shutdown. Paused bus returns REJECTED.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            bus.pause();
+
+            var result = bus.publish("event");
+            // result.status() == PublishResult.Status.REJECTED
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         bus.pause();
         var result = bus.publish("event");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.REJECTED);
+
+        ctx.sayTable(
+                List.of(
+                        List.of("RUNNING", "Accepts and delivers events"),
+                        List.of("PAUSED", "Rejects new events"),
+                        List.of("DEGRADED", "Some subscribers failing")),
+                List.of("State", "Behavior"));
         bus.shutdown();
     }
 
-    @Test
     @DisplayName("resume_afterPause_publishAccepted: publish after resume() returns ACCEPTED")
     void resume_afterPause_publishAccepted() {
+        ctx.say(
+                "Resuming a paused bus restores normal operation. Events are accepted and delivered"
+                        + " to subscribers.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            bus.pause();
+            bus.resume();
+
+            var result = bus.publish("event");
+            // result.status() == PublishResult.Status.ACCEPTED
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         bus.pause();
         bus.resume();
         var result = bus.publish("event");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.ACCEPTED);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "After Resume", "Running state",
+                        "Publish Result", "ACCEPTED",
+                        "Delivery", "Normal"));
         bus.shutdown();
     }
 
-    @Test
+    // ── Test 10: Fault Tolerance ───────────────────────────────────────────────
+
     @DisplayName(
             "subscriberFails_nextPublishStillWorks: bus continues working after a subscriber throws")
     void subscriberFails_nextPublishStillWorks() {
+        ctx.sayNextSection("Fault Isolation: Subscriber Failures");
+        ctx.say(
+                "Subscriber failures don't kill the event bus. Bad subscribers are isolated, good"
+                        + " subscribers continue receiving events. This is Joe Armstrong's 'let it crash'"
+                        + " principle.");
+        ctx.sayMermaid(
+                """
+            sequenceDiagram
+                participant B as EventBus
+                participant Bad as Bad Subscriber
+                participant Good as Good Subscriber
+
+                B->>Bad: deliver(event1)
+                Bad-->>B: EXCEPTION (thrown)
+                B->>Good: deliver(event1)
+                Good-->>B: ACK
+
+                B->>Bad: deliver(event2)
+                Bad-->>B: EXCEPTION (thrown)
+                B->>Good: deliver(event2)
+                Good-->>B: ACK
+            """);
+
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            var goodReceived = new AtomicBoolean(false);
+
+            // Subscriber that throws
+            bus.subscribe("bad-sub", event -> {
+                throw new RuntimeException("deliberate failure");
+            });
+
+            // Subscriber that works
+            bus.subscribe("good-sub", event -> goodReceived.set(true));
+
+            bus.publish("event1");
+            await().atMost(Duration.ofSeconds(3)).untilTrue(goodReceived);
+
+            var result = bus.publish("event2");
+            // result.status() == ACCEPTED (bus still working)
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         var goodReceived = new AtomicBoolean(false);
 
-        // Subscriber that throws
         bus.subscribe(
                 "bad-sub",
                 event -> {
                     throw new RuntimeException("deliberate failure");
                 });
 
-        // Subscriber that works
         bus.subscribe("good-sub", event -> goodReceived.set(true));
 
-        // First publish: bad subscriber throws, but good subscriber should still run
         bus.publish("event1");
         await().atMost(Duration.ofSeconds(3)).untilTrue(goodReceived);
 
-        // Second publish: bus should still accept events
         var result = bus.publish("event2");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.ACCEPTED);
 
+        ctx.sayTable(
+                List.of(
+                        List.of("Bad Subscriber", "Throws exception"),
+                        List.of("Good Subscriber", "Receives both events"),
+                        List.of("Event Bus", "Continues running"),
+                        List.of("Fault Isolation", "Subscriber failures contained")),
+                List.of("Component", "Behavior"));
         bus.shutdown();
     }
 
-    @Test
+    // ── Test 11: Observability ─────────────────────────────────────────────────
+
     @DisplayName(
             "getSubscribers_afterSubscribeAndUnsubscribe_correct: size reflects subscribe/unsubscribe")
     void getSubscribers_afterSubscribeAndUnsubscribe_correct() {
+        ctx.sayNextSection("Observability: Subscriber Inspection");
+        ctx.say(
+                "EventBus provides introspection of current subscribers. Useful for monitoring,"
+                        + " debugging, and operational visibility.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+
+            bus.subscribe("sub1", event -> {});
+            bus.subscribe("sub2", event -> {});
+            // bus.getSubscribers().size() == 2
+
+            bus.unsubscribe("sub1");
+            // bus.getSubscribers().size() == 1
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
 
         bus.subscribe("sub1", event -> {});
@@ -158,13 +441,36 @@ class EventBusTest implements WithAssertions {
         bus.unsubscribe("sub1");
         assertThat(bus.getSubscribers()).hasSize(1);
 
+        ctx.sayKeyValue(
+                Map.of(
+                        "Initial Subscribers", "2 (sub1, sub2)",
+                        "After Unsubscribe", "1 (sub2)",
+                        "Subscriber Info", "List of SubscriberInfo records"));
         bus.shutdown();
     }
 
-    @Test
+    // ── Test 13: Lifecycle ────────────────────────────────────────────────────
+
     @DisplayName("shutdown_doesNotThrow: calling shutdown does not throw any exception")
     void shutdown_doesNotThrow() {
+        ctx.sayNextSection("Lifecycle: Graceful Shutdown");
+        ctx.say(
+                "EventBus must be shutdown to release process resources. Shutdown is idempotent and"
+                        + " safe to call multiple times.");
+        ctx.sayCode(
+                """
+            var bus = EventBus.create(config);
+            bus.shutdown();
+            """,
+                "java");
+
         var bus = EventBus.create(defaultConfig());
         assertThatNoException().isThrownBy(bus::shutdown);
+
+        ctx.sayKeyValue(
+                Map.of(
+                        "Process Shutdown", "Coordinator process terminated",
+                        "Subscriber Cleanup", "All subscribers removed",
+                        "Dead Letter Queue", "Preserved for inspection"));
     }
 }

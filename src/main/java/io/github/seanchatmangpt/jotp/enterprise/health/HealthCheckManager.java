@@ -8,14 +8,125 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Non-invasive health check manager for monitoring services.
+ * Non-invasive health check manager for proactive service monitoring.
  *
- * <p>HealthCheckManager runs periodic health checks against a target service without killing it if
- * checks fail (unlike link/1 semantics). Uses ProcMonitor internally for liveness checks.
+ * <p>HealthCheckManager runs periodic health checks against target services without killing them if
+ * checks fail (unlike {@link io.github.seanchatmangpt.jotp.ProcLink} crash propagation). Uses
+ * {@link io.github.seanchatmangpt.jotp.ProcMonitor} internally for liveness checks and provides
+ * comprehensive status tracking for observability and automated remediation.
  *
- * <p>State Machine: - HEALTHY: All checks pass - DEGRADED: Some checks fail (< failThreshold
- * consecutive failures) - UNHEALTHY: Critical failure (>= failThreshold consecutive failures) -
- * UNREACHABLE: Service unreachable
+ * <h2>Problem Solved:</h2>
+ *
+ * In distributed systems, services need proactive health monitoring without invasive coupling:
+ *
+ * <ul>
+ *   <li><b>Non-invasive</b>: Check service health without killing it on failures
+ *   <li><b>Multi-dimensional</b>: Liveness, readiness, startup, and custom checks
+ *   <li><b>Adaptive thresholds</b>: Configurable pass/fail thresholds prevent flapping
+ *   <li><b>Observability</b>: Status transitions and results for monitoring dashboards
+ * </ul>
+ *
+ * <h2>State Machine:</h2>
+ *
+ * <ul>
+ *   <li><b>HEALTHY</b>: All checks pass, service operational
+ *   <li><b>DEGRADED</b>: Some checks fail but below failThreshold, service functional
+ *   <li><b>UNHEALTHY</b>: Critical failure (>= failThreshold consecutive failures), service
+ *       degraded
+ *   <li><b>UNREACHABLE</b>: Service unreachable, cannot connect
+ * </ul>
+ *
+ * <h2>Check Types:</h2>
+ *
+ * <ul>
+ *   <li><b>Liveness</b>: Is the service process still running? (via ProcMonitor)
+ *   <li><b>Readiness</b>: Can the service handle requests? (HTTP endpoint check)
+ *   <li><b>Startup</b>: Has the service completed initialization? (state query)
+ *   <li><b>Custom</b>: User-provided async check logic for domain-specific health
+ * </ul>
+ *
+ * <h2>Behavior:</h2>
+ *
+ * <ol>
+ *   <li>Run all configured checks in parallel every {@code checkInterval}
+ *   <li>Track consecutive passes/failures for each check
+ *   <li>Transition status when thresholds crossed
+ *   <li>Emit {@link HealthEvent} for observability
+ *   <li>Trigger alerts on status transitions
+ * </ol>
+ *
+ * <h2>Enterprise Value:</h2>
+ *
+ * <ul>
+ *   <li><b>Proactive monitoring</b>: Detect failures before users notice
+ *   <li><b>Graceful degradation</b>: DEGRADED state allows partial service
+ *   <li><b>Automated remediation</b>: Trigger restarts or traffic shifts on UNHEALTHY
+ *   <li><b>Capacity planning</b>: Track check latency and failure rates
+ * </ul>
+ *
+ * <h2>Thread Safety:</h2>
+ *
+ * <ul>
+ *   <li>Thread-safe: Uses {@link CopyOnWriteArrayList} for listeners
+ *   <li>Process-based coordinator ensures serialized state updates
+ *   <li>Non-blocking check execution (async CompletableFuture)
+ * </ul>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(checks) for storing last results
+ *   <li>Latency: O(checks * checkTimeout) for parallel execution
+ *   <li>Throughput: Bounded by checkInterval (typical: 10-60 seconds)
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Uses {@link io.github.seanchatmangpt.jotp.Proc} for coordinator state management
+ *   <li>Uses {@link io.github.seanchatmangpt.jotp.ProcMonitor} for liveness checks
+ *   <li>Emits {@link HealthEvent} via {@link io.github.seanchatmangpt.jotp.EventManager}
+ *   <li>Compatible with {@link io.github.seanchatmangpt.jotp.Supervisor} for restart triggers
+ * </ul>
+ *
+ * @example
+ *     <pre>{@code
+ * // Create health check manager with multiple checks
+ * HealthCheckConfig config = HealthCheckConfig.builder("payment-service")
+ *     .checks(List.of(
+ *         new HealthCheck.Liveness("process-alive"),
+ *         new HealthCheck.Readiness("http-ready", "http://localhost:8080/health"),
+ *         new HealthCheck.Custom("database-connection", timeout -> {
+ *             return CompletableFuture.supplyAsync(() ->
+ *                 database.ping().equals("PONG")
+ *             );
+ *         })
+ *     ))
+ *     .checkInterval(Duration.ofSeconds(10))
+ *     .timeout(Duration.ofSeconds(5))
+ *     .passThreshold(1)
+ *     .failThreshold(2)
+ *     .build();
+ *
+ * HealthCheckManager manager = HealthCheckManager.create(config);
+ *
+ * // Listen for status changes
+ * manager.addListener((from, to) -> {
+ *     log.warn("Health status changed: {} -> {}", from, to);
+ *     if (to instanceof HealthStatus.Unhealthy) {
+ *         // Trigger alert or restart
+ *         alertManager.fire("Service unhealthy: " + config.serviceName());
+ *     }
+ * });
+ * }</pre>
+ *
+ * @see HealthCheck
+ * @see HealthCheckConfig
+ * @see HealthStatus
+ * @see HealthEvent
+ * @see io.github.seanchatmangpt.jotp.Proc
+ * @see io.github.seanchatmangpt.jotp.ProcMonitor
+ * @since 1.0
  */
 public class HealthCheckManager {
     private final HealthCheckConfig config;

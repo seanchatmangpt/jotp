@@ -1,4 +1,4 @@
-# Java Maven Template - AWS AMI Builder
+# JOTP - AWS AMI Builder
 # Requires: Packer >= 1.9.0, AWS credentials
 
 packer {
@@ -63,8 +63,8 @@ source "amazon-ebs" "java-maven" {
   instance_type = var.instance_type
   source_ami    = var.source_ami
   ssh_username  = var.ssh_username
-  ami_name      = "java-maven-template-${formatdate("YYYYMMDD-HHmmss", timestamp())}"
-  ami_description = "Java Maven Template AMI with Java ${var.java_version}"
+  ami_name      = "jotp-${formatdate("YYYYMMDD-HHmmss", timestamp())}"
+  ami_description = "JOTP AMI with Java ${var.java_version}"
 
   # Optional VPC configuration
   vpc_id    = var.vpc_id != "" ? var.vpc_id : null
@@ -72,8 +72,8 @@ source "amazon-ebs" "java-maven" {
 
   # Tags
   tags = {
-    Name        = "java-maven-template"
-    Project     = "java-maven-template"
+    Name        = "jotp"
+    Project     = "jotp"
     JavaVersion = var.java_version
     AppVersion  = var.app_version
     BuiltBy     = "packer"
@@ -108,38 +108,38 @@ build {
   # Create application directory
   provisioner "shell" {
     inline = [
-      "sudo mkdir -p /opt/java-maven-app",
-      "sudo chmod 755 /opt/java-maven-app",
+      "sudo mkdir -p /opt/jotp-app",
+      "sudo chmod 755 /opt/jotp-app",
     ]
   }
 
   # Copy application JAR
   provisioner "file" {
-    source      = "../../../target/java-maven-template-${var.app_version}.jar"
+    source      = "../../../target/jotp-${var.app_version}.jar"
     destination = "/tmp/app.jar"
   }
 
   # Move JAR to application directory
   provisioner "shell" {
     inline = [
-      "sudo mv /tmp/app.jar /opt/java-maven-app/app.jar",
-      "sudo chmod 644 /opt/java-maven-app/app.jar",
+      "sudo mv /tmp/app.jar /opt/jotp-app/app.jar",
+      "sudo chmod 644 /opt/jotp-app/app.jar",
     ]
   }
 
   # Create systemd service
   provisioner "shell" {
     inline = [
-      "sudo tee /etc/systemd/system/java-maven-app.service > /dev/null <<'EOF'",
+      "sudo tee /etc/systemd/system/jotp-app.service > /dev/null <<'EOF'",
       "[Unit]",
-      "Description=Java Maven Template Application",
+      "Description=JOTP Application",
       "After=network.target",
       "",
       "[Service]",
       "Type=simple",
       "User=nobody",
-      "WorkingDirectory=/opt/java-maven-app",
-      "ExecStart=/usr/bin/java -jar /opt/java-maven-app/app.jar",
+      "WorkingDirectory=/opt/jotp-app",
+      "ExecStart=/usr/bin/java -jar /opt/jotp-app/app.jar",
       "Restart=on-failure",
       "RestartSec=10",
       "",
@@ -153,7 +153,7 @@ build {
   provisioner "shell" {
     inline = [
       "sudo systemctl daemon-reload",
-      "sudo systemctl enable java-maven-app",
+      "sudo systemctl enable jotp-app",
     ]
   }
 

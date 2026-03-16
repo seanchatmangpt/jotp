@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp.test;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.EventManager;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -35,7 +37,10 @@ import org.junit.jupiter.api.Timeout;
  *   <li><b>Memory: 10 000 add/remove cycles leave no phantom handlers</b> — handlers removed via
  *       deleteHandler or crash must be garbage-collectable; the manager must not retain them.
  * </ol>
+ *
+ * @see EventManager
  */
+@DtrTest
 @Timeout(30)
 class EventManagerScaleTest implements WithAssertions {
 
@@ -56,7 +61,10 @@ class EventManagerScaleTest implements WithAssertions {
      * so this is expected behaviour — but the constant factor matters).
      */
     @Test
-    void syncNotify_1000handlers_completesWithin2s() throws Exception {
+    void syncNotify_1000handlers_completesWithin2s(DtrContext ctx) throws Exception {
+        ctx.say(
+                "EventManager.syncNotify() with 1000 handlers demonstrates O(N) broadcast latency.");
+        ctx.say("Each handler is invoked sequentially in the manager's single virtual thread.");
         var mgr = EventManager.<Evt>start();
         int handlerCount = 1000;
 
@@ -74,6 +82,10 @@ class EventManagerScaleTest implements WithAssertions {
         System.out.printf("[event-scale] handlers=%d syncNotify=%d ms%n", handlerCount, elapsedMs);
 
         assertThat(elapsedMs).as("syncNotify with %d handlers (ms)", handlerCount).isLessThan(2000);
+
+        ctx.say(
+                "Broadcast to %d handlers completed in %d ms (under 2s threshold).",
+                handlerCount, elapsedMs);
 
         mgr.stop();
     }
@@ -93,7 +105,11 @@ class EventManagerScaleTest implements WithAssertions {
      * async addHandler() calls), there may be a delay between the crash and the removal completing.
      */
     @Test
-    void allHandlersCrash_managerSurvivesAndContinues() throws Exception {
+    void allHandlersCrash_managerSurvivesAndContinues(DtrContext ctx) throws Exception {
+        ctx.say(
+                "OTP gen_event guarantee: a crashing handler is removed but the manager continues.");
+        ctx.say(
+                "With 500 handlers all throwing, the manager must survive and accept new handlers.");
         var mgr = EventManager.<Evt>start();
         int handlerCount = 500;
         var removedCount = new AtomicInteger(0);
@@ -128,6 +144,9 @@ class EventManagerScaleTest implements WithAssertions {
         mgr.syncNotify(new Evt.Tick()); // must reach the new handler
 
         assertThat(afterCrashCount.get()).isEqualTo(1);
+
+        ctx.say(
+                "After all 500 handlers crashed, a new handler was added and received events successfully.");
 
         mgr.stop();
     }
@@ -192,7 +211,10 @@ class EventManagerScaleTest implements WithAssertions {
      * the time of broadcast
      */
     @Test
-    void handlerChurnDuringNotify_noCorruption() throws Exception {
+    void handlerChurnDuringNotify_noCorruption(DtrContext ctx) throws Exception {
+        ctx.say(
+                "EventManager serializes all operations via its Proc mailbox, preventing concurrent modification.");
+        ctx.say("Handler add/remove/notify operations are enqueued and executed in order.");
         var mgr = EventManager.<Evt>start();
         var errors = new AtomicInteger(0);
         var totalEvents = new AtomicInteger(0);
@@ -229,6 +251,8 @@ class EventManagerScaleTest implements WithAssertions {
         churner.join(3000);
 
         assertThat(errors.get()).as("churn-during-notify errors").isZero();
+
+        ctx.say("100 broadcasts interleaved with rapid handler churn completed with zero errors.");
 
         mgr.stop();
     }
@@ -276,7 +300,10 @@ class EventManagerScaleTest implements WithAssertions {
      * all events and the single handler counts each one.
      */
     @Test
-    void concurrentProducers_50threads_exactEventCount() throws Exception {
+    void concurrentProducers_50threads_exactEventCount(DtrContext ctx) throws Exception {
+        ctx.say("50 concurrent producer threads each sending 100 events = 5000 total events.");
+        ctx.say(
+                "The manager's Proc serializes all events, ensuring exact counting by a single handler.");
         var mgr = EventManager.<Evt>start();
         var count = new AtomicInteger(0);
         mgr.addHandler(e -> count.incrementAndGet());
@@ -312,6 +339,10 @@ class EventManagerScaleTest implements WithAssertions {
         assertThat(count.get())
                 .as("exact event count from %d producers × %d events", producers, eventsEach)
                 .isEqualTo(producers * eventsEach + 1); // +1 for the fence Data event
+
+        ctx.say(
+                "Exactly %d events were counted (5000 from producers + 1 fence event).",
+                count.get());
 
         mgr.stop();
     }

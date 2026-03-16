@@ -3,6 +3,8 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -14,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -51,8 +54,14 @@ import org.junit.jupiter.api.Test;
  * @see ProcRef
  * @see Supervisor
  */
+@DtrTest
 @DisplayName("Proc: Lightweight Virtual-Thread Process")
 class ProcTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     /** Test message types. Use sealed Record hierarchy for pattern matching. */
     sealed interface TestMsg
@@ -84,7 +93,14 @@ class ProcTest {
 
     @Test
     @DisplayName("tell(): Fire-and-forget message delivery")
-    void testTellFireAndForget() throws Exception {
+    void testTellFireAndForget(DtrContext ctx) throws Exception {
+        ctx.sayNextSection("Proc: Lightweight Virtual-Thread Process");
+        ctx.say(
+                """
+                Proc<S,M> is the fundamental OTP primitive in JOTP - a lightweight process backed by a virtual thread.
+                Each Proc has its own mailbox (LinkedTransferQueue) and processes messages sequentially.
+                The tell() method provides fire-and-forget message delivery - the sender doesn't wait for a response.
+                """);
         BiFunction<Integer, TestMsg, Integer> handler =
                 (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) return state + 1;
@@ -107,7 +123,13 @@ class ProcTest {
 
     @Test
     @DisplayName("ask(): Request-reply with future completion")
-    void testAskRequestReply() throws Exception {
+    void testAskRequestReply(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                The ask() method provides synchronous request-reply semantics.
+                It sends a message and returns a CompletableFuture that completes when the handler processes the message.
+                The handler's return value becomes the future's result, enabling type-safe request-response patterns.
+                """);
         BiFunction<Integer, TestMsg, Integer> handler =
                 (state, msg) -> {
                     if (msg instanceof TestMsg.Increment) return state + 1;
@@ -160,7 +182,13 @@ class ProcTest {
 
     @Test
     @DisplayName("Mailbox FIFO: 100 messages received in order")
-    void testMailboxOrdering() throws Exception {
+    void testMailboxOrdering(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                Proc mailboxes guarantee FIFO (First-In-First-Out) message ordering.
+                Messages are delivered in the exact order they were sent, ensuring deterministic behavior.
+                This is critical for protocols where message sequence matters (e.g., state machine transitions).
+                """);
         var received = new CopyOnWriteArrayList<Integer>();
         BiFunction<Integer, TestMsg, Integer> handler =
                 (state, msg) -> {
@@ -238,7 +266,13 @@ class ProcTest {
 
     @Test
     @DisplayName("Crash callback: Fired on abnormal termination")
-    void testCrashCallbackFiredOnException() throws Exception {
+    void testCrashCallbackFiredOnException(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                When a Proc's handler throws an unhandled exception, the process terminates abnormally.
+                Crash callbacks are invoked ONLY on abnormal termination, enabling cleanup and monitoring.
+                This is the "Let It Crash" philosophy - processes don't catch exceptions, supervisors restart them.
+                """);
         var crashFired = new CountDownLatch(1);
         BiFunction<Integer, TestMsg, Integer> handler =
                 (state, msg) -> {
@@ -303,7 +337,13 @@ class ProcTest {
 
     @Test
     @DisplayName("trapExits(true): EXIT signals become mailbox messages")
-    void testExitSignalTrapAsMessage() throws Exception {
+    void testExitSignalTrapAsMessage(DtrContext ctx) throws Exception {
+        ctx.say(
+                """
+                By default, EXIT signals from linked processes immediately terminate the receiving Proc.
+                With trapExits(true), EXIT signals are converted to ExitSignal messages in the mailbox.
+                This enables the "trap_exit" pattern where processes can handle linked process failures gracefully.
+                """);
         var received = new AtomicBoolean(false);
         BiFunction<Integer, Object, Integer> handler =
                 (state, msg) -> {

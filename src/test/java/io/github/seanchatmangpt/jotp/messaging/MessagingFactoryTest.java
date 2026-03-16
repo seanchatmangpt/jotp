@@ -18,6 +18,7 @@ package io.github.seanchatmangpt.jotp.messaging;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messagepatterns.construction.CorrelationIdentifier;
 import io.github.seanchatmangpt.jotp.messagepatterns.management.SmartProxy;
 import io.github.seanchatmangpt.jotp.messaging.endpoints.MessagingGateway;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -57,6 +59,11 @@ import org.junit.jupiter.api.Timeout;
 @DisplayName("Messaging Factory Methods")
 @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class MessagingFactoryTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // CONTROL BUS TESTS

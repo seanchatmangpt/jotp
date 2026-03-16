@@ -1,9 +1,11 @@
 package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
+import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.util.concurrent.TimeUnit;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -16,6 +18,11 @@ import org.junit.jupiter.api.Test;
 class ParameterDataAccessTest implements WithAssertions {
 
     private Proc<ParameterDataAccess.State, PdaMsg> proc;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     @AfterEach
     void tearDown() throws InterruptedException {

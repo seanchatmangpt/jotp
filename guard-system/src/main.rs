@@ -1,6 +1,6 @@
-//! Guard System - Template-level quality guards for Java Maven projects
+//! Guard System - Template-level quality guards for JOTP projects
 //!
-//! Simplified H-Guards implementation for the java-maven-template.
+//! Simplified H-Guards implementation for JOTP.
 //! Detects 3 forbidden patterns: H_TODO, H_MOCK, H_STUB
 
 use clap::{Parser, Subcommand};
