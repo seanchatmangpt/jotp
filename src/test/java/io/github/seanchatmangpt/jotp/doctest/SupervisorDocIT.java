@@ -189,7 +189,8 @@ class SupervisorDocIT implements WithAssertions {
     @Test
     void restartIntensity_supervisorGivesUpAfterTooManyRestarts(DtrContext ctx) throws Exception {
         ctx.say("Restart intensity prevents infinite crash loops");
-        ctx.say("MaxRestarts/Window pattern: if threshold exceeded, supervisor escalates by shutting down");
+        ctx.say(
+                "MaxRestarts/Window pattern: if threshold exceeded, supervisor escalates by shutting down");
 
         var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 2, Duration.ofSeconds(5));
         AtomicInteger crashCount = new AtomicInteger();

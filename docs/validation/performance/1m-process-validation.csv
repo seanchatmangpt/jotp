@@ -1,0 +1,7 @@
+Test Name,Processes Created,Messages Sent,Messages Received,Loss Count,Peak Heap MB,Status,Notes
+SupervisorStormStressTest,10,N/A,N/A,N/A,N/A,✅ PASS,Validates restart boundaries (not 1M)
+ProcStressTest,1,100000+,100000+,0,< 50,✅ PASS,Single process, high message volume
+SupervisorStressTest,50,1000+,1000+,0,N/A,✅ PASS,Restart strategies validated
+ProductionSimulationTest,50,1000,1000,0,N/A,✅ PASS,Chaos engineering validated
+ObservabilityStressTest,1000,1000000,UNVALIDATED,UNVALIDATED,N/A,⚠️ PARTIAL,Claims 1M messages, no delivery validation
+OneMillionProcessValidationTest,1000000,1000000,PENDING,PENDING,PENDING,🔄 PENDING,Awaiting execution with -Xmx16g

@@ -50,7 +50,8 @@ class ReactiveChannelDocIT implements WithAssertions {
     @Test
     void submit_deliversToSubscriber(DtrContext ctx) throws Exception {
         ctx.say("ReactiveChannel bridges JOTP messaging with Reactive Streams (Flow.Publisher)");
-        ctx.say("Supports direct submit() for imperative publishing alongside reactive subscription");
+        ctx.say(
+                "Supports direct submit() for imperative publishing alongside reactive subscription");
 
         ReactiveChannel<String> ch = ReactiveChannel.create("greetings");
         List<String> received = new CopyOnWriteArrayList<>();

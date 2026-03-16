@@ -129,7 +129,7 @@ public final class Proc<S, M> {
      * <ul>
      *   <li><strong>Virtual Threads:</strong> Each process runs on its own virtual thread
      *       (Thread.ofVirtual) spawned immediately. This allows millions of lightweight processes
-     *       with minimal heap overhead (~1 KB per process).
+     *       with minimal heap overhead (~3.9 KB per process, empirically measured).
      *   <li><strong>Mailbox:</strong> Uses LinkedTransferQueue for lock-free MPMC message passing
      *       (50–150 ns per message round-trip).
      *   <li><strong>State Isolation:</strong> State {@code S} is never returned by reference — only

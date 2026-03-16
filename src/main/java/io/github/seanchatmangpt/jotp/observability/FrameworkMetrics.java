@@ -76,6 +76,15 @@ public final class FrameworkMetrics
      */
     private static final boolean ENABLED = Boolean.getBoolean("jotp.observability.enabled");
 
+    /**
+     * Returns whether observability is enabled via system property.
+     *
+     * @return {@code true} if {@code -Djotp.observability.enabled=true}, {@code false} otherwise
+     */
+    public static boolean isEnabled() {
+        return ENABLED;
+    }
+
     private final String name;
     private final MetricsCollector collector;
     private final FrameworkEventBus eventBus;

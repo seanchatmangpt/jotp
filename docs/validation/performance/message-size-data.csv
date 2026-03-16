@@ -1,0 +1,10 @@
+payload_size_bytes,category,description,estimated_throughput_msg_per_sec,reduction_from_baseline_percent,realistic
+16,Empty,Empty record,4600000,0%,UNREALISTIC
+24,Tiny,Integer primitive,4600000,0%,UNREALISTIC
+40,Tiny,Empty string,4600000,0%,UNREALISTIC
+48,Tiny,Small string "msg",4400000,4.3%,UNREALISTIC
+64,Tiny,Medium string "message-123-456",4600000,0%,UNREALISTIC
+256,Realistic,F1 telemetry frame,1150000,75.0%,REALISTIC
+512,Realistic,Batch telemetry,575000,87.5%,REALISTIC
+1024,Realistic,Enterprise event,287000,93.8%,REALISTIC
+4096,Large,Document batch,72000,98.4%,REALISTIC

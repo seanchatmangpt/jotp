@@ -183,7 +183,10 @@ class BaselinePerformanceTest {
                         + observabilityStats.p95()
                         + " ns");
 
-        ctx.say("Observability p95: " + observabilityStats.p95() + " ns - hot path remains sub-microsecond");
+        ctx.say(
+                "Observability p95: "
+                        + observabilityStats.p95()
+                        + " ns - hot path remains sub-microsecond");
     }
 
     @Test
@@ -271,7 +274,8 @@ class BaselinePerformanceTest {
         System.out.println("Hot path validation passed - no contamination detected");
 
         ctx.say("Overhead: " + String.format("%.2f", overheadNs) + " ns (target: < 100 ns)");
-        ctx.say("Zero-overhead principle verified - async event bus does not contaminate hot paths");
+        ctx.say(
+                "Zero-overhead principle verified - async event bus does not contaminate hot paths");
     }
 
     /**

@@ -1,5 +1,7 @@
 # Benchmark Reporting Infrastructure
 
+**⚠️ Important:** Please read [docs/testing/BENCHMARKING.md](./testing/BENCHMARKING.md) for **critical methodology disclosures** before using this reporting infrastructure.
+
 This directory contains the benchmark reporting infrastructure for JOTP, providing comprehensive analysis and visualization of JMH benchmark results.
 
 ## Components

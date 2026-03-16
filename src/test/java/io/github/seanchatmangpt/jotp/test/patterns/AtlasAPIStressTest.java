@@ -2,6 +2,9 @@ package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -61,7 +64,10 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 @Timeout(180)
 @Execution(ExecutionMode.SAME_THREAD)
 @DisplayName("Atlas API Stress Tests")
+@DtrTest
 class AtlasAPIStressTest implements WithAssertions {
+
+    @DtrContextField private DtrContext ctx;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // THEORETICAL BASELINES FROM THESIS
@@ -114,6 +120,9 @@ class AtlasAPIStressTest implements WithAssertions {
         @Test
         @DisplayName("Session.Open: 2M+ command messages/second — thesis baseline")
         void sessionOpen_2MCommandsPerSecond() throws Exception {
+            ctx.sayNextSection("Atlas API Stress Test: Session.Open");
+            ctx.say("Tests command message pattern for session initialization.");
+
             var processed = new AtomicInteger(0);
 
             interface SessionCmd {
@@ -159,6 +168,25 @@ class AtlasAPIStressTest implements WithAssertions {
             System.out.printf(
                     "[Session.Open] %d commands in %.2f ms = %,.0f cmd/s%n",
                     iterations, elapsed / 1_000_000.0, throughput);
+
+            ctx.sayTable(
+                    new String[][] {
+                        {"API", "Operation", "Throughput", "Baseline"},
+                        {
+                            "SQLRaceAPI",
+                            "Session.Open",
+                            String.format("%,.0f cmd/s", throughput),
+                            "2M+ cmd/s"
+                        }
+                    });
+
+            ctx.sayKeyValue(
+                    Map.of(
+                            "API", "SQLRaceAPI",
+                            "Operation", "Session.Open",
+                            "Status", throughput > SESSION_OPEN_BASELINE * 0.5 ? "PASS" : "FAIL",
+                            "Throughput", String.format("%,.0f cmd/s", throughput),
+                            "Notes", "Command message pattern validated"));
 
             assertBaseline("Session.Open", throughput, SESSION_OPEN_BASELINE);
 
@@ -749,6 +777,9 @@ class AtlasAPIStressTest implements WithAssertions {
         @Test
         @DisplayName("Full Pipeline: 500K+ samples through SQLRace → FileSession → Display")
         void fullPipeline_500KSamplesPerSecond() throws Exception {
+            ctx.sayNextSection("Cross-API Stress Test: Full Pipeline");
+            ctx.say("Tests end-to-end throughput through SQLRace, FileSession, and Display APIs.");
+
             var processed = new AtomicInteger(0);
 
             // SQLRace: Session
@@ -810,6 +841,22 @@ class AtlasAPIStressTest implements WithAssertions {
             System.out.printf(
                     "[FullPipeline] %d samples through 3 APIs in %.2f ms = %,.0f samples/s%n",
                     iterations, elapsed / 1_000_000.0, throughput);
+
+            ctx.sayTable(
+                    new String[][] {
+                        {"Pipeline Stage", "API", "Role"},
+                        {"1", "SQLRaceAPI", "Session processing"},
+                        {"2", "FileSessionAPI", "Auto-save via EventManager"},
+                        {"3", "DisplayAPI", "Real-time updates"}
+                    });
+
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Test", "Full Pipeline",
+                            "Status", throughput > 500_000.0 * 0.5 ? "PASS" : "FAIL",
+                            "Throughput", String.format("%,.0f samples/s", throughput),
+                            "Baseline", "500K+ samples/s",
+                            "Notes", "Cross-API pipeline validated"));
 
             // Cross-pipeline baseline: should handle at least 500K/s
             assertBaseline("FullPipeline", throughput, 500_000.0);

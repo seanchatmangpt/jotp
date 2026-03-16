@@ -17,6 +17,7 @@
 package io.github.seanchatmangpt.jotp.observability;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.openjdk.jmh.annotations.*;
 
 /**
@@ -64,7 +65,9 @@ public class FrameworkMetricsIsolatedBenchmark {
             System.clearProperty("jotp.observability.enabled");
 
             metrics = FrameworkMetrics.create();
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+            event =
+                    new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                            java.time.Instant.now(), "test-pid", "Proc");
         }
 
         @TearDown(Level.Trial)
@@ -84,7 +87,9 @@ public class FrameworkMetricsIsolatedBenchmark {
             System.setProperty("jotp.observability.enabled", "true");
 
             metrics = FrameworkMetrics.create();
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+            event =
+                    new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                            java.time.Instant.now(), "test-pid", "Proc");
         }
 
         @TearDown(Level.Trial)
@@ -103,7 +108,9 @@ public class FrameworkMetricsIsolatedBenchmark {
         public void setup() {
             System.clearProperty("jotp.observability.enabled");
             eventBus = FrameworkEventBus.create();
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+            event =
+                    new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                            java.time.Instant.now(), "test-pid", "Proc");
         }
 
         @TearDown(Level.Trial)
@@ -125,7 +132,9 @@ public class FrameworkMetricsIsolatedBenchmark {
             eventBus = FrameworkEventBus.create();
             metrics = FrameworkMetrics.create();
 
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+            event =
+                    new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                            java.time.Instant.now(), "test-pid", "Proc");
         }
 
         @TearDown(Level.Trial)
@@ -148,7 +157,9 @@ public class FrameworkMetricsIsolatedBenchmark {
             eventBus = FrameworkEventBus.create();
             metrics = FrameworkMetrics.create();
 
-            event = new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+            event =
+                    new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                            java.time.Instant.now(), "test-pid", "Proc");
         }
 
         @TearDown(Level.Trial)
@@ -281,7 +292,8 @@ public class FrameworkMetricsIsolatedBenchmark {
     public void accept_originalPattern() {
         FrameworkMetrics metrics = FrameworkMetrics.create();
         FrameworkEventBus.FrameworkEvent event =
-                new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                        java.time.Instant.now(), "test-pid", "Proc");
 
         metrics.accept(event);
 

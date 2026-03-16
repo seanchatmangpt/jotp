@@ -2,6 +2,9 @@ package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
@@ -52,7 +55,10 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 @Timeout(300)
 @Execution(ExecutionMode.SAME_THREAD)
 @DisplayName("Reactive Messaging Pattern Stress Tests — REAL NUMBERS")
+@DtrTest
 class ReactiveMessagingPatternStressTest implements WithAssertions {
+
+    @DtrContextField private DtrContext ctx;
 
     // ── Message Types ───────────────────────────────────────────────────────────
 
@@ -127,6 +133,9 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         @Test
         @DisplayName("1. Message Channel: 1M messages through Proc — target 2M+ msg/s")
         void messageChannel_1MMessages_2MPerSecond() throws Exception {
+            ctx.sayNextSection("Pattern Stress Test: Message Channel");
+            ctx.say("Tests fire-and-forget messaging throughput via Proc tell().");
+
             int count = 1_000_000;
             var proc = new Proc<>(State.initial(), ReactiveMessagingPatternStressTest::handler);
 
@@ -146,6 +155,28 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             System.out.printf(
                     "[message-channel] %,d messages in %,d ns = %,.0f msg/s%n",
                     count, elapsed, throughput);
+
+            ctx.sayTable(
+                    new String[][] {
+                        {"Pattern", "Messages", "Throughput", "Target"},
+                        {
+                            "Message Channel",
+                            String.valueOf(count),
+                            String.format("%,.0f msg/s", throughput),
+                            "2M+ msg/s"
+                        }
+                    });
+
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Pattern",
+                            "Message Channel",
+                            "Status",
+                            throughput > 2_000_000 ? "PASS" : "FAIL",
+                            "Throughput",
+                            String.format("%,.0f msg/s", throughput),
+                            "Notes",
+                            "Fire-and-forget messaging validated"));
 
             assertThat(throughput)
                     .as("Message Channel should exceed 2M msg/s")
@@ -242,6 +273,9 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         @Test
         @DisplayName("5. Request-Reply: 100K ask() round-trips — target 50K+ rt/s")
         void requestReply_100KRoundTrips_50KPerSecond() throws Exception {
+            ctx.sayNextSection("Pattern Stress Test: Request-Reply");
+            ctx.say("Tests synchronous request-reply messaging via Proc ask().");
+
             int count = 100_000;
             var proc = new Proc<>(State.initial(), ReactiveMessagingPatternStressTest::handler);
 
@@ -256,6 +290,28 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
             System.out.printf(
                     "[request-reply] %,d round-trips in %,d ns = %,.0f rt/s%n",
                     count, elapsed, rtPerSec);
+
+            ctx.sayTable(
+                    new String[][] {
+                        {"Pattern", "Round-Trips", "Throughput", "Target"},
+                        {
+                            "Request-Reply",
+                            String.valueOf(count),
+                            String.format("%,.0f rt/s", rtPerSec),
+                            "50K+ rt/s"
+                        }
+                    });
+
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Pattern",
+                            "Request-Reply",
+                            "Status",
+                            rtPerSec > 50_000 ? "PASS" : "FAIL",
+                            "Throughput",
+                            String.format("%,.0f rt/s", rtPerSec),
+                            "Notes",
+                            "Synchronous messaging validated"));
 
             assertThat(rtPerSec).as("Request-Reply should exceed 50K rt/s").isGreaterThan(50_000);
             proc.stop();

@@ -74,7 +74,8 @@ class ProcDocIT implements WithAssertions {
     @Test
     void tell_isFireAndForget(DtrContext ctx) throws Exception {
         ctx.say("tell() is the primary messaging primitive - fire-and-forget async delivery");
-        ctx.say("Messages are queued to a LinkedTransferQueue mailbox (lock-free, high throughput)");
+        ctx.say(
+                "Messages are queued to a LinkedTransferQueue mailbox (lock-free, high throughput)");
 
         Proc<Integer, String> p = new Proc<>(0, (s, m) -> s + 1);
         p.tell("ping");
@@ -158,7 +159,8 @@ class ProcDocIT implements WithAssertions {
                     + "and can restart the process.")
     @Test
     void crashCallback_firedOnAbnormalExit(DtrContext ctx) throws Exception {
-        ctx.say("'Let It Crash' philosophy: processes don't catch exceptions, supervisors restart them");
+        ctx.say(
+                "'Let It Crash' philosophy: processes don't catch exceptions, supervisors restart them");
         ctx.say("Crash callbacks enable monitoring and supervisor notification");
 
         AtomicInteger crashes = new AtomicInteger();

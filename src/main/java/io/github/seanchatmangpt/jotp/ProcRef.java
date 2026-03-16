@@ -1,6 +1,8 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Stable opaque handle to a supervised process — mirrors Erlang's {@code Pid}.
@@ -56,6 +58,18 @@ public final class ProcRef<S, M> {
      */
     public CompletableFuture<S> ask(M msg) {
         return delegate.ask(msg);
+    }
+
+    /**
+     * Request-reply with timeout: returns a {@link CompletableFuture} that completes with the
+     * process's state after {@code msg} is processed, or times out after the specified duration.
+     *
+     * @param msg the message to send
+     * @param timeout maximum time to wait for response
+     * @return a CompletableFuture that completes with the state or times out
+     */
+    public CompletableFuture<S> ask(M msg, Duration timeout) {
+        return delegate.ask(msg).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**

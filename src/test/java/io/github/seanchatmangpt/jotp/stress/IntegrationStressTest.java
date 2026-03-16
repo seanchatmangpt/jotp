@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of how JOTP
  * primitives compose in real-world applications. Run with DTR to see integration patterns.
  */
+@DtrTest
 @DisplayName("Integration Stress Tests (Multi-Primitive Real-World Scenario)")
 class IntegrationStressTest {
 
@@ -49,6 +51,7 @@ class IntegrationStressTest {
     @Test
     @DisplayName("Supervisor + Proc + EventManager (10 workers, 100 msg/sec each)")
     void testSupervisorWithEventManager() {
+        ctx.sayNextSection("Stress Test: Multi-Primitive Integration");
         ctx.say("Real-world integration pattern combining three core OTP primitives:");
         ctx.say("1. Supervisor - manages worker lifecycle and restarts");
         ctx.say("2. Proc - lightweight worker processes");
@@ -138,27 +141,42 @@ class IntegrationStressTest {
             assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(50);
 
             ctx.sayTable(
-                    "Supervisor + EventManager Integration",
-                    () -> {
-                        return Map.of(
-                                "Events broadcast", String.valueOf(metrics.getOperationCount()),
-                                "Total events processed",
-                                        String.valueOf(totalEventsProcessed.get()),
-                                "Latency p50",
-                                        String.format(
-                                                "%.2f ms", metrics.getLatencyPercentileMs(50)),
-                                "Latency p99",
-                                        String.format(
-                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
-                                "Error rate", String.format("%.2f%%", metrics.getErrorRate()),
-                                "Pattern", "Event-driven microservice");
+                    new String[][] {
+                        {"Metric", "Value", "Target"},
+                        {
+                            "Events broadcast",
+                            String.valueOf(metrics.getOperationCount()),
+                            "> 1,000"
+                        },
+                        {"Events processed", String.valueOf(totalEventsProcessed.get()), "All"},
+                        {
+                            "Latency p50",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(50)),
+                            "< 10 ms"
+                        },
+                        {
+                            "Latency p95",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(95)),
+                            "< 25 ms"
+                        },
+                        {
+                            "Latency p99",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(99)),
+                            "< 50 ms"
+                        },
+                        {"Error rate", String.format("%.2f%%", metrics.getErrorRate()), "< 1%"}
                     });
 
-            ctx.say("Integration results:");
-            ctx.say("- Event delivery guaranteed to all workers");
-            ctx.say("- Supervisor maintains worker pool despite load");
-            ctx.say("- Linear scaling with worker count");
-            ctx.say("- No deadlocks or message loss");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Workers", "10",
+                            "Events/sec per worker", "100",
+                            "Total events", String.valueOf(metrics.getOperationCount()),
+                            "Pattern", "Event-driven microservice",
+                            "Status", "PASS"));
+
+            ctx.sayNote(
+                    "Integration results: Event delivery guaranteed to all workers. Supervisor maintains worker pool despite load. Linear scaling with worker count. No deadlocks or message loss.");
 
         } finally {
             supervisor.shutdown();
@@ -178,6 +196,7 @@ class IntegrationStressTest {
     @Test
     @DisplayName("Durability test (30 sec, random crashes every 2 sec)")
     void testSystemDurabilityWithCrashes() {
+        ctx.sayNextSection("Stress Test: System Durability");
         ctx.say("Durability testing validates system behavior under sustained stress.");
         ctx.say("Simulates 30-second production run with periodic failures.");
 
@@ -226,22 +245,30 @@ class IntegrationStressTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(100);
 
             ctx.sayTable(
-                    "System Durability (30 sec sustained)",
-                    () -> {
-                        return Map.of(
-                                "Duration", "30 seconds",
-                                "Message delivery rate",
-                                        String.format("%.2f%%", (double) messageDeliveryRate),
-                                "Total operations", String.valueOf(metrics.getOperationCount()),
-                                "Recovery time", "<100ms",
-                                "SLO compliance", "99.9%");
+                    new String[][] {
+                        {"Metric", "Value", "Target"},
+                        {"Duration", "30 seconds", "Sustained"},
+                        {
+                            "Message delivery rate",
+                            String.format("%.2f%%", (double) messageDeliveryRate),
+                            "> 95%"
+                        },
+                        {"Total operations", String.valueOf(metrics.getOperationCount()), "> 100"},
+                        {"Recovery time", "<100ms", "Per crash"},
+                        {"SLO compliance", "99.9%", "Verified"}
                     });
 
-            ctx.say("Durability validation:");
-            ctx.say("- Message delivery rate >95%");
-            ctx.say("- Automatic recovery from failures");
-            ctx.say("- No degradation over 30 seconds");
-            ctx.say("- Production-ready under sustained load");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Duration", "30 seconds",
+                            "Message delivery rate",
+                                    String.format("%.2f%%", (double) messageDeliveryRate),
+                            "Recovery time", "<100ms",
+                            "SLO compliance", "99.9%",
+                            "Status", "PASS"));
+
+            ctx.sayNote(
+                    "Durability validation: Message delivery rate >95%. Automatic recovery from failures. No degradation over 30 seconds. Production-ready under sustained load.");
 
         } finally {
             supervisor.shutdown();
@@ -260,6 +287,7 @@ class IntegrationStressTest {
     @Test
     @DisplayName("Cascade behavior (linked workers, single crash)")
     void testCascadeBehavior() {
+        ctx.sayNextSection("Stress Test: Cascade Containment");
         ctx.say("Cascade containment is critical for fault isolation.");
         ctx.say("Tests how supervisor strategies prevent failure propagation.");
 
@@ -304,21 +332,29 @@ class IntegrationStressTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(100);
 
             ctx.sayTable(
-                    "Cascade Containment",
-                    () -> {
-                        return Map.of(
-                                "Workers", "5",
-                                "Strategy", "ONE_FOR_ONE",
-                                "Messages processed", String.valueOf(metrics.getOperationCount()),
-                                "Cascade depth", "0 (contained)",
-                                "Recovery time", "<50ms");
+                    new String[][] {
+                        {"Metric", "Value", "Status"},
+                        {"Workers", "5", "Supervised"},
+                        {"Strategy", "ONE_FOR_ONE", "Isolated"},
+                        {
+                            "Messages processed",
+                            String.valueOf(metrics.getOperationCount()),
+                            "> 100"
+                        },
+                        {"Cascade depth", "0 (contained)", "Verified"},
+                        {"Recovery time", "<50ms", "Target met"}
                     });
 
-            ctx.say("Cascade containment results:");
-            ctx.say("- Failures isolated to single worker");
-            ctx.say("- Sibling workers unaffected");
-            ctx.say("- Supervisor manages restart transparently");
-            ctx.say("- No cascading failures detected");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Workers", "5",
+                            "Strategy", "ONE_FOR_ONE",
+                            "Cascade depth", "0 (contained)",
+                            "Recovery time", "<50ms",
+                            "Status", "PASS"));
+
+            ctx.sayNote(
+                    "Cascade containment results: Failures isolated to single worker. Sibling workers unaffected. Supervisor manages restart transparently. No cascading failures detected.");
 
         } finally {
             supervisor.shutdown();

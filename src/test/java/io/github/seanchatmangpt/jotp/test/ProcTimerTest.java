@@ -328,7 +328,7 @@ class ProcTimerTest implements WithAssertions {
     // -------------------------------------------------------------------------
 
     @Test
-    void timerRef_cancel_returnsTrueWhenPending() {
+    void timerRef_cancel_returnsTrueWhenPending() throws InterruptedException {
         ctx.sayNextSection("ProcTimer: Cancel Return Value");
         ctx.say(
                 "cancel() returns true if the timer was pending (cancelled before firing), false if already fired or previously cancelled.");

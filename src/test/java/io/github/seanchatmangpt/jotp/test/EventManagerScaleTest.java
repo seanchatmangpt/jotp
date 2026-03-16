@@ -84,8 +84,9 @@ class EventManagerScaleTest implements WithAssertions {
         assertThat(elapsedMs).as("syncNotify with %d handlers (ms)", handlerCount).isLessThan(2000);
 
         ctx.say(
-                "Broadcast to %d handlers completed in %d ms (under 2s threshold).",
-                handlerCount, elapsedMs);
+                String.format(
+                        "Broadcast to %d handlers completed in %d ms (under 2s threshold).",
+                        handlerCount, elapsedMs));
 
         mgr.stop();
     }
@@ -341,8 +342,9 @@ class EventManagerScaleTest implements WithAssertions {
                 .isEqualTo(producers * eventsEach + 1); // +1 for the fence Data event
 
         ctx.say(
-                "Exactly %d events were counted (5000 from producers + 1 fence event).",
-                count.get());
+                String.format(
+                        "Exactly %d events were counted (5000 from producers + 1 fence event).",
+                        count.get()));
 
         mgr.stop();
     }

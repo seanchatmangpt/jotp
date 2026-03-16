@@ -286,7 +286,7 @@ public class ObservabilityPerformanceTest {
     /** Creates a Proc instance for testing. */
     private Proc<String, String> createProc() {
         return Proc.spawn(
-                () -> "initial",
+                "initial",
                 (state, msg) -> {
                     if ("crash".equals(msg)) {
                         throw new RuntimeException("Intentional crash");
@@ -296,7 +296,7 @@ public class ObservabilityPerformanceTest {
     }
 
     /** Creates a Supervisor instance for testing. */
-    private Supervisor<String, String> createSupervisor() {
+    private Supervisor createSupervisor() {
         return Supervisor.create(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
     }
 
