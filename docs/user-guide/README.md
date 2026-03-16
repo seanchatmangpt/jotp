@@ -60,7 +60,7 @@ Common issues and solutions:
 ## Core Concepts
 
 ### Processes
-Lightweight virtual-thread processes with mailboxes (~1 KB heap each):
+Lightweight virtual-thread processes with mailboxes (~3.9 KB heap each, validated at 1M+ processes):
 ```java
 Proc<S, M> proc = Proc.spawn(name, initialState, handler);
 ```

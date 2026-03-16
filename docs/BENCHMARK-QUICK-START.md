@@ -1,5 +1,7 @@
 # Benchmark Reporting Quick Start
 
+**⚠️ Important:** Please read [docs/testing/BENCHMARKING.md](./testing/BENCHMARKING.md) for **critical methodology disclosures** before running benchmarks.
+
 ## 5-Minute Guide to Benchmark Reporting
 
 ### Step 1: Run a Benchmark (1 minute)

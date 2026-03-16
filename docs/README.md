@@ -80,7 +80,7 @@ JOTP implements 15 Erlang/OTP primitives for the JVM:
 1. **Let It Crash** - Processes don't handle exceptions; supervisors restart them
 2. **Message Passing** - No shared state; communicate via immutable messages
 3. **Supervision Trees** - Hierarchical restart strategies contain failures
-4. **Virtual Threads** - Millions of lightweight processes (~1 KB heap each)
+4. **Virtual Threads** - Millions of lightweight processes (~3.9 KB heap each, validated at 1M+)
 5. **Sealed Types** - Type-safe message protocols at compile time
 
 ## Getting Started

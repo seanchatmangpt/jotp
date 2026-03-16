@@ -6,13 +6,13 @@
 - [Benchmark: Batch Message Throughput](#benchmarkbatchmessagethroughput)
 
 
+
+## Benchmark: Batch Message Throughput
 ## Benchmark: Observability Throughput
 
 Measures message throughput with observability disabled vs enabled.
 
 Validates that async event bus design maintains high throughput.
-
-## Benchmark: Batch Message Throughput
 
 Measures throughput for batch message delivery with observability.
 
@@ -21,29 +21,29 @@ Measures throughput for batch message delivery with observability.
 | Batch Size | 10000 |
 | Num Batches | 100 |
 | Total Messages | 1000000 |
-| Duration (s) | 0.652 |
-| Throughput (msg/sec) | 1533380 |
+| Duration (s) | 0.147 |
+| Throughput (msg/sec) | 6780883 |
 
 | Key | Value |
 | --- | --- |
 | `Total Messages` | `1000000` |
-| `Throughput` | `1533380 msg/sec` |
 | `Batch Size` | `10000` |
+| `Throughput` | `6780883 msg/sec` |
 
 > [!NOTE]
 > Batch throughput measurement shows sustained message delivery rate.
 
 | Configuration | Messages | Duration (ms) | Throughput (msg/sec) |
 | --- | --- | --- | --- |
-| Disabled | 18216656 | 5000.03 | 3643310 |
-| Enabled | 23179754 | 5000.03 | 4635919 |
+| Disabled | 41588031 | 5000.03 | 8317562 |
+| Enabled | 44600630 | 5000.03 | 8920077 |
 
 | Key | Value |
 | --- | --- |
-| `Disabled Throughput` | `3643310 msg/sec` |
-| `Degradation` | `-27.24%` |
-| `Enabled Throughput` | `4635919 msg/sec` |
 | `Status` | `PASS` |
+| `Enabled Throughput` | `8920077 msg/sec` |
+| `Degradation` | `-7.24%` |
+| `Disabled Throughput` | `8317562 msg/sec` |
 
 > [!NOTE]
 > Throughput benchmark validates async event bus design. Degradation should be < 5% for zero-overhead observability.

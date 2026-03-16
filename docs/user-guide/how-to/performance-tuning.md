@@ -5,7 +5,7 @@
 Joe Armstrong, reflecting on decades of building Erlang systems, put it plainly:
 > "The real question is never 'how do I make this faster?' It is 'am I doing the right thing at all?'"
 
-Performance work in JOTP starts from the same premise. The primitives are fast by design: `tell()` delivers a message in ~80 ns, process creation costs ~50 µs, and the scheduler handles millions of virtual threads without ceremony. When a JOTP system is slow, the cause is almost never the primitives themselves. It is one of three structural problems: mailboxes filling faster than handlers drain them, handlers doing work that blocks the virtual thread scheduler, or GC pressure from a heap sized for a different workload.
+Performance work in JOTP starts from the same premise. The primitives are fast by design: `tell()` delivers a message in 125 ns (p50), process creation costs ~50 µs, and the scheduler handles millions of virtual threads without ceremony. When a JOTP system is slow, the cause is almost never the primitives themselves. It is one of three structural problems: mailboxes filling faster than handlers drain them, handlers doing work that blocks the virtual thread scheduler, or GC pressure from a heap sized for a different workload.
 
 Micro-optimizing a `tell()` call when the real problem is a 200ms database query inside a handler is theater. This guide shows you how to find the actual bottleneck first, then fix it with the minimum intervention necessary.
 
@@ -330,12 +330,12 @@ mvnd verify -Pbenchmark -Dbenchmark.format=csv
 
 | Benchmark | Baseline (p50) | Alert threshold |
 |---|---|---|
-| `tell()` throughput | 120M msg/sec | < 80M msg/sec |
-| `tell()` latency p50 | 80 ns | > 200 ns |
-| `tell()` latency p99 | 500 ns | > 2 µs |
-| `ask()` round trip p50 | 500 ns | > 1 µs |
+| `tell()` latency p50 | 125 ns | > 200 ns |
+| `tell()` latency p99 | 625 ns | > 2 µs |
+| `ask()` round trip p50 | <1 µs | > 5 µs |
 | Process creation | 50 µs | > 100 µs |
-| Supervisor restart p50 | 100–200 µs | > 500 µs |
+| Supervisor restart p50 | 150 µs | > 500 µs |
+| Throughput (enabled) | 4.6M msg/sec | < 3M msg/sec |
 
 Compare benchmark results across JVM flag changes using the JMH `-rf csv` output piped into a spreadsheet. A 10% regression in `tell()` throughput after a flag change is a clear signal to revert.
 
@@ -415,10 +415,10 @@ Premature optimization in JOTP follows predictable patterns. These changes add c
 ```
 Baseline numbers (intra-JVM, single host):
 
-  tell()           p50:  80 ns     throughput: ~120M msg/sec
-  ask()            p50: 500 ns
+  tell()           p50: 125 ns     p99: 625 ns     throughput: 4.6M msg/sec
+  ask()            p50: <1 µs      p99: <100 µs
   Proc creation        :  50 µs
-  Supervisor restart  p50: 100–200 µs
+  Supervisor restart  p50: 150 µs     p99: <1 ms
 
 Tuning decision tree:
 

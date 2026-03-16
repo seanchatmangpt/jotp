@@ -1,0 +1,8 @@
+Scenario,Process_Count,Heap_Growth_MB,Bytes_Per_Process,KB_Per_Process,Matches_Claim,Variance_Percent
+Empty processes,10000,221.4,22277,21.74,No,+2074
+Small state,10000,217.2,22154,21.63,No,+2063
+With messages (10 per proc),10000,348.2,35639,34.80,No,+3380
+100 processes,100,196.1,2007316,1960.69,No,+195969
+1K processes,1000,128.1,131197,128.12,No,+12712
+10K processes,10000,340.3,34847,34.03,No,+3303
+100K processes,100000,445.0,4561,4.45,No,+345
