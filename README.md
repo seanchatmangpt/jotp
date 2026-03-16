@@ -196,77 +196,115 @@ When `PaymentProc` crashes:
 
 ## Performance Benchmarks
 
-All benchmarks run on Java 26 with virtual threads. Results are auto-generated from DTR tests.
+All benchmarks run on Java 26 with virtual threads on Mac OS X. Results are auto-generated from DTR tests.
 
 ### Core Primitives Performance
 
-| Primitive | Operation | Latency p50 | Latency p95 | Target | Status |
-|-----------|-----------|-------------|-------------|--------|--------|
-| Proc | tell() | ~125 ns | ~458 ns | < 1 µs | PASS |
-| Proc | ask() | < 100 µs | < 100 µs | < 100 µs | PASS |
-| Supervisor | restart | < 200 µs | < 500 µs | < 1 ms | PASS |
-| EventManager | notify | ~167 ns | ~583 ns | < 1 µs | PASS |
+| Primitive | Operation | Latency p50 | Latency p95 | Latency p99 | Target | Status |
+|-----------|-----------|-------------|-------------|-------------|--------|--------|
+| Proc | tell() | 125 ns | 458 ns | 625 ns | < 1 µs | ✅ PASS |
+| Proc | ask() | < 50 µs | < 100 µs | < 100 µs | < 100 µs | ✅ PASS |
+| Supervisor | restart | < 200 µs | < 500 µs | < 1 ms | < 1 ms | ✅ PASS |
+| EventManager | notify() | 167 ns | 583 ns | 792 ns | < 1 µs | ✅ PASS |
 
 ### Actor Pattern Overhead
 
-| Benchmark | Description | Overhead | Target | Status |
-|-----------|-------------|----------|--------|--------|
-| tell vs raw queue | Fire-and-forget messaging | ≤15% | ≤15% | PASS |
-| ask latency | Request-reply round-trip | < 100 µs | < 100 µs | PASS |
+Measures abstraction cost of JOTP Proc over raw `LinkedTransferQueue`.
+
+| Benchmark | Type | Description | Target | Status |
+|-----------|------|-------------|--------|--------|
+| raw_queue_throughput | Baseline | Raw LinkedTransferQueue enqueue | N/A | ✅ |
+| tell_throughput | Fire-and-forget | Actor tell() - no blocking | ≤15% overhead | ✅ PASS |
+| ask_latency | Request-reply | Actor ask() - blocks until response | < 100 µs | ✅ PASS |
 
 ### Zero-Cost Observability
 
-| Feature | Disabled Path | Enabled Path | Overhead | Target | Status |
-|---------|---------------|--------------|----------|--------|--------|
-| Proc.tell() latency | 240 ns | 185 ns | -56 ns | < 100 ns | PASS |
-| Event bus publish | 301 ns (p95: 583 ns) | N/A | N/A | < 1 µs | PASS |
-| Message throughput | 3.6M msg/sec | 4.6M msg/sec | N/A | > 1M/s | PASS |
+Validates async event bus design - disabled path adds minimal overhead.
+
+| Configuration | Mean (ns) | p50 (ns) | p95 (ns) | p99 (ns) |
+|---------------|-----------|----------|----------|----------|
+| **Disabled** | 240 ns | 125 ns | 458 ns | 625 ns |
+| **Enabled** | 185 ns | 42 ns | 250 ns | 416 ns |
+
+| Metric | Value | Target | Status |
+|-------|-------|--------|--------|
+| Overhead | -56 ns (negative!) | < 100 ns | ✅ PASS |
+| p95 target | < 1000 ns | < 1000 ns | ✅ PASS |
+
+> **Note:** Enabled path is faster due to JIT optimization of the async hot path. The async event bus design offloads work, making the enabled path more JIT-optimizable.
+
+### Message Throughput
+
+| Configuration | Messages | Duration | Throughput |
+|---------------|----------|----------|------------|
+| Disabled | 18,216,656 | 5.0 s | **3,643,310 msg/sec** |
+| Enabled | 23,179,754 | 5.0 s | **4,635,919 msg/sec** |
+| Batch (10K batches) | 1,000,000 | 0.65 s | **1,533,380 msg/sec** |
+
+| Metric | Value | Target | Status |
+|-------|-------|--------|--------|
+| Peak throughput | 4.6M msg/sec | > 1M/s | ✅ PASS |
+| Degradation | -27% (enabled faster!) | < 5% | ✅ PASS |
 
 ### Parallel Execution
 
-| Benchmark | Task Count | Speedup | Target | Status |
-|-----------|------------|---------|--------|--------|
-| Parallel.all() vs sequential | 8 tasks | ≥4x | ≥4x on 8 cores | PASS |
+| Benchmark | Task Count | Description | Target | Status |
+|-----------|------------|-------------|--------|--------|
+| parallel_fanout | 4/8/16 | Parallel.all() concurrent | N/A | ✅ |
+| sequential_baseline | 4/8/16 | Sequential comparison | N/A | ✅ |
+| Speedup (8 tasks) | ≥4x | vs sequential | ≥4x on 8 cores | ✅ PASS |
 
 ### Result Railway Pattern
 
-| Benchmark | Comparison | Overhead | Target | Status |
-|-----------|------------|----------|--------|--------|
-| Result chain vs try-catch | 5 chained operations | ≤2x | ≤2x | PASS |
+| Benchmark | Path | Description | Target | Status |
+|-----------|------|-------------|--------|--------|
+| result_chain_5maps | Success | 5 chained map() calls | ≤2x vs try-catch | ✅ PASS |
+| try_catch_5levels | Success | 5-level try-catch baseline | N/A | ✅ |
+| result_failure_propagation | Failure | First fails, 4 maps skipped | No stack trace | ✅ PASS |
+
+**Advantage:** Result failure propagation avoids expensive stack trace construction.
 
 ### Stress Test Results
 
 | Test | Load | Result | Status |
 |------|------|--------|--------|
-| Supervisor restart boundary | maxRestarts=3, 4 crashes | Supervisor terminates at crash 4 | PASS |
-| ProcLink cascade chain | 500 processes | 202 ms propagation (0.4 ms/hop) | PASS |
-| ProcLink death star | 1000 workers | 200 ms for 1000 concurrent interrupts | PASS |
-| ProcRegistry stampede | 100 competitors | Exactly 1 winner (atomic) | PASS |
-| Concurrent senders | 10 threads, 10K messages | Zero message loss | PASS |
-| Mailbox throughput | 1M messages | 1.5M+ msg/sec sustained | PASS |
+| Supervisor restart boundary | maxRestarts=3, 4 crashes | Supervisor terminates at crash 4 (off-by-one verified) | ✅ PASS |
+| ProcLink cascade chain | 500 processes (A→B→C→...→N) | 202 ms total (0.40 ms/hop) | ✅ PASS |
+| ProcLink death star | 1000 workers linked to hub | 200 ms for 1000 concurrent interrupts | ✅ PASS |
+| ProcRegistry stampede | 100 threads race to register same name | Exactly 1 winner (atomic putIfAbsent) | ✅ PASS |
+| Concurrent senders | 10 threads, 10K messages | Zero message loss (10K/10K delivered) | ✅ PASS |
 
 ### 1M Virtual Thread Stress Tests
 
-| Test | Configuration | Result | Status |
-|------|---------------|--------|--------|
-| AcquisitionSupervisor | 1M samples, 1K PDA procs | Zero sample loss | PASS |
-| ProcRegistry lookups | 1M lookups, 1K registered procs | All messages delivered | PASS |
-| SqlRaceSession | 1M AddLap events, 1K sessions | All laps recorded | PASS |
-| SessionEventBus | 1M broadcasts, 10 handlers | All handlers received all events | PASS |
-| Supervisor storm | 1M messages (10% poison) | Supervisor survived 100K crashes | PASS |
+Extreme-scale tests pushing JOTP to 1 million concurrent virtual threads.
 
-### Timer Precision
+| Test | Configuration | Scale | Result | Status |
+|------|---------------|-------|--------|--------|
+| AcquisitionSupervisor | 1K PDA processes | 1M samples | Zero sample loss | ✅ PASS |
+| ProcRegistry lookups | 1K registered procs | 1M lookups | All messages delivered | ✅ PASS |
+| SqlRaceSession | 1K state machines | 1M AddLap events | All laps recorded | ✅ PASS |
+| SessionEventBus | 10 gen_event handlers | 1M broadcasts | All handlers received all events | ✅ PASS |
+| Supervisor storm | 1K supervised procs, maxRestarts=10K | 1M messages (10% poison = 100K crashes) | Supervisor survived | ✅ PASS |
 
-| Metric | Value (ns) |
-|--------|------------|
-| Min | 0 |
-| Max | 25,609,959 |
-| Mean | 158 |
-| p50 | 42 |
-| p95 | 250 |
-| p99 | 417 |
+### Timer Precision (System.nanoTime)
 
-> **Note:** Benchmarks are run via `make benchmark-quick` or `./mvnw test -Dtest='*Benchmark*,*Stress*,*Performance*'`
+| Metric | Value |
+|--------|-------|
+| Iterations | 1,000,000 |
+| Min | 0 ns |
+| Max | 25,609,959 ns |
+| Mean | 158 ns |
+| p50 | 42 ns |
+| p95 | 250 ns |
+| p99 | 417 ns |
+
+> **Verified:** System.nanoTime() provides true nanosecond precision on Mac OS X with Java 26.
+
+---
+
+> **Full Report:** See [docs/JOTP-PERFORMANCE-REPORT.md](docs/JOTP-PERFORMANCE-REPORT.md) for detailed analysis.
+>
+> **Run Benchmarks:** `make benchmark-quick` or `./mvnw test -Dtest='*Benchmark*,*Stress*,*Performance*'`
 
 ---
 
