@@ -1,0 +1,683 @@
+# Construction Patterns
+
+Construction patterns define how messages should be structured to convey intent effectively. They form the vocabulary of your messaging system, determining what messages mean and how they should be processed.
+
+## Overview
+
+JOTP implements four core construction patterns from the Enterprise Integration Patterns catalog:
+
+1. **Command Message** - Imperative instructions ("do this")
+2. **Document Message** - Data payload ("here's information")
+3. **Event Message** - Notification of fact ("this happened")
+4. **Claim Check** - Store large payloads, pass lightweight tokens
+
+These patterns leverage Java 26's sealed interfaces and records to provide type-safe, self-documenting message protocols.
+
+## Command Message
+
+### Pattern Description
+
+A Command Message tells the receiver to perform a specific action. It's imperative and actionable, carrying all the information needed to execute the command. Commands are typically fire-and-forget (no immediate response expected).
+
+### Implementation
+
+```java
+public interface CommandMessage {
+    default <S> void executeOn(Proc<S, ? super CommandMessage> processor) {
+        processor.tell(this);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Define command hierarchy with sealed interface
+sealed interface TradingCommand extends CommandMessage permits
+    ExecuteBuyOrder,
+    ExecuteSellOrder,
+    CancelOrder {}
+
+record ExecuteBuyOrder(
+    String portfolioId,
+    String symbol,
+    int quantity,
+    double price
+) implements TradingCommand {}
+
+record ExecuteSellOrder(
+    String portfolioId,
+    String symbol,
+    int quantity,
+    double price
+) implements TradingCommand {}
+
+record CancelOrder(
+    String portfolioId,
+    String orderId,
+    String reason
+) implements TradingCommand {}
+
+// Create command handler
+var trader = new Proc<TradingState, TradingCommand>(
+    TradingState.empty(),
+    (state, cmd) -> switch (cmd) {
+        case ExecuteBuyOrder buy -> executeBuy(state, buy);
+        case ExecuteSellOrder sell -> executeSell(state, sell);
+        case CancelOrder cancel -> cancelOrder(state, cancel);
+    }
+);
+
+// Execute commands
+new ExecuteBuyOrder("portfolio-1", "AAPL", 100, 150.0).executeOn(trader);
+new ExecuteSellOrder("portfolio-1", "GOOGL", 50, 2800.0).executeOn(trader);
+new CancelOrder("portfolio-1", "order-123", "duplicate").executeOn(trader);
+```
+
+### Command Validation
+
+```java
+// Validate commands before execution
+record CreateOrder(
+    String customerId,
+    List<OrderItem> items,
+    Instant scheduledTime
+) implements CommandMessage {
+    public CreateOrder {
+        if (customerId == null || customerId.isBlank()) {
+            throw new IllegalArgumentException("Customer ID required");
+        }
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("Order must have items");
+        }
+        if (scheduledTime.isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Cannot schedule in the past");
+        }
+    }
+}
+```
+
+### Command Auditing
+
+```java
+// Wrap commands with audit metadata
+record AuditedCommand<T extends CommandMessage>(
+    String commandId,
+    T originalCommand,
+    Instant executedAt,
+    String executedBy
+) implements CommandMessage {}
+
+// Audit all commands
+var auditor = new Proc<Void, AuditedCommand<CommandMessage>>(
+    null,
+    (state, audited) -> {
+        auditLog.append(audited);
+        return state;
+    }
+);
+
+// Wrap and execute commands
+CommandCommand command = new ExecuteBuyOrder("portfolio-1", "AAPL", 100, 150.0);
+var audited = new AuditedCommand<>(
+    UUID.randomUUID().toString(),
+    command,
+    Instant.now(),
+    "user-123"
+);
+audited.executeOn(trader);
+audited.executeOn(auditor);
+```
+
+### Idempotent Commands
+
+```java
+// Add idempotency keys to prevent duplicate execution
+record IdempotentCommand<T extends CommandMessage>(
+    String idempotencyKey,
+    T command,
+    Instant timestamp
+) implements CommandMessage {}
+
+// Idempotent receiver checks keys
+var receiver = new IdempotentReceiver<IdempotentCommand<CommandMessage>, String>(
+    IdempotentCommand::idempotencyKey,
+    cmd -> cmd.command().executeOn(handler)
+);
+```
+
+## Document Message
+
+### Pattern Description
+
+A Document Message carries data for the receiver to process. Unlike commands that tell the receiver "what to do," documents say "here's data" and leave processing decisions to the receiver. Documents are typically larger and more complex than commands.
+
+### Implementation
+
+```java
+public interface DocumentMessage {
+    default String documentType() {
+        return getClass().getSimpleName();
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Define document types
+sealed interface OrderDocument extends DocumentMessage permits
+    OrderDetails,
+    InvoiceDetails,
+    ShippingNotice {}
+
+record OrderDetails(
+    String orderId,
+    String customerId,
+    List<OrderItem> items,
+    BigDecimal subtotal,
+    BigDecimal tax,
+    BigDecimal total,
+    Instant createdAt
+) implements OrderDocument {}
+
+record InvoiceDetails(
+    String invoiceId,
+    String orderId,
+    String customerId,
+    BigDecimal amount,
+    Instant dueDate,
+    String status
+) implements OrderDocument {}
+
+record ShippingNotice(
+    String trackingNumber,
+    String orderId,
+    Address shippingAddress,
+    Instant shippedAt,
+    Instant estimatedDelivery
+) implements OrderDocument {}
+
+// Document handler processes based on type
+var documentProcessor = new Proc<Void, OrderDocument>(
+    null,
+    (state, doc) -> switch (doc) {
+        case OrderDetails order -> {
+            analyticsSystem.trackOrderReceived(order);
+            yield state;
+        }
+        case InvoiceDetails invoice -> {
+            billingSystem.processInvoice(invoice);
+            yield state;
+        }
+        case ShippingNotice notice -> {
+            notificationSystem.sendShippingUpdate(notice);
+            yield state;
+        }
+    }
+);
+```
+
+### Large Document Handling
+
+```java
+// Use Claim Check pattern for large documents
+record LargeDocument<T> {
+    String documentId;
+    ClaimCheck.CheckToken claimCheck; // Reference to stored data
+    String documentType;
+    Instant createdAt;
+}
+
+// Store large payload, pass token
+var claimCheck = new ClaimCheck<byte[]>();
+var token = claimCheck.checkIn(largePdfData);
+
+var document = new LargeDocument<byte[]>(
+    "doc-123",
+    token,
+    "INVOICE",
+    Instant.now()
+);
+
+// Retrieve payload when needed
+documentProcessor.tell(document);
+
+// In processor:
+var payload = claimCheck.checkOut(document.claimCheck()).orElseThrow();
+processInvoicePdf(payload);
+```
+
+### Document Validation
+
+```java
+// Validate document structure
+record ValidatedDocument<T> {
+    T document;
+    List<ValidationError> errors;
+
+    public boolean isValid() {
+        return errors.isEmpty();
+    }
+
+    public static <T> ValidatedDocument<T> validate(T doc) {
+        var errors = new ArrayList<ValidationError>();
+
+        // Schema validation
+        if (!schemaValidator.isValid(doc)) {
+            errors.add(new ValidationError("SCHEMA", "Invalid schema"));
+        }
+
+        // Business rules
+        if (doc instanceof OrderDetails order) {
+            if (order.total().compareTo(BigDecimal.ZERO) <= 0) {
+                errors.add(new ValidationError("TOTAL", "Total must be positive"));
+            }
+        }
+
+        return new ValidatedDocument<>(doc, errors);
+    }
+}
+```
+
+## Event Message
+
+### Pattern Description
+
+An Event Message notifies consumers that something has happened. Events are factual, immutable, and often trigger downstream workflows. Multiple consumers can subscribe to the same event, making events ideal for fan-out scenarios.
+
+### Implementation
+
+```java
+sealed interface EventMessage {
+    String eventType();
+    Instant occurredAt();
+    Map<String, String> metadata();
+}
+```
+
+### Usage Example
+
+```java
+// Domain events
+sealed interface OrderEvent extends EventMessage permits
+    OrderCreated,
+    OrderPaid,
+    OrderShipped,
+    OrderCancelled {}
+
+record OrderCreated(
+    String orderId,
+    String customerId,
+    List<OrderItem> items,
+    BigDecimal total,
+    Instant createdAt
+) implements OrderEvent {
+    public String eventType() { return "OrderCreated"; }
+    public Instant occurredAt() { return createdAt; }
+    public Map<String, String> metadata() {
+        return Map.of(
+            "customerId", customerId,
+            "itemCount", String.valueOf(items.size()),
+            "total", total.toString()
+        );
+    }
+}
+
+record OrderPaid(
+    String orderId,
+    String paymentId,
+    BigDecimal amount,
+    Instant paidAt
+) implements OrderEvent {
+    public String eventType() { return "OrderPaid"; }
+    public Instant occurredAt() { return paidAt; }
+    public Map<String, String> metadata() {
+        return Map.of(
+            "orderId", orderId,
+            "paymentId", paymentId,
+            "amount", amount.toString()
+        );
+    }
+}
+
+// Event manager broadcasts to subscribers
+var eventManager = new EventManager<OrderEvent>();
+
+// Multiple subscribers
+eventManager.subscribe(OrderCreated.class, event -> {
+    emailService.sendOrderConfirmation(event);
+});
+
+eventManager.subscribe(OrderCreated.class, event -> {
+    analyticsSystem.trackOrderCreated(event);
+});
+
+eventManager.subscribe(OrderCreated.class, event -> {
+    inventoryService.reserveItems(event);
+});
+
+// Publish event
+eventManager.publish(new OrderCreated("order-123", "cust-456", items, total, Instant.now()));
+```
+
+### Event Sourcing
+
+```java
+// Store events as source of truth
+var eventStore = new EventStore<OrderEvent>();
+
+// Command handler generates events
+var orderHandler = new Proc<OrderState, CommandMessage>(
+    OrderState.empty(),
+    (state, cmd) -> switch (cmd) {
+        case CreateOrder(var orderId, var customerId, var items) -> {
+            // Validate
+            if (items.isEmpty()) {
+                yield state; // Or throw
+            }
+
+            // Generate event
+            var event = new OrderCreated(
+                orderId, customerId, items,
+                calculateTotal(items),
+                Instant.now()
+            );
+
+            // Persist event
+            eventStore.append(event);
+
+            // Apply event to state
+            yield state.apply(event);
+        }
+    }
+);
+
+// Rebuild state from events
+OrderState currentState = eventStore.replay(OrderState.empty());
+```
+
+### Causality and Correlation
+
+```java
+// Link related events
+record CorrelatedEvent<T extends EventMessage> {
+    String correlationId;
+    String causationId;  // Event that caused this event
+    T event;
+    Instant timestamp;
+}
+
+// Event chain: OrderCreated -> OrderPaid -> OrderShipped
+var correlationId = UUID.randomUUID().toString();
+
+var created = new CorrelatedEvent<>(
+    correlationId,
+    null, // No causation - root event
+    new OrderCreated("order-123", "cust-456", items, total, Instant.now()),
+    Instant.now()
+);
+
+var paid = new CorrelatedEvent<>(
+    correlationId,
+    created.eventId(), // Caused by OrderCreated
+    new OrderPaid("order-123", "payment-789", total, Instant.now()),
+    Instant.now()
+);
+
+var shipped = new CorrelatedEvent<>(
+    correlationId,
+    paid.eventId(), // Caused by OrderPaid
+    new OrderShipped("order-123", "tracking-456", Instant.now()),
+    Instant.now()
+);
+```
+
+## Claim Check
+
+### Pattern Description
+
+The Claim Check pattern stores large message payloads externally and passes a lightweight token through the messaging pipeline. Claim checks reduce channel bandwidth and improve performance by preventing large messages from traversing multiple hops.
+
+### Implementation
+
+```java
+public final class ClaimCheck<T> {
+    public record CheckToken(UUID id) {
+        public static CheckToken create() {
+            return new CheckToken(UUID.randomUUID());
+        }
+    }
+
+    private final ConcurrentHashMap<UUID, T> store = new ConcurrentHashMap<>();
+
+    public CheckToken checkIn(T item) {
+        var token = CheckToken.create();
+        store.put(token.id(), item);
+        return token;
+    }
+
+    public Optional<T> claim(CheckToken token) {
+        return Optional.ofNullable(store.get(token.id()));
+    }
+
+    public Optional<T> checkOut(CheckToken token) {
+        return Optional.ofNullable(store.remove(token.id()));
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Large payload (e.g., PDF, video, large JSON)
+record InvoiceDocument {
+    String invoiceId;
+    byte[] pdfData;  // 5MB PDF
+    List<InvoiceLineItem> lineItems;
+    Metadata metadata;
+}
+
+// Store large document
+var claimCheck = new ClaimCheck<InvoiceDocument>();
+var invoice = new InvoiceDocument("inv-123", pdfBytes, items, metadata);
+var token = claimCheck.checkIn(invoice);
+
+// Pass only token through pipeline
+var message = new ProcessInvoiceCommand("inv-123", token);
+processor.tell(message);
+
+// Retrieve when needed
+in the processor:
+var doc = claimCheck.checkOut(token).orElseThrow();
+processInvoicePdf(doc.pdfData());
+```
+
+### Multi-Stage Processing
+
+```java
+// Pipeline with multiple stages
+var store = new ClaimCheck<LargePayload>();
+
+// Stage 1: Upload and check in
+var token = store.checkIn(uploadedFile);
+
+// Stage 2: Validation (pass token only)
+validationService.validate(token);
+
+// Stage 3: Thumbnail generation (pass token only)
+thumbnailService.generateThumbnail(token);
+
+// Stage 4: Final processing (retrieve and process)
+var payload = store.checkOut(token).orElseThrow();
+finalProcessingService.process(payload);
+```
+
+### Distributed Claim Checks
+
+```java
+// Use Redis for distributed claim checks
+class RedisClaimCheck<T> implements ClaimCheck<T> {
+    private final RedisClient redis;
+
+    public CheckToken checkIn(T item) {
+        var token = CheckToken.create();
+        var serialized = serializer.serialize(item);
+        redis.setex(token.id(), 3600, serialized); // 1 hour TTL
+        return token;
+    }
+
+    public Optional<T> claim(CheckToken token) {
+        var serialized = redis.get(token.id());
+        if (serialized == null) {
+            return Optional.empty();
+        }
+        return Optional.of(serializer.deserialize(serialized));
+    }
+}
+```
+
+### Persistence and Recovery
+
+```java
+// Persist claim checks to database for recovery
+class PersistentClaimCheck<T> {
+    private final ClaimCheckRepository repo;
+
+    public CheckToken checkIn(T item, Duration ttl) {
+        var token = CheckToken.create();
+        var entity = new ClaimCheckEntity(
+            token.id(),
+            serializer.serialize(item),
+            Instant.now(),
+            Instant.now().plus(ttl)
+        );
+        repo.save(entity);
+        return token;
+    }
+
+    public Optional<T> claim(CheckToken token) {
+        return repo.findById(token.id())
+            .filter(entity -> entity.expiresAt().isAfter(Instant.now()))
+            .map(entity -> serializer.deserialize(entity.data()));
+    }
+
+    // Clean up expired claim checks
+    @Scheduled(fixedRate = 3600000) // Every hour
+    public void cleanupExpired() {
+        repo.deleteByExpiresAtBefore(Instant.now());
+    }
+}
+```
+
+## Best Practices
+
+### 1. Use Sealed Interfaces for Type Safety
+
+```java
+// Good: Exhaustive pattern matching
+sealed interface Command permits Buy, Sell, Cancel {}
+
+switch (cmd) {
+    case Buy b -> handleBuy(b);
+    case Sell s -> handleSell(s);
+    case Cancel c -> handleCancel(c);
+    // Compiler error if missing case
+}
+
+// Bad: String-based commands
+if (cmd.type().equals("BUY")) { ... }
+```
+
+### 2. Make Messages Immutable
+
+```java
+// Good: Immutable records
+record OrderCommand(String id, List<Item> items) {}
+
+// Bad: Mutable fields
+class MutableCommand {
+    private String id;
+    void setId(String id) { this.id = id; } // Unsafe!
+}
+```
+
+### 3. Include Metadata
+
+```java
+// Include correlation and causation IDs
+record EnrichedCommand<T> {
+    String commandId;
+    String correlationId;
+    String causationId;
+    Instant timestamp;
+    T payload;
+}
+```
+
+### 4. Version Messages
+
+```java
+// Version commands for backward compatibility
+sealed interface OrderCommand permits OrderCommandV1, OrderCommandV2 {}
+record OrderCommandV1(String orderId, List<Item> items) implements OrderCommand {}
+record OrderCommandV2(String orderId, List<Item> items, String customerNote) implements OrderCommand {}
+```
+
+## Message Design Guidelines
+
+### Commands vs Events
+
+```java
+// Command: Request to do something
+record CreateOrder(String customerId, List<Item> items) implements CommandMessage {}
+
+// Event: Notification that something happened
+record OrderCreated(String orderId, String customerId, List<Item> items, Instant createdAt) implements EventMessage {}
+```
+
+### Message Granularity
+
+```java
+// Coarse-grained: Single command with all data
+record CreateOrder(OrderData data) implements CommandMessage {}
+
+// Fine-grained: Multiple focused commands
+record StartOrder(String orderId) implements CommandMessage {}
+record AddOrderItem(String orderId, Item item) implements CommandMessage {}
+record SubmitOrder(String orderId) implements CommandMessage {}
+```
+
+### Error Handling
+
+```java
+// Use Result type for command responses
+record CommandResult<T> {
+    boolean success;
+    T result;
+    String error;
+}
+
+// Or use sealed types
+sealed interface CommandResult<T> permits Success, Failure {}
+record Success<T>(T value) implements CommandResult<T> {}
+record Failure<T>(String error) implements CommandResult<T> {}
+```
+
+## Summary
+
+Construction patterns define message structure and intent:
+
+- **Command Message**: Imperative instructions ("do this")
+- **Document Message**: Data payload ("here's information")
+- **Event Message**: Notification of fact ("this happened")
+- **Claim Check**: Store large payloads, pass lightweight tokens
+
+These patterns form the vocabulary of your messaging system. Use them consistently to create clear, type-safe communication protocols.
+
+## Further Reading
+
+- [Enterprise Integration Patterns: Chapter 6](https://www.enterpriseintegrationpatterns.com/patterns/messaging/) - Original EIP construction patterns
+- [Martin Fowler: Event Carried State Transfer](https://martinfowler.com/articles/patterns-of-distributed-systems/#event-carried-state-transfer) - Event design
+- [JOTP Event Manager](../../../concurrency/event-manager/) - Event broadcasting
+- [JOTP Sealed Types Guide](../../../language-features/sealed-types/) - Type-safe message hierarchies

@@ -4,10 +4,93 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Sealed interface representing a single health check.
+ * Sealed interface representing a single health check for service monitoring.
  *
- * <p>Health checks are non-invasive probes of service health. They can be synchronous or
- * asynchronous and should not kill the target service if they fail.
+ * <p>Health checks are non-invasive probes of service health that can be synchronous or
+ * asynchronous. They are designed to detect service degradation without killing the target service
+ * on failures (unlike {@link io.github.seanchatmangpt.jotp.ProcLink} crash propagation).
+ *
+ * <h2>Check Types:</h2>
+ *
+ * <ul>
+ *   <li><b>Liveness</b>: Is the service process still running? Implemented via {@link
+ *       io.github.seanchatmangpt.jotp.ProcMonitor} to detect process crashes without stopping the
+ *       target. Essential for detecting deadlocked or crashed processes
+ *   <li><b>Readiness</b>: Can the service handle requests? Typically involves sending a test HTTP
+ *       request to a health endpoint and validating the response. Used by load balancers for
+ *       traffic routing decisions
+ *   <li><b>Startup</b>: Has the service completed initialization? Can query service state via
+ *       {@link io.github.seanchatmangpt.jotp.ProcSys} without stopping the service. Useful for
+ *       detecting slow startup or initialization failures
+ *   <li><b>Custom</b>: User-provided async check function for domain-specific health logic. Allows
+ *       checking databases, external APIs, file systems, or any other dependency
+ * </ul>
+ *
+ * <h2>Usage Example:</h2>
+ *
+ * <pre>{@code
+ * // Liveness check: process alive
+ * HealthCheck liveness = new HealthCheck.Liveness("process-alive");
+ *
+ * // Readiness check: HTTP endpoint
+ * HealthCheck readiness = new HealthCheck.Readiness(
+ *     "http-ready",
+ *     "http://localhost:8080/health/ready"
+ * );
+ *
+ * // Startup check: state query
+ * HealthCheck startup = new HealthCheck.Startup(
+ *     "initialized",
+ *     "is_initialized"
+ * );
+ *
+ * // Custom check: database connection
+ * HealthCheck dbCheck = new HealthCheck.Custom(
+ *     "database",
+ *     timeout -> CompletableFuture.supplyAsync(() -> {
+ *         try (Connection conn = dataSource.getConnection()) {
+ *             return conn.isValid(5);
+ *         } catch (SQLException e) {
+ *             return false;
+ *         }
+ *     })
+ * );
+ * }</pre>
+ *
+ * <h2>Check Function Interface:</h2>
+ *
+ * The {@link CheckFunction} interface defines async check execution:
+ *
+ * <ul>
+ *   <li>Input: {@link Duration} timeout for the check
+ *   <li>Output: {@link CompletableFuture<Boolean>} where true = healthy, false = unhealthy
+ *   <li>Exceptions: Treated as unhealthy (caught by framework)
+ * </ul>
+ *
+ * <h2>Performance Considerations:</h2>
+ *
+ * <ul>
+ *   <li>Checks should be fast (< 5 seconds typical)
+ *   <li>Checks should be idempotent (can run multiple times)
+ *   <li>Checks should not have side effects
+ *   <li>Custom checks must respect timeout parameter
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Liveness checks use {@link io.github.seanchatmangpt.jotp.ProcMonitor} for non-invasive
+ *       monitoring
+ *   <li>Startup checks can use {@link io.github.seanchatmangpt.jotp.ProcSys} for state queries
+ *   <li>All checks are executed by {@link HealthCheckManager} in parallel
+ *   <li>Type-safe via sealed interface with exhaustive pattern matching
+ * </ul>
+ *
+ * @see HealthCheckManager
+ * @see HealthCheckResult
+ * @see io.github.seanchatmangpt.jotp.ProcMonitor
+ * @see io.github.seanchatmangpt.jotp.ProcSys
+ * @since 1.0
  */
 public sealed interface HealthCheck
         permits HealthCheck.Liveness,

@@ -1,0 +1,1385 @@
+# Enterprise Pattern Issues Troubleshooting Guide
+
+import { Tabs } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This guide covers troubleshooting for JOTP enterprise patterns including circuit breakers, bulkheads, backpressure, and sagas. These patterns provide production resilience but introduce complex failure modes that require systematic diagnosis.
+
+<Callout type="warning">
+  Enterprise pattern failures can cascade across your system. Always isolate the failing pattern before attempting fixes.
+</Callout>
+
+---
+
+## Circuit Breaker Issues
+
+### Symptoms
+
+- All requests failing fast (circuit stuck open)
+- Circuit not opening when dependency is down
+- Frequent state transitions (flapping)
+- Requests timing out despite circuit being closed
+- Metrics showing incorrect failure counts
+
+### Common Causes Checklist
+
+- [ ] Failure threshold too sensitive
+- [ ] Half-open timeout too short/long
+- [ ] Success detection not working
+- [ ] Clock skew in distributed environments
+- [ ] Exception classification incorrect
+- [ ] State corruption from concurrent access
+
+### Diagnostic Steps
+
+#### 1. Check Circuit Breaker State
+
+```java
+// Inspect circuit breaker state
+CircuitBreaker<?, ?, ?> cb = circuitBreakerRegistry.get("payment-service");
+
+System.out.println("State: " + cb.getState());
+System.out.println("Failure count: " + cb.getFailureCount());
+System.out.println("Last failure: " + cb.getLastFailureTime());
+System.out.println("Success count: " + cb.getSuccessCount());
+System.out.println("Opened at: " + cb.getOpenedAt());
+```
+
+#### 2. Monitor State Transitions
+
+```java
+// Add state transition logging
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .name("payment-service")
+    .failureThreshold(5)
+    .window(Duration.ofSeconds(60))
+    .halfOpenTimeout(Duration.ofSeconds(30))
+    .onStateTransition((oldState, newState) -> {
+        log.warn("Circuit breaker transition: {} -> {}", oldState, newState);
+        metrics.increment("circuit.breaker.transition",
+            "from", oldState.toString(),
+            "to", newState.toString());
+    })
+    .build();
+```
+
+#### 3. Verify Exception Classification
+
+```java
+// Check if exceptions are being counted correctly
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failurePredicate(exception -> {
+        // Log all exceptions for debugging
+        log.debug("Exception in circuit breaker: {} - {}",
+            exception.getClass().getSimpleName(),
+            exception.getMessage());
+
+        // Classify as failure
+        return shouldCountAsFailure(exception);
+    })
+    .build();
+```
+
+#### 4. Test Half-Open Behavior
+
+```java
+// Simulate half-open transition
+@Test
+void testHalfOpenTransition() throws Exception {
+    CircuitBreaker<String, String, Exception> cb = createCircuitBreaker();
+
+    // Trigger opening
+    for (int i = 0; i < 5; i++) {
+        cb.execute("req", req -> { throw new IOException(); });
+    }
+
+    assertEquals(State.OPEN, cb.getState());
+
+    // Wait for half-open timeout
+    Thread.sleep(31000);
+
+    // Should now be half-open
+    assertEquals(State.HALF_OPEN, cb.getState());
+
+    // First request in half-open determines state
+    var result = cb.execute("req", req -> "success");
+    assertEquals(State.CLOSED, cb.getState());
+}
+```
+
+### Solutions
+
+#### Solution 1: Fix Circuit Stuck Open
+
+**Problem:** Circuit opens but never closes despite service being healthy
+
+**Root Causes:**
+- Half-open timeout too short
+- Success detection not working
+- Network issues preventing probe requests
+
+```java
+// Bad: Half-open timeout too short
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .halfOpenTimeout(Duration.ofSeconds(1))  // Too short!
+    .build();
+
+// Good: Allow sufficient time for recovery
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .halfOpenTimeout(Duration.ofSeconds(30))  // Reasonable
+    .halfOpenTimeout(Duration.ofMinutes(2))   // For slow services
+    .build();
+
+// Add success detection
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .successPredicate(result -> {
+        // Verify result is actually successful
+        return result != null && result.isValid();
+    })
+    .build();
+```
+
+#### Solution 2: Prevent Circuit Flapping
+
+**Problem:** Circuit rapidly transitions between open and closed
+
+**Root Cause:** Failure threshold and window size misconfigured
+
+```java
+// Bad: Threshold too sensitive
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(2)  // Too low!
+    .window(Duration.ofSeconds(5))  // Too short!
+    .build();
+
+// Good: Balanced configuration
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(10)  // Reasonable threshold
+    .window(Duration.ofSeconds(60))  // One-minute window
+    // Calculate: failure rate = threshold / window
+    // Example: 10 failures per minute = 0.167 failures/sec
+    .build();
+
+// Alternative: Use percentage-based threshold
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(50)  // 50% failure rate
+    .window(Duration.ofSeconds(60))
+    .minimumRequests(10)  // Need at least 10 requests
+    .build();
+```
+
+#### Solution 3: Handle Distributed Clock Skew
+
+**Problem:** Circuit breaker state inconsistent across nodes
+
+**Root Cause:** Clock differences between nodes
+
+```java
+// Bad: Relying on local clock
+Instant now = Instant.now();  // May differ between nodes
+
+// Good: Use logical clock or centralized time
+public class CircuitBreakerState {
+    private final AtomicLong lastFailureTime = new AtomicLong();
+
+    public void recordFailure() {
+        // Use monotonic clock
+        lastFailureTime.set(System.nanoTime());
+    }
+
+    public boolean shouldReset() {
+        long elapsed = System.nanoTime() - lastFailureTime.get();
+        return elapsed > timeoutNanos;
+    }
+}
+
+// Or use distributed coordination
+public class DistributedCircuitBreaker {
+    private final CuratorFramework zkClient;
+
+    public State getState() {
+        try {
+            byte[] data = zkClient.getData()
+                .forPath("/circuit-breakers/payment-service");
+
+            // Read from distributed store
+            return State.parseFrom(data);
+        } catch (Exception e) {
+            log.error("Failed to read state", e);
+            return State.UNKNOWN;
+        }
+    }
+}
+```
+
+#### Solution 4: Correct Exception Classification
+
+**Problem:** Business exceptions counted as failures (or vice versa)
+
+```java
+// Bad: All exceptions counted as failures
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failurePredicate(ex -> true)  // Too broad!
+    .build();
+
+// Good: Selective failure counting
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failurePredicate(ex -> {
+        // Count system errors as failures
+        if (ex instanceof IOException) return true;
+        if (ex instanceof TimeoutException) return true;
+        if (ex instanceof ConnectException) return true;
+
+        // Don't count business errors
+        if (ex instanceof ValidationException) return false;
+        if (ex instanceof NotFoundException) return false;
+
+        // Log unknown exceptions
+        log.warn("Unknown exception type: {}", ex.getClass());
+        return true;  // Conservative: count as failure
+    })
+    .build();
+
+// Alternative: Whitelist approach
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failurePredicate(ex -> {
+        return ex instanceof SystemException  // Only system errors
+            || ex.getCause() instanceof SystemException;
+    })
+    .build();
+```
+
+### Prevention Strategies
+
+- **Test circuit breaker behavior** in staging with realistic failure scenarios
+- **Monitor state transitions** and alert on flapping
+- **Use appropriate thresholds** based on service SLA
+- **Classify exceptions carefully** to avoid false positives
+- **Implement health checks** to detect service recovery
+- **Document threshold rationale** (why 5 failures? why 60 seconds?)
+- **Review metrics weekly** to tune thresholds
+
+---
+
+## Bulkhead Isolation Issues
+
+### Symptoms
+
+- Requests rejected when system appears healthy
+- Bulkhead not limiting concurrency
+- Deadlocks when acquiring bulkhead permits
+- Uneven load distribution across bulkheads
+- Memory leaks from bulkhead queue buildup
+
+### Common Causes Checklist
+
+- [ ] Permit count misconfigured
+- [ ] Queue policy incorrect
+- [ ] Timeout settings too aggressive
+- [ ] Permit leaks (not released)
+- [ ] Thread pool exhaustion
+- [ ] Priority inversion
+
+### Diagnostic Steps
+
+#### 1. Check Bulkhead Statistics
+
+```java
+// Inspect bulkhead state
+BulkheadIsolation bulkhead = bulkheadRegistry.get("database-operations");
+
+System.out.println("Active permits: " + bulkhead.getActivePermits());
+System.out.println("Available permits: " + bulkhead.getAvailablePermits());
+System.out.println("Queue size: " + bulkhead.getQueueSize());
+System.out.println("Rejected requests: " + bulkhead.getRejectedCount());
+System.out.println("Waiting threads: " + bulkhead.getWaitingThreadCount());
+```
+
+#### 2. Monitor Permit Acquisition
+
+```java
+// Add monitoring to bulkhead
+BulkheadConfig config = BulkheadConfig.builder()
+    .name("database-operations")
+    .maxConcurrent(10)
+    .maxWaitTime(Duration.ofSeconds(5))
+    .onAcquisition(permit -> {
+        log.debug("Permit acquired: {}", permit);
+        metrics.increment("bulkhead.permit.acquired",
+            "bulkhead", "database-operations");
+    })
+    .onRelease(permit -> {
+        log.debug("Permit released: {}", permit);
+        metrics.increment("bulkhead.permit.released",
+            "bulkhead", "database-operations");
+    })
+    .onRejection(() -> {
+        log.warn("Request rejected due to bulkhead");
+        metrics.increment("bulkhead.request.rejected",
+            "bulkhead", "database-operations");
+    })
+    .build();
+```
+
+#### 3. Detect Permit Leaks
+
+```java
+// Monitor for permit leaks
+@Scheduled(fixedRate = 60000)
+public void checkPermitLeaks() {
+    BulkheadIsolation bulkhead = bulkheadRegistry.get("database-operations");
+
+    long active = bulkhead.getActivePermits();
+    long completed = metrics.getCounter("bulkhead.operations.completed");
+
+    if (active > completed) {
+        log.error("Possible permit leak: active={}, completed={}", active, completed);
+        alerting.sendAlert("Bulkhead permit leak detected");
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Fix Permit Leaks
+
+**Problem:** Permits acquired but never released
+
+**Root Cause:** Exceptions not handled in finally blocks
+
+```java
+// Bad: Permit not released on exception
+public void executeWithBulkhead(Runnable operation) {
+    bulkhead.acquire();  // Acquire permit
+    operation.run();      // May throw exception
+    bulkhead.release();   // Never reached!
+}
+
+// Good: Always release in finally
+public void executeWithBulkhead(Runnable operation) {
+    bulkhead.acquire();
+    try {
+        operation.run();
+    } finally {
+        bulkhead.release();  // Always executed
+    }
+}
+
+// Better: Use try-with-resources pattern
+public class BulkheadPermit implements AutoCloseable {
+    private final BulkheadIsolation bulkhead;
+
+    public BulkheadPermit(BulkheadIsolation bulkhead) {
+        this.bulkhead = bulkhead;
+        this.bulkhead.acquire();
+    }
+
+    @Override
+    public void close() {
+        bulkhead.release();
+    }
+}
+
+// Usage
+try (var permit = new BulkheadPermit(bulkhead)) {
+    operation.run();
+}  // Automatically released
+```
+
+#### Solution 2: Optimize Permit Count
+
+**Problem:** Too few permits (rejections) or too many (no isolation)
+
+```java
+// Calculate optimal permit count
+public class BulkheadCapacityCalculator {
+
+    public int calculateOptimalPermits(
+        double targetResponseTimeMs,
+        double serviceTimeMs,
+        double maxLatencyMs
+    ) {
+        // Little's Law: L = λW
+        // L = average number in system
+        // λ = arrival rate
+        // W = average time in system
+
+        // For bulkhead:
+        // permits = (target_response_time / service_time)
+        // adjusted for max latency
+
+        double basePermits = targetResponseTimeMs / serviceTimeMs;
+        double latencyFactor = maxLatencyMs / targetResponseTimeMs;
+
+        return (int) Math.ceil(basePermits * latencyFactor);
+    }
+}
+
+// Example:
+// Target response time: 100ms
+// Service time: 20ms
+// Max acceptable latency: 200ms
+// permits = (100 / 20) * (200 / 100) = 5 * 2 = 10 permits
+
+BulkheadConfig config = BulkheadConfig.builder()
+    .maxConcurrent(10)  // Calculated above
+    .build();
+```
+
+#### Solution 3: Handle Bulkhead Rejection
+
+**Problem:** Requests fail when bulkhead full
+
+```java
+// Bad: Throw exception immediately
+try {
+    bulkhead.acquire();
+} catch (BulkheadFullException e) {
+    throw new RuntimeException("Bulkhead full", e);
+}
+
+// Good: Fallback with queue or alternative
+public Result<T, Exception> executeWithBulkhead(
+    Supplier<T> operation,
+    Supplier<T> fallback
+) {
+    if (!bulkhead.tryAcquire(Duration.ofSeconds(5))) {
+        // Try fallback strategy
+        log.warn("Bulkhead full, using fallback");
+        return Result.success(fallback.get());
+    }
+
+    try {
+        return Result.success(operation.get());
+    } catch (Exception e) {
+        return Result.failure(e);
+    } finally {
+        bulkhead.release();
+    }
+}
+
+// Alternative: Queue with timeout
+public Future<T> submitToBulkhead(
+    Supplier<T> operation
+) {
+    CompletableFuture<T> future = new CompletableFuture<>();
+
+    executor.submit(() -> {
+        try {
+            if (bulkhead.tryAcquire(Duration.ofSeconds(10))) {
+                try {
+                    T result = operation.get();
+                    future.complete(result);
+                } finally {
+                    bulkhead.release();
+                }
+            } else {
+                future.completeExceptionally(
+                    new TimeoutException("Bulkhead acquisition timeout"));
+            }
+        } catch (Exception e) {
+            future.completeExceptionally(e);
+        }
+    });
+
+    return future;
+}
+```
+
+#### Solution 4: Priority-Based Bulkheads
+
+**Problem:** High-priority requests blocked by low-priority ones
+
+```java
+// Implement priority bulkhead
+public class PriorityBulkheadIsolation {
+    private final Map<Priority, BulkheadIsolation> bulkheads;
+    private final int[] priorityPermits;
+
+    public boolean tryAcquire(Priority priority, Duration timeout) {
+        BulkheadIsolation bulkhead = bulkheads.get(priority);
+
+        // Try priority-specific bulkhead first
+        if (bulkhead.tryAcquire(timeout)) {
+            return true;
+        }
+
+        // Try borrowing from lower priority bulkheads
+        if (priority == Priority.HIGH) {
+            for (Priority p : Priority.values()) {
+                if (p.ordinal() < priority.ordinal()) {
+                    if (bulkheads.get(p).tryAcquire(Duration.ZERO)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+}
+
+// Usage
+bulkhead.tryAcquire(Priority.HIGH, Duration.ofSeconds(5));
+```
+
+### Prevention Strategies
+
+- **Always use try-finally** for permit acquisition
+- **Monitor permit leaks** with automated alerts
+- **Calculate permit count** based on service characteristics
+- **Implement fallback strategies** for rejections
+- **Use priority queues** for mixed workloads
+- **Test under load** to verify isolation
+- **Set timeouts** on permit acquisition
+
+---
+
+## Backpressure Issues
+
+### Symptoms
+
+- OutOfMemoryError from unbounded queues
+- Requests timing out waiting for backpressure
+- System overload despite backpressure enabled
+- Slow consumer blocking fast producers
+- Metrics showing queue overflow
+
+### Common Causes Checklist
+
+- [ ] Unbounded mailbox/queue
+- [ ] No backpressure mechanism
+- [ ] Consumer too slow
+- [ ] Producer rate not limited
+- [ ] Buffer size misconfigured
+- [ ] Notification strategy incorrect
+
+### Diagnostic Steps
+
+#### 1. Check Queue Depths
+
+```java
+// Monitor queue sizes across the system
+public class BackpressureMonitor {
+
+    @Scheduled(fixedRate = 5000)
+    public void checkQueueDepths() {
+        ProcRegistry.getInstance().stream()
+            .forEach(proc -> {
+                ProcInspection inspection = ProcSys.inspect(proc.id());
+
+                int mailboxSize = inspection.mailboxSize();
+                int mailboxCapacity = inspection.mailboxCapacity();
+
+                double usagePercent = (double) mailboxSize / mailboxCapacity * 100;
+
+                if (usagePercent > 80) {
+                    log.warn("High mailbox usage: {}% - {}",
+                        usagePercent, proc.id());
+
+                    metrics.recordGauge("proc.mailbox.usage",
+                        usagePercent,
+                        "proc", proc.id().toString());
+                }
+
+                if (mailboxSize == mailboxCapacity) {
+                    log.error("Mailbox full: {}", proc.id());
+                    alerting.sendAlert("Mailbox overflow: " + proc.id());
+                }
+            });
+    }
+}
+```
+
+#### 2. Measure Consumer/Producer Rates
+
+```java
+// Track producer/consumer rates
+public class RateTracker {
+
+    private final AtomicLong producerCount = new AtomicLong(0);
+    private final AtomicLong consumerCount = new AtomicLong(0);
+    private final Instant windowStart = Instant.now();
+
+    public void recordProduced() {
+        producerCount.incrementAndGet();
+    }
+
+    public void recordConsumed() {
+        consumerCount.incrementAndGet();
+    }
+
+    @Scheduled(fixedRate = 10000)
+    public void reportRates() {
+        long produced = producerCount.getAndSet(0);
+        long consumed = consumerCount.getAndSet(0);
+        long elapsed = Duration.between(windowStart, Instant.now()).getSeconds();
+
+        double producerRate = (double) produced / elapsed;
+        double consumerRate = (double) consumed / elapsed;
+
+        log.info("Producer rate: {}/s, Consumer rate: {}/s",
+            producerRate, consumerRate);
+
+        if (producerRate > consumerRate * 1.5) {
+            log.warn("Producer outrunning consumer: {} vs {}",
+                producerRate, consumerRate);
+        }
+    }
+}
+```
+
+#### 3. Detect Backpressure Violations
+
+```java
+// Monitor for backpressure violations
+ProcSpec<MyState, MyMsg> spec = ProcSpec.<MyState, MyMsg>builder()
+    .mailboxPolicy(MailboxPolicy.BOUNDED)
+    .mailboxSize(10000)
+    .onFull((msg) -> {
+        metrics.increment("mailbox.overflow");
+
+        // Check if this is a pattern
+        long overflowCount = metrics.getCounter("mailbox.overflow");
+        if (overflowCount > 100) {
+            log.error("Excessive mailbox overflows: {}", overflowCount);
+
+            // Trigger backpressure
+            eventBus.publish(new BackpressureTriggered(
+                procId,
+                overflowCount
+            ));
+        }
+
+        // Send to dead letter queue instead of dropping
+        deadLetterChannel.send(new DeadLetter(msg, "mailbox.full"));
+    })
+    .build();
+```
+
+### Solutions
+
+#### Solution 1: Implement Bounded Mailboxes
+
+**Problem:** Unbounded mailboxes cause OutOfMemoryError
+
+```java
+// Bad: Unbounded mailbox (default)
+ProcSpec<MyState, MyMsg> spec = ProcSpec.builder()
+    .build();  // Unbounded!
+
+// Good: Bounded mailbox
+ProcSpec<MyState, MyMsg> spec = ProcSpec.<MyState, MyMsg>builder()
+    .mailboxPolicy(MailboxPolicy.BOUNDED)
+    .mailboxSize(10000)  // Maximum 10,000 messages
+    .onFull((msg) -> {
+        // Handle overflow
+        log.warn("Mailbox full, dropping message: {}", msg);
+
+        // Option 1: Drop
+        // Message is discarded
+
+        // Option 2: Dead letter queue
+        deadLetterChannel.send(new DeadLetter(msg, "mailbox.full"));
+
+        // Option 3: Block producer
+        // throw new MailboxFullException();
+
+        // Option 4: Fallback
+        fallbackHandler.handle(msg);
+    })
+    .build();
+
+// Calculate appropriate mailbox size
+int mailboxSize = calculateMailboxSize(
+    consumerLatencyMs,      // 100ms
+    producerRatePerSec,     // 1000 msg/s
+    maxAcceptableLagMs      // 5000ms
+);
+// messages_in_lag = producer_rate * lag
+// mailbox_size = 1000 * (5000 / 1000) = 5000 messages
+```
+
+#### Solution 2: Implement Reactive Pull
+
+**Problem:** Producer floods consumer
+
+```java
+// Implement pull-based backpressure
+public class PullBasedConsumer<S, M> extends Proc<S, M> {
+
+    private final ProcRef<Producer, ProducerCmd> producer;
+    private final int batchSize;
+
+    @Override
+    protected void init() {
+        // Request initial batch
+        requestBatch();
+    }
+
+    private void requestBatch() {
+        producer.send(new RequestBatch(self(), batchSize));
+    }
+
+    @Override
+    protected void handle(M msg) {
+        processMessage(msg);
+
+        // Request more when buffer low
+        if (mailboxSize() < batchSize / 2) {
+            requestBatch();
+        }
+    }
+}
+
+// Producer respects credit
+public class CreditBasedProducer extends Proc<ProducerState, ProducerCmd> {
+
+    @Override
+    protected void handle(RequestBatch req) {
+        int availableCredit = state.availableCredit();
+
+        if (availableCredit > 0) {
+            int sendCount = Math.min(req.batchSize(), availableCredit);
+
+            for (int i = 0; i < sendCount; i++) {
+                req.consumerRef().send(createMessage());
+                state.decrementCredit();
+            }
+        }
+    }
+
+    @Override
+    protected void handle(Acknowledgment ack) {
+        // Increment credit when message acknowledged
+        state.incrementCredit();
+
+        // Send more if credit available
+        if (state.hasPendingRequests()) {
+            sendPendingMessages();
+        }
+    }
+}
+```
+
+#### Solution 3: Implement Rate Limiting
+
+**Problem:** Producer rate exceeds system capacity
+
+```java
+// Rate limit producers
+public class RateLimiter {
+
+    private final Semaphore permits;
+    private final ScheduledExecutorService scheduler;
+
+    public RateLimiter(double permitsPerSecond) {
+        this.permits = new Semaphore(100);  // Initial burst capacity
+        this.scheduler = Executors.newScheduledThreadPool(1);
+
+        // Refill permits at constant rate
+        double permitIntervalMs = 1000.0 / permitsPerSecond;
+
+        scheduler.scheduleAtFixedRate(() -> {
+            permits.release(1);
+        }, (long) permitIntervalMs, (long) permitIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    public <T> T execute(Supplier<T> operation) throws Exception {
+        // Block until permit available
+        permits.acquire();
+        try {
+            return operation.get();
+        } finally {
+            // Permit automatically recycled by scheduler
+        }
+    }
+
+    public boolean tryExecute(Supplier<T> operation, Duration timeout) {
+        try {
+            if (permits.tryAcquire(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+                return true;
+            }
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+}
+
+// Usage
+RateLimiter rateLimiter = new RateLimiter(1000);  // 1000 msg/s
+
+protected void handle(OutboundMessage msg) {
+    rateLimiter.execute(() -> {
+        producer.send(msg);
+        return null;
+    });
+}
+```
+
+#### Solution 4: Implement Adaptive Throttling
+
+**Problem:** Static rate limits don't adapt to load
+
+```java
+// Adaptive throttling based on system metrics
+public class AdaptiveThrottler {
+
+    private final MeterRegistry registry;
+    private volatile double currentRateLimit;
+
+    @Scheduled(fixedRate = 5000)
+    public void adjustRateLimit() {
+        // Get system metrics
+        double cpuUsage = registry.get("system.cpu.usage").gauge().value();
+        double memoryUsage = registry.get("jvm.memory.used").gauge().value();
+        double mailboxUsage = registry.get("proc.mailbox.usage").gauge().value();
+
+        // Calculate target rate
+        double targetRate = calculateTargetRate(
+            cpuUsage,
+            memoryUsage,
+            mailboxUsage
+        );
+
+        // Smooth transitions (exponential moving average)
+        currentRateLimit = 0.7 * currentRateLimit + 0.3 * targetRate;
+
+        log.info("Adjusted rate limit: {}/s", currentRateLimit);
+    }
+
+    private double calculateTargetRate(double cpu, double mem, double mailbox) {
+        // Reduce rate if any metric is high
+        if (cpu > 0.8 || mem > 0.8 || mailbox > 0.9) {
+            return currentRateLimit * 0.8;  // Reduce by 20%
+        }
+
+        // Increase rate if system is healthy
+        if (cpu < 0.5 && mem < 0.5 && mailbox < 0.5) {
+            return currentRateLimit * 1.1;  // Increase by 10%
+        }
+
+        return currentRateLimit;  // No change
+    }
+
+    public boolean tryAcquire(Duration timeout) {
+        return rateLimiter.tryExecute(() -> null, timeout);
+    }
+}
+```
+
+### Prevention Strategies
+
+- **Always use bounded mailboxes** in production
+- **Implement pull-based backpressure** for high-throughput systems
+- **Monitor queue depths** and set alert thresholds
+- **Use rate limiting** on producers
+- **Implement adaptive throttling** based on system metrics
+- **Test flood scenarios** in staging
+- **Document capacity limits** (max messages/sec, max latency)
+
+---
+
+## Saga Issues
+
+### Symptoms
+
+- Saga stuck in non-terminal state
+- Compensating actions not executing
+- Saga steps executing out of order
+- Duplicate saga executions
+- Saga state corruption
+- Compensation failures
+
+### Common Causes Checklist
+
+- [ ] Saga coordinator crash
+- [ ] Compensating action throws exception
+- [ ] Saga timeout too short
+- [ ] Idempotency not implemented
+- [ ] State persistence failure
+- [ ] Network partition during saga
+
+### Diagnostic Steps
+
+#### 1. Check Saga State
+
+```java
+// Inspect saga state
+SagaOrchestrator orchestrator = sagaRegistry.get(sagaId);
+
+System.out.println("Saga ID: " + orchestrator.getSagaId());
+System.out.println("State: " + orchestrator.getState());
+System.out.println("Current step: " + orchestrator.getCurrentStep());
+System.out.println("Completed steps: " + orchestrator.getCompletedSteps());
+System.out.println("Failed step: " + orchestrator.getFailedStep());
+System.out.println("Created at: " + orchestrator.getCreatedAt());
+System.out.println("Last updated: " + orchestrator.getLastUpdatedAt());
+```
+
+#### 2. Monitor Saga Progress
+
+```java
+// Add saga progress monitoring
+SagaConfig config = SagaConfig.builder()
+    .sagaId("order-payment")
+    .onStepComplete((step, result) -> {
+        log.info("Saga step complete: {} - {}", step, result);
+        metrics.increment("saga.step.complete",
+            "saga", "order-payment",
+            "step", step.name());
+    })
+    .onStepFailure((step, error) -> {
+        log.error("Saga step failed: {} - {}", step, error);
+        metrics.increment("saga.step.failure",
+            "saga", "order-payment",
+            "step", step.name(),
+            "error", error.getClass().getSimpleName());
+    })
+    .onCompensation((step) -> {
+        log.warn("Compensating step: {}", step);
+        metrics.increment("saga.compensation",
+            "saga", "order-payment",
+            "step", step.name());
+    })
+    .onComplete((result) -> {
+        log.info("Saga complete: {}", result);
+        metrics.recordTimer("saga.duration",
+            result.durationMs(),
+            "saga", "order-payment",
+            "status", result.isSuccess() ? "success" : "failure");
+    })
+    .build();
+```
+
+#### 3. Detect Stuck Sagas
+
+```java
+// Monitor for stuck sagas
+@Scheduled(fixedRate = 60000)
+public void detectStuckSagas() {
+    List<SagaOrchestrator> stuckSagas = sagaRegistry.findAll().stream()
+        .filter(saga -> !saga.getState().isTerminal())
+        .filter(saga -> {
+            Duration age = Duration.between(
+                saga.getCreatedAt(),
+                Instant.now()
+            );
+            return age.compareTo(Duration.ofMinutes(10)) > 0;
+        })
+        .toList();
+
+    if (!stuckSagas.isEmpty()) {
+        log.error("Found {} stuck sagas", stuckSagas.size());
+
+        stuckSagas.forEach(saga -> {
+            log.error("Stuck saga: {} - state={}, age={}min",
+                saga.getSagaId(),
+                saga.getState(),
+                Duration.between(saga.getCreatedAt(), Instant.now()).toMinutes());
+
+            alerting.sendAlert("Stuck saga: " + saga.getSagaId());
+        });
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Handle Compensating Action Failures
+
+**Problem:** Compensating action throws exception, saga stuck
+
+```java
+// Bad: Compensating action throws exception
+SagaStep step = SagaStep.builder()
+    .action(() -> paymentService.charge(amount))
+    .compensation(() -> paymentService.refund(amount))  // May throw!
+    .build();
+
+// Good: Compensating action never throws
+SagaStep step = SagaStep.builder()
+    .action(() -> paymentService.charge(amount))
+    .compensation(() -> {
+        try {
+            paymentService.refund(amount);
+        } catch (Exception e) {
+            log.error("Compensation failed, recording for manual intervention", e);
+
+            // Record failed compensation
+            failedCompensationRegistry.record(
+                sagaId,
+                "refund",
+                amount,
+                e
+            );
+
+            // Continue compensation
+            return CompensationResult.FAILED_RECORDED;
+        }
+    })
+    .build();
+
+// Better: Idempotent compensating actions
+SagaStep step = SagaStep.builder()
+    .action(() -> paymentService.charge(amount))
+    .compensation(() -> {
+        // Idempotent: safe to retry
+        refundService.refundWithIdempotency(
+            sagaId,
+            amount,
+            attemptNumber
+        );
+    })
+    .build();
+```
+
+#### Solution 2: Implement Saga Timeouts
+
+**Problem:** Saga stuck waiting for response
+
+```java
+// Add timeout to saga steps
+SagaStep step = SagaStep.builder()
+    .name("payment")
+    .action(() -> paymentService.charge(amount))
+    .timeout(Duration.ofSeconds(30))
+    .onTimeout(() -> {
+        log.warn("Payment step timed out");
+
+        // Mark step as failed to trigger compensation
+        throw new TimeoutException("Payment timed out");
+    })
+    .compensation(() -> paymentService.refund(amount))
+    .build();
+
+// Add overall saga timeout
+SagaConfig config = SagaConfig.builder()
+    .sagaId("order-payment")
+    .timeout(Duration.ofMinutes(5))
+    .onTimeout((sagaId) -> {
+        log.error("Saga timed out: {}", sagaId);
+
+        // Trigger compensation for all completed steps
+        sagaRegistry.get(sagaId).compensate();
+    })
+    .build();
+```
+
+#### Solution 3: Implement Idempotent Saga Steps
+
+**Problem:** Duplicate saga executions cause side effects
+
+```java
+// Bad: Non-idempotent action
+SagaStep step = SagaStep.builder()
+    .action(() -> {
+        account.debit(amount);  // Not idempotent!
+    })
+    .build();
+
+// Good: Idempotent action
+SagaStep step = SagaStep.builder()
+    .action(() -> {
+        // Check if already executed
+        if (deduplicationCache.has(sagaId, "debit")) {
+            log.info("Debit already executed, skipping");
+            return;
+        }
+
+        // Execute action
+        account.debit(amount);
+
+        // Record execution
+        deduplicationCache.record(sagaId, "debit");
+    })
+    .build();
+
+// Alternative: Use idempotency keys
+SagaStep step = SagaStep.builder()
+    .action(() -> {
+        paymentService.chargeWithIdempotency(
+            amount,
+            IdempotencyKey.of(sagaId, "charge")
+        );
+    })
+    .build();
+```
+
+#### Solution 4: Persist Saga State
+
+**Problem:** Saga coordinator crash loses state
+
+```java
+// Persist saga state after each step
+public class PersistentSagaOrchestrator extends SagaOrchestrator {
+
+    private final SagaStateRepository repository;
+
+    @Override
+    protected void executeStep(SagaStep step) {
+        try {
+            // Execute step
+            StepResult result = step.execute();
+
+            // Persist state
+            repository.save(sagaId, new SagaState(
+                sagaId,
+                State.IN_PROGRESS,
+                currentStep + 1,
+                completedSteps,
+                result
+            ));
+
+            // Continue to next step
+            executeNextStep();
+
+        } catch (Exception e) {
+            // Persist failure state
+            repository.save(sagaId, new SagaState(
+                sagaId,
+                State.FAILED,
+                currentStep,
+                completedSteps,
+                e
+            ));
+
+            // Start compensation
+            compensate();
+        }
+    }
+
+    @Override
+    protected void compensate() {
+        List<SagaStep> completedSteps = getCompletedSteps();
+
+        // Compensate in reverse order
+        for (int i = completedSteps.size() - 1; i >= 0; i--) {
+            SagaStep step = completedSteps.get(i);
+
+            try {
+                step.compensate();
+
+                // Persist compensated state
+                repository.update(sagaId, State.COMPENSATING, i);
+
+            } catch (Exception e) {
+                log.error("Compensation failed for step {}", step, e);
+
+                // Record failed compensation
+                repository.saveCompensationFailure(sagaId, step, e);
+            }
+        }
+
+        // Mark saga as compensated
+        repository.save(sagaId, new SagaState(
+            sagaId,
+            State.COMPENSATED,
+            -1,
+            List.of(),
+            null
+        ));
+    }
+}
+```
+
+#### Solution 5: Handle Network Partitions
+
+**Problem:** Network partition causes inconsistent saga state
+
+```java
+// Implement distributed saga with consensus
+public class DistributedSagaOrchestrator {
+
+    private final ConsensusService consensus;
+
+    public void executeStep(SagaStep step) {
+        // Propose state change to cluster
+        consensus.propose(new SagaStateTransition(
+            sagaId,
+            State.IN_PROGRESS,
+            currentStep + 1
+        ));
+
+        // Wait for consensus
+        consensus.awaitQuorum(Duration.ofSeconds(5));
+
+        try {
+            // Execute step
+            StepResult result = step.execute();
+
+            // Commit state change
+            consensus.commit(new SagaStateTransition(
+                sagaId,
+                State.IN_PROGRESS,
+                currentStep + 1,
+                result
+            ));
+
+        } catch (Exception e) {
+            // Rollback state change
+            consensus.rollback(new SagaStateTransition(
+                sagaId,
+                State.FAILED,
+                currentStep,
+                e
+            ));
+
+            throw e;
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- **Implement idempotent actions** for all saga steps
+- **Persist saga state** after each step
+- **Add timeouts** to steps and overall saga
+- **Never throw in compensating actions**
+- **Monitor saga duration** and alert on stuck sagas
+- **Test saga failures** in staging
+- **Implement manual recovery** procedures
+- **Use distributed coordination** for multi-node sagas
+
+---
+
+## Quick Reference: Enterprise Pattern Commands
+
+<Tabs items={['Circuit Breaker', 'Bulkhead', 'Backpressure', 'Saga']}>
+
+<Tabs.Tab>
+```java
+// Check circuit breaker state
+CircuitBreaker<?, ?, ?> cb = registry.get("service-name");
+System.out.println("State: " + cb.getState());
+System.out.println("Failures: " + cb.getFailureCount());
+
+// Reset circuit breaker
+cb.reset();
+
+// Force circuit open
+cb.forceOpen();
+
+// Force circuit closed
+cb.forceClose();
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Check bulkhead state
+BulkheadIsolation bulkhead = registry.get("bulkhead-name");
+System.out.println("Active permits: " + bulkhead.getActivePermits());
+System.out.println("Queue size: " + bulkhead.getQueueSize());
+
+// Acquire permit with timeout
+if (bulkhead.tryAcquire(Duration.ofSeconds(5))) {
+    try {
+        // Execute operation
+    } finally {
+        bulkhead.release();
+    }
+}
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Check mailbox depth
+ProcInspection inspect = ProcSys.inspect(procId);
+System.out.println("Mailbox size: " + inspect.mailboxSize());
+System.out.println("Mailbox capacity: " + inspect.mailboxCapacity());
+
+// Configure bounded mailbox
+ProcSpec<MyState, MyMsg> spec = ProcSpec.<MyState, MyMsg>builder()
+    .mailboxPolicy(MailboxPolicy.BOUNDED)
+    .mailboxSize(10000)
+    .onFull((msg) -> {
+        deadLetterChannel.send(new DeadLetter(msg, "mailbox.full"));
+    })
+    .build();
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Check saga state
+SagaOrchestrator saga = registry.get(sagaId);
+System.out.println("State: " + saga.getState());
+System.out.println("Current step: " + saga.getCurrentStep());
+System.out.println("Failed step: " + saga.getFailedStep());
+
+// Retry stuck saga
+if (saga.getState() == State.FAILED) {
+    saga.retry();
+}
+
+// Force compensation
+saga.compensate();
+```
+</Tabs.Tab>
+
+</Tabs>
+
+---
+
+## Related Issues
+
+- **Runtime Issues:** See [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) for process lifecycle problems
+- **Performance Issues:** See [performance-issues.mdx](/docs/user-guide/troubleshooting/performance-issues) for memory and GC issues
+- **Production Issues:** See [production-issues.mdx](/docs/user-guide/troubleshooting/production-issues) for production monitoring
+
+---
+
+## Getting Help
+
+When reporting enterprise pattern issues, collect:
+
+1. **Pattern State**
+   ```java
+   // Circuit breaker
+   CircuitBreaker<?, ?, ?> cb = registry.get(name);
+   System.out.println(cb.getState());
+   System.out.println(cb.getFailureCount());
+
+   // Bulkhead
+   BulkheadIsolation bh = registry.get(name);
+   System.out.println(bh.getActivePermits());
+
+   // Saga
+   SagaOrchestrator saga = registry.get(sagaId);
+   System.out.println(saga.getState());
+   System.out.println(saga.getCompletedSteps());
+   ```
+
+2. **Configuration**
+   - Failure thresholds
+   - Timeout values
+   - Permit counts
+   - Buffer sizes
+
+3. **Metrics**
+   - State transition counts
+   - Rejection rates
+   - Queue depths
+   - Saga durations
+
+4. **Timeline**
+   - When did the pattern enter failure state?
+   - What changed recently?
+   - Is it recurring?
+
+<Callout type="info">
+  Enterprise patterns require careful tuning. Always test configuration changes in staging before deploying to production.
+</Callout>
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0
+**Maintainer:** JOTP Core Team

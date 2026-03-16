@@ -1,0 +1,448 @@
+---
+title: Proc API Reference
+description: Complete API reference for Proc<S,M> processes
+sidebar_position: 1
+---
+
+# Proc API Reference
+
+Complete API reference for JOTP's `Proc<S, M>` process primitive.
+
+## Overview
+
+`Proc<S, M>` represents a lightweight concurrent process with:
+- **State type** `S`: The process's state
+- **Message type** `M`: The type of messages it accepts
+- **Mailbox**: FIFO queue for incoming messages
+- **Handler**: Pure function `(S, M) -> S`
+
+## Core API
+
+### Factory Methods
+
+#### `spawn(String id, S initialState, BiFunction<S, M, S> handler)`
+
+Creates and starts a new process.
+
+```java
+Proc<String, String> proc = Proc.spawn(
+    "echo-server",
+    "initial",
+    (state, msg) -> msg
+);
+```
+
+**Parameters:**
+- `id`: Unique process identifier
+- `initialState`: Initial state value
+- `handler`: Pure function processing messages
+
+**Returns:** New `Proc<S, M>` instance
+
+**Throws:** `IllegalArgumentException` if id is null
+
+#### `spawnAnonymous(S initialState, BiFunction<S, M, S> handler)`
+
+Creates a process without registering it.
+
+```java
+Proc<String, String> proc = Proc.spawnAnonymous(
+    "initial",
+    (state, msg) -> msg
+);
+```
+
+**Use case:** Temporary processes not needing registry lookup
+
+### Message Operations
+
+#### `send(M message)`
+
+Sends a message to the process (fire-and-forget).
+
+```java
+proc.send("hello");
+```
+
+**Parameters:**
+- `message`: Message to send
+
+**Returns:** `void`
+
+**Non-blocking:** Returns immediately after enqueuing
+
+#### `ask(M message, Duration timeout)`
+
+Sends a message and waits for response.
+
+```java
+String response = proc.ask(new GetValue(), Duration.ofSeconds(5))
+    .join();
+```
+
+**Parameters:**
+- `message`: Request message
+- `timeout`: Maximum time to wait
+
+**Returns:** `CompletableFuture<S>` with response state
+
+**Throws:** `TimeoutException` if timeout expires
+
+#### `getState()`
+
+Gets the current process state.
+
+```java
+String state = proc.getState();
+```
+
+**Returns:** Current state `S`
+
+**Note:** For testing/debugging only (no synchronization)
+
+### Lifecycle Operations
+
+#### `stop()`
+
+Stops the process gracefully.
+
+```java
+proc.stop();
+```
+
+**Behavior:**
+- Waits for current message to process
+- Clears mailbox
+- Terminates virtual thread
+- Notifies linked/monitored processes
+
+**Returns:** `void`
+
+#### `isAlive()`
+
+Checks if process is running.
+
+```java
+if (proc.isAlive()) {
+    proc.send(message);
+}
+```
+
+**Returns:** `boolean`
+
+### Process Information
+
+#### `getId()`
+
+Gets the process identifier.
+
+```java
+String id = proc.getId();
+```
+
+**Returns:** Process ID string
+
+#### `getMailboxSize()`
+
+Gets the current mailbox size.
+
+```java
+int size = proc.getMailboxSize();
+```
+
+**Returns:** Number of messages in mailbox
+
+**Use case:** Monitoring and debugging
+
+## ProcRef<S, M>
+
+Stable reference to a process that survives supervisor restarts.
+
+### Factory Methods
+
+#### `of(String id, Supplier<Optional<Proc<S, M>>> lookup)`
+
+Creates a process reference.
+
+```java
+ProcRef<String, String> ref = ProcRef.of(
+    "my-service",
+    () -> ProcRegistry.lookup("my-service")
+);
+```
+
+**Use case:** Long-lived references to supervised processes
+
+### Operations
+
+#### `send(M message)`
+
+Sends message to referenced process.
+
+```java
+ref.send("hello");
+```
+
+**Behavior:** Resolves process via lookup and sends message
+
+#### `ask(M message, Duration timeout)`
+
+Sends request and waits for response.
+
+```java
+String response = ref.ask(new GetValue(), Duration.ofSeconds(5))
+    .join();
+```
+
+**Returns:** `CompletableFuture<S>`
+
+## Message Handler Patterns
+
+### Simple Handler
+
+```java
+Proc<Integer, String> proc = Proc.spawn(
+    "counter",
+    0,
+    (state, msg) -> {
+        if (msg.equals("increment")) {
+            return state + 1;
+        }
+        return state;
+    }
+);
+```
+
+### Pattern Matching Handler
+
+```java
+sealed interface Message permits Message.Increment, Message.Decrement {}
+record Increment() implements Message {}
+record Decrement() implements Message {}
+
+Proc<Integer, Message> proc = Proc.spawn(
+    "counter",
+    0,
+    (state, msg) -> switch (msg) {
+        case Increment() -> state + 1;
+        case Decrement() -> state - 1;
+    }
+);
+```
+
+### Request-Response Handler
+
+```java
+sealed interface Request permits Request.GetData {}
+record GetData(ProcRef<String, Request> replyTo) implements Request {}
+
+Proc<String, Request> proc = Proc.spawn(
+    "server",
+    "data",
+    (state, msg) -> {
+        if (msg instanceof GetData(var replyTo)) {
+            replyTo.send(state);
+        }
+        return state;
+    }
+);
+```
+
+### State Machine Handler
+
+```java
+sealed interface State permits State.Idle, State.Active {}
+record Idle() implements State {}
+record Active(String user) implements State {}
+
+sealed interface Message permits Message.Start, Message.Stop {}
+record Start(String user) implements Message {}
+record Stop() implements Message {}
+
+Proc<State, Message> proc = Proc.spawn(
+    "session",
+    new Idle(),
+    (state, msg) -> switch(state, msg) {
+        case Idle(), Start(var user) -> new Active(user);
+        case Active(var u), Stop() -> new Idle();
+        default -> state;
+    }
+);
+```
+
+## Best Practices
+
+### State Management
+
+```java
+// DO: Use immutable state
+record MyState(String data, int count) {}
+
+// DON'T: Use mutable state
+class MyState {
+    String data;
+    int count;
+}
+```
+
+### Message Types
+
+```java
+// DO: Use sealed interfaces
+sealed interface Message permits Message.A, Message.B {}
+
+// DON'T: Use raw types
+interface Message {}
+```
+
+### Error Handling
+
+```java
+// DO: Let process crash on errors
+State handle(State state, Message msg) {
+    if (msg instanceof BadMessage) {
+        throw new RuntimeException("Invalid message");
+    }
+    return state;
+}
+
+// DON'T: Catch and hide errors
+State handle(State state, Message msg) {
+    try {
+        return process(state, msg);
+    } catch (Exception e) {
+        return state;  // Hides error!
+    }
+}
+```
+
+### Resource Cleanup
+
+```java
+// DO: Use trap exit for cleanup
+Proc<ResourceState, Message> proc = Proc.spawn(
+    "resource-holder",
+    new ResourceState(resource),
+    (state, msg) -> {
+        if (msg instanceof ExitSignal) {
+            state.resource().close();
+        }
+        return state;
+    }
+);
+```
+
+## Thread Safety
+
+### Safe Operations
+- `send()` - Thread-safe
+- `ask()` - Thread-safe
+- `getState()` - For testing only
+- `stop()` - Thread-safe
+
+### Unsafe Operations
+- Direct state mutation - Not thread-safe
+- Shared mutable state - Not thread-safe
+
+### Concurrent Access
+
+```java
+// Multiple threads can send safely
+ExecutorService executor = Executors.newFixedThreadPool(10);
+for (int i = 0; i < 1000; i++) {
+    executor.submit(() -> proc.send("msg"));
+}
+```
+
+## Performance Considerations
+
+### Memory Usage
+
+```
+Per-process overhead:
+- Virtual thread: ~1 KB
+- Mailbox: ~1 KB
+- State: User-defined
+Total: ~2-10 KB per process
+```
+
+### Throughput
+
+```
+Message passing:
+- Local: ~10M messages/sec
+- With handler: ~1M messages/sec
+```
+
+### Latency
+
+```
+Send → Process:
+- Average: <1μs
+- P99: <10μs
+```
+
+## Common Patterns
+
+### Process Registry
+
+```java
+// Register process
+Proc<String, String> proc = Proc.spawn("my-service", state, handler);
+ProcRegistry.register("my-service", proc);
+
+// Lookup process
+Optional<ProcRef<String, String>> ref = ProcRegistry.lookup("my-service");
+ref.ifPresent(r -> r.send("hello"));
+```
+
+### Process Linking
+
+```java
+// Link processes for bidirectional crash propagation
+Proc<String, String> parent = Proc.spawn(...);
+Proc<String, String> child = Proc.spawn(...);
+ProcLink.link(parent, child);
+
+// If child crashes, parent gets ExitSignal
+```
+
+### Process Monitoring
+
+```java
+// Monitor process for unidirectional death notification
+Proc<String, String> monitored = Proc.spawn(...);
+ProcRef<String, String> monitor = Proc.spawn(...);
+ProcMonitor.monitor(monitored, monitor);
+
+// Monitor receives ExitSignal when monitored dies
+```
+
+### Scheduled Messages
+
+```java
+// Schedule delayed message
+ProcTimer timer = new ProcTimer();
+timer.send(proc, "timeout", Duration.ofSeconds(5));
+```
+
+## Error Codes
+
+| Exception | Cause | Resolution |
+|-----------|-------|------------|
+| `IllegalArgumentException` | Null process ID | Provide valid ID |
+| `TimeoutException` | ask() timeout expired | Increase timeout |
+| `IllegalStateException` | Operation on stopped process | Check isAlive() first |
+| `RuntimeException` | Handler exception | Supervisor restarts process |
+
+## Related Tests
+- `ProcTest.java` - All Proc operations
+- `GenServerTest.java` - Request-response patterns
+- `ProcRegistryTest.java` - Registry operations
+- `ProcLinkTest.java` - Process linking
+- `ProcMonitorTest.java` - Process monitoring
+
+## See Also
+- [Supervisor API](./supervisor-api.mdx) - Process supervision
+- [EventManager API](./event-manager-api.mdx) - Event broadcasting
+- [Create a Process](../how-to/create-process.mdx) - Usage guide

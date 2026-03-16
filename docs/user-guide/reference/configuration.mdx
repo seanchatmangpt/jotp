@@ -1,0 +1,427 @@
+---
+title: Configuration Reference
+description: Configuration options for JOTP components
+sidebar_position: 4
+---
+
+# Configuration Reference
+
+Complete configuration reference for JOTP components.
+
+## Overview
+
+JOTP components can be configured through:
+- **Builder patterns**: Type-safe configuration
+- **Config objects**: Reusable configuration
+- **System properties**: JVM-level overrides
+- **Environment variables**: Deployment-specific settings
+
+## Proc Configuration
+
+### Basic Configuration
+
+```java
+// No configuration needed for basic Proc
+Proc<String, String> proc = Proc.spawn(
+    "my-proc",
+    "initial-state",
+    (state, msg) -> msg
+);
+```
+
+### Advanced Configuration
+
+```java
+// Proc uses builder for advanced config (future)
+// Currently, configuration is through constructor parameters
+```
+
+## Supervisor Configuration
+
+### Config Object
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .intensity(5)                       // Max restarts
+    .period(Duration.ofSeconds(60))     // Time window
+    .build();
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `intensity` | int | 10 | Maximum restarts in period |
+| `period` | Duration | 60s | Time window for intensity |
+
+### Example Configurations
+
+#### Conservative (Production)
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .intensity(3)
+    .period(Duration.ofSeconds(60))
+    .build();
+```
+
+#### Moderate (Development)
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .intensity(10)
+    .period(Duration.ofSeconds(60))
+    .build();
+```
+
+#### Aggressive (Testing)
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .intensity(100)
+    .period(Duration.ofSeconds(60))
+    .build();
+```
+
+### Usage
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "my-supervisor",
+    Strategy.ONE_FOR_ONE,
+    config,
+    children
+);
+```
+
+## Child Specification Configuration
+
+### ChildSpec Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | String | Yes | Unique child identifier |
+| `start` | Supplier<Proc<S,M>> | Yes | Function to start child |
+| `restart` | RestartStrategy | No (default: PERMANENT) | When to restart child |
+| `shutdown` | Duration | No (default: 5s) | Graceful shutdown timeout |
+
+### Restart Strategy Values
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| `PERMANENT` | Always restart | Critical services |
+| `TRANSIENT` | Restart only on abnormal exit | Jobs that may complete |
+| `TEMPORARY` | Never restart | One-off tasks |
+
+### Example Configurations
+
+#### Worker Process
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .id("worker-1")
+    .start(() -> WorkerProc.spawn("worker-1"))
+    .restart(RestartStrategy.PERMANENT)
+    .shutdown(Duration.ofSeconds(5))
+    .build();
+```
+
+#### One-off Job
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .id("migration")
+    .start(() -> MigrationProc.spawn())
+    .restart(RestartStrategy.TEMPORARY)
+    .shutdown(Duration.ofSeconds(30))
+    .build();
+```
+
+## Circuit Breaker Configuration
+
+### CircuitBreakerConfig Object
+
+```java
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(5)              // Failures before opening
+    .timeout(Duration.ofSeconds(30))   // How long to stay open
+    .halfOpenAttempts(3)              // Test attempts in half-open
+    .successThreshold(2)              // Successes to close again
+    .build();
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `failureThreshold` | int | 5 | Failures before opening |
+| `timeout` | Duration | 30s | How long to stay open |
+| `halfOpenAttempts` | int | 3 | Test attempts in half-open |
+| `successThreshold` | int | 2 | Successes to close again |
+
+### Example Configurations
+
+#### Aggressive (Fast Fail)
+
+```java
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(3)
+    .timeout(Duration.ofSeconds(10))
+    .halfOpenAttempts(1)
+    .successThreshold(1)
+    .build();
+```
+
+#### Conservative (Forgiving)
+
+```java
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(10)
+    .timeout(Duration.ofSeconds(60))
+    .halfOpenAttempts(5)
+    .successThreshold(3)
+    .build();
+```
+
+## EventManager Configuration
+
+### Basic Configuration
+
+```java
+// No configuration needed for basic EventManager
+EventManager<DomainEvent> eventBus = EventManager.spawn("events");
+```
+
+### Advanced Configuration (Future)
+
+```java
+// Future: EventManager.Config
+EventManager.Config config = EventManager.Config.builder()
+    .queueSize(10_000)
+    .subscriberTimeout(Duration.ofSeconds(30))
+    .build();
+```
+
+## ProcTimer Configuration
+
+### Basic Usage
+
+```java
+ProcTimer timer = new ProcTimer();
+timer.send(proc, message, Duration.ofSeconds(5));
+```
+
+### Configuration (Future)
+
+```java
+// Future: ProcTimer.Config
+ProcTimer.Config config = ProcTimer.Config.builder()
+    .precision(Duration.ofMillis(100))
+    .maxPendingTimers(10_000)
+    .build();
+```
+
+## Registry Configuration
+
+### Basic Configuration
+
+```java
+// No configuration needed
+ProcRegistry.register("my-service", proc);
+```
+
+### Advanced Configuration (Future)
+
+```java
+// Future: Registry configuration
+ProcRegistry.Config config = ProcRegistry.Config.builder()
+    .maxEntries(1_000_000)
+    .cleanupInterval(Duration.ofMinutes(5))
+    .build();
+```
+
+## System Properties
+
+### Virtual Thread Configuration
+
+```bash
+# Set carrier thread pool size
+java -Djdk.virtualThreadScheduler.parallelism=8 \
+     -jar app.jar
+```
+
+### Process Monitoring
+
+```bash
+# Enable virtual thread tracing
+java -Djdk.tracePinnedThreads=full \
+     -jar app.jar
+```
+
+## Environment Variables
+
+### Application Configuration
+
+```bash
+# Supervisor intensity
+export JOTP_SUPERVISOR_INTENSITY=10
+
+# Circuit breaker timeout
+export JOTP_CIRCUIT_BREAKER_TIMEOUT=30s
+
+# Event queue size
+export JOTP_EVENT_QUEUE_SIZE=10000
+```
+
+### Usage in Code
+
+```java
+// Read environment variable
+String intensity = System.getenv("JOTP_SUPERVISOR_INTENSITY");
+int intensityValue = intensity != null
+    ? Integer.parseInt(intensity)
+    : 10;  // Default
+```
+
+## Configuration Examples
+
+### Development Configuration
+
+```java
+Supervisor.Config devConfig = Supervisor.Config.builder()
+    .intensity(100)  // Allow many restarts in dev
+    .period(Duration.ofSeconds(60))
+    .build();
+
+CircuitBreakerConfig devBreakerConfig = CircuitBreakerConfig.builder()
+    .failureThreshold(10)  // More forgiving
+    .timeout(Duration.ofSeconds(10))  // Short timeout
+    .build();
+```
+
+### Production Configuration
+
+```java
+Supervisor.Config prodConfig = Supervisor.Config.builder()
+    .intensity(5)  // Conservative
+    .period(Duration.ofSeconds(60))
+    .build();
+
+CircuitBreakerConfig prodBreakerConfig = CircuitBreakerConfig.builder()
+    .failureThreshold(5)  // Standard
+    .timeout(Duration.ofSeconds(30))  // Reasonable timeout
+    .build();
+```
+
+### Testing Configuration
+
+```java
+Supervisor.Config testConfig = Supervisor.Config.builder()
+    .intensity(Integer.MAX_VALUE)  // Never give up in tests
+    .period(Duration.ofSeconds(60))
+    .build();
+
+CircuitBreakerConfig testBreakerConfig = CircuitBreakerConfig.builder()
+    .failureThreshold(1)  // Fail fast in tests
+    .timeout(Duration.ofMillis(100))
+    .build();
+```
+
+## Configuration Validation
+
+### Supervisor Configuration
+
+```java
+// Validate configuration
+if (config.intensity() <= 0) {
+    throw new IllegalArgumentException("Intensity must be positive");
+}
+
+if (config.period().isNegative() || config.period().isZero()) {
+    throw new IllegalArgumentException("Period must be positive");
+}
+```
+
+### Child Spec Validation
+
+```java
+// Validate child specification
+if (spec.id() == null || spec.id().isBlank()) {
+    throw new IllegalArgumentException("Child ID cannot be blank");
+}
+
+if (spec.start() == null) {
+    throw new IllegalArgumentException("Start function cannot be null");
+}
+
+if (spec.shutdown().isNegative()) {
+    throw new IllegalArgumentException("Shutdown timeout cannot be negative");
+}
+```
+
+## Common Configuration Patterns
+
+### Factory Pattern
+
+```java
+public class ConfigFactory {
+    public static Supervisor.Config productionSupervisor() {
+        return Supervisor.Config.builder()
+            .intensity(5)
+            .period(Duration.ofSeconds(60))
+            .build();
+    }
+
+    public static CircuitBreakerConfig productionCircuitBreaker() {
+        return CircuitBreakerConfig.builder()
+            .failureThreshold(5)
+            .timeout(Duration.ofSeconds(30))
+            .build();
+    }
+}
+```
+
+### Profile-Based Configuration
+
+```java
+public class ConfigLoader {
+    public static Supervisor.Config loadSupervisorConfig(String profile) {
+        return switch (profile) {
+            case "dev" -> Supervisor.Config.builder()
+                .intensity(100)
+                .period(Duration.ofSeconds(60))
+                .build();
+            case "prod" -> Supervisor.Config.builder()
+                .intensity(5)
+                .period(Duration.ofSeconds(60))
+                .build();
+            default -> throw new IllegalArgumentException("Unknown profile");
+        };
+    }
+}
+```
+
+## Best Practices
+
+### DO:
+- Use conservative settings in production
+- Use aggressive settings in development
+- Document configuration choices
+- Validate configuration at startup
+- Use profiles for different environments
+
+### DON'T:
+- Use production settings in development
+- Forget to document why values were chosen
+- Use hardcoded configuration
+- Skip configuration validation
+- Ignore configuration defaults
+
+## Related Tests
+- `ConfigurationTest.java` - Configuration validation
+- `SupervisorTest.java` - Supervisor configuration
+- `CircuitBreakerTest.java` - Circuit breaker configuration
+
+## See Also
+- [Supervisor API](./supervisor-api.mdx) - Supervisor reference
+- [Circuit Breaker Guide](../how-to/add-circuit-breaker.mdx) - Implementation guide

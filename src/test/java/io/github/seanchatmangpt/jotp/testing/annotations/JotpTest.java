@@ -29,11 +29,6 @@ import java.lang.annotation.*;
  * <pre>{@code
  * @JotpTest(primitive = "Supervisor")
  * class SupervisorTest extends JotpTestBase {
- * @BeforeEach
- * void setUp() {
- * ApplicationController.reset();
- * }
- *
  *   @Test
  *   void testOneForOneRestart() { ... }
  * }

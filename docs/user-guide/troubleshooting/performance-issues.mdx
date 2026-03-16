@@ -1,0 +1,1160 @@
+# Performance Issues Troubleshooting Guide
+
+import { Tabs } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This guide covers performance-related issues in JOTP applications, including high latency, memory leaks, GC pressure, thread exhaustion, and JOTP-specific performance patterns.
+
+<Callout type="warning">
+  Performance issues in JOTP often stem from virtual thread pinning, mailbox overflow, or supervisor restart storms. Profile before optimizing.
+</Callout>
+
+---
+
+## High Message Latency
+
+### Symptoms
+
+- Messages take seconds to be processed
+- `ask()` calls timeout frequently
+- Increasing mailbox queue depth
+- User-visible delays
+- ProcSys inspection shows high mailbox sizes
+
+### Common Causes Checklist
+
+- [ ] Handler doing blocking I/O
+- [ ] Message handler too slow
+- [ ] Virtual thread pinned by synchronized
+- [ ] Mailbox overflow causing backpressure
+- [ ] Supervisor restart storm
+- [ ] No message batching
+- [ ] Excessive message routing
+
+### Diagnostic Steps
+
+#### 1. Measure Message Throughput
+
+```java
+// Add metrics to process
+class MetricProc<S, M> extends Proc<S, M> {
+    private final AtomicLong messagesProcessed = new AtomicLong(0);
+    private final Instant start = Instant.now();
+
+    @Override
+    protected void handle(M msg) {
+        long count = messagesProcessed.incrementAndGet();
+        if (count % 10000 == 0) {
+            Duration elapsed = Duration.between(start, Instant.now());
+            double rate = count / (double) elapsed.toSeconds();
+            log.info("Rate: {} msg/s", rate);
+            metrics.recordGauge("proc.throughput", rate);
+        }
+    }
+}
+```
+
+#### 2. Check Handler Execution Time
+
+```java
+@Override
+protected void handle(M msg) {
+    Instant start = Instant.now();
+    try {
+        processMessage(msg);
+    } finally {
+        Duration elapsed = Duration.between(start, Instant.now());
+        if (elapsed.toMillis() > 100) {
+            log.warn("Slow message: {}ms", elapsed.toMillis());
+            metrics.recordTimer("proc.handler.duration", elapsed.toMillis());
+        }
+    }
+}
+```
+
+#### 3. Profile with JFR
+
+```bash
+# Record with Java Flight Recorder
+java -XX:StartFlightRecording=filename=recording.jfr,duration=60s \
+     -XX:FlightRecorderOptions=settings=profile \
+     --enable-preview \
+     -jar app.jar
+
+# Analyze
+jfr print --events jdk.ExecutionSample recording.jfr | grep "handle"
+```
+
+#### 4. Check Mailbox Depth
+
+```java
+// Monitor mailbox sizes
+@Scheduled(fixedRate = 5000)
+public void checkMailboxDepths() {
+    ProcRegistry.getInstance().stream()
+        .forEach(proc -> {
+            ProcInspection inspection = ProcSys.inspect(proc.id());
+            int mailboxSize = inspection.mailboxSize();
+
+            if (mailboxSize > 1000) {
+                log.warn("High mailbox depth: {} - {} messages",
+                    proc.id(), mailboxSize);
+            }
+        });
+}
+```
+
+#### 5. Check for Thread Parking
+
+```bash
+# Monitor virtual thread state
+jcmd <pid> Thread.vthread_summary
+
+# Look for:
+# - "Pinned virtual thread" warnings
+# - High carrier thread count
+# - Threads blocked in I/O
+```
+
+### Solutions
+
+#### Solution 1: Optimize Message Handler
+
+**Problem:** Handler does too much work per message
+
+```java
+// Bad: Heavy computation in handler
+protected void handle(Work work) {
+    String result = expensiveComputation(work);  // Takes 1s
+    reply(result);
+}
+
+// Good: Offload to worker pool
+protected void handle(Work work) {
+    CompletableFuture.supplyAsync(() -> {
+        return expensiveComputation(work);
+    }, workerPool).thenAcceptAsync(result -> {
+        reply(result);
+    });
+}
+
+// Better: Use parallel processing
+protected void handle(BatchWork batch) {
+    batch.items().parallelStream()
+        .forEach(this::processItem);
+    reply(batch);
+}
+```
+
+#### Solution 2: Use Batch Processing
+
+```java
+// Instead of processing one message at a time
+protected void handle(Message msg) {
+    process(msg);  // Context switch overhead
+}
+
+// Batch multiple messages
+protected void handle(Batch batch) {
+    batch.messages().stream()
+        .forEach(this::process);  // Fewer context switches
+    reply(new BatchResult(batch.size()));
+}
+
+// In producer:
+List<Message> batch = new ArrayList<>(1000);
+for (int i = 0; i < 1000; i++) {
+    batch.add(createMessage(i));
+}
+ref.send(new Batch(batch));
+```
+
+#### Solution 3: Implement Message Prioritization
+
+```java
+class PriorityProc<S, M> extends Proc<S, M> {
+    private final PriorityBlockingQueue<M> queue =
+        new PriorityBlockingQueue<>(100, Comparator.comparing(Message::priority));
+
+    @Override
+    protected void handle(M msg) {
+        queue.put(msg);
+        if (queue.size() >= 100) {
+            flushQueue();
+        }
+    }
+
+    private void flushQueue() {
+        List<M> batch = new ArrayList<>();
+        queue.drainTo(batch, 100);
+        batch.stream()
+            .sorted()
+            .forEach(this::process);
+    }
+}
+```
+
+#### Solution 4: Fix Virtual Thread Pinning
+
+```java
+// Bad: synchronized blocks pin virtual threads
+private synchronized void criticalSection() {
+    // This pins the virtual thread
+}
+
+// Good: Use ReentrantLock
+private final ReentrantLock lock = new ReentrantLock();
+
+private void criticalSection() {
+    lock.lock();
+    try {
+        // Won't pin virtual thread
+    } finally {
+        lock.unlock();
+    }
+}
+
+// Check for pinning
+jcmd <pid> Thread.vthread_summary
+# Enable pinning detection
+-Djdk.tracePinnedThreads=full
+```
+
+### Prevention Strategies
+
+- Profile handler execution time regularly
+- Use batch messages for bulk operations
+- Monitor queue depth metrics with alerts
+- Set alert thresholds for latency (p95 < 100ms)
+- Enable JFR profiling in staging
+- Avoid synchronized blocks in hot paths
+
+---
+
+## Memory Leaks
+
+### Symptoms
+
+- Heap usage grows continuously
+- OutOfMemoryError after hours/days
+- GC pauses increasing over time
+- Process mailbox size growing
+- ProcRegistry shows increasing process count
+
+### Common Causes Checklist
+
+- [ ] Messages holding large object references
+- [ ] ProcRef not released after use
+- [ ] EventManager listeners not removed
+- [ ] Supervisor children not terminating
+- [ ] Mailbox growing unbounded
+- [ ] State machines holding stale state
+
+### Diagnostic Steps
+
+#### 1. Capture Heap Dumps
+
+```bash
+# On OOM
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/tmp/heap.hprof
+
+# Manual dump
+jmap -dump:format=b,file=heap.hprof <pid>
+
+# Automatic on high memory
+-XX:HeapDumpPath=/tmp/heap.hprof
+-XX:+HeapDumpBeforeFullGC
+```
+
+#### 2. Analyze with MAT
+
+```
+Open heap.hprof in Eclipse MAT
+→ Leak Suspects Report
+→ Dominator Tree
+→ Look for: Proc instances, Mailbox queues, Message objects
+→ Search for "io.github.seanchatmangpt.jotp"
+```
+
+#### 3. Check Mailbox Retention
+
+```java
+// Are messages holding references?
+record MessageWithPayload(byte[] payload) {}  // Large!
+
+protected void handle(MessageWithPayload msg) {
+    process(msg.payload());
+    // msg.payload() stays in memory until GC
+}
+```
+
+#### 4. Monitor Process Count
+
+```java
+@Scheduled(fixedRate = 60000)
+public void checkProcessCount() {
+    long procCount = ProcRegistry.getInstance().stream().count();
+    long expectedCount = getExpectedProcessCount();
+
+    if (procCount > expectedCount * 1.5) {
+        log.error("Process leak detected: {} processes (expected: {})",
+            procCount, expectedCount);
+
+        // Find suspicious processes
+        ProcRegistry.getInstance().stream()
+            .filter(proc -> {
+                ProcInspection inspection = ProcSys.inspect(proc.id());
+                return inspection.mailboxSize() == 0;
+            })
+            .forEach(proc -> {
+                log.warn("Idle process: {}", proc.id());
+            });
+    }
+}
+```
+
+#### 5. Monitor GC Behavior
+
+```bash
+# Enable GC logging
+-Xlog:gc*:file=gc.log:time,uptime:filecount=5,filesize=10m
+
+# Analyze
+grep "Full GC" gc.log
+jstat -gcutil <pid> 1000
+```
+
+### Solutions
+
+#### Solution 1: Fix Message Retention
+
+**Problem:** Messages holding large objects after processing
+
+```java
+// Bad: Large payload in message
+record LargeMessage(byte[] data) {}  // 10MB per message
+
+protected void handle(LargeMessage msg) {
+    process(msg.data());
+    // msg.data() stays in memory until GC
+}
+
+// Good: Clear references
+protected void handle(LargeMessage msg) {
+    try {
+        process(msg.data());
+    } finally {
+        msg.clear();  // Explicitly clear large field
+    }
+}
+
+// Better: Use shared storage
+record MessageRef(Path dataFile) {}  // Just a path
+
+protected void handle(MessageRef msg) {
+    try (InputStream is = Files.newInputStream(msg.dataFile())) {
+        process(is);
+    }
+}
+```
+
+#### Solution 2: Implement Process Cleanup
+
+```java
+// Bad: Never terminate processes
+public void spawnWorker() {
+    ProcRef<?, ?> ref = Proc.spawn(workerSpec);
+    // Ref never released, process never stops
+}
+
+// Good: Explicit lifecycle management
+public void spawnWorker() {
+    ProcRef<?, ?> ref = Proc.spawn(workerSpec);
+
+    // Auto-stop after timeout
+    ProcTimer.schedule(() -> new StopProcess(ref.id()),
+        Duration.ofMinutes(5));
+}
+
+// Better: Use supervisor with temporary children
+SupervisorSpec supervisorSpec = SupervisorSpec.builder()
+    .restartStrategy(RestartStrategy.ONE_FOR_ONE)
+    .temporaryChild(workerSpec, Duration.ofMinutes(5))
+    .build();
+```
+
+#### Solution 3: Implement Message Expiration
+
+```java
+class ExpiringMailbox {
+    private final Map<UUID, Message> messages = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService cleaner =
+        Executors.newScheduledThreadPool(1);
+
+    void add(Message msg) {
+        UUID id = UUID.randomUUID();
+        messages.put(id, msg);
+
+        // Auto-remove after 5 minutes
+        cleaner.schedule(() -> {
+            Message removed = messages.remove(id);
+            if (removed != null) {
+                log.warn("Message expired: {}", id);
+                metrics.increment("mailbox.expired");
+            }
+        }, 5, TimeUnit.MINUTES);
+    }
+}
+```
+
+#### Solution 4: Use Weak References for Caches
+
+```java
+// Bad: Strong references keep objects alive
+private final Map<String, Object> cache = new HashMap<>();
+
+// Good: Allow GC to reclaim
+private final Map<String, WeakReference<Object>> cache =
+    new ConcurrentHashMap<>();
+
+void cache(String key, Object value) {
+    cache.put(key, new WeakReference<>(value));
+}
+
+Optional<Object> get(String key) {
+    WeakReference<Object> ref = cache.get(key);
+    return ref != null ? Optional.ofNullable(ref.get()) : Optional.empty();
+}
+```
+
+#### Solution 5: Clean Up EventManager Listeners
+
+```java
+// Bad: Never remove listeners
+public void subscribe(EventListener<M> listener) {
+    eventManager.subscribe(listener);
+    // Listener stays forever
+}
+
+// Good: Auto-unsubscribe
+public class AutoClosingEventListener<M> implements EventListener<M> {
+    private final EventManager<M> eventManager;
+    private final EventListener<M> delegate;
+
+    @Override
+    public void onEvent(M event) {
+        delegate.onEvent(event);
+    }
+
+    public void close() {
+        eventManager.unsubscribe(this);
+    }
+}
+
+// Usage
+try (var subscription = new AutoClosingEventListener<>(eventManager, listener)) {
+    // Use listener
+}  // Automatically unsubscribed
+```
+
+### Prevention Strategies
+
+- Regular heap dump analysis in staging (weekly)
+- Monitor GC pause times (alert > 100ms)
+- Use weak references for caches
+- Clear large message payloads after processing
+- Implement process lifecycle management
+- Set mailbox limits (bounded mailboxes)
+- Monitor process count trends
+
+---
+
+## GC Pressure
+
+### Symptoms
+
+- Long GC pauses (>100ms)
+- High CPU usage from GC threads
+- Frequent Full GC cycles
+- Throughput degradation
+- OOM errors despite available memory
+
+### Common Causes Checklist
+
+- [ ] High message allocation rate
+- [ ] Large temporary objects
+- [ ] No object pooling
+- [ ] Excessive string concatenation
+- [ ] Unbounded collections
+- [ ] Memory fragmentation
+
+### Diagnostic Steps
+
+#### 1. Check GC Stats
+
+```bash
+# Enable GC logging
+-Xlog:gc*:gc.log:time,uptime
+
+# View GC frequency
+grep "GC" gc.log | wc -l
+
+# Check pause times
+grep "pause" gc.log | awk '{print $NF}'
+
+# Analyze with GCViewer
+java -jar gcviewer.jar gc.log
+```
+
+#### 2. Analyze Object Allocation
+
+```bash
+# Use JFR allocation profiling
+java -XX:StartFlightRecording=filename=alloc.jfr \
+     -XX:StartFlightRecording=settings=profile \
+     --enable-preview \
+     -jar app.jar
+
+jfr print --events jdk.ObjectAllocationInNewTLAB alloc.jfr | \
+    grep "io.github.seanchatmangpt.jotp" | \
+    head -100
+```
+
+#### 3. Check Generation Sizes
+
+```bash
+jstat -gc <pid> 1000
+# Look for:
+# - EU (Eden Utilization) - should fill regularly
+# - OU (Old Utilization) - should stay low
+# - YGC (Young GC count) - rate of young GCs
+# - FGC (Full GC count) - should be zero
+```
+
+#### 4. Monitor Allocation Rate
+
+```java
+// Track allocation rate
+class AllocationMonitor {
+    private final MemoryMXBean memoryMXBean =
+        ManagementFactory.getMemoryMXBean();
+
+    @Scheduled(fixedRate = 10000)
+    public void reportAllocation() {
+        MemoryUsage heapUsage = memoryMXBean.getHeapMemoryUsage();
+        long used = heapUsage.getUsed();
+        long committed = heapUsage.getCommitted();
+
+        log.info("Heap: {}MB / {}MB ({}%)",
+            used / 1024 / 1024,
+            committed / 1024 / 1024,
+            (used * 100 / committed));
+
+        metrics.recordGauge("jvm.memory.used", used);
+        metrics.recordGauge("jvm.memory.committed", committed);
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Reduce Allocation Rate
+
+**Problem:** Creating millions of short-lived objects
+
+```java
+// Bad: New object per message
+protected void handle(Message msg) {
+    StringBuilder sb = new StringBuilder();  // Allocates
+    sb.append("Header: ");
+    sb.append(msg.header());
+    sb.append(", Body: ");
+    sb.append(msg.body());
+    log.info(sb.toString());
+}
+
+// Good: Reuse buffers
+private final ThreadLocal<StringBuilder> buffer =
+    ThreadLocal.withInitial(() -> new StringBuilder(256));
+
+protected void handle(Message msg) {
+    StringBuilder sb = buffer.get();
+    sb.setLength(0);  // Reset
+    sb.append("Header: ").append(msg.header());
+    log.info(sb.toString());
+}
+
+// Better: Use structured logging
+protected void handle(Message msg) {
+    log.info("Processing message: header={}, body={}",
+        msg.header(), msg.body());
+}
+```
+
+#### Solution 2: Use Object Pooling
+
+```java
+// For frequently allocated objects
+class MessagePool {
+    private final Queue<Message> pool = new ConcurrentLinkedQueue<>();
+
+    Message acquire() {
+        Message msg = pool.poll();
+        return msg != null ? msg : new Message();
+    }
+
+    void release(Message msg) {
+        msg.clear();
+        pool.offer(msg);
+    }
+}
+
+// Usage
+Message msg = pool.acquire();
+try {
+    process(msg);
+} finally {
+    pool.release(msg);
+}
+
+// JOTP-specific: Pool Proc objects
+class ProcPool<S, M> {
+    private final Queue<Proc<S, M>> pool = new ConcurrentLinkedQueue<>();
+    private final ProcSpec<S, M> spec;
+
+    ProcRef<S, M> acquire() {
+        // Reuse existing processes
+        ProcRef<S, M> ref = (ProcRef<S, M>) pool.poll();
+        if (ref != null && ProcSys.inspect(ref.id()).isAlive()) {
+            return ref;
+        }
+
+        // Spawn new process
+        return Proc.spawn(spec);
+    }
+
+    void release(ProcRef<S, M> ref) {
+        pool.offer(ref);
+    }
+}
+```
+
+#### Solution 3: Tune Heap Sizing
+
+```bash
+# G1GC configuration (recommended for Java 26)
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+-XX:G1HeapRegionSize=16m
+-XX:InitiatingHeapOccupancyPercent=45
+
+# Adjust based on observed behavior
+-Xms4g -Xmx4g  # Fixed size avoids resize pauses
+
+# For high allocation rates:
+-XX:+UseStringDeduplication
+-XX:+UseParallelGC
+
+# For low pause times:
+-XX:+UseZGC
+-XX:ZCollectionInterval=5
+```
+
+#### Solution 4: Reduce Message Size
+
+```java
+// Bad: Large messages
+record LargeMessage(byte[] data) {}  // 10MB
+
+// Good: Split into chunks
+record MessageChunk(int index, int total, byte[] data) {}
+
+protected void handle(MessageChunk chunk) {
+    buffer.add(chunk);
+    if (buffer.isComplete()) {
+        process(buffer.reassemble());
+        buffer.clear();
+    }
+}
+
+// Better: Use streaming
+record StreamMessage(Path filePath) {}
+
+protected void handle(StreamMessage msg) {
+    try (Stream<String> lines = Files.lines(msg.filePath())) {
+        lines.forEach(this::processLine);
+    }
+}
+```
+
+### Prevention Strategies
+
+- Profile allocation rates in staging
+- Use object pools for hot paths
+- Tune GC settings for workload
+- Monitor pause time metrics
+- Keep messages small (< 1KB preferred)
+- Use streaming for large data
+- Regular GC log analysis
+
+---
+
+## Thread Exhaustion
+
+### Symptoms
+
+- "RejectedExecutionException"
+- New processes fail to start
+- Carrier threads exhausted
+- System hangs under load
+- `Proc.spawn()` throws exceptions
+
+### Common Causes Checklist
+
+- [ ] Virtual thread pinning
+- [ ] Too many blocking operations
+- [ ] Thread pool exhaustion
+- [ ] Unlimited process spawning
+- [ ] Synchronized blocks in handlers
+- [ ] Native code blocking
+
+### Diagnostic Steps
+
+#### 1. Check Virtual Thread Count
+
+```bash
+jcmd <pid> Thread.vthread_summary
+
+# Look for:
+# - "Virtual thread count" - should be high (100K+)
+# - "Carrier thread count" - should equal CPU cores
+# - "Pinned virtual thread" - should be zero
+```
+
+#### 2. Monitor Pinned Threads
+
+```bash
+# Enable pinning detection
+-Djdk.tracePinnedThreads=full
+
+# Look for warnings in logs
+grep "Pinned virtual thread" application.log
+
+# Find pinning locations
+jstack <pid> | grep -A 10 "Pinned"
+```
+
+#### 3. Check Thread Factory Limits
+
+```java
+// If using custom thread pool
+ExecutorService pool = Executors.newFixedThreadPool(10);
+// ^ Limits carriers to 10
+
+// Bad: Can't create virtual threads
+protected void handle(Work work) {
+    pool.submit(() -> {
+        // Blocks if pool full
+        process(work);
+    });
+}
+
+// Good: Use virtual thread executor
+ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+```
+
+#### 4. Monitor Process Spawn Rate
+
+```java
+@Scheduled(fixedRate = 1000)
+public void checkProcessSpawnRate() {
+    long currentCount = ProcRegistry.getInstance().stream().count();
+    long previousCount = lastCount.get();
+    long spawnRate = currentCount - previousCount;
+
+    if (spawnRate > 1000) {
+        log.warn("High process spawn rate: {}/sec", spawnRate);
+        metrics.increment("proc.spawn.high");
+    }
+
+    lastCount.set(currentCount);
+}
+```
+
+### Solutions
+
+#### Solution 1: Fix Pinning
+
+**Problem:** synchronized blocks pin virtual threads
+
+```java
+// Bad: synchronized pins virtual thread
+private synchronized void criticalSection() {
+    doWork();
+}
+
+// Good: Use ReentrantLock
+private final ReentrantLock lock = new ReentrantLock();
+
+void criticalSection() {
+    lock.lock();
+    try {
+        doWork();
+    } finally {
+        lock.unlock();
+    }
+}
+
+// Better: Use Striped locks for high concurrency
+private final Striped<Lock> locks = Striped.lock(128);
+
+void processItem(Item item) {
+    Lock lock = locks.get(item.id());
+    lock.lock();
+    try {
+        doWork(item);
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+#### Solution 2: Increase Carrier Thread Pool
+
+```java
+// Custom virtual thread executor
+import java.lang.Thread.Builder;
+
+Thread.Builder.OfVirtual builder = Thread.ofVirtual();
+// Configure scheduler if needed
+ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor(builder);
+
+// Or set system property
+-Djdk.virtualThreadScheduler.parallelism=max
+-Djdk.virtualThreadScheduler.maxPoolSize=256
+```
+
+#### Solution 3: Use Bounded Concurrency
+
+```java
+// Limit concurrent operations
+Semaphore semaphore = new Semaphore(100);
+
+protected void handle(Work work) {
+    try {
+        semaphore.acquire();
+        CompletableFuture.runAsync(() -> {
+            process(work);
+        }, executor).whenComplete((r, e) -> {
+            semaphore.release();
+        });
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+    }
+}
+```
+
+#### Solution 4: Limit Process Spawning
+
+```java
+// Bad: Unlimited spawning
+protected void handle(Request req) {
+    Proc.spawn(workerSpec);  // Spawns unbounded
+}
+
+// Good: Pool of workers
+class WorkerPool {
+    private final Semaphore semaphore = new Semaphore(100);
+    private final Queue<ProcRef<?, ?>> workers = new ConcurrentLinkedQueue<>();
+
+    public ProcRef<?, ?> acquire() {
+        try {
+            semaphore.acquire();
+            ProcRef<?, ?> worker = workers.poll();
+            if (worker == null || !ProcSys.inspect(worker.id()).isAlive()) {
+                worker = Proc.spawn(workerSpec);
+            }
+            return worker;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void release(ProcRef<?, ?> worker) {
+        workers.offer(worker);
+        semaphore.release();
+    }
+}
+```
+
+### Prevention Strategies
+
+- Enable pinning warnings in development
+- Profile thread usage under load
+- Use virtual threads instead of platform threads
+- Monitor carrier thread metrics
+- Avoid synchronized blocks in hot paths
+- Limit process spawning with pools
+- Set maximum process counts
+
+---
+
+## Supervisor Restart Storms
+
+### Symptoms
+
+- Processes restarting continuously
+- CPU usage at 100%
+- Supervisor logs showing "max restart intensity exceeded"
+- System unresponsive
+- Processes in TERMINATED state
+
+### Common Causes Checklist
+
+- [ ] Failing process not fixed
+- [ ] Restart intensity too low
+- [ ] Time window too short
+- [ ] All children failing simultaneously
+- [ ] Crash in init() method
+- [ ] Dependency not available
+
+### Diagnostic Steps
+
+#### 1. Check Supervisor State
+
+```java
+SupervisorRef ref = supervisor.ref();
+ref.children().forEach((id, info) -> {
+    System.out.println(id + ": " + info.state());
+    System.out.println("  Restarts: " + info.restartCount());
+    System.out.println("  Last restart: " + info.lastRestartTime());
+});
+```
+
+#### 2. Monitor Restart Rate
+
+```java
+@Scheduled(fixedRate = 1000)
+public void checkRestartRate() {
+    supervisor.ref().children().forEach((id, info) -> {
+        long restarts = info.restartCount();
+        Duration elapsed = Duration.between(
+            info.lastRestartTime(),
+            Instant.now()
+        );
+
+        if (restarts > 10 && elapsed.getSeconds() < 60) {
+            log.error("Restart storm detected: {} - {} restarts in {}s",
+                id, restarts, elapsed.getSeconds());
+            alerting.sendAlert("Restart storm: " + id);
+        }
+    });
+}
+```
+
+#### 3. Check Crash Reasons
+
+```java
+// Enable crash logging
+SupervisorSpec spec = SupervisorSpec.builder()
+    .restartStrategy(RestartStrategy.ONE_FOR_ONE)
+    .restartIntensity(5)  // Max 5 restarts
+    .restartWindow(Duration.ofSeconds(60))
+    .onCrash((childId, reason) -> {
+        log.error("Child crashed: {} - reason: {}",
+            childId, reason);
+        metrics.increment("supervisor.child.crash",
+            "child", childId.toString(),
+            "reason", reason.getClass().getSimpleName());
+    })
+    .build();
+```
+
+### Solutions
+
+#### Solution 1: Adjust Restart Strategy
+
+```java
+// Bad: Too aggressive
+SupervisorSpec spec = SupervisorSpec.builder()
+    .restartIntensity(3)
+    .restartWindow(Duration.ofSeconds(5))  // Too short!
+    .build();
+
+// Good: Reasonable limits
+SupervisorSpec spec = SupervisorSpec.builder()
+    .restartIntensity(10)
+    .restartWindow(Duration.ofSeconds(60))
+    .maxRestarts(100)  // Total limit
+    .build();
+
+// Calculate: intensity / window = restart rate
+// Example: 10 restarts / 60 seconds = 0.167 restarts/sec
+```
+
+#### Solution 2: Fix Failing Process
+
+```java
+// Bad: Process crashes in init
+class FailingProc extends Proc<State, Msg> {
+    @Override
+    protected void init() {
+        // Throws exception every time
+        throw new RuntimeException("Can't connect to DB");
+    }
+}
+
+// Good: Handle failure gracefully
+class ResilientProc extends Proc<State, Msg> {
+    @Override
+    protected void init() {
+        try {
+            connectToDatabase();
+        } catch (Exception e) {
+            log.error("Failed to connect, will retry", e);
+            // Don't throw, let supervisor handle restart
+            throw new CrashException("Database unavailable", e);
+        }
+    }
+}
+```
+
+#### Solution 3: Use Permanent Children
+
+```java
+// For critical processes that must always run
+SupervisorSpec spec = SupervisorSpec.builder()
+    .restartStrategy(RestartStrategy.ONE_FOR_ONE)
+    .permanentChild(criticalProcSpec)  // Always restart
+    .temporaryChild(workerProcSpec, Duration.ofMinutes(5))  // Stop after 5min
+    .transientChild(oneshotProcSpec)  // Don't restart
+    .build();
+```
+
+#### Solution 4: Implement Circuit Breaker
+
+```java
+// Add circuit breaker to failing dependency
+class ProcWithCircuitBreaker extends Proc<State, Msg> {
+    private final CircuitBreaker<?, ?, ?> circuitBreaker;
+
+    @Override
+    protected void handle(Msg msg) {
+        try {
+            circuitBreaker.execute(msg, m -> {
+                return callFailingService(m);
+            });
+        } catch (CircuitBreakerOpenException e) {
+            // Circuit open, don't crash
+            log.warn("Circuit breaker open, skipping message");
+            throw new CrashException("Service unavailable", e);
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Set appropriate restart intensity and window
+- Fix root causes of crashes
+- Use circuit breakers for failing dependencies
+- Monitor restart rates with alerts
+- Test failure scenarios in staging
+- Use permanent/temporary/transient children appropriately
+
+---
+
+## Quick Reference: Performance Commands
+
+<Tabs items={['Profiling', 'Memory', 'Threads', 'GC']}>
+
+<Tabs.Tab>
+```bash
+# Java Flight Recorder
+java -XX:StartFlightRecording=filename=recording.jfr,duration=60s ...
+jfr print recording.jfr
+
+# Async Profiler
+profiler.sh -d 30 -f cpu.svg <pid>
+
+# JMX Monitoring
+jconsole <pid>
+jvisualvm
+
+# JOTP-specific
+jcmd <pid> ProcSys.summary
+jcmd <pid> ProcSys.listProcesses
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```bash
+# Heap dump
+jmap -dump:format=b,file=heap.hprof <pid>
+
+# Analyze with MAT
+# Open heap.hprof in Eclipse MAT
+# → Leak Suspects Report
+
+# Memory usage
+jcmd <pid> GC.heap_info
+jstat -gc <pid> 1000
+
+# JOTP process memory
+jcmd <pid> ProcSys.summary | grep "Heap"
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```bash
+# Virtual thread summary
+jcmd <pid> Thread.vthread_summary
+
+# Thread dump
+jcmd <pid> Thread.print_to_file -file=/tmp/threads.txt
+
+# Pinning detection
+-Djdk.tracePinnedThreads=full
+
+# Carrier thread info
+jcmd <pid> Thread.vthread_summary | grep "Carrier"
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```bash
+# Enable GC logging
+-Xlog:gc*:gc.log:time,uptime
+
+# Analyze GC
+grep "Full GC" gc.log
+jstat -gcutil <pid> 1000
+
+# GCViewer
+java -jar gcviewer.jar gc.log
+
+# Tune GC
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+```
+</Tabs.Tab>
+
+</Tabs>
+
+---
+
+## Related Issues
+
+- **Runtime Issues:** See [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) for process lifecycle problems
+- **Enterprise Issues:** See [enterprise-issues.mdx](/docs/user-guide/troubleshooting/enterprise-issues) for circuit breaker and bulkhead issues
+- **Production Issues:** See [production-issues.mdx](/docs/user-guide/troubleshooting/production-issues) for production monitoring
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0
+**Maintainer:** JOTP Core Team

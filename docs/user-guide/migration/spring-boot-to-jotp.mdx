@@ -1,0 +1,1949 @@
+---
+title: "Spring Boot to JOTP Migration Guide"
+description: "Comprehensive guide for migrating Spring Boot applications to JOTP with specific patterns and code examples"
+---
+
+import { Tabs, Tab } from 'nextra/components'
+import { Callout } from 'nextra/components'
+
+# Migrating from Spring Boot to JOTP
+
+A comprehensive guide for Spring developers migrating to JOTP (Java 26 implementation of OTP primitives) with specific patterns, code examples, and best practices.
+
+<Callout type="warning">
+  This migration represents a significant architectural shift from synchronous,
+  container-managed applications to asynchronous, message-driven systems.
+  Start with non-critical services to learn the patterns.
+</Callout>
+
+## Table of Contents
+
+1. [Architecture Comparison](#architecture-comparison)
+2. [Concept Mapping](#concept-mapping)
+3. [Core Pattern Migrations](#core-pattern-migrations)
+4. [Step-by-Step Migration Example](#step-by-step-migration-example)
+5. [Running Spring Boot and JOTP Side-by-Side](#running-spring-boot-and-jotp-side-by-side)
+6. [Advanced Patterns](#advanced-patterns)
+7. [Testing Strategies](#testing-strategies)
+8. [Performance Considerations](#performance-considerations)
+
+---
+
+## Architecture Comparison
+
+### Spring Boot Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         Spring Application Context       │
+│  ┌─────────────────────────────────────┐ │
+│  │  @Component / @Service Beans        │ │
+│  │  - Synchronous method calls         │ │
+│  │  - Shared mutable state             │ │
+│  │  - @Autowired dependencies          │ │
+│  │  - Thread pool execution            │ │
+│  └─────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────┐ │
+│  │  Spring MVC Controllers             │ │
+│  │  - HTTP request/response            │ │
+│  │  - @Transactional boundaries        │ │
+│  └─────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+### JOTP Architecture
+
+```
+┌─────────────────────────────────────────┐
+│           Supervisor Tree                │
+│  ┌─────────────────────────────────────┐ │
+│  │  Proc<S,M> Processes                │ │
+│  │  - Message-driven communication     │ │
+│  │  - Immutable state                  │ │
+│  │  - Explicit dependencies            │ │
+│  │  - Virtual thread execution         │ │
+│  └─────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────┐ │
+│  │  HTTP Interface Process             │ │
+│  │  - Message-based requests           │ │
+│  │  - Saga pattern coordination        │ │
+│  └─────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Concept Mapping
+
+### Core Concepts
+
+| Spring Boot | JOTP | Migration Notes |
+|-------------|------|-----------------|
+| `@Component` / `@Service` | `Proc<S,M>` | Processes instead of beans |
+| `@Autowired` | Constructor parameters | Explicit dependency passing |
+| `@Async` | `Proc.tell()` | Fire-and-forget messaging |
+| `@Transactional` | `StateMachine<S,E,D>` | Saga pattern for workflows |
+| `@Retryable` (Spring Retry) | `Supervisor` restart strategies | System-level retry |
+| `@CircuitBreaker` (Resilience4j) | `CircuitBreakerPattern` | Enterprise circuit breaker |
+| `@Scheduled` | `ProcTimer` | Process-based timers |
+| `@EventListener` | `EventManager<E>` | Typed event broadcasting |
+| `MessageChannel` (Spring Integration) | JOTP Channels | Point-to-point, pub-sub |
+| `ApplicationContext` | No equivalent | No central container |
+| `ThreadPoolTaskExecutor` | Virtual threads | JVM-managed scheduling |
+
+### Error Handling
+
+| Spring Boot | JOTP | Notes |
+|-------------|------|-------|
+| `@ExceptionHandler` | Process crash handlers | Let supervisors handle crashes |
+| `@ControllerAdvice` | Supervisor trees | Hierarchical error handling |
+| `try-catch` blocks | "Let It Crash" philosophy | Supervisors restart processes |
+| `@Retryable` | Supervisor restart intensity | Max restarts in time window |
+| `@CircuitBreaker` | `CircuitBreakerPattern` | Automatic fail-fast |
+
+### State Management
+
+| Spring Boot | JOTP | Notes |
+|-------------|------|-------|
+| `@Stateless` beans | Immutable state records | All state is immutable |
+| `@SessionScoped` | Process-per-session | Isolated session processes |
+| `@RequestScoped` | Message-scoped state | State in message handler |
+| Database transactions | Saga compensating actions | Explicit compensation |
+
+---
+
+## Core Pattern Migrations
+
+### 1. Component → Proc Migration
+
+#### Spring Boot Service
+
+```java
+@Service
+public class OrderService {
+    private final OrderRepository repository;
+    private final PaymentService paymentService;
+    private final InventoryService inventoryService;
+
+    @Autowired
+    public OrderService(OrderRepository repository,
+                       PaymentService paymentService,
+                       InventoryService inventoryService) {
+        this.repository = repository;
+        this.paymentService = paymentService;
+        this.inventoryService = inventoryService;
+    }
+
+    @Transactional
+    public Order createOrder(OrderRequest request) {
+        // Validate request
+        if (!request.isValid()) {
+            throw new ValidationException("Invalid request");
+        }
+
+        // Create order
+        var order = new Order(request);
+        order = repository.save(order);
+
+        // Reserve inventory
+        inventoryService.reserveItems(order.getItems());
+
+        // Process payment
+        var payment = paymentService.processPayment(order);
+        order.setPayment(payment);
+
+        // Update order
+        return repository.save(order);
+    }
+
+    public Order getOrder(String id) {
+        return repository.findById(id)
+            .orElseThrow(() -> new NotFoundException("Order not found"));
+    }
+}
+```
+
+#### JOTP Process Implementation
+
+```java
+// Message protocol (sealed interface for type safety)
+sealed interface OrderMsg permits
+    CreateOrder,
+    GetOrder,
+    PaymentCompleted,
+    InventoryReserved {}
+
+record CreateOrder(
+    OrderRequest request,
+    CompletableFuture<Order> replyTo
+) implements OrderMsg {}
+
+record GetOrder(
+    String id,
+    CompletableFuture<Order> replyTo
+) implements OrderMsg {}
+
+record PaymentCompleted(Order order) implements OrderMsg {}
+
+record InventoryReserved(Order order) implements OrderMsg {}
+
+// State (immutable record)
+record OrderState(
+    Map<String, Order> orders,
+    ProcRef<PaymentState, PaymentMsg> paymentService,
+    ProcRef<InventoryState, InventoryMsg> inventoryService
+) {}
+
+// Process creation with supervision
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    3,  // max restarts
+    Duration.ofSeconds(10)
+);
+
+var orderProc = supervisor.supervise(
+    "order-service",
+    new OrderState(
+        Map.of(),
+        paymentServiceRef,
+        inventoryServiceRef
+    ),
+    (state, msg) -> switch (msg) {
+        case CreateOrder(var req, var reply) -> {
+            // Validate request
+            if (!req.isValid()) {
+                reply.completeExceptionally(
+                    new ValidationException("Invalid request")
+                );
+                yield state;
+            }
+
+            // Create order
+            var order = new Order(req);
+            var updatedOrders = merge(state.orders(), Map.of(order.id(), order));
+
+            // Send inventory reservation request
+            state.inventoryService().tell(new ReserveItems(
+                order.getItems(),
+                order.id()
+            ));
+
+            yield new OrderState(updatedOrders, state.paymentService(), state.inventoryService());
+        }
+
+        case GetOrder(var id, var reply) -> {
+            var order = state.orders().get(id);
+            if (order != null) {
+                reply.complete(order);
+            } else {
+                reply.completeExceptionally(
+                    new NotFoundException("Order not found")
+                );
+            }
+            yield state;
+        }
+
+        case InventoryReserved(var order) -> {
+            // Inventory reserved, now process payment
+            state.paymentService().tell(new ProcessPayment(order));
+            yield state;
+        }
+
+        case PaymentCompleted(var order) -> {
+            // Payment completed, order is done
+            var updatedOrder = order.withStatus(OrderStatus.COMPLETED);
+            var updatedOrders = merge(state.orders(), Map.of(updatedOrder.id(), updatedOrder));
+            yield new OrderState(updatedOrders, state.paymentService(), state.inventoryService());
+        }
+    }
+);
+```
+
+**Key Differences:**
+1. **Message-driven:** All operations via sealed message types
+2. **Supervision:** Automatic restart on crashes
+3. **Async by default:** Reply via CompletableFuture
+4. **Explicit state:** No database state, in-memory state
+5. **Type safety:** Sealed interfaces enforce exhaustive handling
+
+---
+
+### 2. @Async → Proc.tell() Migration
+
+#### Spring Boot Async Service
+
+```java
+@Service
+public class EmailService {
+    @Async("emailExecutor")
+    public CompletableFuture<Void> sendEmail(Email email) {
+        mailSender.send(email);
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Async("emailExecutor")
+    public CompletableFuture<Void> sendBulkEmails(List<Email> emails) {
+        emails.forEach(mailSender::send);
+        return CompletableFuture.completedFuture(null);
+    }
+}
+
+@Configuration
+@EnableAsync
+public class AsyncConfig {
+    @Bean("emailExecutor")
+    public Executor emailExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(50);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("email-");
+        executor.initialize();
+        return executor;
+    }
+}
+```
+
+#### JOTP Fire-and-Forget Implementation
+
+```java
+// Message protocol
+sealed interface EmailMsg permits
+    SendEmail,
+    SendBulkEmails {}
+
+record SendEmail(Email email) implements EmailMsg {}
+
+record SendBulkEmails(List<Email> emails) implements EmailMsg {}
+
+// State
+record EmailState(MailSender mailSender) {}
+
+// Process creation (no executor configuration needed!)
+var emailProc = Proc.spawn(
+    new EmailState(mailSender),
+    (state, msg) -> switch (msg) {
+        case SendEmail(var email) -> {
+            state.mailSender().send(email);
+            yield state;  // Fire-and-forget
+        }
+
+        case SendBulkEmails(var emails) -> {
+            emails.forEach(email ->
+                state.mailSender().send(email)
+            );
+            yield state;  // Fire-and-forget
+        }
+    }
+);
+
+// Usage - fire and forget
+emailProc.tell(new SendEmail(email));
+
+// Usage - bulk emails
+emailProc.tell(new SendBulkEmails(emails));
+```
+
+**Key Differences:**
+1. **No executor configuration:** Virtual threads handle everything
+2. **Fire-and-forget:** `tell()` instead of `@Async`
+3. **Simpler:** No separate configuration class
+4. **Unlimited scalability:** Millions of virtual threads
+
+---
+
+### 3. @Retryable → Supervisor Restart Strategies
+
+#### Spring Boot Retry
+
+```java
+@Service
+public class PaymentService {
+    @Retryable(
+        value = {PaymentException.class, NetworkException.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
+    public Payment processPayment(Order order) {
+        return paymentGateway.charge(order);
+    }
+
+    @Recover
+    public Payment recover(PaymentException ex, Order order) {
+        // Fallback logic
+        return new Payment(PaymentStatus.FAILED, ex.getMessage());
+    }
+}
+```
+
+#### JOTP Supervisor Implementation
+
+```java
+// Message protocol
+sealed interface PaymentMsg permits ProcessPayment {}
+
+record ProcessPayment(Order order) implements PaymentMsg {}
+
+// State
+record PaymentState(PaymentGateway gateway) {}
+
+// Supervisor with restart strategy
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    3,  // max attempts
+    Duration.ofSeconds(10)  // time window
+);
+
+var paymentProc = supervisor.supervise(
+    "payment-service",
+    new PaymentState(gateway),
+    (state, msg) -> switch (msg) {
+        case ProcessPayment(var order) -> {
+            // If this throws, supervisor restarts the process
+            // After 3 crashes in 10 seconds, supervisor gives up
+            var payment = state.gateway().charge(order);
+            yield state;
+        }
+    }
+);
+
+// Usage with timeout
+var future = paymentProc.ask(new ProcessPayment(order))
+    .orTimeout(30, TimeUnit.SECONDS);
+
+var payment = future.get();  // CompletableFuture-based
+```
+
+**Key Differences:**
+1. **System-level retry:** Supervisor handles retries transparently
+2. **No annotations:** Pure Java code
+3. **Automatic restart:** Process restarted with fresh state
+4. **Time window:** Max restarts within time window (not just max attempts)
+5. **Fresh state:** Each restart gets clean initial state
+
+---
+
+### 4. @CircuitBreaker → CircuitBreakerPattern
+
+#### Spring Boot Circuit Breaker (Resilience4j)
+
+```java
+@Service
+public class ExternalApiService {
+    @CircuitBreaker(
+        name = "externalApi",
+        fallbackMethod = "fallback"
+    )
+    public ApiResponse callExternalApi(Request request) {
+        return externalApiClient.call(request);
+    }
+
+    public ApiResponse fallback(Request request, Exception ex) {
+        return new ApiResponse(
+            Status.FALLBACK,
+            "Service temporarily unavailable"
+        );
+    }
+}
+
+@Configuration
+public class CircuitBreakerConfig {
+    @Bean
+    public CircuitBreakerRegistry circuitBreakerRegistry() {
+        var config = CircuitBreakerConfig.custom()
+            .failureRateThreshold(50)
+            .waitDurationInOpenState(Duration.ofSeconds(30))
+            .permittedNumberOfCallsInHalfOpenState(3)
+            .slidingWindowType(SlidingWindowType.COUNT_BASED)
+            .slidingWindowSize(10)
+            .build();
+
+        return CircuitBreakerRegistry.of(
+            CircuitBreakerConfig.of("externalApi", config)
+        );
+    }
+}
+```
+
+#### JOTP CircuitBreakerPattern
+
+```java
+import io.github.seanchatmangpt.jotp.enterprise.circuitbreaker.*;
+import java.time.Duration;
+
+// Create circuit breaker configuration
+var config = new CircuitBreakerConfig(
+    "external-api",              // service name
+    3,                           // max crashes before opening
+    Duration.ofSeconds(60),      // restart window
+    Duration.ofSeconds(30),      // reset timeout
+    5                            // failure threshold
+);
+
+// Create circuit breaker
+var circuitBreaker = CircuitBreakerPattern.create(config);
+
+// Use circuit breaker
+Result<ApiResponse> result = circuitBreaker.execute(
+    timeout -> {
+        // This is executed through the circuit breaker
+        return externalApiClient.call(request);
+    },
+    Duration.ofSeconds(10)  // timeout per request
+);
+
+// Handle result
+switch (result) {
+    case Result.Success(var response) -> {
+        // Request succeeded
+        handleResponse(response);
+    }
+    case Result.Failure(var error) -> {
+        // Circuit breaker is open or request failed
+        logger.warn("Circuit breaker: {}", error.getMessage());
+        handleFallback(error);
+    }
+}
+
+// Circuit breaker states: CLOSED, OPEN, HALF_OPEN
+var state = circuitBreaker.getState();
+System.out.println("Circuit state: " + state.status());
+
+// Manual reset if needed
+circuitBreaker.reset();
+```
+
+**Key Differences:**
+1. **State machine:** Explicit CLOSED, OPEN, HALF_OPEN states
+2. **Supervisor-based:** Uses JOTP Supervisor for crash tracking
+3. **Type-safe:** Result type instead of exceptions
+4. **Self-healing:** Automatic transition to HALF_OPEN after timeout
+5. **Enterprise patterns:** Integrates with JOTP supervision trees
+
+---
+
+### 5. Message Queues → JOTP Channels
+
+#### Spring Integration Message Channels
+
+```java
+@Configuration
+public class IntegrationConfig {
+
+    @Bean
+    public MessageChannel ordersChannel() {
+        return new DirectChannel();
+    }
+
+    @Bean
+    public MessageChannel emailChannel() {
+        return new PublishSubscribeChannel();
+    }
+
+    @ServiceActivator(inputChannel = "ordersChannel")
+    public void handleOrder(Message<Order> message) {
+        var order = message.getPayload();
+        // Process order
+    }
+
+    @Bean
+    public MessageProducer orderSource() {
+        return new JmsMessageProducer(jmsTemplate())
+            .setDestination("orders")
+            .setChannel(ordersChannel());
+    }
+}
+```
+
+#### JOTP Channel Implementation
+
+```java
+import io.github.seanchatmangpt.jotp.messaging.channels.*;
+import io.github.seanchatmangpt.jotp.messaging.Channel;
+
+// Point-to-Point Channel (DirectChannel equivalent)
+var ordersChannel = new PointToPointChannel<Order>();
+
+// Subscribe consumer
+ordersChannel.subscribe(order -> {
+    // Process order
+    orderProcessor.tell(new ProcessOrder(order));
+});
+
+// Publish-Subscribe Channel (PublishSubscribeChannel equivalent)
+var emailChannel = new PublishSubscribeChannel<Email>();
+
+// Multiple subscribers
+emailChannel.subscribe(email -> notificationService.tell(new SendNotification(email)));
+emailChannel.subscribe(email -> auditLog.tell(new LogEmail(email)));
+
+// Send messages
+ordersChannel.send(new Order(orderId, items));
+
+// DataTypeChannel (routing by type)
+var eventChannel = new DataTypeChannel();
+
+eventChannel.subscribe(OrderCreated.class, event ->
+    orderHandler.tell(new HandleOrderCreated(event))
+);
+
+eventChannel.subscribe(PaymentCompleted.class, event ->
+    paymentHandler.tell(new HandlePaymentCompleted(event))
+);
+
+// Type-safe routing
+eventChannel.send(new OrderCreated(order));
+eventChannel.send(new PaymentCompleted(payment));
+```
+
+**Key Differences:**
+1. **Process-based:** Channels integrate with Proc<S,M>
+2. **Type-safe:** Generic channel types
+3. **No external dependencies:** Pure JOTP implementation
+4. **Fault isolation:** Crashing subscribers don't crash the channel
+5. **Flexible routing:** DataTypeChannel for pattern-based routing
+
+---
+
+### 6. Scheduled Tasks → ProcTimer
+
+#### Spring Boot Scheduled Tasks
+
+```java
+@Component
+public class ScheduledTasks {
+
+    @Scheduled(fixedRate = 5000)
+    public void reportCurrentTime() {
+        System.out.println("Current time: " + Instant.now());
+    }
+
+    @Scheduled(fixedDelay = 10000)
+    public void processPendingOrders() {
+        orderService.processPending();
+    }
+
+    @Scheduled(cron = "0 0 12 * * ?")
+    public void performDailyTask() {
+        dailyReportService.generate();
+    }
+
+    @Scheduled(initialDelay = 5000, fixedRate = 15000)
+    public void delayedTask() {
+        cleanupService.cleanup();
+    }
+}
+```
+
+#### JOTP ProcTimer Implementation
+
+```java
+import io.github.seanchatmangpt.jotp.ProcTimer;
+
+// Message protocol
+sealed interface TimerMsg permits
+    Tick,
+    ProcessPending,
+    DailyTask,
+    DelayedTask {}
+
+record Tick() implements TimerMsg {}
+record ProcessPending() implements TimerMsg {}
+record DailyTask() implements TimerMsg {}
+record DelayedTask() implements TimerMsg {}
+
+// Create timer process
+var timerProc = Proc.spawn(
+    new TimerState(),
+    (state, msg) -> switch (msg) {
+        case Tick _ -> {
+            System.out.println("Current time: " + Instant.now());
+            yield state;
+        }
+
+        case ProcessPending _ -> {
+            orderService.tell(new ProcessPendingOrders());
+            yield state;
+        }
+
+        case DailyTask _ -> {
+            dailyReportService.tell(new GenerateDailyReport());
+            yield state;
+        }
+
+        case DelayedTask _ -> {
+            cleanupService.tell(new Cleanup());
+            yield state;
+        }
+    }
+);
+
+// Fixed rate timer (every 5 seconds)
+var tickTimer = ProcTimer.sendInterval(
+    Duration.ofSeconds(5),
+    timerProc,
+    new Tick()
+);
+
+// Fixed delay timer (every 10 seconds)
+var processTimer = ProcTimer.sendInterval(
+    Duration.ofSeconds(10),
+    timerProc,
+    new ProcessPending()
+);
+
+// Cron-style timer (daily at noon)
+var scheduler = Executors.newScheduledThreadPool(1);
+var cronTimer = scheduler.scheduleAtFixedRate(
+    () -> {
+        var now = LocalTime.now();
+        if (now.getHour() == 12 && now.getMinute() == 0) {
+            timerProc.tell(new DailyTask());
+        }
+    },
+    0,
+    1,
+    TimeUnit.MINUTES
+);
+
+// Delayed timer (initial delay + fixed rate)
+var delayedTimer = ProcTimer.sendAfter(
+    Duration.ofSeconds(5),
+    timerProc,
+    new DelayedTask()
+);
+
+// Then start interval
+var delayedInterval = ProcTimer.sendInterval(
+    Duration.ofSeconds(15),
+    timerProc,
+    new DelayedTask()
+);
+
+// Cancel timers when done
+tickTimer.cancel();
+processTimer.cancel();
+cronTimer.cancel(false);
+delayedTimer.cancel();
+```
+
+**Key Differences:**
+1. **Process-based:** Messages instead of method calls
+2. **Explicit timers:** TimerRef objects for cancellation
+3. **More control:** Can dynamically adjust timers
+4. **No proxy magic:** Direct Proc.tell() calls
+5. **Timeout awareness:** Integrates with Proc.ask(timeout)
+
+---
+
+### 7. Configuration Management
+
+#### Spring Boot Configuration
+
+```java
+@Configuration
+@EnableConfigurationProperties
+public class AppConfig {
+
+    @Bean
+    @ConfigurationProperties(prefix = "app")
+    public AppProperties appProperties() {
+        return new AppProperties();
+    }
+
+    @Bean
+    @ConfigurationProperties(prefix = "database")
+    public DatabaseProperties databaseProperties() {
+        return new DatabaseProperties();
+    }
+}
+
+@Component
+@ConfigurationProperties(prefix = "payment.gateway")
+public class PaymentGatewayProperties {
+    private String url;
+    private Duration timeout;
+    private int maxRetries;
+    // getters and setters
+}
+```
+
+#### JOTP Configuration Pattern
+
+```java
+import java.util.Properties;
+import java.time.Duration;
+
+// Configuration records (immutable)
+public record AppConfig(
+    String name,
+    int queueSize,
+    Duration timeout
+) {}
+
+public record DatabaseConfig(
+    String url,
+    String username,
+    String password,
+    int poolSize
+) {}
+
+public record PaymentGatewayConfig(
+    String url,
+    Duration timeout,
+    int maxRetries
+) {}
+
+// Configuration loader
+public class Config {
+    private static final Properties props = loadProperties();
+
+    public static AppConfig appConfig() {
+        return new AppConfig(
+            props.getProperty("app.name"),
+            Integer.parseInt(props.getProperty("app.queue-size")),
+            Duration.ofMillis(Long.parseLong(props.getProperty("app.timeout")))
+        );
+    }
+
+    public static DatabaseConfig databaseConfig() {
+        return new DatabaseConfig(
+            props.getProperty("database.url"),
+            props.getProperty("database.username"),
+            props.getProperty("database.password"),
+            Integer.parseInt(props.getProperty("database.pool-size"))
+        );
+    }
+
+    public static PaymentGatewayConfig paymentGatewayConfig() {
+        return new PaymentGatewayConfig(
+            props.getProperty("payment.gateway.url"),
+            Duration.ofMillis(Long.parseLong(props.getProperty("payment.gateway.timeout"))),
+            Integer.parseInt(props.getProperty("payment.gateway.max-retries"))
+        );
+    }
+
+    private static Properties loadProperties() {
+        var props = new Properties();
+        try (var in = Config.class.getResourceAsStream("/application.properties")) {
+            props.load(in);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load properties", e);
+        }
+        return props;
+    }
+}
+
+// Use configuration in processes
+var appConfig = Config.appConfig();
+var dbConfig = Config.databaseConfig();
+var paymentConfig = Config.paymentGatewayConfig();
+
+var orderProc = Proc.spawn(
+    new OrderState(appConfig, dbConfig, paymentConfig),
+    orderHandler
+);
+```
+
+**Key Differences:**
+1. **No @Value:** Manual property loading
+2. **Type-safe records:** Compile-time checking
+3. **Explicit conversion:** Manual type conversion
+4. **Immutability:** All configuration is immutable
+5. **No proxy:** Direct record instantiation
+
+---
+
+## Step-by-Step Migration Example
+
+Let's migrate a complete Spring Boot order processing system to JOTP.
+
+### Original Spring Boot Application
+
+```java
+@RestController
+@RequestMapping("/api/orders")
+public class OrderController {
+
+    @Autowired
+    private OrderService orderService;
+
+    @PostMapping
+    public ResponseEntity<Order> createOrder(@RequestBody OrderRequest request) {
+        var order = orderService.createOrder(request);
+        return ResponseEntity.ok(order);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Order> getOrder(@PathVariable String id) {
+        var order = orderService.getOrder(id);
+        return ResponseEntity.ok(order);
+    }
+}
+
+@Service
+public class OrderService {
+
+    @Autowired
+    private OrderRepository repository;
+
+    @Autowired
+    private PaymentService paymentService;
+
+    @Autowired
+    private InventoryService inventoryService;
+
+    @Transactional
+    public Order createOrder(OrderRequest request) {
+        var order = new Order(request);
+        order = repository.save(order);
+
+        inventoryService.reserveItems(order.getItems());
+        var payment = paymentService.processPayment(order);
+        order.setPayment(payment);
+
+        return repository.save(order);
+    }
+}
+```
+
+### JOTP Migration Step 1: Define Message Protocols
+
+```java
+// Order process messages
+sealed interface OrderMsg permits
+    CreateOrder,
+    GetOrder,
+    InventoryReserved,
+    PaymentCompleted,
+    OrderCompleted {}
+
+record CreateOrder(
+    OrderRequest request,
+    CompletableFuture<Order> replyTo
+) implements OrderMsg {}
+
+record GetOrder(
+    String id,
+    CompletableFuture<Order> replyTo
+) implements OrderMsg {}
+
+record InventoryReserved(
+    String orderId,
+    List<OrderItem> items
+) implements OrderMsg {}
+
+record PaymentCompleted(
+    String orderId,
+    Payment payment
+) implements OrderMsg {}
+
+record OrderCompleted(Order order) implements OrderMsg {}
+
+// Payment process messages
+sealed interface PaymentMsg permits
+    ProcessPayment,
+    PaymentFailed {}
+
+record ProcessPayment(
+    Order order,
+    CompletableFuture<Payment> replyTo
+) implements PaymentMsg {}
+
+record PaymentFailed(
+    String orderId,
+    String reason
+) implements PaymentMsg {}
+
+// Inventory process messages
+sealed interface InventoryMsg permits
+    ReserveItems,
+    ItemsReserved,
+    ReservationFailed {}
+
+record ReserveItems(
+    List<OrderItem> items,
+    String orderId
+) implements InventoryMsg {}
+
+record ItemsReserved(
+    String orderId,
+    List<OrderItem> items
+) implements InventoryMsg {}
+
+record ReservationFailed(
+    String orderId,
+    String reason
+) implements InventoryMsg {}
+```
+
+### JOTP Migration Step 2: Create State Records
+
+```java
+// Order state
+record OrderState(
+    Map<String, Order> orders,
+    ProcRef<PaymentState, PaymentMsg> paymentService,
+    ProcRef<InventoryState, InventoryMsg> inventoryService
+) {}
+
+// Payment state
+record PaymentState(
+    PaymentGateway gateway,
+    Map<String, Payment> payments
+) {}
+
+// Inventory state
+record InventoryState(
+    Map<String, Integer> inventory,
+    Map<String, List<OrderItem>> reservations
+) {}
+```
+
+### JOTP Migration Step 3: Create Supervision Tree
+
+```java
+// Create root supervisor
+var rootSupervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofSeconds(60)
+);
+
+// Create inventory process
+var inventoryProc = rootSupervisor.supervise(
+    "inventory-service",
+    new InventoryState(
+        loadInitialInventory(),
+        Map.of()
+    ),
+    (state, msg) -> switch (msg) {
+        case ReserveItems(var items, var orderId) -> {
+            // Check if items are available
+            boolean allAvailable = items.stream()
+                .allMatch(item ->
+                    state.inventory().getOrDefault(item.productId(), 0) >= item.quantity()
+                );
+
+            if (!allAvailable) {
+                // Send failure back to order service
+                yield state;
+            }
+
+            // Reserve items
+            var updatedInventory = new HashMap<>(state.inventory());
+            items.forEach(item ->
+                updatedInventory.merge(
+                    item.productId(),
+                    -item.quantity(),
+                    Integer::sum
+                )
+            );
+
+            var updatedReservations = new HashMap<>(state.reservations());
+            updatedReservations.put(orderId, items);
+
+            yield new InventoryState(
+                Map.copyOf(updatedInventory),
+                Map.copyOf(updatedReservations)
+            );
+        }
+
+        case ItemsReserved(var orderId, var items) -> {
+            // Confirmation - already reserved
+            yield state;
+        }
+
+        case ReservationFailed(var orderId, var reason) -> {
+            // Release reservation
+            var items = state.reservations().get(orderId);
+            if (items != null) {
+                var updatedInventory = new HashMap<>(state.inventory());
+                items.forEach(item ->
+                    updatedInventory.merge(
+                        item.productId(),
+                        item.quantity(),
+                        Integer::sum
+                    )
+                );
+
+                var updatedReservations = new HashMap<>(state.reservations());
+                updatedReservations.remove(orderId);
+
+                yield new InventoryState(
+                    Map.copyOf(updatedInventory),
+                    Map.copyOf(updatedReservations)
+                );
+            }
+            yield state;
+        }
+    }
+);
+
+// Create payment process
+var paymentProc = rootSupervisor.supervise(
+    "payment-service",
+    new PaymentState(
+        new PaymentGateway(),
+        Map.of()
+    ),
+    (state, msg) -> switch (msg) {
+        case ProcessPayment(var order, var reply) -> {
+            try {
+                var payment = state.gateway().charge(order);
+                var updatedPayments = new HashMap<>(state.payments());
+                updatedPayments.put(order.id(), payment);
+                reply.complete(payment);
+                yield new PaymentState(
+                    state.gateway(),
+                    Map.copyOf(updatedPayments)
+                );
+            } catch (PaymentException e) {
+                reply.completeExceptionally(e);
+                throw e;  // Supervisor will restart
+            }
+        }
+
+        case PaymentFailed(var orderId, var reason) -> {
+            // Log failure
+            yield state;
+        }
+    }
+);
+
+// Create order process
+var orderProc = rootSupervisor.supervise(
+    "order-service",
+    new OrderState(
+        Map.of(),
+        new ProcRef<>(paymentProc),
+        new ProcRef<>(inventoryProc)
+    ),
+    (state, msg) -> switch (msg) {
+        case CreateOrder(var req, var reply) -> {
+            var order = new Order(req);
+            var updatedOrders = new HashMap<>(state.orders());
+            updatedOrders.put(order.id(), order);
+
+            // Start workflow: reserve inventory
+            state.inventoryService().tell(new ReserveItems(
+                order.items(),
+                order.id()
+            ));
+
+            yield new OrderState(
+                Map.copyOf(updatedOrders),
+                state.paymentService(),
+                state.inventoryService()
+            );
+        }
+
+        case GetOrder(var id, var reply) -> {
+            var order = state.orders().get(id);
+            if (order != null) {
+                reply.complete(order);
+            } else {
+                reply.completeExceptionally(
+                    new NotFoundException("Order not found")
+                );
+            }
+            yield state;
+        }
+
+        case InventoryReserved(var orderId, var items) -> {
+            // Inventory reserved, process payment
+            var order = state.orders().get(orderId);
+            if (order != null) {
+                state.paymentService().tell(new ProcessPayment(
+                    order,
+                    CompletableFuture.completedFuture(new Payment())
+                ));
+            }
+            yield state;
+        }
+
+        case PaymentCompleted(var orderId, var payment) -> {
+            // Payment completed, mark order as complete
+            var order = state.orders().get(orderId);
+            if (order != null) {
+                var completedOrder = order.withStatus(OrderStatus.COMPLETED);
+                var updatedOrders = new HashMap<>(state.orders());
+                updatedOrders.put(orderId, completedOrder);
+                yield new OrderState(
+                    Map.copyOf(updatedOrders),
+                    state.paymentService(),
+                    state.inventoryService()
+                );
+            }
+            yield state;
+        }
+
+        case OrderCompleted(var order) -> {
+            var updatedOrders = new HashMap<>(state.orders());
+            updatedOrders.put(order.id(), order);
+            yield new OrderState(
+                Map.copyOf(updatedOrders),
+                state.paymentService(),
+                state.inventoryService()
+            );
+        }
+    }
+);
+
+// Register for lookup
+ProcRegistry.register("order-service", orderProc);
+ProcRegistry.register("payment-service", paymentProc);
+ProcRegistry.register("inventory-service", inventoryProc);
+```
+
+### JOTP Migration Step 4: Create HTTP Interface
+
+```java
+// HTTP interface process
+sealed interface HttpMsg permits
+    HandleRequest {}
+
+record HandleRequest(
+    HttpRequest request,
+    HttpResponse response
+) implements HttpMsg {}
+
+var httpProc = Proc.spawn(
+    new HttpState(new ProcRef<>(orderProc)),
+    (state, msg) -> switch (msg) {
+        case HandleRequest(var req, var res) -> {
+            if (req.path().startsWith("/api/orders")) {
+                handleOrderRequest(state, req, res);
+            }
+            yield state;
+        }
+    }
+);
+
+private static void handleOrderRequest(
+    HttpState state,
+    HttpRequest req,
+    HttpResponse res
+) {
+    if (req.method().equals("POST") && req.path().equals("/api/orders")) {
+        // Create order
+        var orderRequest = parseOrderRequest(req.body());
+        var future = new CompletableFuture<Order>();
+
+        state.orderService().tell(new CreateOrder(orderRequest, future));
+
+        future.thenAccept(order -> {
+            res.status(201).body(Json.toJson(order));
+        }).exceptionally(ex -> {
+            res.status(500).body(ex.getMessage());
+            return null;
+        });
+
+    } else if (req.method().equals("GET") && req.path().startsWith("/api/orders/")) {
+        // Get order
+        var orderId = req.path().substring("/api/orders/".length());
+        var future = new CompletableFuture<Order>();
+
+        state.orderService().tell(new GetOrder(orderId, future));
+
+        future.thenAccept(order -> {
+            res.status(200).body(Json.toJson(order));
+        }).exceptionally(ex -> {
+            res.status(404).body(ex.getMessage());
+            return null;
+        });
+    }
+}
+```
+
+---
+
+## Running Spring Boot and JOTP Side-by-Side
+
+### Strangler Pattern Implementation
+
+```java
+// Gateway to route traffic between Spring Boot and JOTP
+@RestController
+@RequestMapping("/api")
+public class MigrationGateway {
+
+    @Autowired
+    private OrderService springOrderService;
+
+    private final ProcRef<OrderState, OrderMsg> jotpOrderService;
+
+    private final double migrationPercentage;  // 0.0 to 1.0
+
+    @PostMapping("/orders")
+    public ResponseEntity<Order> createOrder(@RequestBody OrderRequest request) {
+        // Route based on feature flag or percentage
+        if (shouldRouteToJotp(request)) {
+            return routeToJotp(request);
+        } else {
+            return routeToSpring(request);
+        }
+    }
+
+    private boolean shouldRouteToJotp(OrderRequest request) {
+        // Route based on feature flag
+        var featureFlag = FeatureFlags.get("jotp.orders.enabled", false);
+        if (featureFlag) {
+            return true;
+        }
+
+        // Route based on percentage (canary release)
+        return Math.random() < migrationPercentage;
+    }
+
+    private ResponseEntity<Order> routeToJotp(OrderRequest request) {
+        try {
+            var future = new CompletableFuture<Order>();
+            jotpOrderService.tell(new CreateOrder(request, future));
+            var order = future.get(5, TimeUnit.SECONDS);
+            return ResponseEntity.ok(order);
+        } catch (Exception e) {
+            // Fallback to Spring Boot on error
+            return routeToSpring(request);
+        }
+    }
+
+    private ResponseEntity<Order> routeToSpring(OrderRequest request) {
+        var order = springOrderService.createOrder(request);
+        return ResponseEntity.ok(order);
+    }
+}
+```
+
+### Database Compatibility
+
+```java
+// Both systems use the same database
+@Configuration
+public class DatabaseConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        var hikari = new HikariDataSource();
+        hikari.setJdbcUrl("jdbc:postgresql://localhost/orders");
+        hikari.setUsername("user");
+        hikari.setPassword("pass");
+        return hikari;
+    }
+}
+
+// JOTP process can also access the database
+record DatabaseState(DataSource dataSource) {}
+
+var dbProc = Proc.spawn(
+    new DatabaseState(dataSource),
+    (state, msg) -> switch (msg) {
+        case Query(var sql, var reply) -> {
+            try (var conn = state.dataSource().getConnection();
+                 var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery(sql)) {
+                var results = parseResults(rs);
+                reply.complete(results);
+            } catch (SQLException e) {
+                reply.completeExceptionally(e);
+            }
+            yield state;
+        }
+    }
+);
+```
+
+### Feature Flags
+
+```java
+// Feature flag configuration
+public class FeatureFlags {
+    private static final Map<String, Boolean> flags = loadFlags();
+
+    public static boolean get(String flag, boolean defaultValue) {
+        return flags.getOrDefault(flag, defaultValue);
+    }
+
+    private static Map<String, Boolean> loadFlags() {
+        // Load from properties, database, or remote config service
+        var props = new Properties();
+        try (var in = FeatureFlags.class.getResourceAsStream("/feature-flags.properties")) {
+            props.load(in);
+        } catch (IOException e) {
+            return Map.of();
+        }
+
+        return props.entrySet().stream()
+            .collect(Collectors.toMap(
+                e -> e.getKey().toString(),
+                e -> Boolean.parseBoolean(e.getValue().toString())
+            ));
+    }
+}
+
+// Usage
+if (FeatureFlags.get("jotp.orders.enabled", false)) {
+    // Use JOTP order service
+} else {
+    // Use Spring Boot order service
+}
+```
+
+---
+
+## Advanced Patterns
+
+### 1. Saga Pattern for Distributed Transactions
+
+```java
+// Saga state machine for order processing
+sealed interface SagaState permits
+    Started,
+    OrderCreated,
+    InventoryReserved,
+    PaymentProcessed,
+    Completed,
+    Failed {}
+
+record Started() implements SagaState {}
+record OrderCreated(Order order) implements SagaState {}
+record InventoryReserved(Order order) implements SagaState {}
+record PaymentProcessed(Order order) implements SagaState {}
+record Completed(Order order) implements SagaState {}
+record Failed(Order order, String reason) implements SagaState {}
+
+// Saga events
+sealed interface SagaEvent permits
+    StartOrder,
+    ReserveInventory,
+    ProcessPayment,
+    CompleteOrder,
+    Compensate {}
+
+record StartOrder(OrderRequest request) implements SagaEvent {}
+record ReserveInventory(Order order) implements SagaEvent {}
+record ProcessPayment(Order order) implements SagaEvent {}
+record CompleteOrder(Order order) implements SagaEvent {}
+record Compensate(String step, Order order) implements SagaEvent {}
+
+// Create saga
+var saga = StateMachine.of(
+    new Started(),
+    null,
+    (state, event, data) -> switch (state) {
+        case Started _ -> switch (event) {
+            case SMEvent.User(StartOrder(var req)) -> {
+                var order = new Order(req);
+                orderService.tell(new SaveOrder(order));
+                yield Transition.nextState(new OrderCreated(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case OrderCreated(var order) -> switch (event) {
+            case SMEvent.User(ReserveInventory _) -> {
+                inventoryService.tell(new ReserveItems(order.items(), order.id()));
+                yield Transition.nextState(new InventoryReserved(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case InventoryReserved(var order) -> switch (event) {
+            case SMEvent.User(ProcessPayment _) -> {
+                paymentService.tell(new ProcessPayment(order));
+                yield Transition.nextState(new PaymentProcessed(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case PaymentProcessed(var order) -> switch (event) {
+            case SMEvent.User(CompleteOrder _) -> {
+                orderService.tell(new UpdateOrderStatus(order.id(), OrderStatus.COMPLETED));
+                yield Transition.nextState(new Completed(order), order);
+            }
+            default -> Transition.keepState(data);
+        };
+
+        case Completed _ -> Transition.stop("Order completed");
+
+        case Failed(var order, var reason) -> {
+            // Execute compensating transactions
+            inventoryService.tell(new ReleaseItems(order.items(), order.id()));
+            paymentService.tell(new Refund(order.payment()));
+            orderService.tell(new UpdateOrderStatus(order.id(), OrderStatus.FAILED));
+            yield Transition.stop("Saga failed: " + reason);
+        };
+    }
+);
+
+// Start saga
+saga.call(new StartOrder(orderRequest));
+```
+
+### 2. Event Sourcing with JOTP
+
+```java
+// Event-sourced order process
+sealed interface OrderEvent permits
+    OrderCreated,
+    ItemAdded,
+    PaymentCompleted,
+    OrderCancelled {}
+
+record OrderCreated(String orderId, List<OrderItem> items) implements OrderEvent {}
+record ItemAdded(String orderId, OrderItem item) implements OrderItem {}
+record PaymentCompleted(String orderId, Payment payment) implements OrderEvent {}
+record OrderCancelled(String orderId, String reason) implements OrderEvent {}
+
+// Event store
+record EventStoreState(
+    Map<String, List<OrderEvent>> events,
+    ProcRef<ProjectionState, ProjectionMsg> projection
+) {}
+
+var eventStore = Proc.spawn(
+    new EventStoreState(Map.of(), projectionRef),
+    (state, msg) -> switch (msg) {
+        case AppendEvent(var orderId, var event) -> {
+            var events = new ArrayList<>(
+                state.events().getOrDefault(orderId, List.of())
+            );
+            events.add(event);
+
+            var updatedEvents = new HashMap<>(state.events());
+            updatedEvents.put(orderId, List.copyOf(events));
+
+            // Notify projection
+            state.projection().tell(new ApplyEvent(orderId, event));
+
+            yield new EventStoreState(Map.copyOf(updatedEvents), state.projection());
+        }
+
+        case GetEvents(var orderId, var reply) -> {
+            reply.complete(state.events().getOrDefault(orderId, List.of()));
+            yield state;
+        }
+    }
+);
+
+// Rebuild state from events
+List<OrderEvent> events = eventStore.ask(new GetEvents(orderId)).join();
+Order order = rebuildOrder(events);
+```
+
+### 3. CQRS with JOTP
+
+```java
+// Command side
+sealed interface CommandMsg permits
+    CreateOrder,
+    UpdateOrder,
+    DeleteOrder {}
+
+record CreateOrder(OrderRequest request) implements CommandMsg {}
+record UpdateOrder(String orderId, OrderUpdate update) implements CommandMsg {}
+record DeleteOrder(String orderId) implements CommandMsg {}
+
+var commandProc = Proc.spawn(
+    new CommandState(),
+    (state, msg) -> switch (msg) {
+        case CreateOrder(var req) -> {
+            var orderId = generateOrderId();
+            var event = new OrderCreated(orderId, req.items());
+            eventStore.tell(new AppendEvent(orderId, event));
+            yield state;
+        }
+
+        case UpdateOrder(var orderId, var update) -> {
+            var event = new OrderUpdated(orderId, update);
+            eventStore.tell(new AppendEvent(orderId, event));
+            yield state;
+        }
+
+        case DeleteOrder(var orderId) -> {
+            var event = new OrderDeleted(orderId);
+            eventStore.tell(new AppendEvent(orderId, event));
+            yield state;
+        }
+    }
+);
+
+// Query side (projection)
+sealed interface ProjectionMsg permits
+    ApplyEvent,
+    QueryOrder {}
+
+record ApplyEvent(String orderId, OrderEvent event) implements ProjectionMsg {}
+record QueryOrder(String orderId, CompletableFuture<Order> replyTo) implements ProjectionMsg {}
+
+var queryProc = Proc.spawn(
+    new ProjectionState(Map.of()),
+    (state, msg) -> switch (msg) {
+        case ApplyEvent(var orderId, var event) -> {
+            var updatedOrders = new HashMap<>(state.orders());
+            var currentOrder = state.orders().get(orderId);
+
+            var newOrder = switch (event) {
+                case OrderCreated(var id, var items) -> new Order(id, items);
+                case OrderUpdated(var id, var update) -> currentOrder.withUpdate(update);
+                case OrderDeleted(var id) -> null;
+            };
+
+            if (newOrder != null) {
+                updatedOrders.put(orderId, newOrder);
+            } else {
+                updatedOrders.remove(orderId);
+            }
+
+            yield new ProjectionState(Map.copyOf(updatedOrders));
+        }
+
+        case QueryOrder(var orderId, var reply) -> {
+            reply.complete(state.orders().get(orderId));
+            yield state;
+        }
+    }
+);
+```
+
+---
+
+## Testing Strategies
+
+### Unit Tests
+
+```java
+@Test
+void testCreateOrder() {
+    // Create processes
+    var orderProc = Proc.spawn(
+        new OrderState(Map.of(), paymentRef, inventoryRef),
+        orderHandler
+    );
+
+    // Send message
+    var future = new CompletableFuture<Order>();
+    orderProc.tell(new CreateOrder(orderRequest, future));
+
+    // Wait for response
+    var order = future.join();
+
+    // Assertions
+    assertNotNull(order);
+    assertEquals("product-1", order.items().get(0).productId());
+}
+```
+
+### Supervision Tests
+
+```java
+@Test
+void testSupervisorRestarts() {
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        3,
+        Duration.ofSeconds(10)
+    );
+
+    var crashCount = new AtomicInteger(0);
+
+    var child = supervisor.supervise(
+        "test-child",
+        new TestState(),
+        (state, msg) -> switch (msg) {
+            case Crash _ -> {
+                crashCount.incrementAndGet();
+                throw new RuntimeException("Crash!");
+            }
+        }
+    );
+
+    // Crash the child
+    child.tell(new Crash());
+
+    // Wait for restart
+    await().atMost(2, TimeUnit.SECONDS)
+        .until(() -> crashCount.get() == 1);
+
+    // Verify it's still running
+    assertTrue(child.proc().thread().isAlive());
+}
+```
+
+### Integration Tests
+
+```java
+@Test
+void testOrderWorkflow() {
+    // Create supervision tree
+    var supervisor = Supervisor.create(
+        Supervisor.Strategy.ONE_FOR_ONE,
+        5,
+        Duration.ofSeconds(60)
+    );
+
+    var inventoryProc = supervisor.supervise("inventory", inventoryState, inventoryHandler);
+    var paymentProc = supervisor.supervise("payment", paymentState, paymentHandler);
+    var orderProc = supervisor.supervise("order", orderState, orderHandler);
+
+    // Create order
+    var future = new CompletableFuture<Order>();
+    orderProc.tell(new CreateOrder(orderRequest, future));
+
+    // Wait for completion
+    var order = future.join();
+
+    // Verify
+    assertEquals(OrderStatus.COMPLETED, order.status());
+}
+```
+
+---
+
+## Performance Considerations
+
+### Virtual Thread Advantages
+
+```java
+// Millions of processes
+var processes = new ArrayList<ProcRef<State, Msg>>();
+
+for (int i = 0; i < 1_000_000; i++) {
+    var proc = Proc.spawn(initialState, handler);
+    processes.add(new ProcRef<>(proc));
+}
+
+// All processes run concurrently
+// Memory usage: ~1 KB per process = ~1 GB total
+// Context switching: Sub-millisecond
+
+// Compare to Spring Boot thread pools:
+// - 200 threads max = 200 concurrent operations
+// - Thread creation: ~1 MB per thread = 200 MB for 200 threads
+// - Context switching: Microseconds to milliseconds
+```
+
+### Message Throughput
+
+```java
+// Benchmark message passing
+var proc = Proc.spawn(state, handler);
+
+var start = System.nanoTime();
+
+for (int i = 0; i < 10_000_000; i++) {
+    proc.tell(new Message(i));
+}
+
+var duration = System.nanoTime() - start;
+var messagesPerSecond = (10_000_000L * 1_000_000_000) / duration;
+
+// Typical results:
+// - 10-50 million messages/second
+// - 50-150 ns per message round-trip
+// - LinkedTransferQueue is highly optimized
+```
+
+### Supervision Overhead
+
+```java
+// Supervisor crash detection
+var supervisor = Supervisor.create(
+    Supervisor.Strategy.ONE_FOR_ONE,
+    5,
+    Duration.ofSeconds(60)
+);
+
+var children = new ArrayList<ProcRef<?, ?>>();
+
+for (int i = 0; i < 1000; i++) {
+    var child = supervisor.supervise("child-" + i, state, handler);
+    children.add(child);
+}
+
+// Crash all children simultaneously
+children.forEach(child -> child.tell(new Crash()));
+
+// Supervisor restarts all children within 75ms each
+// Total restart time: ~75ms (parallel restarts)
+// Memory overhead: Negligible (virtual threads)
+```
+
+---
+
+## Migration Checklist
+
+### Phase 1: Assessment (Week 1)
+- [ ] Review existing Spring Boot application
+- [ ] Identify critical services to migrate
+- [ ] Assess team expertise with message passing
+- [ ] Estimate effort and timeline
+- [ ] Define success criteria
+
+### Phase 2: Learning (Week 2-3)
+- [ ] Study JOTP primitives (Proc, Supervisor, StateMachine)
+- [ ] Build proof-of-concept processes
+- [ ] Practice message passing patterns
+- [ ] Learn supervision strategies
+- [ ] Understand virtual threads
+
+### Phase 3: Pilot (Week 4-6)
+- [ ] Select non-critical service for pilot
+- [ ] Implement JOTP version alongside Spring Boot
+- [ ] Set up feature flags for gradual rollout
+- [ ] Test thoroughly (unit, integration, stress)
+- [ ] Measure performance and reliability
+- [ ] Document lessons learned
+
+### Phase 4: Migration (Week 7+)
+- [ ] Migrate core services one by one
+- [ ] Use strangler pattern for gradual rollout
+- [ ] Update testing infrastructure
+- [ ] Modify deployment pipelines
+- [ ] Train team members
+- [ ] Establish best practices
+
+### Phase 5: Optimization (Ongoing)
+- [ ] Performance tuning
+- [ ] Memory optimization
+- [ ] Supervision tree refinement
+- [ ] Error handling improvements
+- [ ] Documentation updates
+- [ ] Knowledge sharing
+
+---
+
+## Common Pitfalls and Solutions
+
+### Pitfall 1: Blocking in Virtual Threads
+
+**Problem:**
+```java
+case DatabaseQuery _ -> {
+    var result = repository.query();  // Blocks virtual thread
+    yield state;
+}
+```
+
+**Solution:**
+```java
+case DatabaseQuery _ -> {
+    var future = CompletableFuture.supplyAsync(
+        () -> repository.query(),
+        blockingExecutor  // Dedicated platform thread pool
+    );
+    // Handle async result or use structured concurrency
+    yield state;
+}
+```
+
+### Pitfall 2: Mutable State
+
+**Problem:**
+```java
+record BadState(List<String> items) {}  // Mutable list!
+```
+
+**Solution:**
+```java
+record GoodState(List<String> items) {
+    public GoodState {
+        items = List.copyOf(items);  // Defensive copy
+    }
+}
+```
+
+### Pitfall 3: Overusing Try-Catch
+
+**Problem:**
+```java
+case ProcessMsg _ -> {
+    try {
+        riskyOperation();
+    } catch (Exception e) {
+        // Swallowing exceptions defeats supervision
+    }
+}
+```
+
+**Solution:**
+```java
+case ProcessMsg _ -> riskyOperation();  // Let supervisor handle crashes
+```
+
+### Pitfall 4: Ignoring Timeouts
+
+**Problem:**
+```java
+var future = proc.ask(new Request());
+var result = future.get();  // May block forever!
+```
+
+**Solution:**
+```java
+var future = proc.ask(new Request(), Duration.ofSeconds(5));
+var result = future.get(5, TimeUnit.SECONDS);
+```
+
+### Pitfall 5: Leaking Processes
+
+**Problem:**
+```java
+// Creating processes without cleanup
+for (int i = 0; i < 1000; i++) {
+    var proc = Proc.spawn(state, handler);
+    // Process never stopped!
+}
+```
+
+**Solution:**
+```java
+// Use supervision trees
+var supervisor = Supervisor.create(strategy, maxRestarts, window);
+
+// Or explicitly stop processes
+var proc = Proc.spawn(state, handler);
+try {
+    // Use process
+} finally {
+    proc.stop();
+}
+```
+
+---
+
+## Conclusion
+
+Migrating from Spring Boot to JOTP represents a fundamental architectural shift from synchronous, container-managed applications to asynchronous, message-driven systems. While the learning curve is steep, the benefits in fault tolerance, scalability, and system reliability are significant.
+
+**Key Takeaways:**
+1. **Message passing** replaces synchronous method calls
+2. **Supervision trees** replace exception handling
+3. **Immutable state** replaces mutable beans
+4. **Virtual threads** replace thread pools
+5. **Explicit patterns** replace annotations
+
+**When to Migrate:**
+- High concurrency requirements (thousands of concurrent operations)
+- Need for fault tolerance and self-healing
+- Complex distributed workflows
+- Real-time systems with low latency requirements
+
+**When to Stay with Spring Boot:**
+- Simple CRUD applications
+- Traditional MVC web apps
+- Team lacks concurrent programming experience
+- Low concurrency requirements
+
+The migration is best done incrementally using the strangler pattern, running Spring Boot and JOTP side-by-side until the transition is complete. Start with non-critical services to build expertise before tackling core business logic.
+
+---
+
+## Further Reading
+
+- [JOTP Architecture Overview](/docs/explanations/architecture-overview)
+- [How-To: Build Supervision Trees](/docs/how-to/build-supervision-trees)
+- [How-To: State Machine Workflows](/docs/how-to/state-machine-workflow)
+- [Examples: Circuit Breaker Pattern](/docs/examples/circuit-breaker-pattern)
+- [Examples: Saga Pattern](/docs/examples/saga-pattern)
+- [Testing JOTP Applications](/docs/how-to/testing-jotp-applications)

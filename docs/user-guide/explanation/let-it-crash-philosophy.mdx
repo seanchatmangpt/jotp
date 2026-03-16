@@ -1,0 +1,423 @@
+---
+title: Let It Crash Philosophy
+description: Understanding fault tolerance through process isolation and supervision
+sidebar_position: 3
+---
+
+# Let It Crash Philosophy
+
+The "let it crash" philosophy is the cornerstone of JOTP and Erlang/OTP's approach to building fault-tolerant systems. Instead of trying to prevent all errors, we embrace failure and build systems that recover gracefully.
+
+## Core Philosophy
+
+### Traditional Approach (Defensive Programming)
+
+```java
+// Try to handle everything
+try {
+    doSomething();
+} catch (IOException e) {
+    handleIOException(e);
+} catch (SQLException e) {
+    handleSQLException(e);
+} catch (Exception e) {
+    handleEverythingElse(e);
+} finally {
+    cleanup();
+}
+```
+
+**Problems:**
+- Error handling code gets complex
+- Hard to anticipate all failure modes
+- Bugs in error handling code themselves
+- State becomes corrupted after recovery
+
+### Let It Crash Approach
+
+```java
+// Don't catch - let supervisor handle it
+State handle(State state, Message msg) {
+    if (msg instanceof ProcessPayment pm) {
+        // If this throws, process dies and supervisor restarts
+        return processPayment(state, pm);
+    }
+    return state;
+}
+```
+
+**Advantages:**
+- Clean, simple code paths
+- No corrupted state (restart from known good state)
+- Supervisor handles recovery consistently
+- Error handling code is tested and reused
+
+## How It Works
+
+### 1. Process Isolation
+
+Each process has:
+- **Isolated heap**: No shared mutable state
+- **Mailbox**: Message queue for communication
+- **State**: Process-local data
+- **Handler**: Pure function processing messages
+
+```java
+Proc<PaymentState, PaymentMessage> proc = Proc.spawn(
+    "payment-processor",
+    new PaymentState(),  // Initial clean state
+    this::handle         // Pure function
+);
+```
+
+### 2. Failure Detection
+
+When a process crashes:
+1. Exception propagates to process root
+2. Process terminates immediately
+3. Linked/monitored processes notified
+4. Supervisor detects child death
+5. Supervisor restarts child
+
+```java
+// In Supervisor
+State handle(State state, Message msg) {
+    if (msg instanceof ExitSignal exit) {
+        logger.warn("Child {} crashed: {}", exit.childId(), exit.reason());
+        return restartChild(state, exit.childId());
+    }
+    return state;
+}
+```
+
+### 3. Automatic Recovery
+
+Supervisor restarts process:
+- **Clean state**: Fresh initial state
+- **Known configuration**: Same startup parameters
+- **Resource cleanup**: Old resources released
+- **Backoff**: Optional delay before restart
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .id("worker")
+    .start(() -> WorkerProc.spawn(config))
+    .restart(RestartStrategy.PERMANENT)
+    .build();
+```
+
+## Crash Scenarios
+
+### Scenario 1: Unexpected Exception
+
+```java
+State handle(State state, Message msg) {
+    // Bug: Division by zero
+    int result = 100 / state.divisor();  // Throws ArithmeticException
+    return new State(result);
+}
+```
+
+**What happens:**
+1. Process crashes with ArithmeticException
+2. Supervisor logs crash reason
+3. Supervisor restarts process with clean state
+4. System continues operating
+
+### Scenario 2: Resource Exhaustion
+
+```java
+State handle(State state, Message msg) {
+    // Too many connections
+    Connection conn = pool.getConnection();  // Throws TimeoutException
+    return processWithConnection(state, conn);
+}
+```
+
+**What happens:**
+1. Process crashes with TimeoutException
+2. Old connection released (process terminates)
+3. Supervisor restarts process
+4. Process tries again with fresh connection
+
+### Scenario 3: External Dependency Failure
+
+```java
+State handle(State state, Message msg) {
+    // Payment gateway down
+    PaymentResult result = gateway.charge(amount);  // Throws IOException
+    return recordPayment(state, result);
+}
+```
+
+**What happens:**
+1. Process crashes with IOException
+2. Supervisor detects repeated crashes
+3. Supervisor may apply backoff or give up
+4. Circuit breaker can trip at higher level
+
+## When NOT to Let It Crash
+
+### 1. Expected Errors
+
+```java
+// Don't crash on expected failures
+State handle(State state, Message msg) {
+    if (msg instanceof ValidateOrder vo) {
+        Result<Order, ValidationError> result = validator.validate(vo.order());
+
+        if (result.isErr()) {
+            // Return error, don't crash
+            return state.withError(result.getError());
+        }
+
+        return processValidOrder(state, result.get());
+    }
+    return state;
+}
+```
+
+### 2. Transient Failures
+
+```java
+// Retry instead of crashing
+State handle(State state, Message msg) {
+    for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+            return callExternalService(state);
+        } catch (IOException e) {
+            if (attempt == 2) throw e;  // Crash on final attempt
+        }
+    }
+    return state;
+}
+```
+
+### 3. Business Logic Errors
+
+```java
+// Validate before processing
+State handle(State state, Message msg) {
+    if (msg instanceof TransferFunds tf) {
+        if (tf.amount().compareTo(BigDecimal.ZERO) <= 0) {
+            // Business error, return failure don't crash
+            return state.withFailure("Amount must be positive");
+        }
+        return executeTransfer(state, tf);
+    }
+    return state;
+}
+```
+
+## Supervisor Strategies
+
+### ONE_FOR_ONE: Independent Failures
+
+```
+Worker-1 crashes → Only Worker-1 restarts
+```
+
+**Use when**: Workers are independent, no shared state
+
+### ONE_FOR_ALL: Shared Resources
+
+```
+Worker-2 crashes → All workers restart
+```
+
+**Use when**: Workers share resources (database, cache)
+
+### REST_FOR_ONE: Dependencies
+
+```
+Worker-3 crashes → Worker-3 + Worker-4 restart
+```
+
+**Use when**: Workers have initialization dependencies
+
+## Advanced Patterns
+
+### Circuit Breaker + Let It Crash
+
+```java
+// Let crashes happen, but detect patterns
+CircuitBreaker breaker = CircuitBreaker.spawn(
+    "breaker",
+    config
+);
+
+// Process crashes on failures
+State handle(State state, Message msg) {
+    Result<Response, Exception> result = breaker.execute(() ->
+        callExternalService()
+    );
+
+    if (result.isErr()) {
+        throw new RuntimeException("Service failed");  // Crash
+    }
+
+    return state.withResponse(result.get());
+}
+
+// Supervisor tracks crash frequency
+// Circuit breaker opens if too many crashes
+```
+
+### State Recovery
+
+```java
+// Recover state from event log on restart
+Proc<OrderState, OrderMessage> proc = Proc.spawn(
+    "order-processor",
+    loadInitialState(),  // Load from database/event log
+    handler
+);
+
+// On restart, state is rebuilt from persistent log
+```
+
+### Hot Code Swapping Alternative
+
+```java
+// Can't hot swap (Java limitation)
+// Use blue-green deployment instead
+
+// Supervisor manages version switch
+Supervisor supervisor = Supervisor.spawn(...);
+
+// Stop v1 workers
+supervisor.terminateChild("worker-v1");
+
+// Start v2 workers
+supervisor.startChild(workerSpecV2);
+```
+
+## Testing Crash Recovery
+
+### Unit Test: Single Crash
+
+```java
+@Test
+void testProcessCrashAndRestart() {
+    Supervisor sup = Supervisor.spawn(...);
+
+    // Find child and crash it
+    sup.findChild("worker").ifPresent(ref ->
+        ref.send(WorkerMessage.crash())
+    );
+
+    // Verify restart
+    await().until(() ->
+        sup.getAliveChildren().contains("worker")
+    );
+
+    // Verify state reset
+    ProcRef<?, ?> worker = sup.findChild("worker").orElseThrow();
+    assertThat(worker.getState()).isEqualTo(initialState);
+}
+```
+
+### Integration Test: Crash Loop
+
+```java
+@Test
+void testSupervisorGivesUp() {
+    Supervisor sup = Supervisor.spawn(
+        "sup",
+        Strategy.ONE_FOR_ONE,
+        Supervisor.Config.builder()
+            .intensity(5)
+            .period(Duration.ofSeconds(60))
+            .build()
+    );
+
+    // Crash child 6 times rapidly
+    for (int i = 0; i < 6; i++) {
+        crashChild(sup, "worker");
+    }
+
+    // Supervisor should give up
+    await().until(() -> sup.isTerminated());
+}
+```
+
+### Stress Test: Crash Storm
+
+```java
+@Test
+void testMultipleCrashes() {
+    Supervisor sup = spawnMultiChildSupervisor();
+
+    // Crash multiple children simultaneously
+    List<String> children = sup.getAliveChildren();
+    children.forEach(id -> crashChild(sup, id));
+
+    // All should restart
+    await().until(() ->
+        sup.getAliveChildren().size() == children.size()
+    );
+}
+```
+
+## Benefits
+
+### 1. Simpler Code
+
+```java
+// Before: Complex error handling
+State handle(State state, Message msg) {
+    try {
+        Result<Data, Exception> result = fetchFromDB();
+        if (result.isErr()) {
+            // Handle database error
+            return state.withDbError();
+        }
+        Data data = result.get();
+        // ... more error handling
+    } catch (Exception e) {
+        // Handle everything else
+    }
+}
+
+// After: Let it crash
+State handle(State state, Message msg) {
+    Data data = fetchFromDB();  // Crashes on error
+    return process(state, data);
+}
+```
+
+### 2. Better Fault Isolation
+
+```java
+// Crash in one process doesn't affect others
+Proc<PaymentState, PaymentMessage> payment = ...;
+Proc<ShippingState, ShippingMessage> shipping = ...;
+
+// Payment crash doesn't take down shipping
+```
+
+### 3. Automatic Recovery
+
+```java
+// Supervisor handles recovery consistently
+// No need to write custom recovery logic
+```
+
+### 4. Predictable Failure Modes
+
+```java
+// Either: Process works perfectly
+// Or: Process crashes and restarts
+// No: Corrupted state, undefined behavior
+```
+
+## Related Tests
+- `SupervisorTest.java` - All restart strategies
+- `CrashRecoveryTest.java` - Automatic recovery
+- `ExitTrapTest.java` - Exit signal handling
+- `SupervisorStormStressTest.java` - Crash storm scenarios
+
+## See Also
+- [Supervision Trees](./supervision-trees.mdx) - Architecture patterns
+- [Fault Tolerance](./fault-tolerance.mdx) - Broader context
+- [Error Handling](../how-to/handle-errors.mdx) - Practical guidance

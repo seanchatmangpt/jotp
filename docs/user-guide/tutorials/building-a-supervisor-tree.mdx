@@ -1,0 +1,73 @@
+---
+title: Building a Supervisor Tree
+description: Create hierarchical fault-tolerant supervision trees
+sidebar_position: 3
+---
+
+# Building a Supervisor Tree
+
+Learn how to structure your applications with supervision trees that provide automatic fault recovery and isolation.
+
+## What You'll Build
+
+A simplified payment processing system with:
+- Payment worker processes
+- Supervisor with restart strategies
+- Fault injection and recovery demonstration
+
+## Core Concepts
+
+- **Supervisor**: Parent process that manages child lifecycle
+- **Restart Strategies**: ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE
+- **Child Specifications**: Defining how children are started
+- **Let It Crash**: Why supervisors don't catch exceptions
+
+## Tree Structure
+
+```
+ApplicationSupervisor
+├── DatabaseConnectionPool
+├── PaymentProcessor (ONE_FOR_ALL)
+│   ├── PaymentWorker-1
+│   ├── PaymentWorker-2
+│   └── PaymentWorker-3
+└── EventLogger
+```
+
+## Implementation Steps
+
+### 1. Define Child Specifications
+- Child identifier
+- Start function (Proc::spawn)
+- Restart strategy
+- Shutdown timeout
+
+### 2. Create Supervisor
+- Choose restart strategy based on failure domains
+- Configure intensity and period for max restarts
+
+### 3. Add Fault Detection
+- ProcMonitor for one-way monitoring
+- ProcLink for bidirectional crash propagation
+- Handling ExitSignal
+
+## Testing Fault Tolerance
+
+- Simulating crashes with intentional exceptions
+- Verifying restart behavior
+- Measuring recovery time
+
+## Production Patterns
+
+- Permanent vs transient children
+- Supervision depth guidelines
+- Error reporting and observability
+
+## Related Tests
+- `SupervisorTest.java` - Complete supervisor lifecycle
+- `CrashRecoveryTest.java` - Automatic recovery patterns
+- `SupervisorStormStressTest.java` - Stress testing supervision trees
+
+## Next Steps
+- [Event-Driven Architecture](./event-driven-architecture.mdx)
+- [How to Implement a Supervisor](../how-to/implement-supervisor.mdx)

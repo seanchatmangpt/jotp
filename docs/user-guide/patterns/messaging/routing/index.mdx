@@ -1,0 +1,665 @@
+# Routing Patterns
+
+## Overview
+
+Routing patterns in JOTP enable intelligent message distribution based on content, correlation, or dynamic conditions. They form the decision-making layer in messaging systems, ensuring messages reach their appropriate destinations.
+
+## Content-Based Router
+
+### Intent
+Inspect each message and route it to the appropriate destination based on message content using predicates and pattern matching.
+
+### Enterprise Integration Pattern
+[EIP: Content-Based Router](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ContentBasedRouter.html)
+
+### Erlang Equivalent
+```erlang
+% Pattern matching in receive clauses
+receive
+    #{type := <<"TypeABC">>} = Order -> inventory_a ! Order;
+    #{type := <<"TypeXYZ">>} = Order -> inventory_x ! Order;
+    _Order -> dead_letter ! unrecognized_type
+end
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messagepatterns.routing;
+
+public final class ContentBasedRouter<T> {
+    private record Route<T>(
+        Predicate<T> predicate,
+        Consumer<T> destination
+    ) {}
+
+    private final List<Route<T>> routes;
+    private final Consumer<T> otherwise;
+
+    public boolean route(T message) {
+        for (Route<T> route : routes) {
+            if (route.predicate().test(message)) {
+                route.destination().accept(message);
+                return true;
+            }
+        }
+        if (otherwise != null) {
+            otherwise.accept(message);
+            return true;
+        }
+        return false;
+    }
+
+    public static <T> Builder<T> builder() {
+        return new Builder<>();
+    }
+
+    public static final class Builder<T> {
+        private final List<Route<T>> routes = new ArrayList<>();
+        private Consumer<T> otherwise;
+
+        public Builder<T> when(Predicate<T> predicate, Consumer<T> destination) {
+            routes.add(new Route<>(predicate, destination));
+            return this;
+        }
+
+        public Builder<T> otherwise(Consumer<T> destination) {
+            this.otherwise = destination;
+            return this;
+        }
+
+        public ContentBasedRouter<T> build() {
+            return new ContentBasedRouter<>(routes, otherwise);
+        }
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Order routing based on type and region
+var router = ContentBasedRouter.<Order>builder()
+    .when(order -> order.type().equals("TypeABC"),
+          abcInventory::tell)
+    .when(order -> order.region().equals("NorthAmerica"),
+          usWarehouse::tell)
+    .when(order -> order.priority() == Priority.URGENT,
+          expeditedProcessor::tell)
+    .otherwise(deadLetter::tell)
+    .build();
+
+// Route orders
+router.route(new Order("order-1", "TypeABC", items));
+router.route(new Order("order-2", "TypeXYZ", items));
+```
+
+### When to Use
+
+**Use Content-Based Router when:**
+- Messages require different processing based on content
+- Multiple processing pipelines exist
+- Routing logic is well-defined and stable
+- Performance allows per-message inspection
+
+**Avoid when:**
+- Routing changes frequently (use Dynamic Router)
+- Simple type-based routing sufficient (use Data Type Channel)
+- All consumers need all messages (use Publish-Subscribe)
+
+### Advanced Usage: Pattern Matching
+
+```java
+// Combining with Java 21 pattern matching
+sealed interface Payment permits CreditCard, BankTransfer, DigitalWallet {}
+record CreditCard(String number, String expiry) implements Payment {}
+record BankTransfer(String account, String routing) implements Payment {}
+record DigitalWallet(String provider, String token) implements Payment {}
+
+var router = ContentBasedRouter.<Payment>builder()
+    .when(payment -> payment instanceof CreditCard(var number, var expiry)
+                    && !isExpired(expiry),
+          payment -> creditCardProcessor.process((CreditCard) payment))
+    .when(payment -> payment instanceof BankTransfer,
+          payment -> bankProcessor.process((BankTransfer) payment))
+    .when(payment -> payment instanceof DigitalWallet,
+          payment -> walletProcessor.process((DigitalWallet) payment))
+    .otherwise(payment -> reject(payment, "Unknown payment type"))
+    .build();
+```
+
+## Recipient List Router
+
+### Intent
+Route each message to a dynamically determined list of recipients. The recipient list is computed at runtime for each message.
+
+### Enterprise Integration Pattern
+[EIP: Recipient List](https://www.enterpriseintegrationpatterns.com/patterns/messaging/RecipientList.html)
+
+### Erlang Equivalent
+```erlang
+% Dynamic recipient computation
+Recipients = compute_recipients(Message),
+[Pid ! Message || Pid <- Recipients].
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messagepatterns.routing;
+
+public final class RecipientListRouter<T> {
+    private final Function<T, List<Consumer<T>>> recipientSelector;
+
+    public RecipientListRouter(Function<T, List<Consumer<T>>> recipientSelector) {
+        this.recipientSelector = recipientSelector;
+    }
+
+    public int route(T message) {
+        var recipients = recipientSelector.apply(message);
+        for (var recipient : recipients) {
+            try {
+                recipient.accept(message);
+            } catch (Exception e) {
+                // Log and continue with next recipient
+            }
+        }
+        return recipients.size();
+    }
+
+    public static <T> Builder<T> builder() {
+        return new Builder<>();
+    }
+
+    public static final class Builder<T> {
+        private Function<T, List<Consumer<T>>> recipientSelector;
+
+        public Builder<T> recipients(Function<T, List<Consumer<T>>> selector) {
+            this.recipientSelector = selector;
+            return this;
+        }
+
+        public RecipientListRouter<T> build() {
+            return new RecipientListRouter<>(recipientSelector);
+        }
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Send notifications to user's preferred channels
+var router = RecipientListRouter.<Notification>builder()
+    .recipients(notification -> {
+        var user = userService.get(notification.userId());
+        var channels = new ArrayList<Consumer<Notification>>();
+
+        if (user.preferences().emailEnabled()) {
+            channels.add(emailService::send);
+        }
+        if (user.preferences().smsEnabled() && notification.isUrgent()) {
+            channels.add(smsService::send);
+        }
+        if (user.preferences().pushEnabled()) {
+            channels.add(pushService::send);
+        }
+
+        return channels;
+    })
+    .build();
+
+router.route(new Notification("user-123", "Your order shipped!"));
+```
+
+### When to Use
+
+**Use Recipient List when:**
+- Recipients determined dynamically per message
+- Variable number of recipients
+- User-specific routing preferences
+- Permission-based delivery
+
+**Avoid when:**
+- Fixed recipient list (use Publish-Subscribe)
+- Single recipient (use Point-to-Point)
+- Complex correlation required (use Scatter-Gather)
+
+## Scatter-Gather
+
+### Intent
+Broadcast a request to multiple recipients and aggregate their responses. Combines request distribution (scatter) with response collection (gather).
+
+### Enterprise Integration Pattern
+[EIP: Scatter-Gather](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ScatterGather.html)
+
+### Erlang Equivalent
+```erlang
+% Fan-out with response collection
+Refs = [spawn_monitor(fun() -> Pid ! {self(), Request} end)
+        || Pid <- Suppliers],
+collect_responses(Refs, Timeout).
+
+collect_responses([], Timeout) -> {ok, responses};
+collect_responses(Refs, Timeout) ->
+    receive
+        {Ref, Response} -> collect_responses(lists:delete(Ref, Refs), Timeout);
+        {'DOWN', Ref, _, Reason} -> collect_responses(lists:delete(Ref, Refs), Timeout)
+        after Timeout -> {timeout, responses}
+    end.
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messagepatterns.routing;
+
+public final class ScatterGather<T, R> {
+    private final List<Function<T, R>> handlers;
+    private final Duration timeout;
+
+    public ScatterGather(List<Function<T, R>> handlers, Duration timeout) {
+        this.handlers = List.copyOf(handlers);
+        this.timeout = timeout;
+    }
+
+    public List<R> scatterAndGather(T request) {
+        var futures = handlers.stream()
+            .map(handler -> CompletableFuture.supplyAsync(
+                () -> handler.apply(request)))
+            .toList();
+
+        var results = new ArrayList<R>();
+        for (CompletableFuture<R> future : futures) {
+            try {
+                R result = future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+                results.add(result);
+            } catch (Exception e) {
+                // Timeout or error - skip this response
+            }
+        }
+        return results;
+    }
+
+    public static <T, R> Builder<T, R> builder() {
+        return new Builder<>();
+    }
+
+    public static final class Builder<T, R> {
+        private final List<Function<T, R>> handlers = new ArrayList<>();
+        private Duration timeout = Duration.ofSeconds(5);
+
+        public Builder<T, R> addHandler(Function<T, R> handler) {
+            handlers.add(handler);
+            return this;
+        }
+
+        public Builder<T, R> timeout(Duration timeout) {
+            this.timeout = timeout;
+            return this;
+        }
+
+        public ScatterGather<T, R> build() {
+            return new ScatterGather<>(handlers, timeout);
+        }
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Request price quotes from multiple suppliers
+var sg = ScatterGather.<RequestForQuote, PriceQuote>builder()
+    .handler(supplierA::getQuote)
+    .handler(supplierB::getQuote)
+    .handler(supplierC::getQuote)
+    .timeout(Duration.ofSeconds(2))
+    .build();
+
+var rfq = new RequestForQuote("item-123", 100);
+var quotes = sg.scatterAndGather(rfq);
+
+// Select best quote
+var bestQuote = quotes.stream()
+    .min(Comparator.comparing(PriceQuote::price))
+    .orElseThrow();
+
+System.out.println("Best price: " + bestQuote.price());
+```
+
+### When to Use
+
+**Use Scatter-Gather when:**
+- Need responses from multiple services
+- Want best-of-N or all-of-N responses
+- Parallel processing with timeout
+- Redundant request for reliability
+
+**Avoid when:**
+- Only need first response (use basic routing)
+- Responses don't need correlation
+- Timeout not acceptable
+
+### Advanced Usage: Response Aggregation
+
+```java
+// Custom aggregation strategy
+class BestPriceAggregator {
+    public PriceQuote aggregate(List<PriceQuote> quotes) {
+        if (quotes.isEmpty()) {
+            throw new NoQuotesAvailableException();
+        }
+
+        var valid = quotes.stream()
+            .filter(q -> q.price() > 0 && q.available())
+            .toList();
+
+        if (valid.isEmpty()) {
+            throw new NoValidQuotesException();
+        }
+
+        return valid.stream()
+            .min(Comparator.comparing(PriceQuote::price))
+            .orElseThrow();
+    }
+}
+```
+
+## Aggregator
+
+### Intent
+Collect correlated messages until a completion condition is met, then emit an aggregated result. Essential for recomposing split messages or collecting multi-part responses.
+
+### Enterprise Integration Pattern
+[EIP: Aggregator](https://www.enterpriseintegrationpatterns.com/patterns/messaging/Aggregator.html)
+
+### Erlang Equivalent
+```erlang
+% Stateful accumulation by correlation ID
+loop(State = #{correlations := Correlations}) ->
+    receive
+        {Part, CorrelationId} ->
+            Updated = accumulate_part(Correlations, CorrelationId, Part),
+            case is_complete(Updated, CorrelationId) of
+                true ->
+                    Parts = get_parts(Updated, CorrelationId),
+                    Result = aggregate(Parts),
+                    ReplyTo ! Result,
+                    loop(remove_correlation(State, CorrelationId));
+                false ->
+                    loop(State#{correlations => Updated})
+            end
+    end.
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messagepatterns.routing;
+
+public final class Aggregator<T, K, R> {
+    record AggregationState<T>(
+        int expectedCount,
+        List<T> parts
+    ) {
+        AggregationState<T> withPart(T part) {
+            var updated = new ArrayList<>(parts);
+            updated.add(part);
+            return new AggregationState<>(expectedCount, updated);
+        }
+
+        boolean isComplete() {
+            return parts.size() >= expectedCount;
+        }
+    }
+
+    private final Function<T, K> correlationKeyExtractor;
+    private final Function<List<T>, R> aggregateFunction;
+    private final Consumer<R> resultConsumer;
+    private final Proc<Map<K, AggregationState<T>>, Object> proc;
+
+    public record ExpectParts<K>(K correlationKey, int expectedCount) {}
+
+    public void expect(K correlationKey, int expectedCount) {
+        proc.tell(new ExpectParts<>(correlationKey, expectedCount));
+    }
+
+    public void addPart(T part) {
+        proc.tell(part);
+    }
+
+    public void stop() throws InterruptedException {
+        proc.stop();
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Collect price quotes for an RFQ
+var aggregator = new Aggregator<PriceQuote, String, QuotationFulfillment>(
+    quote -> quote.rfqId(),  // Correlation key extractor
+    quotes -> new QuotationFulfillment(quotes),  // Aggregation function
+    fulfillment -> orderProcessor.process(fulfillment)  // Result consumer
+);
+
+// Expect 3 quotes for RFQ-123
+aggregator.expect("RFQ-123", 3);
+
+// Add quotes as they arrive
+aggregator.addPart(new PriceQuote("RFQ-123", "supplier-a", 100.0));
+aggregator.addPart(new PriceQuote("RFQ-123", "supplier-b", 95.0));
+aggregator.addPart(new PriceQuote("RFQ-123", "supplier-c", 105.0));
+
+// When third quote arrives, fulfillment is automatically emitted
+```
+
+### When to Use
+
+**Use Aggregator when:**
+- Messages need to be recomposed after splitting
+- Collecting responses from scatter-gather
+- Batch processing of correlated messages
+- Multi-step workflows requiring assembly
+
+**Avoid when:**
+- Messages independent (no correlation needed)
+- Simple counting sufficient
+- Real-time processing required
+
+### Advanced Usage: Timeout Handling
+
+```java
+// Aggregator with message expiration
+class TimeoutAggregator<T, K, R> {
+    private final Map<K, TimeoutState> timeouts = new ConcurrentHashMap<>();
+
+    public void addPart(T part) {
+        K key = correlationKeyExtractor.apply(part);
+        var state = timeouts.get(key);
+
+        if (state == null) {
+            // Start timeout timer
+            var timer = scheduler.schedule(
+                () -> handleTimeout(key),
+                30, TimeUnit.SECONDS
+            );
+            timeouts.put(key, new TimeoutState(timer, 1));
+        } else {
+            // Update count and reset timer
+            state.timer().cancel();
+            var newTimer = scheduler.schedule(
+                () -> handleTimeout(key),
+                30, TimeUnit.SECONDS
+            );
+            timeouts.put(key, new TimeoutState(newTimer, state.count() + 1));
+        }
+    }
+
+    private void handleTimeout(K key) {
+        var state = timeouts.remove(key);
+        if (state != null && !state.isComplete()) {
+            // Emit partial result or error
+            resultConsumer.accept(partialResult(key));
+        }
+    }
+}
+```
+
+## Splitter
+
+### Intent
+Decompose a composite message into individual parts and route each part for processing. Inverse of the Aggregator pattern.
+
+### Enterprise Integration Pattern
+[EIP: Splitter](https://www.enterpriseintegrationpatterns.com/patterns/messaging/Splitter.html)
+
+### Erlang Equivalent
+```erlang
+% Decompose and process individually
+split_order(Order) ->
+    Items = Order#order.items,
+    [process_item(Item) || Item <- Items].
+```
+
+### Implementation
+
+```java
+package io.github.seanchatmangpt.jotp.messagepatterns.routing;
+
+public final class Splitter<T, P> {
+    private final Function<T, List<P>> splitFunction;
+    private final Consumer<P> partConsumer;
+
+    public Splitter(Function<T, List<P>> splitFunction, Consumer<P> partConsumer) {
+        this.splitFunction = splitFunction;
+        this.partConsumer = partConsumer;
+    }
+
+    public int split(T message) {
+        List<P> parts = splitFunction.apply(message);
+        for (P part : parts) {
+            partConsumer.accept(part);
+        }
+        return parts.size();
+    }
+
+    public static <T, P> Splitter<T, P> withRouter(
+        Function<T, List<P>> splitFunction,
+        ContentBasedRouter<P> router
+    ) {
+        return new Splitter<>(splitFunction, router::route);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Split order into individual items for processing
+var splitter = new Splitter<>(
+    order -> order.items(),  // Extract items
+    item -> itemProcessor.process(item)  // Process each
+);
+
+var order = new Order("order-123",
+    List.of(new Item("item-1", 2), new Item("item-2", 1)));
+
+var count = splitter.split(order);
+System.out.println("Split into " + count + " items");
+```
+
+### When to Use
+
+**Use Splitter when:**
+- Composite messages need individual processing
+- Parallel processing of message parts
+- Different parts require different handling
+- Message size too large for atomic processing
+
+**Avoid when:**
+- Message should be processed atomically
+- Parts have complex dependencies
+- Ordering must be preserved
+
+### Advanced Usage: Splitter with Routing
+
+```java
+// Split and route based on item type
+var splitter = Splitter.withRouter(
+    order -> order.items(),
+    ContentBasedRouter.<Item>builder()
+        .when(item -> item.type().equals("physical"),
+              physicalItemProcessor::process)
+        .when(item -> item.type().equals("digital"),
+              digitalItemProcessor::process)
+        .when(item -> item.type().equals("subscription"),
+              subscriptionProcessor::process)
+        .otherwise(item -> log.error("Unknown item type: " + item.type()))
+        .build()
+);
+
+var order = new Order("order-456",
+    List.of(
+        new Item("book", "physical"),
+        new Item("ebook", "digital"),
+        new Item("membership", "subscription")
+    ));
+
+splitter.split(order);
+```
+
+## Pattern Comparison
+
+| Pattern | Use Case | Recipients | Correlation | Timeout |
+|---------|----------|------------|-------------|---------|
+| Content-Based Router | Content-based routing | One | No | No |
+| Recipient List | Dynamic recipients | Multiple | No | No |
+| Scatter-Gather | Parallel requests | Multiple | Yes | Yes |
+| Aggregator | Message collection | N/A | Yes | Optional |
+| Splitter | Message decomposition | Multiple | No | No |
+
+## Testing Routers
+
+```java
+@Test
+void testContentBasedRouting() {
+    var destinations = new ArrayList<String>();
+    var router = ContentBasedRouter.<Order>builder()
+        .when(o -> o.type().equals("A"), o -> destinations.add("A"))
+        .when(o -> o.type().equals("B"), o -> destinations.add("B"))
+        .build();
+
+    router.route(new Order("order-1", "A"));
+    router.route(new Order("order-2", "B"));
+
+    assertThat(destinations).containsExactly("A", "B");
+}
+
+@Test
+void testScatterGatherTimeout() {
+    var sg = ScatterGather.<String, String>builder()
+        .handler(s -> {
+            Thread.sleep(3000);
+            return s + "-done";
+        })
+        .timeout(Duration.ofMillis(100))
+        .build();
+
+    var results = sg.scatterAndGather("test");
+    assertThat(results).isEmpty();  // Timeout occurred
+}
+```
+
+## Best Practices
+
+1. **Always handle otherwise case** in Content-Based Router
+2. **Set appropriate timeouts** in Scatter-Gather to prevent hanging
+3. **Use correlation IDs** for aggregating related messages
+4. **Consider partial results** when aggregating with timeouts
+5. **Test timeout scenarios** in scatter-gather
+6. **Monitor split/aggregate ratios** for performance optimization
+7. **Handle empty recipient lists** gracefully in Recipient List
+8. **Use supervisors** for fault-tolerant routing components

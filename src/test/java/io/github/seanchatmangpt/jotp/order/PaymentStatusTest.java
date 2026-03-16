@@ -1,10 +1,9 @@
 package io.github.seanchatmangpt.jotp.order;
 
-import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.BeforeEach;
 import org.junit.jupiter.api.Test;
+
 /**
  * JUnit 5 test suite for PaymentStatus.
  *
@@ -12,23 +11,31 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("PaymentStatus")
 class PaymentStatusTest implements WithAssertions {
+
     // ── Construction ─────────────────────────────────────────────────────────
-    @BeforeEach
-    void setUp() {
-        ApplicationController.reset();
-    }
+
     @Test
     @DisplayName("should be constructed successfully")
     void shouldConstruct() {
         // TODO: instantiate PaymentStatus and assert non-null
         assertThat(true).isTrue(); // placeholder
+    }
+
     // ── Equality & hash code ─────────────────────────────────────────────────
+
+    @Test
     @DisplayName("equal instances should have equal hash codes")
     void equalInstancesHaveEqualHashCodes() {
         // TODO: create two equal PaymentStatus instances and verify equals/hashCode
+        assertThat(true).isTrue(); // placeholder
+    }
+
     // ── toString ─────────────────────────────────────────────────────────────
+
+    @Test
     @DisplayName("toString should include type name")
     void toStringShouldIncludeTypeName() {
         // TODO: verify toString output contains "PaymentStatus"
         assertThat("PaymentStatus").contains("PaymentStatus");
+    }
 }

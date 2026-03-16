@@ -30,13 +30,27 @@ The troubleshooting guide is organized into **9 core guides** covering different
     Supervisor restart problems, restart intensity exceeded, orphaned processes, and shutdown hangs.
   </Card>
   <Card title="Performance Issues" icon="📊" href="/docs/user-guide/troubleshooting/performance-issues">
-    High latency, memory leaks, GC pressure, thread exhaustion, and slow startups.
+    High latency, memory leaks, GC pressure, thread exhaustion, supervisor restart storms, and JOTP-specific performance patterns.
   </Card>
   <Card title="Testing Issues" icon="🧪" href="/docs/user-guide/troubleshooting/testing-issues">
     Flaky async tests, Awaitility timeouts, mock setup problems, and test isolation failures.
   </Card>
   <Card title="Production Issues" icon="🚀" href="/docs/user-guide/troubleshooting/production-issues">
     Production monitoring, distributed systems, memory issues in production, and performance degradation.
+  </Card>
+</Cards>
+
+### Advanced Troubleshooting Guides
+
+<Cards>
+  <Card title="Enterprise Pattern Issues" icon="🏢" href="/docs/user-guide/troubleshooting/enterprise-issues">
+    Circuit breaker issues, bulkhead problems, backpressure failures, and saga complications.
+  </Card>
+  <Card title="Distributed Issues" icon="🌐" href="/docs/user-guide/troubleshooting/distributed-issues">
+    Cluster formation failures, network partitions, node failures, leader election issues, and split-brain scenarios.
+  </Card>
+  <Card title="Pattern Composition Issues" icon="🔗" href="/docs/user-guide/troubleshooting/pattern-composition-issues">
+    Combining patterns, circuit breaker + bulkhead conflicts, supervisor + saga issues, and complex pattern interactions.
   </Card>
 </Cards>
 
@@ -422,6 +436,9 @@ jcmd <pid> ProcSys.version
 | **Performance Issues** | Latency, memory, GC | [performance-issues.mdx](/docs/user-guide/troubleshooting/performance-issues) |
 | **Testing Issues** | Flaky tests, async | [testing-issues.mdx](/docs/user-guide/troubleshooting/testing-issues) |
 | **Production Issues** | Production debugging, monitoring | [production-issues.mdx](/docs/user-guide/troubleshooting/production-issues) |
+| **Enterprise Pattern Issues** | Circuit breakers, bulkheads, sagas | [enterprise-issues.mdx](/docs/user-guide/troubleshooting/enterprise-issues) |
+| **Distributed Issues** | Cluster formation, network partitions | [distributed-issues.mdx](/docs/user-guide/troubleshooting/distributed-issues) |
+| **Pattern Composition Issues** | Combining patterns, interactions | [pattern-composition-issues.mdx](/docs/user-guide/troubleshooting/pattern-composition-issues) |
 | **Common Errors** | Error message reference | [common-errors.mdx](/docs/user-guide/troubleshooting/common-errors) |
 | **Debugging Techniques** | Advanced debugging | [debugging-techniques.mdx](/docs/user-guide/troubleshooting/debugging-techniques) |
 | **Diagnostic Checklist** | Systematic diagnosis | [diagnostic-checklist.mdx](/docs/user-guide/troubleshooting/diagnostic-checklist) |

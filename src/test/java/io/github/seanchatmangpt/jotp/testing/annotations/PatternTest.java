@@ -7,12 +7,7 @@ import java.lang.annotation.*;
  *
  * <p>Usage:
  *
- * <pre>{
- * @BeforeEach
- * void setUp() {
- * ApplicationController.reset();
- * }
- * @code
+ * <pre>{@code
  * @PatternTest(pattern = "ContentBasedRouter")
  * class ContentBasedRouterTest {
  *   @Test

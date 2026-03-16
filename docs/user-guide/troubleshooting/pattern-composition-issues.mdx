@@ -1,0 +1,1062 @@
+# Pattern Composition Issues Troubleshooting Guide
+
+import { Tabs } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This guide covers issues that arise when combining multiple JOTP patterns, including interaction problems between circuit breakers and bulkheads, supervisor and saga composition, event bus integration issues, and complex pattern interactions.
+
+<Callout type="warning">
+  Pattern composition bugs are subtle and often manifest only under specific load patterns. Test combinations thoroughly in staging.
+</Callout>
+
+---
+
+## Circuit Breaker + Bulkhead Issues
+
+### Symptoms
+
+- Circuit breaker trips when bulkhead full
+- Bulkhead permits exhausted during circuit half-open
+- Requests rejected despite circuit being closed
+- Deadlock between circuit breaker and bulkhead
+- Metrics showing inconsistent states
+
+### Common Causes Checklist
+
+- [ ] Bulkhead timeout longer than circuit breaker timeout
+- [ ] Circuit breaker counting bulkhead rejections as failures
+- [ ] Bulkhead preventing circuit half-open probes
+- [ ] Permit leaks during circuit open state
+- [ ] Incorrect exception classification
+
+### Diagnostic Steps
+
+#### 1. Check Combined State
+
+```java
+// Monitor circuit breaker + bulkhead interaction
+public class CircuitBreakerBulkheadMonitor {
+
+    private final CircuitBreaker<?, ?, ?> circuitBreaker;
+    private final BulkheadIsolation bulkhead;
+
+    @Scheduled(fixedRate = 5000)
+    public void checkCombinedState() {
+        // Circuit breaker state
+        State cbState = circuitBreaker.getState();
+        long cbFailures = circuitBreaker.getFailureCount();
+
+        // Bulkhead state
+        long activePermits = bulkhead.getActivePermits();
+        long availablePermits = bulkhead.getAvailablePermits();
+        long queueSize = bulkhead.getQueueSize();
+
+        log.info("CB: {} ({} failures), BH: {}/{} active, queue: {}",
+            cbState, cbFailures, activePermits,
+            activePermits + availablePermits, queueSize);
+
+        // Check for problematic combinations
+        if (cbState == State.OPEN && queueSize > 0) {
+            log.warn("Circuit open but bulkhead queue not empty - wasted resources");
+        }
+
+        if (cbState == State.HALF_OPEN && availablePermits == 0) {
+            log.error("Circuit half-open but no bulkhead permits - can't probe!");
+            metrics.increment("cb_bh.half_open_blocked");
+        }
+    }
+}
+```
+
+#### 2. Trace Request Flow
+
+```java
+// Trace request through both patterns
+public class RequestTracer {
+
+    public <T> T execute(Supplier<T> operation) {
+        Instant start = Instant.now();
+
+        try {
+            // Try bulkhead first
+            if (!bulkhead.tryAcquire(Duration.ofSeconds(5))) {
+                metrics.recordTimer("bulkhead.acquire_timeout",
+                    Duration.between(start, Instant.now()).toMillis());
+                throw new BulkheadTimeoutException();
+            }
+
+            try {
+                // Then circuit breaker
+                return circuitBreaker.execute("request", req -> {
+                    metrics.recordTimer("cb_bh.success",
+                        Duration.between(start, Instant.now()).toMillis());
+                    return operation.get();
+                });
+
+            } catch (CircuitBreakerOpenException e) {
+                metrics.recordTimer("cb_bh.circuit_open",
+                    Duration.between(start, Instant.now()).toMillis());
+                throw e;
+            } finally {
+                bulkhead.release();
+            }
+
+        } catch (BulkheadTimeoutException e) {
+            metrics.recordTimer("cb_bh.bulkhead_timeout",
+                Duration.between(start, Instant.now()).toMillis());
+            throw e;
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Configure Timeouts Correctly
+
+**Problem:** Bulkhead timeout longer than circuit breaker timeout
+
+```java
+// Bad: Bulkhead timeout > Circuit breaker timeout
+BulkheadConfig bhConfig = BulkheadConfig.builder()
+    .maxWaitTime(Duration.ofSeconds(10))  // 10s
+    .build();
+
+CircuitBreakerConfig cbConfig = CircuitBreakerConfig.builder()
+    .timeout(Duration.ofSeconds(5))  // 5s
+    .build();
+
+// Result: Circuit breaker times out before bulkhead acquisition fails
+
+// Good: Bulkhead timeout < Circuit breaker timeout
+BulkheadConfig bhConfig = BulkheadConfig.builder()
+    .maxWaitTime(Duration.ofSeconds(2))  // 2s
+    .build();
+
+CircuitBreakerConfig cbConfig = CircuitBreakerConfig.builder()
+    .timeout(Duration.ofSeconds(5))  // 5s
+    .build();
+
+// Calculate: bulkhead_timeout < circuit_breaker_timeout * 0.5
+```
+
+#### Solution 2: Classify Exceptions Correctly
+
+```java
+// Don't count bulkhead rejections as circuit breaker failures
+CircuitBreakerConfig cbConfig = CircuitBreakerConfig.builder()
+    .failurePredicate(ex -> {
+        // Don't count bulkhead exceptions
+        if (ex instanceof BulkheadFullException) return false;
+        if (ex instanceof BulkheadTimeoutException) return false;
+
+        // Count actual failures
+        return ex instanceof SystemException;
+    })
+    .build();
+
+// Alternative: Separate metrics
+public class ExceptionClassifier {
+    public void classify(Exception ex) {
+        if (ex instanceof BulkheadException) {
+            metrics.increment("bulkhead.exception",
+                "type", ex.getClass().getSimpleName());
+        } else if (ex instanceof CircuitBreakerException) {
+            metrics.increment("circuit_breaker.exception",
+                "type", ex.getClass().getSimpleName());
+        } else {
+            metrics.increment("system.exception",
+                "type", ex.getClass().getSimpleName());
+        }
+    }
+}
+```
+
+#### Solution 3: Reserve Permits for Half-Open
+
+```java
+// Reserve bulkhead permits for circuit half-open probes
+public class PermitReservingBulkhead {
+
+    private final BulkheadIsolation bulkhead;
+    private final int reservedPermits;
+    private final CircuitBreaker<?, ?, ?> circuitBreaker;
+
+    public boolean tryAcquire(Duration timeout) {
+        // Reserve permits for half-open state
+        if (circuitBreaker.getState() == State.HALF_OPEN) {
+            int available = bulkhead.getAvailablePermits();
+
+            if (available <= reservedPermits) {
+                log.warn("Rejecting request: insufficient permits for half-open probe");
+                return false;
+            }
+
+            // Acquire permit
+            if (bulkhead.tryAcquire(timeout)) {
+                return true;
+            }
+        } else {
+            // Normal acquisition
+            return bulkhead.tryAcquire(timeout);
+        }
+
+        return false;
+    }
+}
+```
+
+#### Solution 4: Use Sequential Execution
+
+```java
+// Execute patterns in correct sequence
+public class SequentialPatternExecutor {
+
+    public <T> Result<T, Exception> execute(Supplier<T> operation) {
+        // 1. Check circuit breaker first (fast fail)
+        if (circuitBreaker.getState() == State.OPEN) {
+            log.debug("Circuit open, fast failing");
+            return Result.failure(new CircuitBreakerOpenException());
+        }
+
+        // 2. Try to acquire bulkhead permit
+        if (!bulkhead.tryAcquire(Duration.ofSeconds(2))) {
+            log.debug("Bulkhead full");
+            return Result.failure(new BulkheadFullException());
+        }
+
+        try {
+            // 3. Execute operation through circuit breaker
+            return circuitBreaker.execute("request", req -> {
+                try {
+                    return Result.success(operation.get());
+                } catch (Exception e) {
+                    return Result.failure(e);
+                }
+            });
+
+        } finally {
+            // 4. Always release permit
+            bulkhead.release();
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Configure timeouts hierarchically (bulkhead < circuit breaker < operation)
+- Classify exceptions correctly for each pattern
+- Reserve capacity for circuit half-open probes
+- Test combined patterns under load
+- Monitor interaction metrics
+- Document pattern composition rules
+
+---
+
+## Supervisor + Saga Issues
+
+### Symptoms
+
+- Saga not compensating when supervisor crashes
+- Supervisor restarting saga in middle of execution
+- Orphaned saga steps after supervisor restart
+- Saga coordinator not found after supervisor restart
+- Inconsistent saga state
+
+### Common Causes Checklist
+
+- [ ] Saga coordinator not supervised properly
+- [ ] Saga state not persisted
+- [ ] Supervisor restart intensity too low
+- [ ] Saga timeout longer than supervisor restart window
+- [ ] Compensation actions not idempotent
+
+### Diagnostic Steps
+
+#### 1. Check Saga Coordinator Lifecycle
+
+```java
+// Monitor saga coordinator lifecycle
+public class SagaCoordinatorMonitor {
+
+    private final SupervisorRef supervisor;
+    private final SagaOrchestratorRegistry sagaRegistry;
+
+    @Scheduled(fixedRate = 5000)
+    public void checkSagaCoordinators() {
+        supervisor.children().forEach((childId, info) -> {
+            if (info.childSpec().name().startsWith("saga-")) {
+                SagaOrchestrator saga = sagaRegistry.get(childId);
+
+                if (saga == null) {
+                    log.warn("Saga coordinator not found in registry: {}", childId);
+                } else {
+                    SagaState state = saga.getState();
+
+                    if (!state.isTerminal()) {
+                        Duration age = Duration.between(
+                            saga.getCreatedAt(),
+                            Instant.now()
+                        );
+
+                        if (age.compareTo(Duration.ofMinutes(10)) > 0) {
+                            log.error("Saga stuck: {} - state={}, age={}min",
+                                childId, state, age.toMinutes());
+
+                            // Check if supervisor is restarting it
+                            log.info("  Restart count: {}", info.restartCount());
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+```
+
+#### 2. Trace Saga Restart
+
+```java
+// Trace saga through supervisor restarts
+public class SagaTracer {
+
+    @EventListener
+    public void onChildRestart(ChildRestartedEvent event) {
+        if (event.childId().toString().startsWith("saga-")) {
+            log.warn("Saga coordinator restarted: {}", event.childId());
+
+            SagaOrchestrator saga = sagaRegistry.get(event.childId());
+
+            if (saga != null) {
+                SagaState state = saga.getState();
+                log.info("  Saga state: {}", state);
+                log.info("  Current step: {}", saga.getCurrentStep());
+                log.info("  Completed steps: {}", saga.getCompletedSteps());
+
+                // Check if saga is recoverable
+                if (state == State.IN_PROGRESS) {
+                    log.warn("  Saga was in progress - may need recovery");
+                }
+            }
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Persist Saga State
+
+```java
+// Persist saga state to survive supervisor restarts
+public class PersistentSagaOrchestrator extends SagaOrchestrator {
+
+    private final SagaStateRepository repository;
+
+    @Override
+    protected void executeStep(SagaStep step) {
+        try {
+            // Execute step
+            StepResult result = step.execute();
+
+            // Persist state
+            repository.save(sagaId, new SagaState(
+                sagaId,
+                State.IN_PROGRESS,
+                currentStep + 1,
+                completedSteps,
+                result
+            ));
+
+            // Continue to next step
+            executeNextStep();
+
+        } catch (Exception e) {
+            // Persist failure state
+            repository.save(sagaId, new SagaState(
+                sagaId,
+                State.FAILED,
+                currentStep,
+                completedSteps,
+                e
+            ));
+
+            // Start compensation
+            compensate();
+        }
+    }
+
+    @Override
+    protected void init() {
+        // Check if saga was in progress
+        Optional<SagaState> previousState = repository.find(sagaId);
+
+        if (previousState.isPresent()) {
+            SagaState state = previousState.get();
+
+            log.info("Recovering saga: {} from step {}",
+                sagaId, state.currentStep());
+
+            // Resume from last step
+            this.currentStep = state.currentStep();
+            this.completedSteps = state.completedSteps();
+
+            // Continue execution
+            if (state.state() == State.IN_PROGRESS) {
+                executeNextStep();
+            } else if (state.state() == State.FAILED) {
+                compensate();
+            }
+        } else {
+            // Fresh start
+            executeNextStep();
+        }
+    }
+}
+```
+
+#### Solution 2: Use Permanent Saga Coordinator
+
+```java
+// Make saga coordinator permanent child
+SupervisorSpec supervisorSpec = SupervisorSpec.builder()
+    .restartStrategy(RestartStrategy.ONE_FOR_ALL)
+    .restartIntensity(10)
+    .restartWindow(Duration.ofSeconds(60))
+    .permanentChild(ChildSpec.builder()
+        .name("saga-coordinator")
+        .spec(sagaCoordinatorSpec)
+        .build())
+    .build();
+
+// Saga coordinator will always be restarted if it crashes
+```
+
+#### Solution 3: Implement Idempotent Saga Steps
+
+```java
+// Make saga steps idempotent for safe restart
+public class IdempotentSagaStep implements SagaStep {
+
+    private final String stepName;
+    private final IdempotencyKey idempotencyKey;
+    private final Supplier<StepResult> action;
+    private final Runnable compensation;
+
+    @Override
+    public StepResult execute() {
+        // Check if already executed
+        if (idempotencyCache.has(idempotencyKey, "execute")) {
+            log.info("Step {} already executed, skipping", stepName);
+            return StepResult.alreadyCompleted();
+        }
+
+        // Execute action
+        StepResult result = action.get();
+
+        // Record execution
+        idempotencyCache.record(idempotencyKey, "execute");
+
+        return result;
+    }
+
+    @Override
+    public void compensate() {
+        // Check if already compensated
+        if (idempotencyCache.has(idempotencyKey, "compensate")) {
+            log.info("Step {} already compensated, skipping", stepName);
+            return;
+        }
+
+        // Execute compensation
+        try {
+            compensation.run();
+        } finally {
+            // Record compensation
+            idempotencyCache.record(idempotencyKey, "compensate");
+        }
+    }
+}
+```
+
+#### Solution 4: Implement Saga Recovery
+
+```java
+// Implement saga recovery after supervisor restart
+public class SagaRecoveryService {
+
+    @EventListener
+    public void onSupervisorReady(SupervisorReadyEvent event) {
+        log.info("Supervisor ready, checking for incomplete sagas");
+
+        List<SagaState> incompleteSagas = sagaRepository.findIncomplete();
+
+        log.info("Found {} incomplete sagas", incompleteSagas.size());
+
+        for (SagaState state : incompleteSagas) {
+            Duration age = Duration.between(
+                state.createdAt(),
+                Instant.now()
+            );
+
+            if (age.compareTo(Duration.ofHours(1)) > 0) {
+                log.warn("Old incomplete saga: {}, age: {}h",
+                    state.sagaId(), age.toHours());
+
+                // Manual intervention required
+                alerting.sendAlert("Incomplete saga",
+                    "saga_id", state.sagaId(),
+                    "age_hours", String.valueOf(age.toHours()));
+            } else {
+                log.info("Recovering saga: {}", state.sagaId());
+
+                // Restart saga
+                SagaOrchestrator saga = spawnSagaCoordinator(state.sagaId());
+                saga.recover(state);
+            }
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Persist saga state after each step
+- Use permanent children for saga coordinators
+- Implement idempotent saga steps
+- Implement saga recovery procedures
+- Monitor saga age with alerts
+- Test supervisor crashes during saga execution
+
+---
+
+## Event Bus + Bulkhead Issues
+
+### Symptoms
+
+- Event bus subscribers blocked by bulkhead
+- Events lost when bulkhead full
+- Slow subscribers blocking fast publishers
+- Event delivery timeouts
+- Uneven load distribution
+
+### Common Causes Checklist
+
+- [ ] Bulkhead permit exhaustion
+- [ ] No backpressure on event bus
+- [ ] Slow subscriber blocking event thread
+- [ ] Event bus buffer overflow
+- [ ] Subscriber throws exception
+
+### Diagnostic Steps
+
+#### 1. Monitor Event Flow
+
+```java
+// Monitor event flow through bulkhead
+public class EventBusBulkheadMonitor {
+
+    private final EventManager<MyEvent> eventBus;
+    private final BulkheadIsolation bulkhead;
+
+    @EventListener
+    public void onEventPublished(MyEvent event) {
+        long queueSize = bulkhead.getQueueSize();
+        long availablePermits = bulkhead.getAvailablePermits();
+
+        log.debug("Event published: {}, queue: {}, permits: {}",
+            event, queueSize, availablePermits);
+
+        if (queueSize > 1000) {
+            log.warn("Large bulkhead queue: {} events", queueSize);
+            metrics.recordGauge("event_bus.queue_size", queueSize);
+        }
+    }
+
+    @Scheduled(fixedRate = 5000)
+    public void checkEventProcessing() {
+        long published = metrics.getCounter("event_bus.published");
+        long processed = metrics.getCounter("event_bus.processed");
+        long failed = metrics.getCounter("event_bus.failed");
+
+        log.info("Events: published={}, processed={}, failed={}, lag={}",
+            published, processed, failed, published - processed);
+
+        if ((published - processed) > 10000) {
+            log.error("Large event lag: {}", published - processed);
+            alerting.sendAlert("Event bus lag",
+                "lag", String.valueOf(published - processed));
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Use Dedicated Executor
+
+```java
+// Use dedicated executor for event processing
+public class BulkheadEventProcessor {
+
+    private final EventManager<MyEvent> eventBus;
+    private final ExecutorService executor;
+    private final BulkheadIsolation bulkhead;
+
+    public void start() {
+        eventBus.subscribe(event -> {
+            // Offload to dedicated executor
+            CompletableFuture.runAsync(() -> {
+                if (bulkhead.tryAcquire(Duration.ofSeconds(5))) {
+                    try {
+                        processEvent(event);
+                    } finally {
+                        bulkhead.release();
+                    }
+                } else {
+                    log.warn("Bulkhead full, dropping event: {}", event);
+                    metrics.increment("event_bus.dropped");
+                }
+            }, executor);
+        });
+    }
+}
+```
+
+#### Solution 2: Implement Event Batching
+
+```java
+// Batch events for bulkhead efficiency
+public class BatchingEventProcessor {
+
+    private final EventManager<MyEvent> eventBus;
+    private final BulkheadIsolation bulkhead;
+    private final Queue<MyEvent> buffer = new ConcurrentLinkedQueue<>();
+    private final int batchSize = 100;
+
+    public void start() {
+        eventBus.subscribe(event -> {
+            buffer.offer(event);
+
+            if (buffer.size() >= batchSize) {
+                flushBuffer();
+            }
+        });
+
+        // Periodic flush
+        scheduler.scheduleAtFixedRate(
+            this::flushBuffer,
+            100, 100, TimeUnit.MILLISECONDS
+        );
+    }
+
+    private void flushBuffer() {
+        List<MyEvent> batch = new ArrayList<>();
+        buffer.drainTo(batch, batchSize);
+
+        if (!batch.isEmpty()) {
+            if (bulkhead.tryAcquire(Duration.ofSeconds(5))) {
+                try {
+                    processBatch(batch);
+                } finally {
+                    bulkhead.release();
+                }
+            } else {
+                log.warn("Bulkhead full, re-queueing {} events", batch.size());
+                buffer.addAll(batch);
+            }
+        }
+    }
+}
+```
+
+#### Solution 3: Implement Event Priorities
+
+```java
+// Use priority queue for events
+public class PriorityEventProcessor {
+
+    private final PriorityBlockingQueue<MyEvent> queue =
+        new PriorityBlockingQueue<>(1000,
+            Comparator.comparing(MyEvent::priority).reversed());
+
+    public void start() {
+        eventBus.subscribe(event -> {
+            queue.offer(event);
+        });
+
+        // Process high-priority events first
+        for (int i = 0; i < 10; i++) {
+            executor.submit(() -> {
+                while (!Thread.currentThread().isInterrupted()) {
+                    try {
+                        MyEvent event = queue.take();
+                        processEvent(event);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            });
+        }
+    }
+}
+```
+
+#### Solution 4: Implement Backpressure
+
+```java
+// Implement backpressure on event bus
+public class BackpressureEventProcessor {
+
+    private final EventManager<MyEvent> eventBus;
+    private final BulkheadIsolation bulkhead;
+    private final Semaphore credits;
+
+    public void start() {
+        eventBus.subscribe(event -> {
+            // Check credits before accepting event
+            if (credits.tryAcquire()) {
+                if (bulkhead.tryAcquire(Duration.ofSeconds(5))) {
+                    try {
+                        processEvent(event);
+                    } finally {
+                        bulkhead.release();
+                        credits.release();  // Return credit
+                    }
+                } else {
+                    log.warn("Bulkhead full, rejecting event");
+                    credits.release();  // Return credit
+                }
+            } else {
+                log.warn("No credits, blocking publisher");
+                throw new BackpressureException("Event bus full");
+            }
+        });
+    }
+}
+```
+
+### Prevention Strategies
+
+- Use dedicated executor for event processing
+- Implement event batching for efficiency
+- Use priority queues for mixed workloads
+- Implement backpressure on event bus
+- Monitor event lag with alerts
+- Test event flood scenarios
+
+---
+
+## State Machine + Supervisor Issues
+
+### Symptoms
+
+- State machine stuck in non-terminal state
+- Supervisor restarting state machine repeatedly
+- State transitions lost during restart
+- Orphaned state machines
+- State inconsistency
+
+### Common Causes Checklist
+
+- [ ] State not persisted
+- [ ] State machine crashes in transition
+- [ ] Supervisor restart strategy incorrect
+- [ ] State machine timeout too short
+- [ ] Transition logic throws exception
+
+### Diagnostic Steps
+
+#### 1. Monitor State Machine Lifecycle
+
+```java
+// Monitor state machine lifecycle
+public class StateMachineMonitor {
+
+    private final SupervisorRef supervisor;
+
+    @EventListener
+    public void onStateTransition(StateTransitionEvent<?, ?> event) {
+        log.info("State transition: {} -> {}",
+            event.oldState(), event.newState());
+
+        metrics.increment("state_machine.transition",
+            "from", event.oldState().getClass().getSimpleName(),
+            "to", event.newState().getClass().getSimpleName());
+
+        // Check for stuck states
+        if (!event.newState().isTerminal()) {
+            scheduler.schedule(() -> {
+                StateMachine<?, ?, ?> sm = getStateMachine(event.machineId());
+
+                if (sm != null && sm.getState().equals(event.newState())) {
+                    log.error("State machine stuck: {} in state {} for >5min",
+                        event.machineId(), event.newState());
+                    alerting.sendAlert("Stuck state machine",
+                        "machine_id", event.machineId().toString(),
+                        "state", event.newState().toString());
+                }
+            }, 5, TimeUnit.MINUTES);
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Persist State
+
+```java
+// Persist state after each transition
+public class PersistentStateMachine<S, E, D> extends StateMachine<S, E, D> {
+
+    private final StateRepository repository;
+
+    @Override
+    protected void onTransition(S oldState, S newState, D data) {
+        try {
+            // Perform transition
+            super.onTransition(oldState, newState, data);
+
+            // Persist state
+            repository.save(machineId, new PersistedState<>(
+                machineId,
+                newState,
+                data,
+                Instant.now()
+            ));
+
+        } catch (Exception e) {
+            log.error("Transition failed: {} -> {}", oldState, newState, e);
+
+            // Persist failed state
+            repository.save(machineId, new PersistedState<>(
+                machineId,
+                oldState,  // Revert to old state
+                data,
+                Instant.now()
+            ));
+
+            throw e;
+        }
+    }
+
+    @Override
+    protected void init() {
+        // Load persisted state
+        Optional<PersistedState<S, D>> persistedState =
+            repository.find(machineId);
+
+        if (persistedState.isPresent()) {
+            PersistedState<S, D> state = persistedState.get();
+
+            log.info("Restoring state: {} from {}",
+                state.state(), state.timestamp());
+
+            this.state = state.state();
+            this.data = state.data();
+        } else {
+            // Initial state
+            this.state = initialState;
+        }
+    }
+}
+```
+
+#### Solution 2: Use Permanent Child
+
+```java
+// Make state machine permanent child
+SupervisorSpec supervisorSpec = SupervisorSpec.builder()
+    .restartStrategy(RestartStrategy.ONE_FOR_ONE)
+    .permanentChild(ChildSpec.builder()
+        .name("order-state-machine")
+        .spec(stateMachineSpec)
+        .build())
+    .build();
+```
+
+#### Solution 3: Implement Timeout
+
+```java
+// Add timeout to state machine
+public class TimeoutStateMachine<S, E, D> extends StateMachine<S, E, D> {
+
+    private final Duration stateTimeout;
+
+    @Override
+    protected void onTransition(S oldState, S newState, D data) {
+        super.onTransition(oldState, newState, data);
+
+        // Schedule timeout for non-terminal states
+        if (!isTerminal(newState)) {
+            scheduler.schedule(() -> {
+                if (state.equals(newState)) {
+                    log.error("State timeout: {}", newState);
+                    metrics.increment("state_machine.timeout");
+
+                    // Trigger timeout event
+                    send(new TimeoutEvent(newState));
+                }
+            }, stateTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Persist state after each transition
+- Use permanent children for state machines
+- Implement state timeouts
+- Monitor state age with alerts
+- Test state machine crashes
+- Implement state recovery procedures
+
+---
+
+## Quick Reference: Pattern Composition
+
+<Tabs items={['CB + Bulkhead', 'Supervisor + Saga', 'Event Bus + BH', 'SM + Supervisor']}>
+
+<Tabs.Tab>
+```java
+// Configure timeouts hierarchically
+Duration bulkheadTimeout = Duration.ofSeconds(2);
+Duration circuitBreakerTimeout = Duration.ofSeconds(5);
+Duration operationTimeout = Duration.ofSeconds(10);
+
+// Classify exceptions correctly
+.failurePredicate(ex -> {
+    if (ex instanceof BulkheadException) return false;
+    return ex instanceof SystemException;
+})
+
+// Reserve permits for half-open
+if (circuitBreaker.getState() == State.HALF_OPEN) {
+    // Reserve permits
+}
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Persist saga state
+@Override
+protected void executeStep(SagaStep step) {
+    StepResult result = step.execute();
+    repository.save(sagaId, newState);
+    executeNextStep();
+}
+
+// Make saga coordinator permanent
+.permanentChild(sagaCoordinatorSpec)
+
+// Implement idempotent steps
+public class IdempotentSagaStep implements SagaStep {
+    public StepResult execute() {
+        if (idempotencyCache.has(key)) {
+            return StepResult.alreadyCompleted();
+        }
+        return action.get();
+    }
+}
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Use dedicated executor
+eventBus.subscribe(event -> {
+    CompletableFuture.runAsync(() -> {
+        processEvent(event);
+    }, executor);
+});
+
+// Implement batching
+private final Queue<MyEvent> buffer = new ConcurrentLinkedQueue<>();
+
+public void onEvent(MyEvent event) {
+    buffer.offer(event);
+    if (buffer.size() >= batchSize) {
+        flushBuffer();
+    }
+}
+
+// Implement backpressure
+if (!credits.tryAcquire()) {
+    throw new BackpressureException("Event bus full");
+}
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Persist state
+@Override
+protected void onTransition(S old, S new, D data) {
+    super.onTransition(old, new, data);
+    repository.save(machineId, new PersistedState<>(new, data));
+}
+
+// Use permanent child
+.permanentChild(stateMachineSpec)
+
+// Add timeout
+if (!isTerminal(newState)) {
+    scheduler.schedule(() -> {
+        send(new TimeoutEvent(newState));
+    }, stateTimeout);
+}
+```
+</Tabs.Tab>
+
+</Tabs>
+
+---
+
+## Related Issues
+
+- **Enterprise Issues:** See [enterprise-issues.mdx](/docs/user-guide/troubleshooting/enterprise-issues) for individual pattern issues
+- **Distributed Issues:** See [distributed-issues.mdx](/docs/user-guide/troubleshooting/distributed-issues) for cluster problems
+- **Runtime Issues:** See [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) for process lifecycle issues
+
+---
+
+## Getting Help
+
+When reporting pattern composition issues, collect:
+
+1. **Pattern Configurations**
+   - All pattern configurations and parameters
+   - Timeout values
+   - Threshold settings
+
+2. **Interaction Diagrams**
+   - How patterns are composed
+   - Message flow between patterns
+   - State transitions
+
+3. **Metrics**
+   - Metrics from all patterns
+   - Correlation IDs for tracing
+   - Timeline of events
+
+4. **Reproduction Steps**
+   - Load pattern that triggers issue
+   - Sequence of operations
+   - Expected vs actual behavior
+
+<Callout type="info">
+  Pattern composition requires careful testing. Always create integration tests that verify the combined behavior of patterns.
+</Callout>
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0
+**Maintainer:** JOTP Core Team

@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.doctest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.ProcTimer;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * <p>Based on Joe Armstrong's original paper: <em>"Making reliable distributed systems in the
  * presence of software errors"</em>.
  */
+@DtrTest
 @ExtendWith(DocTestExtension.class)
 @Timeout(10)
 class ProcDocIT implements WithAssertions {
@@ -41,11 +44,16 @@ class ProcDocIT implements WithAssertions {
             counter.stop();
             """)
     @Test
-    void createProc() throws InterruptedException {
+    void createProc(DtrContext ctx) throws InterruptedException {
+        ctx.say("Proc is the fundamental OTP primitive - a lightweight process with a mailbox");
+        ctx.say("Each Proc runs in its own virtual thread (~1KB heap, millions possible)");
+
         Proc<Integer, String> counter = new Proc<>(0, (state, msg) -> state + 1);
         assertThat(counter.thread().isAlive()).isTrue();
         counter.stop();
         assertThat(counter.thread().isAlive()).isFalse();
+
+        ctx.say("Process lifecycle: spawn -> handle messages -> stop");
     }
 
     // ── Fire-and-forget messaging ────────────────────────────────────────────────
@@ -64,7 +72,10 @@ class ProcDocIT implements WithAssertions {
             p.stop();
             """)
     @Test
-    void tell_isFireAndForget() throws Exception {
+    void tell_isFireAndForget(DtrContext ctx) throws Exception {
+        ctx.say("tell() is the primary messaging primitive - fire-and-forget async delivery");
+        ctx.say("Messages are queued to a LinkedTransferQueue mailbox (lock-free, high throughput)");
+
         Proc<Integer, String> p = new Proc<>(0, (s, m) -> s + 1);
         p.tell("ping");
         p.tell("ping");
@@ -72,6 +83,8 @@ class ProcDocIT implements WithAssertions {
         Integer state = p.ask("sync").get(5, TimeUnit.SECONDS);
         assertThat(state).isEqualTo(3);
         p.stop();
+
+        ctx.say("tell() never blocks - the sender continues immediately");
     }
 
     @DocNote(
@@ -144,7 +157,10 @@ class ProcDocIT implements WithAssertions {
                     + "This mirrors Erlang's monitor/link semantics: the supervisor is notified "
                     + "and can restart the process.")
     @Test
-    void crashCallback_firedOnAbnormalExit() throws Exception {
+    void crashCallback_firedOnAbnormalExit(DtrContext ctx) throws Exception {
+        ctx.say("'Let It Crash' philosophy: processes don't catch exceptions, supervisors restart them");
+        ctx.say("Crash callbacks enable monitoring and supervisor notification");
+
         AtomicInteger crashes = new AtomicInteger();
         Proc<Integer, String> p =
                 new Proc<>(
@@ -162,6 +178,8 @@ class ProcDocIT implements WithAssertions {
                 .until(() -> crashes.get() == 1);
 
         assertThat(crashes.get()).isEqualTo(1);
+
+        ctx.say("Crash callback fired - supervisor would restart this process");
     }
 
     // ── Process introspection (ProcSys) ──────────────────────────────────────────

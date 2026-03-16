@@ -1,0 +1,627 @@
+# Transformation Patterns
+
+Transformation patterns adapt message formats and content as they flow through the system. They enable interoperability between different systems with varying data representations.
+
+## Overview
+
+JOTP implements three core transformation patterns from the Enterprise Integration Patterns catalog:
+
+1. **Content Filter** - Remove unnecessary fields from messages
+2. **Normalizer** - Transform different formats to canonical form
+3. **Content Enricher** - Add missing data from external sources
+
+These patterns leverage Java 26's pattern matching and sealed types for type-safe, efficient message transformation.
+
+## Content Filter
+
+### Pattern Description
+
+The Content Filter pattern removes unwanted fields from messages, producing a lighter version with only the data the receiver needs. This reduces bandwidth, processing overhead, and improves security by limiting data exposure.
+
+### Implementation
+
+```java
+public final class ContentFilter<A, B> {
+    private final Function<A, B> filterFunction;
+    private final Proc<Void, A> proc;
+
+    public ContentFilter(
+        Function<A, B> filterFunction,
+        Consumer<B> destination
+    ) {
+        this.filterFunction = filterFunction;
+        this.proc = new Proc<>(
+            null,
+            (state, msg) -> {
+                B filtered = filterFunction.apply(msg);
+                destination.accept(filtered);
+                return state;
+            }
+        );
+    }
+
+    public void filter(A message) {
+        proc.tell(message);
+    }
+
+    public B apply(A message) {
+        return filterFunction.apply(message);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Large message with sensitive data
+record CustomerProfile(
+    String customerId,
+    String name,
+    String email,
+    String phone,
+    String ssn,          // Sensitive - should be filtered
+    String billingInfo,  // Sensitive - should be filtered
+    List<String> preferences
+) {}
+
+// Lightweight message for external systems
+record PublicProfile(
+    String customerId,
+    String name,
+    List<String> preferences
+) {}
+
+// Create content filter
+var filter = new ContentFilter<>(
+    (CustomerProfile profile) -> new PublicProfile(
+        profile.customerId(),
+        profile.name(),
+        profile.preferences()
+    ),
+    publicProfile -> {
+        // Send filtered message to external system
+        externalSystem.send(publicProfile);
+    }
+);
+
+// Filter sensitive data
+filter.filter(new CustomerProfile(
+    "cust-123",
+    "John Doe",
+    "john@example.com",
+    "555-1234",
+    "123-45-6789",      // Removed
+    "card-1234",        // Removed
+    List.of("email", "sms")
+));
+```
+
+### Multiple Filters
+
+```java
+// Chain filters for progressive data reduction
+record FullOrder(
+    String orderId,
+    Customer customer,
+    List<Item> items,
+    PaymentDetails payment,
+    ShippingAddress shipping
+) {}
+
+record OrderSummary(
+    String orderId,
+    String customerName,
+    int itemCount,
+    double total
+) {}
+
+// Step-by-step filtering
+var toSummary = new ContentFilter<FullOrder, OrderSummary>(
+    order -> new OrderSummary(
+        order.orderId(),
+        order.customer().name(),
+        order.items().size(),
+        order.items().stream().mapToDouble(Item::price).sum()
+    ),
+    summary -> analyticsSystem.track(summary)
+);
+```
+
+### Performance Benefits
+
+```java
+// Measure filtering performance
+var start = System.nanoTime();
+for (int i = 0; i < 1000000; i++) {
+    filter.apply(largeMessage);
+}
+var duration = System.nanoTime() - start;
+
+System.out.println("Filtered 1M messages in " +
+    (duration / 1_000_000) + "ms");
+// Typical: 50-100ms for 1M simple filters
+```
+
+### Security Applications
+
+```java
+// Filter for different access levels
+sealed interface DataLevel permits Internal, Partner, Public {}
+
+record CustomerData(String name, String email, String phone, String ssn) {}
+
+var internalFilter = new ContentFilter<CustomerData, CustomerData>(
+    data -> data, // No filtering
+    this::sendToInternalSystem
+);
+
+var partnerFilter = new ContentFilter<CustomerData, CustomerData>(
+    data -> new CustomerData(
+        data.name(),
+        data.email(),
+        null,  // Remove phone
+        null   // Remove SSN
+    ),
+    this::sendToPartnerSystem
+);
+
+var publicFilter = new ContentFilter<CustomerData, CustomerData>(
+    data -> new CustomerData(
+        data.name(),
+        null,  // Remove email
+        null,  // Remove phone
+        null   // Remove SSN
+    ),
+    this::sendToPublicSystem
+);
+```
+
+## Normalizer
+
+### Pattern Description
+
+The Normalizer pattern transforms different message formats into a common canonical format. This is essential when integrating with multiple legacy systems or external APIs that use different data representations.
+
+### Implementation
+
+```java
+public final class Normalizer<Input, Output> {
+    private final Function<Input, Output> normalizer;
+
+    public Normalizer(Function<Input, Output> normalizer) {
+        this.normalizer = normalizer;
+    }
+
+    public Output normalize(Input input) {
+        return normalizer.apply(input);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Different order formats from different systems
+record SystemAOrder(
+    String order_id,
+    List<LineItem> line_items,
+    String total_amount
+) {}
+
+record SystemBOrder(
+    int orderId,
+    Items items,
+    double grandTotal
+) {}
+
+// Canonical format
+record CanonicalOrder(
+    String orderId,
+    List<OrderLine> lines,
+    BigDecimal total,
+    String sourceSystem
+) {}
+
+// Normalize System A format
+var normalizerA = new Normalizer<SystemAOrder, CanonicalOrder>(
+    sysA -> new CanonicalOrder(
+        sysA.order_id(),
+        sysA.line_items().stream()
+            .map(item -> new OrderLine(item.sku(), item.qty(), item.price()))
+            .toList(),
+        new BigDecimal(sysA.total_amount()),
+        "SystemA"
+    )
+);
+
+// Normalize System B format
+var normalizerB = new Normalizer<SystemBOrder, CanonicalOrder>(
+    sysB -> new CanonicalOrder(
+        String.valueOf(sysB.orderId()),
+        sysB.items().list().stream()
+            .map(item -> new OrderLine(item.product(), item.quantity(), item.cost()))
+            .toList(),
+        BigDecimal.valueOf(sysB.grandTotal()),
+        "SystemB"
+    )
+);
+
+// Use normalizers
+CanonicalOrder order1 = normalizerA.normalize(systemAOrder);
+CanonicalOrder order2 = normalizerB.normalize(systemBOrder);
+
+// Both in canonical format - same processing logic
+processCanonicalOrder(order1);
+processCanonicalOrder(order2);
+```
+
+### Pattern Matching with Sealed Types
+
+```java
+// Use sealed interfaces for type-safe normalization
+sealed interface ExternalOrder permits SysAOrder, SysBOrder, SysCOrder {}
+record SysAOrder(String id, List<Item> items) implements ExternalOrder {}
+record SysBOrder(int id, Item[] items) implements ExternalOrder {}
+record SysCOrder(long orderId, List<Item> items) implements ExternalOrder {}
+
+// Single normalizer for all formats
+var normalizer = new Normalizer<ExternalOrder, CanonicalOrder>(
+    order -> switch (order) {
+        case SysAOrder(var id, var items) ->
+            new CanonicalOrder(id, items, "SystemA");
+        case SysBOrder(var id, var items) ->
+            new CanonicalOrder(String.valueOf(id), List.of(items), "SystemB");
+        case SysCOrder(var id, var items) ->
+            new CanonicalOrder(String.valueOf(id), items, "SystemC");
+    }
+);
+
+// Compiler ensures all cases handled
+```
+
+### Data Validation During Normalization
+
+```java
+// Validate and normalize in one step
+var normalizer = new Normalizer<ExternalOrder, CanonicalOrder>(
+    order -> {
+        // Validation
+        if (order.items().isEmpty()) {
+            throw new ValidationException("Order must have items");
+        }
+
+        // Normalization
+        var canonical = switch (order) {
+            case SysAOrder(var id, var items) -> new CanonicalOrder(id, items);
+            case SysBOrder(var id, var items) -> new CanonicalOrder(String.valueOf(id), items);
+        };
+
+        // Enrichment
+        return canonical.withTimestamp(Instant.now());
+    }
+);
+```
+
+### Format Evolution
+
+```java
+// Handle different versions of the same system
+sealed interface SystemAOrder permits V1Order, V2Order, V3Order {}
+record V1Order(String order_id, String amount) implements SystemAOrder {}
+record V2Order(String order_id, BigDecimal amount, String currency) implements SystemAOrder {}
+record V3Order(String order_id, Money amount) implements SystemAOrder {}
+
+// Normalizer handles all versions
+var normalizer = new Normalizer<SystemAOrder, CanonicalOrder>(
+    order -> switch (order) {
+        case V1Order(var id, var amt) ->
+            new CanonicalOrder(id, new BigDecimal(amt), Currency.USD);
+        case V2Order(var id, var amt, var curr) ->
+            new CanonicalOrder(id, amt, Currency.valueOf(curr));
+        case V3Order(var id, var money) ->
+            new CanonicalOrder(id, money.amount(), money.currency());
+    }
+);
+```
+
+## Content Enricher
+
+### Pattern Description
+
+The Content Enricher pattern adds missing data to messages by fetching information from external sources. This enables messages to be self-contained without requiring consumers to make additional API calls.
+
+### Implementation
+
+```java
+public final class ContentEnricher<Input, Output> {
+    private final Function<Input, Output> enricher;
+
+    public ContentEnricher(Function<Input, Output> enricher) {
+        this.enricher = enricher;
+    }
+
+    public Output enrich(Input input) {
+        return enricher.apply(input);
+    }
+}
+```
+
+### Usage Example
+
+```java
+// Sparse order from frontend
+record CreateOrderRequest(
+    String customerId,
+    List<OrderItem> items
+) {}
+
+// Enriched order for processing
+record EnrichedOrder(
+    String orderId,
+    String customerId,
+    Customer customer,      // Fetched from customer service
+    List<OrderItem> items,
+    BigDecimal discount,    // Calculated from customer tier
+    BigDecimal tax,         // Calculated from location
+    BigDecimal total
+) {}
+
+// Enricher fetches missing data
+var enricher = new ContentEnricher<CreateOrderRequest, EnrichedOrder>(
+    request -> {
+        // Fetch customer details
+        Customer customer = customerService.getById(request.customerId());
+
+        // Calculate discount based on tier
+        BigDecimal discount = switch (customer.tier()) {
+            case PLATINUM -> new BigDecimal("0.20");
+            case GOLD -> new BigDecimal("0.15");
+            case SILVER -> new BigDecimal("0.10");
+            case STANDARD -> BigDecimal.ZERO;
+        };
+
+        // Calculate tax based on location
+        BigDecimal taxRate = taxService.getRate(customer.address());
+        BigDecimal subtotal = request.items().stream()
+            .map(item -> item.price().multiply(BigDecimal.valueOf(item.quantity())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discountAmount = subtotal.multiply(discount);
+        BigDecimal taxableAmount = subtotal.subtract(discountAmount);
+        BigDecimal tax = taxableAmount.multiply(taxRate);
+        BigDecimal total = taxableAmount.add(tax);
+
+        return new EnrichedOrder(
+            UUID.randomUUID().toString(),
+            request.customerId(),
+            customer,
+            request.items(),
+            discountAmount,
+            tax,
+            total
+        );
+    }
+);
+
+// Enrich and process
+EnrichedOrder enriched = enricher.enrich(new CreateOrderRequest("cust-123", items));
+orderProcessingService.process(enriched);
+```
+
+### Parallel Enrichment
+
+```java
+// Fetch multiple data sources in parallel
+var enricher = new ContentEnricher<OrderRequest, EnrichedOrder>(
+    request -> {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            // Fork parallel enrichment tasks
+            var customerTask = scope.fork(() ->
+                customerService.getById(request.customerId())
+            );
+
+            var inventoryTask = scope.fork(() ->
+                inventoryService.checkAvailability(request.items())
+            );
+
+            var pricingTask = scope.fork(() ->
+                pricingService.calculatePricing(request.items())
+            );
+
+            // Wait for all tasks to complete
+            scope.join().throwIfFailed();
+
+            // Combine results
+            return new EnrichedOrder(
+                customerTask.get(),
+                inventoryTask.get(),
+                pricingTask.get()
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new EnrichmentException("Enrichment interrupted", e);
+        }
+    }
+);
+```
+
+### Caching for Performance
+
+```java
+// Cache expensive enrichment operations
+var cache = new ConcurrentHashMap<String, Customer>();
+
+var enricher = new ContentEnricher<OrderRequest, EnrichedOrder>(
+    request -> {
+        // Check cache first
+        Customer customer = cache.computeIfAbsent(
+            request.customerId(),
+            id -> {
+                // Cache miss - fetch from service
+                return customerService.getById(id);
+            }
+        );
+
+        return new EnrichedOrder(
+            request.orderId(),
+            customer,
+            // ... other enrichment
+        );
+    }
+);
+
+// Periodic cache refresh
+ProcTimer.scheduleAtFixedRate(Duration.ofMinutes(5), () -> {
+    cache.clear(); // Or selective invalidation
+});
+```
+
+### Error Handling and Fallbacks
+
+```java
+// Graceful degradation when enrichment fails
+var enricher = new ContentEnricher<OrderRequest, EnrichedOrder>(
+    request -> {
+        Customer customer;
+        try {
+            customer = customerService.getById(request.customerId());
+        } catch (ServiceUnavailableException e) {
+            // Fallback to cached customer
+            customer = customerCache.get(request.customerId())
+                .orElse(Customer.UNKNOWN);
+        }
+
+        InventoryStatus inventory;
+        try {
+            inventory = inventoryService.checkAvailability(request.items());
+        } catch (TimeoutException e) {
+            // Assume available if timeout (optimistic)
+            inventory = InventoryStatus.ASSUMED_AVAILABLE;
+        }
+
+        return new EnrichedOrder(
+            request.orderId(),
+            customer,
+            inventory,
+            // Use defaults when enrichment fails
+            customer == Customer.UNKNOWN ? PricingTier.STANDARD : customer.tier()
+        );
+    }
+);
+```
+
+## Best Practices
+
+### 1. Keep Transformers Stateless
+
+```java
+// Good: Stateless function
+var filter = new ContentFilter<>(
+    msg -> extractFields(msg),
+    destination
+);
+
+// Bad: Stateful transformer
+class StatefulFilter {
+    private int count = 0; // Not thread-safe!
+
+    public B filter(A msg) {
+        count++;
+        return transform(msg);
+    }
+}
+```
+
+### 2. Use Immutable Data Structures
+
+```java
+// Good: Immutable records
+record FilteredMessage(String id, String data) {}
+
+// Bad: Mutable collections
+class MutableMessage {
+    List<String> data = new ArrayList<>(); // Unsafe!
+}
+```
+
+### 3. Handle Null Values Explicitly
+
+```java
+// Explicit null handling
+var normalizer = new Normalizer<ExternalOrder, CanonicalOrder>(
+    order -> {
+        var id = order.id() != null ? order.id() : "UNKNOWN";
+        var items = order.items() != null ? order.items() : List.of();
+        return new CanonicalOrder(id, items);
+    }
+);
+```
+
+### 4. Validate Output
+
+```java
+// Validate normalized format
+var normalizer = new Normalizer<RawOrder, CanonicalOrder>(
+    raw -> {
+        var canonical = convertToCanonical(raw);
+        if (!canonical.isValid()) {
+            throw new ValidationException("Invalid canonical format");
+        }
+        return canonical;
+    }
+);
+```
+
+## Performance Considerations
+
+### Batch Transformation
+
+```java
+// Transform multiple messages efficiently
+List<CanonicalOrder> batch = rawOrders.stream()
+    .map(normalizer::normalize)
+    .toList();
+
+// Parallel batch processing
+List<CanonicalOrder> parallelBatch = rawOrders.parallelStream()
+    .map(normalizer::normalize)
+    .toList();
+```
+
+### Memory Management
+
+```java
+// Avoid holding large intermediate objects
+var normalizer = new Normalizer<LargeMessage, SmallMessage>(
+    large -> {
+        // Don't accumulate data
+        return new SmallMessage(
+            large.getFieldA(),
+            large.getFieldB()
+        );
+    }
+);
+
+// Process in chunks for large datasets
+var chunks = Lists.partition(largeList, 1000);
+for (var chunk : chunks) {
+    chunk.stream()
+        .map(normalizer::normalize)
+        .forEach(this::process);
+}
+```
+
+## Summary
+
+Transformation patterns enable message adaptation:
+
+- **Content Filter**: Remove unnecessary fields for security and performance
+- **Normalizer**: Convert different formats to canonical form
+- **Content Enricher**: Add missing data from external sources
+
+Each pattern leverages Java 26's pattern matching and sealed types for type-safe, efficient transformation. Use them to integrate disparate systems while maintaining loose coupling.
+
+## Further Reading
+
+- [Enterprise Integration Patterns: Chapter 7](https://www.enterpriseintegrationpatterns.com/patterns/messaging/) - Original EIP transformation patterns
+- [Martin Fowler: Canonical Data Model](https://martinfowler.com/eaaCatalog/canonicalDataModel.html) - Canonical format design
+- [JOTP Sealed Types Guide](../../../language-features/sealed-types/) - Pattern matching for transformations

@@ -1,0 +1,372 @@
+---
+title: Testing Processes
+description: Comprehensive testing strategies for JOTP processes
+sidebar_position: 6
+---
+
+# Testing Processes
+
+Learn how to effectively test JOTP processes, supervisors, and event-driven systems.
+
+## Test Infrastructure
+
+### Test Isolation
+
+```java
+@BeforeEach
+void setUp() {
+    ApplicationController.reset(); // Clean slate
+}
+```
+
+### Using JotpTestHelper
+
+```java
+private final JotpTestHelper helper = new JotpTestHelper();
+
+@Test
+void testWithHelper() {
+    Proc<Integer, String> proc = helper.spawnTestProc(
+        "test-proc",
+        0,
+        (state, msg) -> state + 1
+    );
+
+    helper.assertEventually(() ->
+        assertThat(proc.getState().value()).isEqualTo(1)
+    );
+}
+```
+
+## Testing Patterns
+
+### 1. Testing Message Handling
+
+```java
+@Test
+void testProcessMessages() {
+    Proc<CounterState, CounterMessage> proc =
+        CounterProc.spawn("counter");
+
+    proc.send(new CounterMessage.Increment());
+    proc.send(new CounterMessage.Increment());
+
+    await().atMost(1, SECONDS).until(() ->
+        proc.getState().value() == 2
+    );
+}
+```
+
+### 2. Testing Request-Response
+
+```java
+@Test
+void testAskPattern() {
+    ProcRef<String, Request> proc = GenServer.spawn("server");
+
+    CompletableFuture<String> response = proc.ask(
+        new Request.GetData(),
+        Duration.ofSeconds(5)
+    );
+
+    assertThat(response.join()).isEqualTo("data");
+}
+```
+
+### 3. Testing Supervisor Behavior
+
+```java
+@Test
+void testSupervisorRestartsChild() {
+    Supervisor supervisor = Supervisor.spawn(
+        "sup",
+        Strategy.ONE_FOR_ONE,
+        List.of(childSpec)
+    );
+
+    // Find and crash child
+    supervisor.findChild("worker").ifPresent(ref ->
+        ref.send(WorkerMessage.crash())
+    );
+
+    // Verify restart
+    await().atMost(5, SECONDS).until(() ->
+        supervisor.findChild("worker").isPresent()
+    );
+
+    // Verify state reset
+    assertThat(supervisor.getChildRestartCount("worker")).isEqualTo(1);
+}
+```
+
+### 4. Testing Event Systems
+
+```java
+@Test
+void testEventPublication() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    List<TestEvent> captured = new ArrayList<>();
+    bus.subscribe("capturer", event -> {
+        captured.add(event);
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    await().atMost(1, SECONDS).until(() ->
+        captured.size() == 1
+    );
+    assertThat(captured.get(0).data()).isEqualTo("data");
+}
+```
+
+## Advanced Testing
+
+### Property-Based Testing with jqwik
+
+```java
+@Property
+void testCounterIncrementProperty(@ForAll int increments) {
+    Proc<CounterState, CounterMessage> proc = CounterProc.spawn();
+
+    for (int i = 0; i < increments; i++) {
+        proc.send(new CounterMessage.Increment());
+    }
+
+    await().until(() -> proc.getState().value() == increments);
+}
+```
+
+### Stress Testing
+
+```java
+@Test
+void testHighThroughput() {
+    Proc<CounterState, CounterMessage> proc = CounterProc.spawn();
+
+    int messageCount = 10_000;
+    for (int i = 0; i < messageCount; i++) {
+        proc.send(new CounterMessage.Increment());
+    }
+
+    await().atMost(10, SECONDS).until(() ->
+        proc.getState().value() == messageCount
+    );
+}
+```
+
+### Chaos Testing
+
+```java
+@Test
+void testSupervisorUnderLoad() {
+    Supervisor supervisor = Supervisor.spawn(...);
+
+    // Spawn 100 workers
+    for (int i = 0; i < 100; i++) {
+        supervisor.startChild(workerSpec(i));
+    }
+
+    // Randomly crash workers
+    Random random = new Random();
+    for (int i = 0; i < 50; i++) {
+        int workerId = random.nextInt(100);
+        crashWorker(supervisor, workerId);
+    }
+
+    // Verify system still healthy
+    await().until(() ->
+        supervisor.getAliveChildren().size() == 100
+    );
+}
+```
+
+## Testing Time-Dependent Code
+
+### Using Fake Timers
+
+```java
+@Test
+void testTimeout() {
+    Proc<TimedState, TimedMessage> proc = TimedProc.spawn();
+
+    // Send timeout in 1 second
+    proc.send(new TimedMessage.ScheduleTimeout(Duration.ofSeconds(1)));
+
+    // Wait for timeout
+    await().atMost(2, SECONDS).until(() ->
+        proc.getState().hasTimedOut()
+    );
+}
+```
+
+### Testing Scheduled Messages
+
+```java
+@Test
+void testScheduledMessage() {
+    ProcRef<String, String> proc = Proc.spawn("test", state, handler);
+
+    ProcTimer timer = new ProcTimer();
+    timer.send(proc, "scheduled", Duration.ofMillis(100));
+
+    await().atMost(200, MILLISECONDS).until(() ->
+        proc.getState().equals("scheduled")
+    );
+}
+```
+
+## Testing Error Scenarios
+
+### Testing Crash Recovery
+
+```java
+@Test
+void testProcessCrashAndRestart() {
+    Supervisor supervisor = Supervisor.spawn(...);
+    ProcRef<?, ?> child = supervisor.findChild("worker").orElseThrow();
+
+    // Send crash message
+    child.send(WorkerMessage.crash());
+
+    // Verify supervisor detects crash
+    await().atMost(1, SECONDS).until(() ->
+        supervisor.getChildRestartCount("worker") > 0
+    );
+}
+```
+
+### Testing Fault Isolation
+
+```java
+@Test
+void testFaultIsolation() {
+    EventManager<TestEvent> bus = EventManager.spawn("test");
+
+    AtomicInteger healthyCount = new AtomicInteger(0);
+
+    bus.subscribe("crasher", event -> {
+        throw new RuntimeException("Crash!");
+    });
+
+    bus.subscribe("healthy", event -> {
+        healthyCount.incrementAndGet();
+        return SubscriberState.KEEP;
+    });
+
+    bus.publish(new TestEvent("data"));
+
+    // Healthy handler should still receive
+    await().until(() -> healthyCount.get() == 1);
+}
+```
+
+## Test Organization
+
+### Test Class Structure
+
+```java
+class MyProcTest {
+    private JotpTestHelper helper;
+    private Proc<MyState, MyMsg> proc;
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+        helper = new JotpTestHelper();
+        proc = helper.spawnTestProc("my-proc", initialState, handler);
+    }
+
+    @Test
+    void testBasicOperation() { ... }
+
+    @Test
+    void testErrorHandling() { ... }
+
+    @AfterEach
+    void tearDown() {
+        proc.stop();
+    }
+}
+```
+
+### Integration Tests
+
+```java
+@IntegrationTest
+class MyProcIT {
+    @Test
+    void testIntegration() {
+        // Tests across multiple processes
+        Supervisor supervisor = Supervisor.spawn(...);
+        EventManager<Event> bus = EventManager.spawn(...);
+
+        // Test interaction
+    }
+}
+```
+
+## Best Practices
+
+### DO:
+- Reset ApplicationController between tests
+- Use Awaitility for async assertions
+- Test both success and failure paths
+- Use descriptive test names
+- Test supervisor restart strategies
+- Verify message ordering when important
+
+### DON'T:
+- Use Thread.sleep() (use Awaitility)
+- Forget to clean up resources
+- Test implementation details
+- Ignore timing issues in async code
+- Skip error scenarios
+
+## Common Test Patterns
+
+### Given-When-Then
+
+```java
+@Test
+void testCounterIncrements() {
+    // Given
+    Proc<CounterState, CounterMessage> proc = CounterProc.spawn(0);
+
+    // When
+    proc.send(new CounterMessage.Increment());
+
+    // Then
+    await().until(() -> proc.getState().value() == 1);
+}
+```
+
+### Test Fixtures
+
+```java
+class ProcTestFixture {
+    private final List<Proc<?,?>> processes = new ArrayList<>();
+
+    <S,M> Proc<S,M> spawn(String id, S state, BiFunction<S,M,S> handler) {
+        Proc<S,M> proc = Proc.spawn(id, state, handler);
+        processes.add(proc);
+        return proc;
+    }
+
+    void cleanup() {
+        processes.forEach(Proc::stop);
+        processes.clear();
+    }
+}
+```
+
+## Related Tests
+- `ProcTest.java` - Comprehensive process tests
+- `SupervisorTest.java` - Supervisor testing patterns
+- `EventManagerTest.java` - Event bus testing
+- `JotpTestHelperTest.java` - Test helper utilities
+
+## See Also
+- [Proc API](../reference/proc-api.mdx) - API reference
+- [Testing Utilities](../reference/testing-utilities.mdx) - Helper reference

@@ -1,0 +1,74 @@
+---
+title: Event-Driven Architecture
+description: Build loosely coupled systems with typed event broadcasting
+sidebar_position: 4
+---
+
+# Event-Driven Architecture
+
+Learn how to build scalable, loosely coupled systems using JOTP's typed event bus and reactive patterns.
+
+## What You'll Build
+
+A real-time analytics system that:
+- Publishes domain events
+- Subscribes to event types
+- Handles failures independently
+- Scales horizontally
+
+## Core Concepts
+
+- **EventManager<E>**: Typed pub-sub event bus
+- **Event Handlers**: Isolated processes for each subscriber
+- **Loose Coupling**: Publishers don't know about subscribers
+- **Fault Isolation**: Handler crashes don't affect the bus
+
+## Event Flow
+
+```
+Publisher → EventManager → [Handler-1, Handler-2, Handler-3]
+                              ↓           ↓           ↓
+                          Analytics   Logging    Alerting
+```
+
+## Implementation Steps
+
+### 1. Define Event Types
+```java
+public sealed interface DomainEvent
+    permits OrderCreated, PaymentCompleted, InventoryUpdated {
+    record OrderCreated(String orderId, BigDecimal amount) implements DomainEvent {}
+    // ...
+}
+```
+
+### 2. Create Event Bus
+- Instantiate `EventManager<DomainEvent>`
+- Subscribe handlers with filtering
+- Publish events from business logic
+
+### 3. Build Handlers
+- Each handler is a separate `Proc`
+- Process events asynchronously
+- Emit new events as needed
+
+## Advanced Patterns
+
+- **CQRS**: Separate read/write models via events
+- **Event Sourcing**: Rebuild state from event log
+- **Saga Orchestration**: Coordinate distributed transactions
+
+## Testing Event Systems
+
+- Verifying event publication
+- Testing handler isolation
+- Time-travel debugging with event logs
+
+## Related Tests
+- `EventManagerTest.java` - Core event bus functionality
+- `EventManagerGenEventTest.java` - Generic event types
+- `EventSourcingAuditLogTest.java` - Event sourcing patterns
+
+## Next Steps
+- [How to Use Event Bus](../how-to/use-event-bus.mdx)
+- [Distributed Actors](./distributed-actors.mdx)

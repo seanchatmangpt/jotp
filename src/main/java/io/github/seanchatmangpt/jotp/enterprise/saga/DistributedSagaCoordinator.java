@@ -14,12 +14,143 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Distributed saga coordinator for multi-step transactions with compensating actions.
  *
  * <p>Executes a sequence of steps (forward actions) and can rollback via compensation (backward
- * actions) if any step fails. Provides exactly-once semantics with idempotent compensation and
- * durable step logging.
+ * actions) if any step fails. Provides exactly-once semantics with idempotent compensation, durable
+ * step logging, and comprehensive observability. Built on JOTP's process-based architecture for
+ * fault tolerance and distributed coordination.
  *
- * <p>State Machine: - PENDING: Saga registered, awaiting execution - IN_PROGRESS: Executing forward
- * steps - COMPLETED: All steps succeeded - FAILED: A step failed, starting compensation -
- * COMPENSATED: Compensation completed - ABORTED: User-requested abort
+ * <h2>Problem Solved:</h2>
+ *
+ * Distributed transactions across microservices cannot use traditional two-phase commit:
+ *
+ * <ul>
+ *   <li><b>No global lock</b>: Services are independently deployed
+ *   <li><b>No distributed transaction manager</b>: No coordinator across services
+ *   <li><b>Network failures</b>: Services may be temporarily unavailable
+ *   <li><b>Partial failure</b>: Some steps succeed, others fail
+ * </ul>
+ *
+ * <p>Saga pattern solves this with compensating transactions (undo actions).
+ *
+ * <h2>State Machine:</h2>
+ *
+ * <ul>
+ *   <li><b>PENDING</b>: Saga registered, awaiting execution
+ *   <li><b>IN_PROGRESS</b>: Executing forward steps
+ *   <li><b>COMPLETED</b>: All steps succeeded
+ *   <li><b>FAILED</b>: A step failed, starting compensation
+ *   <li><b>COMPENSATED</b>: Compensation completed
+ *   <li><b>ABORTED</b>: User-requested abort
+ * </ul>
+ *
+ * <h2>Behavior:</h2>
+ *
+ * <ol>
+ *   <li>Execute steps sequentially in forward direction
+ *   <li>On step success: record output, continue to next step
+ *   <li>On step failure: execute compensations in reverse order
+ *   <li>Compensation is best-effort (continue even if some compensations fail)
+ *   <li>Emit {@link SagaEvent} for all state transitions
+ * </ol>
+ *
+ * <h2>Example Saga (Order Processing):</h2>
+ *
+ * <pre>
+ * Forward actions:
+ * 1. Reserve inventory (quantity -1)
+ * 2. Charge payment (amount -price)
+ * 3. Schedule shipment (create shipping order)
+ * 4. Send confirmation email
+ *
+ * Compensating actions (if step 3 fails):
+ * 1. Refund payment (amount +price)
+ * 2. Release inventory (quantity +1)
+ * </pre>
+ *
+ * <h2>Enterprise Value:</h2>
+ *
+ * <ul>
+ *   <li><b>Consistency</b>: Maintains data consistency across services without locks
+ *   <li><b>Observability</b>: Complete audit log of all steps and compensations
+ *   <li><b>Recovery</b>: Can retry failed sagas or continue compensation
+ *   <li><b>Async execution</b>: Returns CompletableFuture for non-blocking coordination
+ * </ul>
+ *
+ * <h2>Thread Safety:</h2>
+ *
+ * <ul>
+ *   <li>Thread-safe: Uses {@link CopyOnWriteArrayList} for listeners
+ *   <li>Process-based coordinator ensures serialized state updates
+ *   <li>ConcurrentHashMap for saga instance storage
+ * </ul>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(activeSagas * avgSteps) for saga state
+ *   <li>Latency: O(steps * avgStepLatency) for completion
+ *   <li>Throughput: Limited by slowest step in saga
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Uses {@link io.github.seanchatmangpt.jotp.Proc} for coordinator state management
+ *   <li>Emits {@link SagaEvent} via {@link io.github.seanchatmangpt.jotp.EventManager}
+ *   <li>Compatible with {@link io.github.seanchatmangpt.jotp.Supervisor} for fault-tolerant
+ *       execution
+ * </ul>
+ *
+ * @example
+ *     <pre>{@code
+ * // Define saga steps
+ * List<SagaStep> steps = List.of(
+ *     new SagaStep.Action<>("reserveInventory", input -> {
+ *         return inventoryService.reserve(input.productId, input.quantity);
+ *     }),
+ *     new SagaStep.Action<>("chargePayment", input -> {
+ *         return paymentService.charge(input.paymentMethod, input.amount);
+ *     }),
+ *     new SagaStep.Action<>("scheduleShipment", input -> {
+ *         return shippingService.schedule(input.address, input.items);
+ *     })
+ * );
+ *
+ * // Define compensations
+ * List<SagaStep> compensations = List.of(
+ *     new SagaStep.Compensation<PaymentResult>("refundPayment", result -> {
+ *         paymentService.refund(result.transactionId);
+ *     }),
+ *     new SagaStep.Compensation<InventoryResult>("releaseInventory", result -> {
+ *         inventoryService.release(result.reservationId);
+ *     })
+ * );
+ *
+ * // Create saga
+ * SagaConfig config = SagaConfig.builder("order-processing")
+ *     .steps(Stream.concat(steps.stream(), compensations.stream()).toList())
+ *     .timeout(Duration.ofMinutes(10))
+ *     .compensationTimeout(Duration.ofMinutes(5))
+ *     .build();
+ *
+ * DistributedSagaCoordinator saga = DistributedSagaCoordinator.create(config);
+ *
+ * // Execute saga
+ * CompletableFuture<SagaResult> future = saga.execute();
+ * future.thenAccept(result -> {
+ *     if (result.status() == SagaResult.Status.COMPLETED) {
+ *         log.info("Order processed successfully");
+ *     } else if (result.status() == SagaResult.Status.COMPENSATED) {
+ *         log.warn("Order failed, compensation completed: {}", result.errorMessage());
+ *     }
+ * });
+ * }</pre>
+ *
+ * @see SagaConfig
+ * @see SagaStep
+ * @see SagaEvent
+ * @see SagaTransaction
+ * @see io.github.seanchatmangpt.jotp.Proc
+ * @since 1.0
  */
 public class DistributedSagaCoordinator {
     private final SagaConfig config;

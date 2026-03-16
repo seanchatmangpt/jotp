@@ -1,0 +1,606 @@
+---
+title: Supervisor API Reference
+description: Complete API reference for Supervisor fault-tolerance
+sidebar_position: 2
+---
+
+# Supervisor API Reference
+
+Complete API reference for JOTP's `Supervisor` fault-tolerance primitive.
+
+## Overview
+
+`Supervisor` manages a tree of child processes with:
+- **Restart strategies**: ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE
+- **Child specifications**: Process configuration and lifecycle
+- **Failure detection**: Automatic crash detection and restart
+- **Intensity control**: Limits restart frequency to prevent restart storms
+
+## Core API
+
+### Factory Methods
+
+#### `spawn(String id, Strategy strategy, List<ChildSpec> children)`
+
+Creates a new supervisor.
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "my-supervisor",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        ChildSpec.of("worker-1", () -> WorkerProc.spawn()),
+        ChildSpec.of("worker-2", () -> WorkerProc.spawn())
+    )
+);
+```
+
+**Parameters:**
+- `id`: Unique supervisor identifier
+- `strategy`: Restart strategy (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)
+- `children`: List of child specifications
+
+**Returns:** New `Supervisor` instance
+
+#### `spawn(String id, Strategy strategy, Supervisor.Config config, List<ChildSpec> children)`
+
+Creates supervisor with custom configuration.
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "my-supervisor",
+    Strategy.ONE_FOR_ONE,
+    Supervisor.Config.builder()
+        .intensity(5)
+        .period(Duration.ofSeconds(60))
+        .build(),
+    children
+);
+```
+
+### Child Management
+
+#### `startChild(ChildSpec spec)`
+
+Dynamically starts a child process.
+
+```java
+supervisor.startChild(
+    ChildSpec.of(
+        "new-worker",
+        () -> WorkerProc.spawn(),
+        RestartStrategy.PERMANENT,
+        Duration.ofSeconds(5)
+    )
+);
+```
+
+**Returns:** `ProcRef<S, M>` reference to child
+
+#### `terminateChild(String childId)`
+
+Stops a child process.
+
+```java
+supervisor.terminateChild("worker-1");
+```
+
+**Behavior:**
+- Sends stop signal to child
+- Waits for shutdown timeout
+- Removes child from supervision tree
+
+#### `restartChild(String childId)`
+
+Manually restarts a child.
+
+```java
+supervisor.restartChild("worker-1");
+```
+
+**Use case:** Forced restart without crash
+
+#### `findChild(String childId)`
+
+Finds a child by ID.
+
+```java
+Optional<ProcRef<?, ?>> child = supervisor.findChild("worker-1");
+```
+
+**Returns:** `Optional<ProcRef<S, M>>`
+
+#### `getChildren()`
+
+Gets all child IDs.
+
+```java
+List<String> children = supervisor.getChildren();
+```
+
+**Returns:** List of child IDs
+
+#### `getAliveChildren()`
+
+Gets IDs of alive children.
+
+```java
+List<String> alive = supervisor.getAliveChildren();
+```
+
+**Returns:** List of alive child IDs
+
+### Lifecycle Operations
+
+#### `stop()`
+
+Stops the supervisor and all children.
+
+```java
+supervisor.stop();
+```
+
+**Behavior:**
+- Stops all children (reverse start order)
+- Waits for shutdown timeouts
+- Terminates supervisor process
+
+#### `isAlive()`
+
+Checks if supervisor is running.
+
+```java
+if (supervisor.isAlive()) {
+    supervisor.startChild(spec);
+}
+```
+
+**Returns:** `boolean`
+
+## Restart Strategies
+
+### Strategy.ONE_FOR_ONE
+
+Only the crashed child is restarted.
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "supervisor",
+    Strategy.ONE_FOR_ONE,
+    children
+);
+```
+
+**Use case:** Independent workers with no shared state
+
+**Example:**
+```
+Worker-2 crashes → Only Worker-2 restarts
+```
+
+### Strategy.ONE_FOR_ALL
+
+All children are terminated and restarted when one crashes.
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "supervisor",
+    Strategy.ONE_FOR_ALL,
+    children
+);
+```
+
+**Use case:** Children sharing resources (database, cache)
+
+**Example:**
+```
+Worker-2 crashes → All workers restart
+```
+
+### Strategy.REST_FOR_ONE
+
+The crashed child and all children started after it are restarted.
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "supervisor",
+    Strategy.REST_FOR_ONE,
+    children
+);
+```
+
+**Use case:** Children with initialization order dependencies
+
+**Example:**
+```
+Worker-2 crashes → Worker-2, Worker-3 restart
+```
+
+## Child Specification
+
+### Builder Pattern
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .id("my-worker")
+    .start(() -> WorkerProc.spawn())
+    .restart(RestartStrategy.PERMANENT)
+    .shutdown(Duration.ofSeconds(5))
+    .build();
+```
+
+### Factory Method
+
+```java
+ChildSpec spec = ChildSpec.of(
+    "my-worker",
+    () -> WorkerProc.spawn(),
+    RestartStrategy.PERMANENT,
+    Duration.ofSeconds(5)
+);
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String | Unique child identifier |
+| `start` | Supplier<Proc<S,M>> | Function to start child |
+| `restart` | RestartStrategy | When to restart child |
+| `shutdown` | Duration | Graceful shutdown timeout |
+
+## Restart Strategies
+
+### RestartStrategy.PERMANENT
+
+Always restart the child.
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .restart(RestartStrategy.PERMANENT)
+    .build();
+```
+
+**Use case:** Critical services (API servers, workers)
+
+### RestartStrategy.TRANSIENT
+
+Restart only on abnormal exit.
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .restart(RestartStrategy.TRANSIENT)
+    .build();
+```
+
+**Use case:** Jobs that may complete normally
+
+### RestartStrategy.TEMPORARY
+
+Never restart the child.
+
+```java
+ChildSpec spec = ChildSpec.builder()
+    .restart(RestartStrategy.TEMPORARY)
+    .build();
+```
+
+**Use case:** One-off tasks (migrations, jobs)
+
+## Configuration
+
+### Config Builder
+
+```java
+Supervisor.Config config = Supervisor.Config.builder()
+    .intensity(5)                       // Max restarts
+    .period(Duration.ofSeconds(60))     // Time window
+    .build();
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `intensity` | int | 10 | Maximum restarts in period |
+| `period` | Duration | 60s | Time window for intensity |
+
+### Restart Storm Prevention
+
+```java
+// If intensity/period exceeded → Supervisor terminates
+Supervisor supervisor = Supervisor.spawn(
+    "supervisor",
+    Strategy.ONE_FOR_ONE,
+    Supervisor.Config.builder()
+        .intensity(5)      // Allow 5 restarts
+        .period(Duration.ofSeconds(60))  // In 60 seconds
+        .build(),
+    children
+);
+
+// After 6th crash in 60 seconds:
+// → Supervisor terminates all children
+// → Supervisor itself terminates
+```
+
+## Common Patterns
+
+### Worker Pool
+
+```java
+Supervisor pool = Supervisor.spawn(
+    "worker-pool",
+    Strategy.ONE_FOR_ONE,
+    IntStream.range(0, 10)
+        .mapToObj(i -> ChildSpec.of(
+            "worker-" + i,
+            () -> WorkerProc.spawn(i),
+            RestartStrategy.PERMANENT,
+            Duration.ofSeconds(5)
+        ))
+        .toList()
+);
+```
+
+### Resource Manager
+
+```java
+Supervisor dbSup = Supervisor.spawn(
+    "db-supervisor",
+    Strategy.ONE_FOR_ALL,
+    List.of(
+        ChildSpec.of(
+            "connection-pool",
+            () -> DbPool.spawn(config),
+            RestartStrategy.PERMANENT,
+            Duration.ofSeconds(10)
+        )
+    )
+);
+```
+
+### Pipeline
+
+```java
+Supervisor pipeline = Supervisor.spawn(
+    "pipeline",
+    Strategy.REST_FOR_ONE,
+    List.of(
+        ChildSpec.of("ingest", () -> IngestProc.spawn()),
+        ChildSpec.of("process", () -> ProcessProc.spawn()),
+        ChildSpec.of("output", () -> OutputProc.spawn())
+    )
+);
+```
+
+### Application Tree
+
+```java
+// Level 1: Application Supervisor
+Supervisor appSup = Supervisor.spawn(
+    "application",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        // Level 2: Service Supervisors
+        serviceSupervisorSpec(),
+        monitoringSupervisorSpec()
+    )
+);
+
+// Level 2: Service Supervisor
+Supervisor serviceSup = Supervisor.spawn(
+    "services",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        // Level 3: Worker Pools
+        workerPoolSpec(),
+        apiServerSpec()
+    )
+);
+```
+
+## Advanced Operations
+
+### Dynamic Child Addition
+
+```java
+// Add worker on demand
+String workerId = "worker-" + nextId.getAndIncrement();
+supervisor.startChild(
+    ChildSpec.of(
+        workerId,
+        () -> WorkerProc.spawn(workerId),
+        RestartStrategy.PERMANENT,
+        Duration.ofSeconds(5)
+    )
+);
+```
+
+### Child Restart Count
+
+```java
+// Get restart count for specific child
+int restarts = supervisor.getChildRestartCount("worker-1");
+```
+
+### Supervision Depth
+
+```java
+// Access child supervisor
+Optional<ProcRef<?,?>> childSupervisor =
+    supervisor.findChild("service-supervisor");
+
+if (childSupervisor.isPresent()) {
+    // Navigate to grandchildren
+    // Note: Requires type casting or ProcRef usage
+}
+```
+
+## Monitoring and Events
+
+### Event Subscription
+
+```java
+// Subscribe to supervisor events
+supervisor.getEventBus().subscribe(
+    "supervisor-monitor",
+    event -> switch(event) {
+        case ChildStarted(var childId) ->
+            logger.info("Child {} started", childId);
+
+        case ChildRestarted(var childId, var reason) ->
+            logger.warn("Child {} restarted: {}", childId, reason);
+
+        case ChildTerminated(var childId) ->
+            logger.info("Child {} terminated", childId);
+
+        case SupervisorShutdown ->
+            logger.error("Supervisor shutdown");
+
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+### Event Types
+
+```java
+sealed interface SupervisorEvent
+    permits SupervisorEvent.ChildStarted,
+             SupervisorEvent.ChildRestarted,
+             SupervisorEvent.ChildTerminated,
+             SupervisorEvent.SupervisorShutdown {}
+```
+
+## Error Handling
+
+### Child Crashes
+
+```java
+// When child crashes:
+// 1. Supervisor receives ExitSignal
+// 2. Supervisor logs crash reason
+// 3. Supervisor applies restart strategy
+// 4. Supervisor restarts child (if applicable)
+// 5. Supervisor increments restart counter
+```
+
+### Supervisor Termination
+
+```java
+// When supervisor gives up (intensity exceeded):
+// 1. Supervisor terminates all children
+// 2. Supervisor notifies its supervisor (if any)
+// 3. Supervisor terminates itself
+```
+
+### Manual Intervention
+
+```java
+// Force restart specific child
+supervisor.restartChild("worker-1");
+
+// Remove child permanently
+supervisor.terminateChild("worker-1");
+```
+
+## Best Practices
+
+### Strategy Selection
+
+```java
+// Independent workers → ONE_FOR_ONE
+Strategy.ONE_FOR_ONE
+
+// Shared resources → ONE_FOR_ALL
+Strategy.ONE_FOR_ALL
+
+// Ordered dependencies → REST_FOR_ONE
+Strategy.REST_FOR_ONE
+```
+
+### Intensity Configuration
+
+```java
+// Prevent restart storms
+Supervisor.Config.builder()
+    .intensity(5)        // Conservative
+    .period(Duration.ofSeconds(60))
+    .build();
+
+// Aggressive restarts
+Supervisor.Config.builder()
+    .intensity(100)      // Allow many restarts
+    .period(Duration.ofSeconds(60))
+    .build();
+```
+
+### Tree Depth
+
+```java
+// Keep trees shallow (3-4 levels max)
+Level 1: Application
+Level 2: Service Supervisors
+Level 3: Worker Pools
+Level 4: Individual Workers
+```
+
+## Thread Safety
+
+### Safe Operations
+- `startChild()` - Thread-safe
+- `terminateChild()` - Thread-safe
+- `restartChild()` - Thread-safe
+- `findChild()` - Thread-safe
+- `stop()` - Thread-safe
+
+### Concurrent Access
+
+```java
+// Multiple threads can manage children
+ExecutorService executor = Executors.newFixedThreadPool(10);
+for (int i = 0; i < 100; i++) {
+    executor.submit(() -> {
+        supervisor.startChild(workerSpec(i));
+    });
+}
+```
+
+## Performance Considerations
+
+### Restart Latency
+
+```
+Time to restart child:
+- Process spawn: ~1ms
+- Initialization: User-defined
+- Total: ~1-100ms per restart
+```
+
+### Overhead
+
+```
+Per-supervisor overhead:
+- Child tracking: ~1 KB per child
+- Event handling: ~1 KB
+- Total: ~10-100 KB for typical supervisor
+```
+
+### Scalability
+
+```
+Children per supervisor:
+- Recommended: <100
+- Maximum: ~1000 (with performance degradation)
+```
+
+## Related Tests
+- `SupervisorTest.java` - All supervisor operations
+- `CrashRecoveryTest.java` - Automatic recovery
+- `SupervisorStormStressTest.java` - Storm testing
+
+## See Also
+- [Implement a Supervisor](../how-to/implement-supervisor.mdx) - Usage guide
+- [Supervision Trees](../explanation/supervision-trees.mdx) - Architecture
+- [Proc API](./proc-api.mdx) - Process reference

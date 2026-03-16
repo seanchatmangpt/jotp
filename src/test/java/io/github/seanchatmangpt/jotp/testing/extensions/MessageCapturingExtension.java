@@ -7,7 +7,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.extension.*;
 
 /**
- * JUnit 6 extension for non-invasive message interception via ProcMonitor.
+ * JUnit 6 extension for non-invasive message interception via ProcessMonitor.
  *
  * <p>Records all mailbox messages during test execution:
  *
@@ -18,8 +18,8 @@ import org.junit.jupiter.api.extension.*;
  *   <li>Message type and payload
  * </ul>
  *
- * <p>Uses ProcMonitor (not instrumentation) to avoid interfering with message flow. Automatically
- * injected into test via store.
+ * <p>Uses ProcessMonitor (not instrumentation) to avoid interfering with message flow.
+ * Automatically injected into test via store.
  */
 public class MessageCapturingExtension implements TestInstancePostProcessor, ParameterResolver {
 

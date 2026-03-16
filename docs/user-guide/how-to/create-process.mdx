@@ -1,0 +1,106 @@
+---
+title: Create a Process
+description: Step-by-step guide to creating and managing JOTP processes
+sidebar_position: 1
+---
+
+# Create a Process
+
+Learn how to create, start, and manage JOTP processes with best practices for production use.
+
+## Quick Start
+
+### Basic Process Creation
+
+```java
+// Define state and message types
+record MyState(int value) {}
+sealed interface MyMsg permits MyMsg.Increment {}
+record Increment() implements MyMsg {}
+
+// Create and spawn
+Proc<MyState, MyMsg> proc = Proc.spawn(
+    "my-process",
+    new MyState(0),
+    (state, msg) -> {
+        if (msg instanceof MyMsg.Increment) {
+            return new MyState(state.value() + 1);
+        }
+        return state;
+    }
+);
+```
+
+## Common Patterns
+
+### 1. Request-Response (GenServer Pattern)
+
+```java
+sealed interface Request permits Request.GetData {}
+record GetData(ProcRef<String, Request> replyTo) implements Request {}
+
+// In handler:
+if (msg instanceof Request.GetData(var replyTo)) {
+    replyTo.send("Current data: " + state.data());
+    return state;
+}
+```
+
+### 2. State Machine Transitions
+
+```java
+sealed interface State permits Idle, Active {}
+record Idle() implements State {}
+record Active(String user) implements State {}
+
+sealed interface Message permits Message.Start, Message.Stop {}
+```
+
+### 3. Timed Operations
+
+```java
+// Schedule a message
+ProcTimer timer = new ProcTimer();
+timer.send(proc, new TimeoutMessage(), Duration.ofSeconds(5));
+```
+
+## Best Practices
+
+### DO:
+- Use sealed interfaces for message types
+- Keep message handlers pure functions
+- Use records for immutable state
+- Trap exits for cleanup
+
+### DON'T:
+- Block in message handlers
+- Use shared mutable state
+- Throw exceptions in handlers
+- Hold raw Proc references long-term
+
+## Process Lifecycle
+
+1. **Spawn**: Create with initial state and handler
+2. **Running**: Process messages from mailbox
+3. **Shutdown**: Graceful termination
+4. **Crashed**: Exception terminates (supervisor may restart)
+
+## Testing
+
+```java
+@Test
+void testProcessCreation() {
+    Proc<Integer, String> proc = Proc.spawn("test", 0, (s, m) -> s + 1);
+    proc.send("increment");
+    await().atMost(1, SECONDS).until(() -> proc.getState().value() == 1);
+}
+```
+
+## Related Tests
+- `ProcTest.java` - Comprehensive process testing
+- `GenServerTest.java` - Request-response patterns
+- `ProcTimerTest.java` - Scheduled operations
+
+## See Also
+- [Your First Process](../tutorials/your-first-process.mdx) - Tutorial introduction
+- [Supervisor API](../reference/supervisor-api.mdx) - Managing process trees

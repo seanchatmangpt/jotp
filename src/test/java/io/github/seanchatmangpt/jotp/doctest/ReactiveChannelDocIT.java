@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp.doctest;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ReactiveChannel;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
  *
  * <p>HTML output: {@code target/site/doctester/ReactiveChannelDocIT.html}.
  */
+@DtrTest
 @ExtendWith(DocTestExtension.class)
 @Timeout(10)
 class ReactiveChannelDocIT implements WithAssertions {
@@ -45,7 +48,10 @@ class ReactiveChannelDocIT implements WithAssertions {
             await().atMost(2, SECONDS).until(() -> received.size() == 2);
             """)
     @Test
-    void submit_deliversToSubscriber() throws Exception {
+    void submit_deliversToSubscriber(DtrContext ctx) throws Exception {
+        ctx.say("ReactiveChannel bridges JOTP messaging with Reactive Streams (Flow.Publisher)");
+        ctx.say("Supports direct submit() for imperative publishing alongside reactive subscription");
+
         ReactiveChannel<String> ch = ReactiveChannel.create("greetings");
         List<String> received = new CopyOnWriteArrayList<>();
 
@@ -56,6 +62,8 @@ class ReactiveChannelDocIT implements WithAssertions {
 
         Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> received.size() == 2);
         assertThat(received).containsExactly("hello", "world");
+
+        ctx.say("Messages delivered in order to subscriber via Reactive Streams contract");
     }
 
     // ── Broadcast / fan-out ──────────────────────────────────────────────────────
@@ -103,7 +111,10 @@ class ReactiveChannelDocIT implements WithAssertions {
             assertThat(out).containsExactly("item-1", "item-2");
             """)
     @Test
-    void map_transformsItems() throws Exception {
+    void map_transformsItems(DtrContext ctx) throws Exception {
+        ctx.say("Pipeline combinators enable declarative stream processing");
+        ctx.say("map() creates a derived channel that transforms each item");
+
         ReactiveChannel<Integer> numbers = ReactiveChannel.create("numbers");
         ReactiveChannel<String> labels = numbers.map(n -> "item-" + n);
 
@@ -116,6 +127,8 @@ class ReactiveChannelDocIT implements WithAssertions {
 
         Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> out.size() == 2);
         assertThat(out).containsExactly("item-1", "item-2");
+
+        ctx.say("Derived channels close automatically when upstream closes");
     }
 
     @DocNote(

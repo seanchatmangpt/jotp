@@ -1,0 +1,674 @@
+# Comprehensive OpenTelemetry Integration Guide
+
+OpenTelemetry provides production-ready observability for JOTP applications, enabling you to collect metrics, distributed traces, and logs from your concurrent systems. This guide covers everything from basic setup to production deployment strategies.
+
+## Table of Contents
+
+1. [OpenTelemetry Setup and Configuration](#opentelemetry-setup-and-configuration)
+2. [Metrics Collection](#metrics-collection)
+3. [Distributed Tracing with Spans](#distributed-tracing-with-spans)
+4. [JOTP-Specific Observability](#jotp-specific-observability)
+5. [Exporter Configuration](#exporter-configuration)
+6. [Production Deployment](#production-deployment)
+7. [Performance Considerations](#performance-considerations)
+8. [Troubleshooting Observability](#troubleshooting-observability)
+
+## OpenTelemetry Setup and Configuration
+
+### Prerequisites
+
+JOTP's OpenTelemetry integration requires Java 26 with preview features enabled:
+
+```bash
+java --enable-preview -jar your-jotp-app.jar
+```
+
+### Basic Configuration
+
+The simplest way to enable OpenTelemetry is through the `OpenTelemetryService`:
+
+```java
+import io.github.seanchatmangpt.jotp.observability.otel.OpenTelemetryService;
+import io.github.seanchatmangpt.jotp.ApplicationSpec;
+import io.github.seanchatmangpt.jotp.ApplicationController;
+import io.github.seanchatmangpt.jotp.RunType;
+
+// Create with default configuration
+var spec = ApplicationSpec.builder("otel-app")
+    .description("OpenTelemetry integration example")
+    .mod((startType, args) -> OpenTelemetryService.create())
+    .build();
+
+ApplicationController.load(spec);
+ApplicationController.start("otel-app", RunType.PERMANENT);
+```
+
+### Custom Configuration
+
+For production deployments, use `OtelConfiguration` to customize settings:
+
+```java
+import io.github.seanchatmangpt.jotp.observability.otel.OtelConfiguration;
+import java.time.Duration;
+
+OtelConfiguration config = OtelConfiguration.builder()
+    .serviceName("jotp-payment-service")
+    .otlpEndpoint("http://otel-collector:4318")
+    .exportInterval(Duration.ofSeconds(60))
+    .exportTimeout(Duration.ofSeconds(30))
+    .enableMetrics(true)
+    .enableTracing(true)
+    .enableLogging(false)
+    .build();
+
+OpenTelemetryService service = OpenTelemetryService.create(config);
+```
+
+### Configuration Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `serviceName` | "jotp-service" | Service name for telemetry identification |
+| `otlpEndpoint` | "http://localhost:4318" | OTLP collector endpoint |
+| `exportInterval` | 60 seconds | Frequency of metric exports |
+| `exportTimeout` | 30 seconds | Timeout for export operations |
+| `enableMetrics` | true | Enable metrics collection |
+| `enableTracing` | true | Enable distributed tracing |
+| `enableLogging` | false | Enable logging integration |
+
+### JVM Configuration
+
+Enable observability framework-wide with system properties:
+
+```bash
+java -Djotp.observability.enabled=true \
+     --enable-preview \
+     -jar jotp-app.jar
+```
+
+This enables the `FrameworkEventBus` and `FrameworkMetrics` for zero-overhead observability of process lifecycle events.
+
+## Metrics Collection
+
+JOTP provides a comprehensive metrics collection system through `MetricsCollector` and OpenTelemetry integration.
+
+### Counter Metrics
+
+Counters track monotonically increasing values like request counts or error rates:
+
+```java
+import io.github.seanchatmangpt.jotp.MetricsCollector;
+
+MetricsCollector metrics = MetricsCollector.create("payment-service");
+
+// Simple counter
+metrics.counter("requests.total").increment();
+
+// Counter with tags
+metrics.counter("requests.total",
+    Map.of("endpoint", "/api/payments", "method", "POST"))
+    .increment();
+
+// Counter with delta
+metrics.counter("bytes.sent").increment(1024);
+
+// Get current value
+long totalRequests = metrics.counter("requests.total").count();
+```
+
+### Gauge Metrics
+
+Gauges track point-in-time values like queue depth or memory usage:
+
+```java
+// Gauge with supplier (dynamic)
+metrics.gauge("queue.depth", () -> mailbox.size());
+
+// Manual gauge updates
+metrics.gauge("memory.heap.used").set(1234567890.0);
+
+// Gauge with tags
+metrics.gauge("processes.active",
+    Map.of("type", "payment-worker"),
+    () -> procRegistry.activeCount());
+
+// Get current value
+double depth = metrics.gauge("queue.depth").value();
+```
+
+### Histogram Metrics
+
+Histograms track the distribution of values like response times or payload sizes:
+
+```java
+// Record values
+metrics.histogram("request.size").record(1024);
+metrics.histogram("request.size").record(2048);
+metrics.histogram("request.size").record(512);
+
+// Get statistics
+long count = metrics.histogram("request.size").count();
+double mean = metrics.histogram("request.size").mean();
+long min = metrics.histogram("request.size").min();
+long max = metrics.histogram("request.size").max();
+double p95 = metrics.histogram("request.size").percentile(95.0);
+double p99 = metrics.histogram("request.size").percentile(99.0);
+```
+
+### Timer Metrics
+
+Timers measure duration with automatic histogram aggregation:
+
+```java
+// Try-with-resources for automatic timing
+try (var timer = metrics.timer("request.duration").start()) {
+    processPayment(payment);
+} // Automatically records duration on close
+
+// Manual timing
+var timer = metrics.timer("database.query.duration").start();
+// ... do work ...
+Duration elapsed = timer.stop();
+
+// Record pre-measured duration
+metrics.timer("external.api.duration")
+    .record(Duration.ofMillis(250));
+
+// Get timer statistics
+Duration mean = metrics.timer("request.duration").mean();
+Duration p95 = metrics.timer("request.duration").percentile(95.0);
+```
+
+### Metric Snapshots
+
+Export all metrics at once for debugging or reporting:
+
+```java
+Map<String, Object> snapshot = metrics.snapshot();
+
+snapshot.forEach((name, value) -> {
+    System.out.println(name + " = " + value);
+});
+```
+
+## Distributed Tracing with Spans
+
+Distributed tracing helps you understand request flows across processes and services.
+
+### Span Basics
+
+Create spans to track operations:
+
+```java
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
+
+// Get tracer from OpenTelemetryService
+Tracer tracer = openTelemetryService.tracerProvider()
+    .get("jotp-payment-service", "1.0.0");
+
+// Create a span
+Span span = tracer.spanBuilder("process-payment")
+    .setParent(Context.current()) // Inherit current context
+    .startSpan();
+
+try (Scope scope = span.makeCurrent()) {
+    // Your business logic here
+    processPayment(payment);
+
+    // Add attributes
+    span.setAttribute("payment.id", payment.getId());
+    span.setAttribute("payment.amount", payment.getAmount());
+
+} catch (Exception e) {
+    span.recordException(e);
+    throw e;
+} finally {
+    span.end();
+}
+```
+
+### Span Attributes
+
+Add structured data to spans for filtering and analysis:
+
+```java
+Span span = tracer.spanBuilder("handle-payment-event")
+    .startSpan();
+
+try (Scope scope = span.makeCurrent()) {
+    // Add various attribute types
+    span.setAttribute("payment.id", paymentId);
+    span.setAttribute("payment.amount", amount);
+    span.setAttribute("payment.currency", "USD");
+    span.setAttribute("customer.id", customerId);
+    span.setAttribute("attempts", attemptCount);
+    span.setAttribute("success", true);
+
+    // Add events
+    span.addEvent("validation-started");
+    validatePayment(payment);
+    span.addEvent("validation-completed");
+
+} finally {
+    span.end();
+}
+```
+
+### Nested Spans
+
+Create child spans for sub-operations:
+
+```java
+Span parentSpan = tracer.spanBuilder("payment-processing")
+    .startSpan();
+
+try (Scope parentScope = parentSpan.makeCurrent()) {
+    // Child span automatically inherits parent context
+    Span validationSpan = tracer.spanBuilder("validation")
+        .startSpan();
+
+    try (Scope validationScope = validationSpan.makeCurrent()) {
+        validatePayment(payment);
+    } finally {
+        validationSpan.end();
+    }
+
+    // Another child span
+    Span processingSpan = tracer.spanBuilder("processing")
+        .startSpan();
+
+    try (Scope processingScope = processingSpan.makeCurrent()) {
+        processPayment(payment);
+    } finally {
+        processingSpan.end();
+    }
+
+} finally {
+    parentSpan.end();
+}
+```
+
+### Span Status
+
+Set span status to indicate success or failure:
+
+```java
+Span span = tracer.spanBuilder("process-payment")
+    .startSpan();
+
+try (Scope scope = span.makeCurrent()) {
+    PaymentResult result = processPayment(payment);
+
+    if (result.isSuccess()) {
+        span.setStatus(StatusCode.OK);
+        span.setAttribute("result", "success");
+    } else {
+        span.setStatus(StatusCode.ERROR, "Payment declined");
+        span.setAttribute("result", "declined");
+        span.setAttribute("reason", result.getReason());
+    }
+
+} catch (Exception e) {
+    span.setStatus(StatusCode.ERROR, "Processing error");
+    span.recordException(e);
+    throw e;
+} finally {
+    span.end();
+}
+```
+
+## JOTP-Specific Observability
+
+JOTP provides built-in observability for processes, supervisors, and state machines through the `FrameworkEventBus` and `ProcessMetrics`.
+
+### Framework Event Bus
+
+Subscribe to framework lifecycle events:
+
+```java
+import io.github.seanchatmangpt.jotp.observability.FrameworkEventBus;
+import io.github.seanchatmangpt.jotp.observability.FrameworkMetrics;
+
+// Enable observability (must be set before Application.start())
+System.setProperty("jotp.observability.enabled", "true");
+
+// FrameworkMetrics auto-subscribes to FrameworkEventBus
+FrameworkMetrics metrics = FrameworkMetrics.create();
+
+// Subscribe custom handler
+FrameworkEventBus.getDefault().subscribe(event -> {
+    switch (event) {
+        case FrameworkEvent.ProcessCreated e ->
+            logger.info("Process started: {}", e.processId());
+
+        case FrameworkEvent.ProcessTerminated e ->
+            logger.warn("Process terminated: {} (abnormal={})",
+                e.processId(), e.abnormal());
+
+        case FrameworkEvent.SupervisorChildCrashed e ->
+            alerting.sendAlert("Child process crashed: " + e.childId());
+
+        case FrameworkEvent.StateMachineTransition e ->
+            logger.debug("State transition: {} -> {}",
+                e.fromState(), e.toState());
+
+        // All events handled exhaustively (sealed interface)
+    }
+});
+```
+
+### Process Metrics
+
+Track process lifecycle and health:
+
+```java
+import io.github.seanchatmangpt.jotp.observability.ProcessMetrics;
+
+ProcessMetrics procMetrics = ProcessMetrics.create();
+
+// Record process events
+procMetrics.recordProcessCreated("proc-123", "payment-worker");
+procMetrics.recordProcessTerminated("proc-123", "normal");
+procMetrics.recordProcessCrashed("proc-456", "OutOfMemoryError", exception);
+procMetrics.recordProcessRestarted("proc-456", "supervisor-restart");
+
+// Record message throughput
+procMetrics.recordMessageSent("proc-123");
+procMetrics.recordMessageReceived("proc-123");
+procMetrics.recordMessageProcessed("proc-123");
+
+// Record queue depth
+procMetrics.recordQueueDepth("proc-123", 42);
+
+// Record health status
+procMetrics.recordHealthStatus("proc-123",
+    ProcessMetrics.HealthStatus.HEALTHY);
+
+// Get snapshots
+ProcessMetrics.ProcessMetricsSnapshot snapshot = procMetrics.snapshot();
+
+System.out.println("Crash rate: " + snapshot.crashRate() + "%");
+System.out.println("Restart rate: " + snapshot.restartRate() + "%");
+System.out.println("Message success rate: " + snapshot.messageSuccessRate() + "%");
+```
+
+### Process-Specific Metrics
+
+Query metrics for individual processes:
+
+```java
+ProcessMetrics.ProcessMetricEntry entry =
+    procMetrics.getProcessMetrics("proc-123");
+
+System.out.println("Process type: " + entry.getProcessType());
+System.out.println("Uptime: " + entry.getUptimeMs() + "ms");
+System.out.println("Crash count: " + entry.getCrashCount());
+System.out.println("Restart count: " + entry.getRestartCount());
+System.out.println("Current queue depth: " + entry.getCurrentQueueDepth());
+System.out.println("Max queue depth: " + entry.getMaxQueueDepth());
+System.out.println("Health status: " + entry.getCurrentHealthStatus());
+System.out.println("Is running: " + entry.isRunning());
+```
+
+## Exporter Configuration
+
+### OTLP Exporter
+
+The default OTLP exporter sends telemetry to an OpenTelemetry Collector:
+
+```java
+OtelConfiguration config = OtelConfiguration.builder()
+    .otlpEndpoint("http://otel-collector:4318") // HTTP endpoint
+    .otlpEndpoint("http://otel-collector:4317") // gRPC endpoint (if supported)
+    .exportInterval(Duration.ofSeconds(60))
+    .exportTimeout(Duration.ofSeconds(30))
+    .build();
+```
+
+### Prometheus Exporter
+
+For Prometheus scraping, configure the OTLP endpoint to your Prometheus instance:
+
+```bash
+# Start Prometheus with OTLP receiver
+prometheus --config.file=prometheus.yml \
+    --enable-feature=exemplar-storage \
+    --web.listen-address=:9090
+```
+
+```java
+OtelConfiguration config = OtelConfiguration.builder()
+    .otlpEndpoint("http://prometheus:9090/otlp")
+    .enableMetrics(true)
+    .enableTracing(false)
+    .build();
+```
+
+### Jaeger Exporter
+
+For distributed tracing visualization with Jaeger:
+
+```bash
+# Start Jaeger with OTLP receiver
+docker run -d --name jaeger \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 4318:4318 \
+  -p 16686:16686 \
+  jaegertracing/all-in-one:latest
+```
+
+```java
+OtelConfiguration config = OtelConfiguration.builder()
+    .otlpEndpoint("http://jaeger:4318")
+    .enableMetrics(false)
+    .enableTracing(true)
+    .build();
+```
+
+### Console Exporter (Development)
+
+For development, print telemetry to console:
+
+```java
+OtelConfiguration config = OtelConfiguration.builder()
+    .otlpEndpoint("console://")
+    .exportInterval(Duration.ofSeconds(10))
+    .build();
+```
+
+## Production Deployment
+
+### Resource Detection
+
+Add resource attributes for better service identification:
+
+```java
+OtelConfiguration config = OtelConfiguration.builder()
+    .serviceName("jotp-payment-service")
+    .otlpEndpoint("http://otel-collector:4318")
+    .build();
+
+// Additional resource attributes can be added via environment variables:
+// OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
+```
+
+### Batch Processing
+
+Configure batch processing for high-throughput scenarios:
+
+```java
+OtelConfiguration config = OtelConfiguration.builder()
+    .serviceName("jotp-payment-service")
+    .otlpEndpoint("http://otel-collector:4318")
+    .exportInterval(Duration.ofSeconds(30)) // More frequent exports
+    .exportTimeout(Duration.ofSeconds(10))  // Shorter timeout
+    .build();
+```
+
+### Sampling Strategies
+
+Reduce tracing overhead with sampling:
+
+```bash
+# Trace 10% of requests
+OTEL_TRACES_SAMPLER=traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+
+# Trace based on parent span
+OTEL_TRACES_SAMPLER=parentbased
+```
+
+### Health Checks
+
+Include OpenTelemetry in health checks:
+
+```java
+public class HealthCheck {
+    private final OpenTelemetryService otelService;
+
+    public HealthStatus check() {
+        Map<String, Object> config = otelService.configuration();
+        boolean enabled = (Boolean) config.get("enableMetrics");
+
+        if (!enabled) {
+            return HealthStatus.unhealthy("Observability disabled");
+        }
+
+        return HealthStatus.healthy("Observability running");
+    }
+}
+```
+
+## Performance Considerations
+
+### Zero-Overhead Design
+
+JOTP's observability is designed for zero overhead when disabled:
+
+- **Fast path**: Single branch check (<100ns) when disabled
+- **Async publishing**: Events delivered on background thread
+- **Lock-free**: Uses `LongAdder` and `ConcurrentHashMap`
+- **Hot path protection**: No observability in `Proc.tell()` or mailbox operations
+
+### Hot Path Validation
+
+Validate that observability doesn't contaminate performance-critical paths:
+
+```java
+import io.github.seanchatmangpt.jotp.observability.HotPathValidation;
+
+// Run in tests to validate hot path purity
+@Test
+void validateProcTellIsPure() {
+    HotPathValidation.validateHotPaths();
+}
+```
+
+### Memory Management
+
+Control memory usage for histograms and timers:
+
+```java
+MetricsCollector metrics = MetricsCollector.builder()
+    .name("payment-service")
+    .histogramMaxSamples(1000) // Limit sample retention
+    .build();
+```
+
+### Metric Cardinality
+
+Avoid high-cardinality tags that explode metric counts:
+
+```java
+// BAD: High cardinality (user ID)
+metrics.counter("requests.total",
+    Map.of("user.id", userId)) // Don't do this!
+
+// GOOD: Low cardinality (user type)
+metrics.counter("requests.total",
+    Map.of("user.type", userType)) // Better
+```
+
+## Troubleshooting Observability
+
+### Enable Debug Logging
+
+```bash
+# OpenTelemetry SDK logging
+OTEL_LOG_LEVEL=debug
+
+# JOTP observability logging
+-Djotp.observability.enabled=true
+-Djava.util.logging.ConsoleHandler.level=FINE
+```
+
+### Verify Metric Export
+
+Check that metrics are being exported:
+
+```java
+MetricsCollector metrics = MetricsCollector.create();
+
+// Record some metrics
+metrics.counter("test.counter").increment();
+
+// Print snapshot
+Map<String, Object> snapshot = metrics.snapshot();
+System.out.println("Metrics: " + snapshot);
+
+// Verify OpenTelemetry configuration
+OpenTelemetryService otel = OpenTelemetryService.create();
+System.out.println("Config: " + otel.configuration());
+```
+
+### Common Issues
+
+**Issue**: Metrics not appearing in backend
+
+**Solutions**:
+1. Verify OTLP endpoint is reachable: `curl http://otel-collector:4318/health`
+2. Check firewall rules allow outbound connections
+3. Verify `enableMetrics=true` in configuration
+4. Check export timeout is sufficient
+
+**Issue**: High memory usage
+
+**Solutions**:
+1. Reduce `histogramMaxSamples` in `MetricsCollector`
+2. Increase export interval to reduce batch frequency
+3. Remove high-cardinality tags
+4. Disable observability if not needed
+
+**Issue**: Performance degradation
+
+**Solutions**:
+1. Verify `jotp.observability.enabled=true` (only if needed)
+2. Run `HotPathValidation.validateHotPaths()` to check for violations
+3. Increase export interval to reduce background thread activity
+4. Use sampling for traces
+
+**Issue**: Missing trace context
+
+**Solutions**:
+1. Verify parent span is set: `span.setParent(Context.current())`
+2. Check `Scope` is used: `try (Scope scope = span.makeCurrent())`
+3. Verify context propagation across process boundaries
+
+### Best Practices
+
+1. **Enable early**: Enable observability from the start of development
+2. **Use structured tags**: Maintain consistent tag naming conventions
+3. **Monitor observability**: Track the performance of observability itself
+4. **Test in production**: Run shadow deployments to validate overhead
+5. **Plan for scale**: Design metrics to handle 10x traffic growth
+
+## Next Steps
+
+- [Explore JOTP Architecture](/user-guide/architecture/overview) for system design patterns
+- [Read Performance Guide](/user-guide/performance/optimization) for tuning tips
+- [Check Production Checklist](/user-guide/system/production-checklist) for deployment guidance
+- [Review Troubleshooting Guide](/user-guide/troubleshooting/common-issues) for problem-solving
+
+For more information on OpenTelemetry, visit [opentelemetry.io](https://opentelemetry.io/).

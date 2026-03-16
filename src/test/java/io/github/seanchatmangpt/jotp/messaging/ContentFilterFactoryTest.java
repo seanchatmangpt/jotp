@@ -6,20 +6,21 @@ import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messagepatterns.transformation.ContentFilter;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 
 /** Test for ContentFilter factory method in Messaging. */
 class ContentFilterFactoryTest {
+
+    @BeforeEach
+    void setUp() {
+        ApplicationController.reset();
+    }
 
     record FullCustomer(String id, String name, String email, String phone, String address) {}
 
     record LeanCustomer(String id, String name) {}
 
     @org.junit.jupiter.api.Test
-    @BeforeEach
-    void setUp() {
-        ApplicationController.reset();
-    }
-
     void testContentFilterFactory() throws InterruptedException {
         // Given
         List<LeanCustomer> results = new ArrayList<>();

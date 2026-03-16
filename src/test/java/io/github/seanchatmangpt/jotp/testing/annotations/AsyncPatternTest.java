@@ -20,11 +20,6 @@ import java.util.concurrent.TimeUnit;
  * <pre>{@code
  * @AsyncPatternTest(timeoutValue = 5, timeoutUnit = TimeUnit.SECONDS)
  * class RouterTest extends AsyncPatternTestBase<ContentBasedRouter> {
- * @BeforeEach
- * void setUp() {
- * ApplicationController.reset();
- * }
- *
  *   @Test
  *   void testAsyncRouting() {
  *     var result = ask(routerPid, message, timeout);

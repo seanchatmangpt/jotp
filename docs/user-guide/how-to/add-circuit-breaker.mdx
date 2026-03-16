@@ -1,0 +1,177 @@
+---
+title: Add Circuit Breaker
+description: Implement circuit breaker pattern for fault tolerance
+sidebar_position: 3
+---
+
+# Add Circuit Breaker
+
+Learn how to implement the circuit breaker pattern to prevent cascading failures and provide graceful degradation.
+
+## What is Circuit Breaker?
+
+A circuit breaker protects your system by:
+1. **Closed**: Requests pass through normally
+2. **Open**: Failures detected, requests fail fast
+3. **Half-Open**: Test if service has recovered
+
+## Quick Start
+
+```java
+CircuitBreaker breaker = CircuitBreaker.spawn(
+    "api-breaker",
+    CircuitBreakerConfig.builder()
+        .failureThreshold(5)
+        .timeout(Duration.ofSeconds(30))
+        .halfOpenAttempts(3)
+        .build()
+);
+
+// Protected call
+Result<Response, Exception> result = breaker.execute(() ->
+    httpClient.get(url)
+);
+```
+
+## Implementation Pattern
+
+### 1. Define the Breaker Process
+
+```java
+sealed interface CircuitState
+    permits CircuitState.Closed, CircuitState.Open, CircuitState.HalfOpen {}
+
+record Closed(int failureCount) implements CircuitState {}
+record Open(Instant opensAt) implements CircuitState {}
+record HalfOpen(int attempts) implements CircuitState {}
+```
+
+### 2. Create Message Protocol
+
+```java
+sealed interface BreakerMessage
+    permits BreakerMessage.Call, BreakerMessage.Reset {}
+
+record Call(Supplier<Result<?, Exception>> operation,
+            ProcRef<Result<?, Exception>, BreakerMessage> replyTo)
+    implements BreakerMessage {}
+
+record Reset() implements BreakerMessage {}
+```
+
+### 3. Implement State Machine
+
+```java
+CircuitBreaker breaker = CircuitBreaker.spawn(
+    "breaker",
+    new CircuitState.Closed(0),
+    (state, msg) -> switch(state) {
+        case CircuitState.Closed(var failures) when msg instanceof Call -> {
+            try {
+                var result = msg.operation().get();
+                if (result.isErr()) {
+                    int newFailures = failures + 1;
+                    if (newFailures >= threshold) {
+                        yield new CircuitState.Open(Instant.now());
+                    }
+                    yield new CircuitState.Closed(newFailures);
+                }
+                yield new CircuitState.Closed(0); // Success resets
+            } catch (Exception e) {
+                yield handleFailure(failures + 1);
+            }
+        }
+        // ... handle other cases
+    }
+);
+```
+
+## Configuration Options
+
+```java
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .failureThreshold(5)        // Failures before opening
+    .timeout(Duration.ofSeconds(30))  // How long to stay open
+    .halfOpenAttempts(3)        // Test attempts in half-open
+    .successThreshold(2)        // Successes to close again
+    .build();
+```
+
+## Using with External Services
+
+### HTTP Client Wrapper
+
+```java
+public class CircuitBreakingHttpClient {
+    private final CircuitBreaker breaker;
+    private final HttpClient delegate;
+
+    public Result<Response, Exception> get(String url) {
+        return breaker.execute(() -> {
+            try {
+                return Result.ok(delegate.send(HttpRequest.GET(url)));
+            } catch (Exception e) {
+                return Result.err(e);
+            }
+        });
+    }
+}
+```
+
+### Database Connection Protection
+
+```java
+public class CircuitBreakingDataSource implements DataSource {
+    private final CircuitBreaker breaker;
+    private final DataSource delegate;
+
+    @Override
+    public Connection getConnection() throws SQLException {
+        Result<Connection, Exception> result = breaker.execute(() ->
+            Result.ok(delegate.getConnection())
+        );
+
+        return result.match(
+            conn -> conn,
+            err -> { throw new SQLException("Circuit breaker open", err); }
+        );
+    }
+}
+```
+
+## Testing Circuit Breakers
+
+```java
+@Test
+void testCircuitBreakerOpensOnFailures() {
+    CircuitBreaker breaker = spawnCircuitBreaker();
+
+    // Trigger failures
+    for (int i = 0; i < 5; i++) {
+        breaker.execute(() -> Result.err(new IOException("Failed")));
+    }
+
+    // Should be open now
+    Result<?, ?> result = breaker.execute(() -> Result.ok("shouldn't reach"));
+    assertThat(result.isErr()).isTrue();
+    assertThat(result.getError())
+        .isInstanceOf(CircuitBreakerOpenException.class);
+}
+```
+
+## Best Practices
+
+- Set appropriate failure thresholds (too low = flaky, too high = slow response)
+- Use different breakers for different services
+- Add metrics and monitoring for breaker state
+- Consider adding fallback logic when open
+- Test breaker behavior in integration tests
+
+## Related Tests
+- `CircuitBreakerTest.java` - Complete circuit breaker tests
+- `BulkheadIsolationTest.java` - Combining with bulkheads
+- `BackpressureTest.java` - Flow control patterns
+
+## See Also
+- [Fault Tolerance](../explanation/fault-tolerance.mdx) - Conceptual overview
+- [Add Backpressure](../how-to/add-backpressure.mdx) - Related patterns

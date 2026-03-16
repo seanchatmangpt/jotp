@@ -1,0 +1,248 @@
+---
+title: OTP in Java
+description: How Erlang/OTP patterns map to Java 26 and virtual threads
+sidebar_position: 1
+---
+
+# OTP in Java
+
+Learn how JOTP brings Erlang/OTP's battle-tested concurrency patterns to the Java ecosystem using Java 26's virtual threads and modern language features.
+
+## What is OTP?
+
+**Open Telecom Platform (OTP)** is Erlang's set of libraries and design principles for building:
+- Massively concurrent systems
+- Fault-tolerant applications
+- Distributed systems
+- High-availability services
+
+**JOTP** implements all 15 OTP primitives in Java 26, providing a production-ready framework for the JVM.
+
+## The 15 OTP Primitives
+
+### Core Processes
+
+| Erlang | JOTP | Purpose |
+|--------|------|---------|
+| `spawn/1` | `Proc.spawn()` | Create lightweight process |
+| `Pid ! Msg` | `proc.send(msg)` | Send message to process |
+| `receive` | Mailbox handling | Pattern match on messages |
+| `handle_call` | `ask()` pattern | Synchronous request-response |
+
+### Supervision
+
+| Erlang | JOTP | Purpose |
+|--------|------|---------|
+| `supervisor` | `Supervisor` | Fault-tolerant process tree |
+| `one_for_one` | `Strategy.ONE_FOR_ONE` | Restart only crashed child |
+| `one_for_all` | `Strategy.ONE_FOR_ALL` | Restart all children |
+| `rest_for_one` | `Strategy.REST_FOR_ONE` | Restart crashed + later children |
+
+### Communication
+
+| Erlang | JOTP | Purpose |
+|--------|------|---------|
+| `gen_event` | `EventManager` | Typed pub-sub event bus |
+| `link/1` | `ProcLink` | Bidirectional crash propagation |
+| `monitor/2` | `ProcMonitor` | One-way death notification |
+| `register/2` | `ProcRegistry` | Name-based process lookup |
+
+### Advanced
+
+| Erlang | JOTP | Purpose |
+|--------|------|---------|
+| `gen_statem` | `StateMachine` | State machine with events |
+| `gen_server` | `Proc + ask()` | Request-response pattern |
+| `proc_lib` | `ProcLib` | Process utilities |
+| `sys` | `ProcSys` | Live process introspection |
+
+## Java 26 Mapping
+
+### Virtual Threads ≈ Erlang Processes
+
+```java
+// Erlang
+spawn(fun() -> loop(State) end).
+
+// JOTP
+Proc<State, Message> proc = Proc.spawn("name", initialState, handler);
+```
+
+**Key Differences:**
+- Erlang: ~300 bytes per process
+- JOTP: ~1 KB per virtual thread process
+- Both: Millions of concurrent processes possible
+
+### Sealed Types ≈ Pattern Matching
+
+```java
+// Erlang
+handle_call({increment, By}, _From, State) ->
+    {reply, ok, State + By};
+handle_call({decrement, By}, _From, State) ->
+    {reply, ok, State - By}.
+
+// JOTP
+sealed interface Message permits Message.Increment, Message.Decrement {}
+record Increment(int by) implements Message {}
+record Decrement(int by) implements Message {}
+
+State handle(State state, Message msg) {
+    return switch (msg) {
+        case Increment(int by) -> new State(state.value() + by);
+        case Decrement(int by) -> new State(state.value() - by);
+    };
+}
+```
+
+### Actor Model Compatibility
+
+| Concept | Erlang | JOTP |
+|---------|--------|------|
+| Process | Lightweight | Virtual thread |
+| Mailbox | Built-in | LinkedTransferQueue |
+| Message passing | `!` operator | `send()` method |
+| State | Recursive function | Record/class field |
+| Supervision | Built-in | Supervisor class |
+
+## Architecture Decisions
+
+### 1. Why Virtual Threads?
+
+Traditional Java threads are expensive (~1 MB stack). Virtual threads (Java 21+) are lightweight:
+- No 1:1 OS thread mapping
+- Scheduled on carrier threads
+- Millions concurrent on one JVM
+
+### 2. Why Sealed Types?
+
+Type-safe message protocols:
+```java
+// Compiler-enforced exhaustive matching
+State handle(State state, Message msg) {
+    return switch (msg) { // Compile error if case missing!
+        case Increment i -> ...
+        case Decrement d -> ...
+    };
+}
+```
+
+### 3. Why Not Akka?
+
+| Feature | Akka | JOTP |
+|---------|------|------|
+| Paradigm | Actor model | OTP primitives |
+| Concurrency | Dispatcher-based | Virtual threads |
+| Types | Heterogeneous | Sealed types |
+| Backpressure | Manual | Built-in |
+| Runtime | Separate library | JDK 21+ built-in |
+
+### 4. Why Not Vert.x?
+
+| Feature | Vert.x | JOTP |
+|---------|--------|------|
+| Model | Reactive streams | Message passing |
+| Concurrency | Event loop | Virtual threads |
+| State | External | Process-local |
+| Supervision | Manual | Built-in |
+| Testing | Callback hell | Direct assertions |
+
+## Migration from Erlang
+
+### Process Creation
+
+```erlang
+% Erlang
+Pid = spawn(module, function, [Args]).
+
+% JOTP
+ProcRef<S, M> ref = Proc.spawn("name", initialState, handler);
+```
+
+### Message Passing
+
+```erlang
+% Erlang
+Pid ! {increment, 5},
+receive
+    {ok, NewState} -> ok
+end.
+
+% JOTP
+ref.send(new Increment(5));
+State newState = ref.ask(new GetValue(), Duration.ofSeconds(5)).join();
+```
+
+### Supervision
+
+```erlang
+% Erlang
+init([]) ->
+    ChildSpecs = [
+        #{id => worker,
+          start => {worker, start_link, []}},
+        ...
+    ],
+    {ok, {{one_for_one, 5, 60}, ChildSpecs}}.
+
+% JOTP
+Supervisor supervisor = Supervisor.spawn(
+    "sup",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        ChildSpec.of("worker", () -> WorkerProc.spawn()),
+        ...
+    )
+);
+```
+
+## Performance Characteristics
+
+### Throughput
+- Message passing: ~10M messages/sec (local)
+- Process spawning: ~1M processes/sec
+- Context switching: Virtual thread advantage
+
+### Latency
+- Average: <1μs for local messaging
+- Tail latency: Stable under load (no GC pauses)
+
+### Scalability
+- 1M+ concurrent processes demonstrated
+- Linear scaling to 64+ cores
+- No global locks on message passing
+
+## Design Trade-offs
+
+### Advantages Over Erlang
+
+1. **Ecosystem**: Access to Java libraries
+2. **Tooling**: Mature IDEs, profilers, debuggers
+3. **Type Safety**: Compile-time guarantees
+4. **Deployment**: Traditional Java deployment
+5. **Team**: Easier to hire Java developers
+
+### Advantages Over Traditional Java
+
+1. **Concurrency**: Millions vs thousands of threads
+2. **Fault Tolerance**: Let it crash philosophy
+3. **Distribution**: Built-in location transparency
+4. **State**: Explicit message passing, no shared mutable state
+
+### Limitations
+
+1. **Memory**: ~3x more per process than Erlang
+2. **Hot Code Loading**: Not supported (use blue-green deployment)
+3. **Process Preemption**: Cooperative (virtual threads) vs preemptive (Erlang)
+4. **Distribution**: Requires serialization (not transparent like Erlang)
+
+## Related Tests
+- `ProcTest.java` - Basic process behavior
+- `SupervisorTest.java` - Supervision strategies
+- `DistributedActorBridgeTest.java` - Distribution
+- `BaselinePerformanceBenchmark.java` - Performance validation
+
+## See Also
+- [Let It Crash Philosophy](./let-it-crash-philosophy.mdx) - Fault tolerance deep dive
+- [Supervision Trees](./supervision-trees.mdx) - Architecture patterns
+- [Virtual Threads](./virtual-threads.mdx) - Implementation details

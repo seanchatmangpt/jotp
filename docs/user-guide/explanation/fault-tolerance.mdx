@@ -1,0 +1,519 @@
+---
+title: Fault Tolerance
+description: Building resilient systems with supervisors, circuit breakers, and recovery patterns
+sidebar_position: 5
+---
+
+# Fault Tolerance
+
+Learn how to build production-ready, fault-tolerant systems using JOTP's comprehensive resilience patterns.
+
+## Principles of Fault Tolerance
+
+### 1. Isolation
+
+Failures should be contained and prevented from spreading:
+
+```java
+// Each process is isolated
+Proc<PaymentState, PaymentMessage> payment = ...;
+Proc<ShippingState, ShippingMessage> shipping = ...;
+
+// Payment crash doesn't affect shipping
+```
+
+### 2. Redundancy
+
+Critical components should have backups:
+
+```java
+// Multiple workers for high availability
+Supervisor supervisor = Supervisor.spawn(
+    "workers",
+    Strategy.ONE_FOR_ONE,
+    List.of(
+        workerSpec("worker-1"),
+        workerSpec("worker-2"),
+        workerSpec("worker-3")
+    )
+);
+```
+
+### 3. Recovery
+
+Systems should automatically recover from failures:
+
+```java
+// Supervisor restarts crashed processes
+Supervisor supervisor = Supervisor.spawn(
+    "supervisor",
+    Strategy.ONE_FOR_ONE,
+    childSpecs
+);
+// Automatic recovery, no manual intervention
+```
+
+### 4. Monitoring
+
+Systems should provide visibility into failures:
+
+```java
+// Track restarts, failures, and health
+eventBus.subscribe(
+    "health-monitor",
+    event -> switch(event) {
+        case ProcessCrashed(var pid, var reason) ->
+            metrics.increment("process.crashes");
+        case ProcessRestarted(var pid) ->
+            metrics.increment("process.restarts");
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+## Failure Modes
+
+### 1. Process Crashes
+
+```java
+// Process throws exception
+State handle(State state, Message msg) {
+    if (msg instanceof BadMessage) {
+        throw new RuntimeException("Unexpected input");
+    }
+    return state;
+}
+```
+
+**Detection**: Supervisor monitors process
+**Recovery**: Supervisor restarts process
+**Impact**: Process state reset to initial
+
+### 2. Timeouts
+
+```java
+// External service timeout
+State handle(State state, Message msg) {
+    Result<Response, Exception> result = service.call()
+        .timeout(Duration.ofSeconds(5))
+        .block();
+
+    if (result.isErr()) {
+        // Timeout occurred
+        throw new RuntimeException("Service timeout");
+    }
+
+    return state.withResponse(result.get());
+}
+```
+
+**Detection**: Timeout exception
+**Recovery**: Process restarts, circuit breaker may trip
+**Impact**: Request fails, service continues
+
+### 3. Resource Exhaustion
+
+```java
+// Connection pool exhausted
+State handle(State state, Message msg) {
+    try {
+        Connection conn = pool.getConnection();
+        return processWithConnection(state, conn);
+    } catch (PoolExhaustedException e) {
+        // Pool exhausted
+        throw e;  // Let process crash, supervisor will restart
+    }
+}
+```
+
+**Detection**: Resource acquisition exception
+**Recovery**: Process restarts, backoff may apply
+**Impact**: Request fails, resources released
+
+### 4. Network Failures
+
+```java
+// Network partition
+State handle(State state, Message msg) {
+    Result<Data, Exception> result = remoteService.fetch();
+
+    if (result.isErr()) {
+        // Network failure
+        throw new RuntimeException("Network error");
+    }
+
+    return state.withData(result.get());
+}
+```
+
+**Detection**: I/O exception
+**Recovery**: Process restarts, circuit breaker may trip
+**Impact**: Requests fail, system degrades gracefully
+
+## Resilience Patterns
+
+### Pattern 1: Supervisor Tree
+
+```
+ApplicationSupervisor
+├── ServiceSupervisor (ONE_FOR_ONE)
+│   ├── Worker-1
+│   ├── Worker-2
+│   └── Worker-3
+└── CircuitBreakerSupervisor (ONE_FOR_ALL)
+    └── CircuitBreaker
+```
+
+**Benefits:**
+- Automatic restart of failed workers
+- Fault isolation between components
+- Hierarchical recovery strategies
+
+### Pattern 2: Circuit Breaker
+
+```java
+CircuitBreaker breaker = CircuitBreaker.spawn(
+    "service-breaker",
+    CircuitBreakerConfig.builder()
+        .failureThreshold(5)
+        .timeout(Duration.ofSeconds(30))
+        .build()
+);
+
+State handle(State state, Message msg) {
+    Result<Response, Exception> result = breaker.execute(() ->
+        externalService.call()
+    );
+
+    return result.match(
+        response -> state.withResponse(response),
+        error -> {
+            // Circuit breaker open, fail fast
+            return state.withError("Service unavailable");
+        }
+    );
+}
+```
+
+**Benefits:**
+- Prevents cascading failures
+- Fast failure when service is down
+- Automatic recovery when service returns
+
+### Pattern 3: Bulkhead Isolation
+
+```java
+Supervisor supervisor = Supervisor.spawn(
+    "bulkhead",
+    Strategy.ONE_FOR_ALL,
+    IntStream.range(0, 10)
+        .mapToObj(i -> ChildSpec.of(
+            "worker-" + i,
+            () -> WorkerProc.spawn(),
+            RestartStrategy.PERMANENT,
+            Duration.ofSeconds(5)
+        ))
+        .toList()
+);
+```
+
+**Benefits:**
+- Limits resource consumption
+- Prevents resource exhaustion
+- Isolated failure domains
+
+### Pattern 4: Retry with Backoff
+
+```java
+State handle(State state, Message msg) {
+    int maxRetries = 3;
+    Duration backoff = Duration.ofMillis(100);
+
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            Result<Response, Exception> result = service.call();
+            if (result.isOk()) {
+                return state.withResponse(result.get());
+            }
+        } catch (Exception e) {
+            if (attempt == maxRetries - 1) {
+                throw new RuntimeException("Max retries exceeded", e);
+            }
+            Thread.sleep(backoff.toMillis());
+            backoff = backoff.multipliedBy(2);  // Exponential backoff
+        }
+    }
+
+    return state;
+}
+```
+
+**Benefits:**
+- Handles transient failures
+- Exponential backoff reduces load
+- Gives service time to recover
+
+### Pattern 5: Fallback to Degraded Mode
+
+```java
+State handle(State state, Message msg) {
+    Result<Response, Exception> result = primaryService.call();
+
+    if (result.isErr()) {
+        logger.warn("Primary service failed, using fallback");
+
+        Result<Response, Exception> fallback = fallbackService.call();
+        if (fallback.isOk()) {
+            metrics.increment("service.fallback");
+            return state.withResponse(fallback.get());
+        }
+
+        // Both failed, crash and let supervisor handle
+        throw new RuntimeException("All services failed");
+    }
+
+    return state.withResponse(result.get());
+}
+```
+
+**Benefits:**
+- Graceful degradation
+- Continued service with reduced functionality
+- Better user experience than complete failure
+
+## Advanced Techniques
+
+### Health Checks
+
+```java
+HealthCheckManager healthManager = HealthCheckManager.spawn(
+    "health",
+    Duration.ofSeconds(30)
+);
+
+healthManager.registerCheck(
+    "database",
+    () -> {
+        try {
+            db.ping();
+            return HealthCheckResult.healthy();
+        } catch (Exception e) {
+            return HealthCheckResult.unhealthy(e);
+        }
+    }
+);
+
+// Subscribe to health events
+healthManager.getEventBus().subscribe(
+    "health-monitor",
+    event -> switch(event) {
+        case HealthCheck.Unhealthy(var name, var reason) ->
+            alerting.sendAlert(name, reason);
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+### Graceful Shutdown
+
+```java
+Proc<AppState, AppMessage> app = Proc.spawn(
+    "app",
+    new AppState(),
+    (state, msg) -> switch(msg) {
+        case Shutdown -> {
+            // Initiate graceful shutdown
+            supervisor.shutdown(Duration.ofSeconds(30));
+            yield new State(State.SHUTTING_DOWN);
+        }
+        default -> state;
+    }
+);
+```
+
+### Disaster Recovery
+
+```java
+// State persistence for recovery
+StateManager manager = StateManager.spawn(
+    "state-manager",
+    config
+);
+
+// Save state periodically
+eventBus.subscribe(
+    "state-persistor",
+    event -> {
+        manager.saveSnapshot(procId, state);
+        return SubscriberState.KEEP;
+    }
+);
+
+// Recover on restart
+Proc<State, Message> proc = Proc.spawn(
+    "proc",
+    manager.loadSnapshot("proc-id").orElse(initialState),
+    handler
+);
+```
+
+## Testing Fault Tolerance
+
+### Chaos Testing
+
+```java
+@Test
+void testChaosMonkey() {
+    Supervisor supervisor = spawnSupervisor();
+
+    // Randomly crash processes
+    Random random = new Random();
+    for (int i = 0; i < 100; i++) {
+        String childId = "worker-" + random.nextInt(10);
+        crashChild(supervisor, childId);
+        Thread.sleep(100);
+    }
+
+    // System should still be alive
+    assertThat(supervisor.isAlive()).isTrue();
+    assertThat(supervisor.getAliveChildren().size()).isEqualTo(10);
+}
+```
+
+### Fault Injection
+
+```java
+class FaultInjectingProxy {
+    private final Service delegate;
+    private final double failureRate;
+
+    Result<Response, Exception> call() {
+        if (Math.random() < failureRate) {
+            return Result.err(new IOException("Injected failure"));
+        }
+        return Result.ok(delegate.call());
+    }
+}
+
+@Test
+void testFaultInjection() {
+    Service faultyService = new FaultInjectingProxy(realService, 0.1);
+    // Test system behavior under 10% failure rate
+}
+```
+
+### Resource Exhaustion Testing
+
+```java
+@Test
+void testResourceExhaustion() {
+    // Spawn many processes to exhaust resources
+    List<Proc<?, ?>> processes = new ArrayList<>();
+    for (int i = 0; i < 10_000; i++) {
+        processes.add(Proc.spawn("proc-" + i, state, handler));
+    }
+
+    // System should handle gracefully
+    // Supervisor should restart crashed processes
+}
+```
+
+## Monitoring and Observability
+
+### Metrics Collection
+
+```java
+MetricsCollector collector = MetricsCollector.spawn(
+    "metrics",
+    MetricsConfig.builder()
+        .exportInterval(Duration.ofSeconds(60))
+        .build()
+);
+
+// Track process crashes
+eventBus.subscribe(
+    "metrics-crashes",
+    event -> switch(event) {
+        case ProcessCrashed(var pid, var reason) ->
+            collector.increment("process.crashes", Tags.of("pid", pid));
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+### Distributed Tracing
+
+```java
+// Correlate requests across processes
+class TracingHelper {
+    static final ScopedValue<SpanContext> CURRENT_SPAN =
+        ScopedValue.newInstance();
+
+    static ProcRef<S, M> trace(ProcRef<S, M> ref, String operation) {
+        SpanContext span = tracer.startSpan(operation);
+
+        return ScopedValue.where(CURRENT_SPAN, span)
+            .call(() -> {
+                Result<S, Exception> result = ref.ask(...);
+                span.finish();
+                return result;
+            });
+    }
+}
+```
+
+### Alerting
+
+```java
+eventBus.subscribe(
+    "alerter",
+    event -> switch(event) {
+        case ProcessCrashed(var pid, var reason)
+            when getRestartCount(pid) > 10 ->
+            pagerDuty.sendAlert(
+                "High restart count for " + pid,
+                Map.of("reason", reason)
+            );
+
+        case CircuitBreakerOpen(var service)
+            when getServiceHealth(service) < 0.5 ->
+            slack.sendMessage(
+                "⚠️ Circuit breaker open for " + service
+            );
+
+        default -> SubscriberState.KEEP;
+    }
+);
+```
+
+## Best Practices
+
+### DO:
+- Use supervisors for automatic recovery
+- Implement circuit breakers for external services
+- Add health checks for critical components
+- Monitor failures and set up alerting
+- Test failure scenarios in development
+- Design for graceful degradation
+- Use bulkheads to limit resource consumption
+
+### DON'T:
+- Catch all exceptions and hide them
+- Restart without addressing root cause
+- Ignore health check failures
+- Forget to monitor system behavior
+- Assume external services are always available
+- Let failures cascade across components
+- Overload shared resources
+
+## Related Tests
+- `CircuitBreakerTest.java` - Circuit breaker patterns
+- `BulkheadIsolationTest.java` - Bulkhead isolation
+- `BackpressureTest.java` - Flow control
+- `ChaosTest.java` - Chaos testing
+- `HealthCheckManagerTest.java` - Health checks
+
+## See Also
+- [Let It Crash Philosophy](./let-it-crash-philosophy.mdx) - Philosophy
+- [Supervision Trees](./supervision-trees.mdx) - Architecture
+- [Add Circuit Breaker](../how-to/add-circuit-breaker.mdx) - Implementation

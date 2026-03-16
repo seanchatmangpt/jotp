@@ -16,7 +16,6 @@
 
 package io.github.seanchatmangpt.jotp.benchmark;
 
-import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -65,10 +64,6 @@ import java.util.regex.Pattern;
  * }</pre>
  */
 public class JMHValidationTest {
-    @BeforeEach
-    void setUp() {
-        ApplicationController.reset();
-    }
 
     private static final Path RESULTS_DIR =
             Paths.get("benchmark-results").toAbsolutePath().normalize();

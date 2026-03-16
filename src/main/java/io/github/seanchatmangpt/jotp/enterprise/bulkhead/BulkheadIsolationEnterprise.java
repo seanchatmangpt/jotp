@@ -10,12 +10,104 @@ import java.util.concurrent.Semaphore;
 /**
  * Bulkhead isolation for resource-limited feature execution.
  *
- * <p>Prevents one feature from starving others by enforcing per-feature resource limits (concurrent
- * requests, queue size, memory, CPU). Uses Process-based strategy with Semaphore for concurrent
- * request limiting.
+ * <p>Prevents one feature from starving others by enforcing per-feature resource limits including
+ * concurrent requests, queue size, memory, and CPU. Uses JOTP's process-based strategy with
+ * semaphore-based concurrency control and adaptive resource management.
  *
- * <p>State Machine: - HEALTHY: Resources available - DEGRADED: High utilization (80-99%) -
- * EXHAUSTED: At capacity (100%)
+ * <h2>Problem Solved:</h2>
+ *
+ * In shared systems, a runaway or resource-intensive feature can starve other features:
+ *
+ * <ul>
+ *   <li>Thread pool exhaustion → No threads available for other features
+ *   <li>Memory pressure → GC pauses, out-of-memory errors
+ *   <li>CPU saturation → Slow response times across all features
+ *   <li>Queue overflow → Request loss, cascading failures
+ * </ul>
+ *
+ * <h2>State Machine:</h2>
+ *
+ * <ul>
+ *   <li><b>HEALTHY</b>: Resources available (< alertThreshold utilization)
+ *   <li><b>DEGRADED</b>: High utilization (80-99%), requests still accepted
+ *   <li><b>EXHAUSTED</b>: At capacity (100%), new requests rejected
+ * </ul>
+ *
+ * <h2>Behavior:</h2>
+ *
+ * <ol>
+ *   <li>Acquire semaphore permit (up to maxConcurrentRequests)
+ *   <li>If no permit available within queueTimeout, reject request
+ *   <li>Execute task with isolated resources
+ *   <li>Release permit on completion (success or failure)
+ *   <li>Track utilization and emit alerts when threshold crossed
+ * </ol>
+ *
+ * <h2>Enterprise Value:</h2>
+ *
+ * <ul>
+ *   <li><b>Resource isolation</b>: Prevents noisy neighbor problems in multi-tenant systems
+ *   <li><b>Predictable performance</b>: Bounded latency for each feature
+ *   <li><b>Faster failure</b>: Reject requests immediately when exhausted (no queuing)
+ *   <li><b>Resource efficiency</b>: Dynamic allocation based on actual usage patterns
+ * </ul>
+ *
+ * <h2>Thread Safety:</h2>
+ *
+ * <ul>
+ *   <li>Thread-safe: Uses {@link java.util.concurrent.Semaphore} for concurrency control
+ *   <li>Process-based coordinator ensures serialized state updates
+ *   <li>Lock-free request execution path (except semaphore acquire/release)
+ * </ul>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(queueSize) for pending requests
+ *   <li>Latency: O(1) for permit acquire, O(1) for task execution
+ *   <li>Throughput: Limited by maxConcurrentRequests, no blocking beyond queue timeout
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Uses {@link Proc} for state management (message-based coordination)
+ *   <li>Emits {@link BulkheadEvent} via {@link io.github.seanchatmangpt.jotp.EventManager}
+ *   <li>Compatible with {@link io.github.seanchatmangpt.jotp.Supervisor} for fault tolerance
+ * </ul>
+ *
+ * @example
+ *     <pre>{@code
+ * // Create bulkhead with concurrent request limit
+ * BulkheadConfig config = BulkheadConfig.builder("image-processing")
+ *     .strategy(new BulkheadStrategy.ProcessBased())
+ *     .limits(List.of(new ResourceLimit.MaxConcurrentRequests(10)))
+ *     .queueTimeout(Duration.ofSeconds(30))
+ *     .alertThreshold(0.80)
+ *     .build();
+ *
+ * BulkheadIsolationEnterprise bulkhead = BulkheadIsolationEnterprise.create(config);
+ *
+ * // Execute with bulkhead protection
+ * Result<Image> result = bulkhead.execute(() -> {
+ *     return imageProcessor.process(image);
+ * });
+ *
+ * if (result instanceof Result.Success<Image> s) {
+ *     return s.value();
+ * } else {
+ *     // Handle bulkhead rejection
+ *     log.warn("Image processing rejected: bulkhead exhausted");
+ *     return fallbackImage();
+ * }
+ * }</pre>
+ *
+ * @see BulkheadConfig
+ * @see BulkheadStrategy
+ * @see ResourceLimit
+ * @see io.github.seanchatmangpt.jotp.Proc
+ * @see io.github.seanchatmangpt.jotp.Supervisor
+ * @since 1.0
  */
 public class BulkheadIsolationEnterprise {
     private final BulkheadConfig config;

@@ -100,7 +100,7 @@ public class JotpTestHelper {
 
     /** Inspect sealed Transition type using Java 26 reflection API. */
     public static Class<?>[] getTransitionVariants(Class<?> sealedTransition) {
-        if (sealedTransition.isSealed()) {
+        if (sealedTransition != null && sealedTransition.isSealed()) {
             return sealedTransition.getPermittedSubclasses();
         }
         return new Class<?>[0];
@@ -118,9 +118,7 @@ public class JotpTestHelper {
 
         for (int i = 0; i < components.length; i++) {
             try {
-                var accessor = components[i].getAccessor();
-                accessor.setAccessible(true);
-                values[i] = accessor.invoke(record);
+                values[i] = components[i].getAccessor().invoke(record);
             } catch (Exception e) {
                 values[i] = null;
             }

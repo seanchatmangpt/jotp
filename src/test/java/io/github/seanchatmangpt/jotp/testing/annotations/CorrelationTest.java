@@ -19,11 +19,6 @@ import java.lang.annotation.*;
  * <pre>{@code
  * @CorrelationTest
  * class ProcessManagerTest {
- * @BeforeEach
- * void setUp() {
- * ApplicationController.reset();
- * }
- *
  *   @Inject CorrelationIdTracker tracker;
  *
  *   @Test

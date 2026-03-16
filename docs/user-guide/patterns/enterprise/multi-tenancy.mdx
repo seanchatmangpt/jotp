@@ -1,0 +1,786 @@
+# Multi-Tenant Supervisor Pattern
+
+import { CodeBlock } from '../../components/CodeBlock';
+
+## Overview
+
+The **Multi-Tenant Supervisor** pattern provides fault isolation between different tenants in a shared JOTP application. Each tenant gets its own supervision tree, ensuring that failures in one tenant's services don't affect other tenants. This pattern is essential for SaaS applications, cloud services, and any system where multiple customers share the same infrastructure.
+
+**Enterprise Pattern**: Multi-tenancy with 99.95% SLA per tenant
+
+**Erlang Analog**: `supervisor_of_supervisors` with per-tenant isolation
+
+## When to Use This Pattern
+
+- **SaaS Applications**: Multiple customers sharing the same application instance
+- **Cloud Services**: Multi-tenant infrastructure with shared resources
+- **Fault Isolation**: Preventing tenant failures from affecting others
+- **Resource Limits**: Enforcing per-tenant resource quotas
+- **Independent Scaling**: Different tenants have different load characteristics
+- **Regulatory Compliance**: Data isolation between tenants (e.g., HIPAA, GDPR)
+
+## Architecture
+
+### Hierarchy Structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              MultiTenantSupervisor (Root)                    │
+│              Strategy: ONE_FOR_ONE                           │
+│              Purpose: Tenant isolation                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────────┐  ┌──────────────────┐                 │
+│  │  Tenant A        │  │  Tenant B        │                 │
+│  │  Supervisor      │  │  Supervisor      │                 │
+│  │  ONE_FOR_ALL     │  │  ONE_FOR_ALL     │                 │
+│  ├──────────────────┤  ├──────────────────┤                 │
+│  │ • Order Service  │  │ • Order Service  │                 │
+│  │ • User Service   │  │ • User Service   │                 │
+│  │ • Payment Svc    │  │ • Payment Svc    │                 │
+│  └──────────────────┘  └──────────────────┘                 │
+│                                                               │
+│  Tenant A crash █ Tenant B unaffected                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Isolation Strategies
+
+JOTP provides three isolation strategies:
+
+1. **Strict Isolation**: Each tenant gets their own supervisor (highest isolation)
+2. **Pooled Isolation**: N supervisors shared by M tenants (M > N) (resource efficient)
+3. **Hybrid Isolation**: Large tenants isolated, small tenants pooled (balanced)
+
+## Core API
+
+### MultiTenantSupervisor
+
+The main entry point for multi-tenant supervision:
+
+```java
+import io.github.seanchatmangpt.jotp.enterprise.multitenancy.*;
+
+// Create a multi-tenant supervisor
+MultiTenantSupervisor mtSupervisor = MultiTenantSupervisor.create();
+
+// Register a tenant with configuration
+TenantConfig config = TenantConfig.builder("tenant-123")
+    .maxConcurrentProcesses(1000)
+    .maxRestarts(5)
+    .window(Duration.ofMinutes(1))
+    .strategy(new TenantIsolationPolicy.Strict())
+    .build();
+
+Supervisor tenantSupervisor = mtSupervisor.registerTenant(config);
+
+// Get tenant supervisor
+Supervisor tenant = mtSupervisor.getTenant("tenant-123");
+
+// List all tenants
+MultiTenantSupervisor.TenantInfo[] tenants = mtSupervisor.listTenants();
+
+// Deregister a tenant
+mtSupervisor.deregisterTenant("tenant-123", "Migration complete");
+```
+
+### TenantConfig
+
+Configuration for tenant-specific behavior:
+
+```java
+TenantConfig config = TenantConfig.builder("acme-corp")
+    // Maximum concurrent processes for this tenant
+    .maxConcurrentProcesses(1000)
+
+    // Maximum restarts within time window
+    .maxRestarts(5)
+
+    // Time window for restart counting
+    .window(Duration.ofMinutes(1))
+
+    // Isolation strategy
+    .strategy(new TenantIsolationPolicy.Strict())
+
+    // Tenant metadata
+    .metadata(Map.of(
+        "plan", "enterprise",
+        "region", "us-east-1",
+        "contact", "admin@acme.com"
+    ))
+
+    .build();
+```
+
+### TenantIsolationPolicy
+
+Strategies for isolating tenants:
+
+```java
+// Strict: Each tenant gets own supervisor (highest isolation)
+TenantIsolationPolicy strict = new TenantIsolationPolicy.Strict();
+
+// Pooled: N supervisors shared by M tenants (resource efficient)
+TenantIsolationPolicy pooled = new TenantIsolationPolicy.Pooled(10);
+
+// Hybrid: Large tenants isolated, small tenants pooled
+TenantIsolationPolicy hybrid = new TenantIsolationPolicy.Hybrid(1000);
+```
+
+## Usage Examples
+
+### Example 1: Basic Multi-Tenant Setup
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import io.github.seanchatmangpt.jotp.enterprise.multitenancy.*;
+import java.time.Duration;
+
+public class MultiTenantApplication {
+    private final MultiTenantSupervisor mtSupervisor;
+
+    public MultiTenantApplication() {
+        // Create multi-tenant supervisor
+        this.mtSupervisor = MultiTenantSupervisor.create();
+
+        // Add lifecycle listener
+        mtSupervisor.addListener(new MultiTenantSupervisor.MultiTenantListener() {
+            @Override
+            public void onTenantOnboarded(String tenantId, TenantConfig config) {
+                System.out.println("Tenant onboarded: " + tenantId);
+            }
+
+            @Override
+            public void onTenantOffboarded(String tenantId, String reason) {
+                System.out.println("Tenant offboarded: " + tenantId + " - " + reason);
+            }
+
+            @Override
+            public void onTenantRestartLimitExceeded(String tenantId) {
+                System.err.println("Tenant restart limit exceeded: " + tenantId);
+            }
+        });
+    }
+
+    public void onboardTenant(String tenantId) {
+        // Create tenant configuration
+        TenantConfig config = TenantConfig.builder(tenantId)
+            .maxConcurrentProcesses(500)
+            .maxRestarts(5)
+            .window(Duration.ofMinutes(1))
+            .strategy(new TenantIsolationPolicy.Strict())
+            .build();
+
+        // Register tenant
+        Supervisor tenantSupervisor = mtSupervisor.registerTenant(config);
+
+        // Add tenant services
+        addTenantServices(tenantSupervisor, tenantId);
+    }
+
+    private void addTenantServices(Supervisor tenantSupervisor, String tenantId) {
+        // Add order service
+        ProcRef<OrderState, OrderCommand> orderService = tenantSupervisor.addChild(
+            () -> OrderService.create(tenantId)
+        );
+
+        // Add user service
+        ProcRef<UserState, UserCommand> userService = tenantSupervisor.addChild(
+            () -> UserService.create(tenantId)
+        );
+
+        // Add payment service
+        ProcRef<PaymentState, PaymentCommand> paymentService = tenantSupervisor.addChild(
+            () -> PaymentService.create(tenantId)
+        );
+    }
+
+    public void offboardTenant(String tenantId) {
+        mtSupervisor.deregisterTenant(tenantId, "Customer churn");
+    }
+
+    public void shutdown() {
+        mtSupervisor.shutdown();
+    }
+}
+```
+
+### Example 2: Fault Isolation Between Tenants
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import io.github.seanchatmangpt.jotp.enterprise.multitenancy.*;
+import static org.awaitility.Awaitility.await;
+import java.time.Duration;
+
+public class FaultIsolationDemo {
+    public static void main(String[] args) {
+        MultiTenantSupervisor mtSupervisor = MultiTenantSupervisor.create();
+
+        // Register two tenants
+        Supervisor tenantA = mtSupervisor.registerTenant(
+            TenantConfig.builder("tenant-a")
+                .maxConcurrentProcesses(100)
+                .maxRestarts(3)
+                .window(Duration.ofMinutes(1))
+                .build()
+        );
+
+        Supervisor tenantB = mtSupervisor.registerTenant(
+            TenantConfig.builder("tenant-b")
+                .maxConcurrentProcesses(100)
+                .maxRestarts(3)
+                .window(Duration.ofMinutes(1))
+                .build()
+        );
+
+        // Add services to Tenant A
+        ProcRef<String, String> serviceA = tenantA.addChild(
+            () -> Proc.spawn("initial", (state, msg) -> {
+                if (msg.equals("crash")) {
+                    throw new RuntimeException("Tenant A service crash");
+                }
+                return state;
+            })
+        );
+
+        // Add services to Tenant B
+        ProcRef<String, String> serviceB = tenantB.addChild(
+            () -> Proc.spawn("initial", (state, msg) -> {
+                if (msg.equals("crash")) {
+                    throw new RuntimeException("Tenant B service crash");
+                }
+                return state;
+            })
+        );
+
+        // Crash Tenant A service
+        serviceA.tell("crash");
+
+        // Wait for restart (ONE_FOR_ALL strategy restarts all services)
+        await().atMost(Duration.ofSeconds(5))
+            .until(() -> serviceA.isAlive());
+
+        // Tenant B services should be unaffected
+        assert serviceB.isAlive();
+        assert serviceB.tell("ping").block().equals("initial");
+
+        System.out.println("✓ Tenant isolation verified: Tenant B unaffected by Tenant A crash");
+
+        mtSupervisor.shutdown();
+    }
+}
+```
+
+### Example 3: Per-Tenant Resource Limits
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import io.github.seanchatmangpt.jotp.enterprise.multitenancy.*;
+import java.time.Duration;
+
+public class ResourceLimitsDemo {
+    public static void main(String[] args) {
+        MultiTenantSupervisor mtSupervisor = MultiTenantSupervisor.create();
+
+        // Enterprise tenant with high limits
+        TenantConfig enterpriseConfig = TenantConfig.builder("enterprise")
+            .maxConcurrentProcesses(10000)
+            .maxRestarts(10)
+            .window(Duration.ofMinutes(5))
+            .strategy(new TenantIsolationPolicy.Strict())
+            .metadata(Map.of("tier", "enterprise", "sla", "99.99%"))
+            .build();
+
+        Supervisor enterpriseTenant = mtSupervisor.registerTenant(enterpriseConfig);
+
+        // Startup tenant with moderate limits
+        TenantConfig startupConfig = TenantConfig.builder("startup")
+            .maxConcurrentProcesses(500)
+            .maxRestarts(3)
+            .window(Duration.ofMinutes(1))
+            .strategy(new TenantIsolationPolicy.Pooled(5))
+            .metadata(Map.of("tier", "startup", "sla", "99.9%"))
+            .build();
+
+        Supervisor startupTenant = mtSupervisor.registerTenant(startupConfig);
+
+        // Free tier with low limits
+        TenantConfig freeConfig = TenantConfig.builder("free")
+            .maxConcurrentProcesses(100)
+            .maxRestarts(2)
+            .window(Duration.ofSeconds(30))
+            .strategy(new TenantIsolationPolicy.Hybrid(100))
+            .metadata(Map.of("tier", "free", "sla", "99.5%"))
+            .build();
+
+        Supervisor freeTenant = mtSupervisor.registerTenant(freeConfig);
+
+        // List all tenants and their limits
+        for (MultiTenantSupervisor.TenantInfo tenant : mtSupervisor.listTenants()) {
+            System.out.printf("Tenant: %s, Max Processes: %d, Restarts: %d%n",
+                tenant.tenantId(),
+                tenant.maxConcurrentProcesses(),
+                tenant.restartCount()
+            );
+        }
+
+        mtSupervisor.shutdown();
+    }
+}
+```
+
+### Example 4: Tenant Lifecycle Events
+
+```java
+import io.github.seanchatmangpt.jotp.*;
+import io.github.seanchatmangpt.jotp.enterprise.multitenancy.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class TenantLifecycleMonitor {
+    private final ConcurrentHashMap<String, TenantStats> stats = new ConcurrentHashMap<>();
+
+    public static void main(String[] args) {
+        MultiTenantSupervisor mtSupervisor = MultiTenantSupervisor.create();
+        TenantLifecycleMonitor monitor = new TenantLifecycleMonitor();
+
+        // Register lifecycle listener
+        mtSupervisor.addListener(new MultiTenantSupervisor.MultiTenantListener() {
+            @Override
+            public void onTenantOnboarded(String tenantId, TenantConfig config) {
+                monitor.recordOnboarding(tenantId, config);
+                System.out.println("✓ Tenant onboarded: " + tenantId);
+            }
+
+            @Override
+            public void onTenantOffboarded(String tenantId, String reason) {
+                monitor.recordOffboarding(tenantId, reason);
+                System.out.println("✓ Tenant offboarded: " + tenantId + " (" + reason + ")");
+            }
+
+            @Override
+            public void onTenantRestartLimitExceeded(String tenantId) {
+                monitor.recordRestartLimitExceeded(tenantId);
+                System.err.println("✗ Tenant restart limit exceeded: " + tenantId);
+            }
+        });
+
+        // Onboard some tenants
+        mtSupervisor.registerTenant(
+            TenantConfig.builder("tenant-1")
+                .maxConcurrentProcesses(1000)
+                .maxRestarts(5)
+                .window(Duration.ofMinutes(1))
+                .build()
+        );
+
+        mtSupervisor.registerTenant(
+            TenantConfig.builder("tenant-2")
+                .maxConcurrentProcesses(500)
+                .maxRestarts(3)
+                .window(Duration.ofMinutes(1))
+                .build()
+        );
+
+        // Offboard a tenant
+        mtSupervisor.deregisterTenant("tenant-1", "Upgrade to enterprise");
+
+        mtSupervisor.shutdown();
+    }
+
+    private void recordOnboarding(String tenantId, TenantConfig config) {
+        stats.computeIfAbsent(tenantId, k -> new TenantStats())
+            .onboardedAt(System.currentTimeMillis());
+    }
+
+    private void recordOffboarding(String tenantId, String reason) {
+        stats.computeIfAbsent(tenantId, k -> new TenantStats())
+            .offboardedAt(System.currentTimeMillis(), reason);
+    }
+
+    private void recordRestartLimitExceeded(String tenantId) {
+        stats.computeIfAbsent(tenantId, k -> new TenantStats())
+            .restartLimitExceededAt(System.currentTimeMillis());
+    }
+
+    private static class TenantStats {
+        private long onboardedAt;
+        private long offboardedAt;
+        private String offboardReason;
+        private long restartLimitExceededAt;
+
+        public TenantStats onboardedAt(long timestamp) {
+            this.onboardedAt = timestamp;
+            return this;
+        }
+
+        public TenantStats offboardedAt(long timestamp, String reason) {
+            this.offboardedAt = timestamp;
+            this.offboardReason = reason;
+            return this;
+        }
+
+        public TenantStats restartLimitExceededAt(long timestamp) {
+            this.restartLimitExceededAt = timestamp;
+            return this;
+        }
+    }
+}
+```
+
+## Tenant Isolation Strategies
+
+### Strict Isolation
+
+**Best for**: Enterprise customers, high-security requirements, regulatory compliance
+
+```java
+TenantConfig config = TenantConfig.builder("enterprise-tenant")
+    .strategy(new TenantIsolationPolicy.Strict())
+    .build();
+```
+
+**Characteristics:**
+- Each tenant gets dedicated supervisor
+- Highest fault isolation
+- Independent restart policies
+- Higher resource overhead
+- Best for critical workloads
+
+### Pooled Isolation
+
+**Best for**: Small to medium tenants, cost optimization
+
+```java
+TenantConfig config = TenantConfig.builder("startup-tenant")
+    .strategy(new TenantIsolationPolicy.Pooled(10))  // 10 supervisors for 100+ tenants
+    .build();
+```
+
+**Characteristics:**
+- N supervisors shared by M tenants (M > N)
+- Resource efficient
+- Some fault isolation (pool-level)
+- Lower per-tenant overhead
+- Best for non-critical workloads
+
+### Hybrid Isolation
+
+**Best for**: Mixed-tier environments, variable tenant sizes
+
+```java
+TenantConfig config = TenantConfig.builder("tenant")
+    .strategy(new TenantIsolationPolicy.Hybrid(1000))  // Isolate if > 1000 processes
+    .build();
+```
+
+**Characteristics:**
+- Large tenants get dedicated supervisors
+- Small tenants share pools
+- Balanced isolation and efficiency
+- Automatic tier selection
+- Best for diverse tenant bases
+
+## Production Deployment Patterns
+
+### Pattern 1: Tiered Multi-Tenancy
+
+```java
+public class TieredMultiTenantDeployment {
+    public enum TenantTier {
+        ENTERPRISE(10000, 10, Duration.ofMinutes(5), new TenantIsolationPolicy.Strict()),
+        PREMIUM(2000, 5, Duration.ofMinutes(2), new TenantIsolationPolicy.Strict()),
+        STARTUP(500, 3, Duration.ofMinutes(1), new TenantIsolationPolicy.Pooled(10)),
+        FREE(100, 2, Duration.ofSeconds(30), new TenantIsolationPolicy.Hybrid(100));
+
+        final int maxProcesses;
+        final int maxRestarts;
+        final Duration window;
+        final TenantIsolationPolicy strategy;
+
+        TenantTier(int maxProcesses, int maxRestarts, Duration window, TenantIsolationPolicy strategy) {
+            this.maxProcesses = maxProcesses;
+            this.maxRestarts = maxRestarts;
+            this.window = window;
+            this.strategy = strategy;
+        }
+    }
+
+    public TenantConfig createConfig(String tenantId, TenantTier tier) {
+        return TenantConfig.builder(tenantId)
+            .maxConcurrentProcesses(tier.maxProcesses)
+            .maxRestarts(tier.maxRestarts)
+            .window(tier.window)
+            .strategy(tier.strategy)
+            .metadata(Map.of("tier", tier.name()))
+            .build();
+    }
+}
+```
+
+### Pattern 2: Regional Isolation
+
+```java
+public class RegionalMultiTenantDeployment {
+    public void onboardRegionalTenant(String tenantId, String region) {
+        // Create region-specific configuration
+        TenantConfig config = TenantConfig.builder(tenantId)
+            .maxConcurrentProcesses(1000)
+            .maxRestarts(5)
+            .window(Duration.ofMinutes(1))
+            .strategy(new TenantIsolationPolicy.Strict())
+            .metadata(Map.of(
+                "region", region,
+                "datacenter", region + "-dc1"
+            ))
+            .build();
+
+        Supervisor tenantSupervisor = mtSupervisor.registerTenant(config);
+
+        // Add region-specific services
+        addRegionalServices(tenantSupervisor, region);
+    }
+
+    private void addRegionalServices(Supervisor tenantSupervisor, String region) {
+        // Add region-specific database connections
+        tenantSupervisor.addChild(() -> DatabaseService.create(region));
+
+        // Add region-specific cache
+        tenantSupervisor.addChild(() -> CacheService.create(region));
+    }
+}
+```
+
+### Pattern 3: Tenant Health Monitoring
+
+```java
+public class TenantHealthMonitor {
+    private final MultiTenantSupervisor mtSupervisor;
+    private final EventManager<TenantLifecycleEvent> eventManager;
+
+    public TenantHealthMonitor(MultiTenantSupervisor mtSupervisor) {
+        this.mtSupervisor = mtSupervisor;
+        this.eventManager = EventManager.create(TenantLifecycleEvent.class);
+
+        // Subscribe to lifecycle events
+        eventManager.subscribe(event -> {
+            switch (event) {
+                case TenantLifecycleEvent.TenantServicesHealthy(var tenantId, var count, var ts) ->
+                    logHealthy(tenantId, count, ts);
+
+                case TenantLifecycleEvent.TenantServiceFailed(var tenantId, var service, var reason, var ts) ->
+                    logFailure(tenantId, service, reason, ts);
+
+                case TenantLifecycleEvent.TenantResourcesExhausted(var tenantId, var memory, var ts) ->
+                    logResourceExhaustion(tenantId, memory, ts);
+
+                default -> {}
+            }
+        });
+    }
+
+    private void logHealthy(String tenantId, int serviceCount, long timestamp) {
+        System.out.printf("✓ Tenant %s healthy: %d services%n", tenantId, serviceCount);
+    }
+
+    private void logFailure(String tenantId, String service, String reason, long timestamp) {
+        System.err.printf("✗ Tenant %s service %s failed: %s%n", tenantId, service, reason);
+    }
+
+    private void logResourceExhaustion(String tenantId, long memory, long timestamp) {
+        System.err.printf("✗ Tenant %s resources exhausted: %d bytes%n", tenantId, memory);
+    }
+}
+```
+
+## Monitoring and Observability
+
+### Tenant Metrics
+
+```java
+public class TenantMetricsCollector {
+    public void collectMetrics(MultiTenantSupervisor mtSupervisor) {
+        for (MultiTenantSupervisor.TenantInfo tenant : mtSupervisor.listTenants()) {
+            System.out.printf("""
+                Tenant Metrics: %s
+                - Max Processes: %d
+                - Restart Count: %d
+                - Onboarded: %s
+                """,
+                tenant.tenantId(),
+                tenant.maxConcurrentProcesses(),
+                tenant.restartCount(),
+                new Date(tenant.onboardedAtMs())
+            );
+        }
+    }
+}
+```
+
+### Per-Tenant Observability
+
+```java
+public class TenantObservability {
+    public void setupTenantObservability(String tenantId, Supervisor tenantSupervisor) {
+        // Create tenant-specific observability service
+        tenantSupervisor.addChild(() ->
+            ObservabilityService.create(tenantId)
+        );
+    }
+}
+```
+
+## Best Practices
+
+### 1. Always Use Supervision Trees
+
+```java
+// ✓ Good: Each tenant has its own supervision tree
+Supervisor tenantSupervisor = mtSupervisor.registerTenant(config);
+tenantSupervisor.addChild(() -> OrderService.create(tenantId));
+tenantSupervisor.addChild(() -> UserService.create(tenantId));
+
+// ✗ Bad: Adding all services to root supervisor
+mtSupervisor.getRootSupervisor().addChild(() -> OrderService.create(tenantId));
+```
+
+### 2. Set Appropriate Resource Limits
+
+```java
+// ✓ Good: Tier-based resource limits
+TenantConfig config = TenantConfig.builder(tenantId)
+    .maxConcurrentProcesses(getTierLimit(tenantId))
+    .maxRestarts(getTierRestarts(tenantId))
+    .window(getTierWindow(tenantId))
+    .build();
+
+// ✗ Bad: One-size-fits-all limits
+TenantConfig config = TenantConfig.builder(tenantId)
+    .maxConcurrentProcesses(1000000)  // Too high
+    .build();
+```
+
+### 3. Monitor Tenant Lifecycle
+
+```java
+// ✓ Good: Track tenant lifecycle events
+mtSupervisor.addListener(new MultiTenantSupervisor.MultiTenantListener() {
+    @Override
+    public void onTenantRestartLimitExceeded(String tenantId) {
+        alertTeam("Tenant " + tenantId + " exceeding restart limits");
+    }
+});
+
+// ✗ Bad: No monitoring
+mtSupervisor.registerTenant(config);  // Silent failures
+```
+
+### 4. Graceful Tenant Offboarding
+
+```java
+// ✓ Good: Graceful shutdown
+public void offboardTenant(String tenantId) {
+    Supervisor tenant = mtSupervisor.getTenant(tenantId);
+
+    // Drain existing requests
+    tenant.children().forEach(child ->
+        child.tell(new DrainMessage())
+    );
+
+    // Wait for graceful shutdown
+    await().atMost(Duration.ofSeconds(30))
+        .until(() -> tenant.children().isEmpty());
+
+    // Deregister tenant
+    mtSupervisor.deregisterTenant(tenantId, "Migration complete");
+}
+
+// ✗ Bad: Immediate termination
+public void offboardTenant(String tenantId) {
+    mtSupervisor.deregisterTenant(tenantId, "Done");
+    // Data loss possible
+}
+```
+
+## Performance Considerations
+
+### Resource Overhead
+
+- **Per-Tenant Supervisor**: ~1 KB heap per tenant
+- **Virtual Thread Scalability**: Millions of concurrent tenants
+- **Memory Usage**: Scales linearly with tenant count
+- **CPU Overhead**: Minimal for idle tenants
+
+### Scaling Recommendations
+
+| Tenant Count | Strategy | Max Processes/Tenant | Memory (Approx) |
+|--------------|----------|----------------------|-----------------|
+| 1-10 | Strict | 10,000 | 10 MB |
+| 10-100 | Strict | 5,000 | 50 MB |
+| 100-1000 | Pooled(10) | 1,000 | 100 MB |
+| 1000+ | Hybrid | 500 | 500 MB |
+
+## Troubleshooting
+
+### Issue: Tenant Restart Loop
+
+**Symptoms**: Tenant services constantly restarting
+
+**Diagnosis**:
+```java
+// Check restart count
+MultiTenantSupervisor.TenantInfo tenant = mtSupervisor.listTenants()[0];
+if (tenant.restartCount() > 5) {
+    System.err.println("Tenant in restart loop: " + tenant.tenantId());
+}
+```
+
+**Solution**: Increase restart window or fix underlying bug
+
+### Issue: Tenant Resource Exhaustion
+
+**Symptoms**: Tenant services fail to start
+
+**Diagnosis**:
+```java
+// Check process count
+TenantConfig config = getConfig(tenantId);
+if (getCurrentProcessCount(tenantId) >= config.maxConcurrentProcesses()) {
+    System.err.println("Tenant resources exhausted: " + tenantId);
+}
+```
+
+**Solution**: Increase `maxConcurrentProcesses` or scale horizontally
+
+### Issue: Tenant Isolation Breach
+
+**Symptoms**: One tenant affecting another
+
+**Diagnosis**: Check isolation strategy
+```java
+TenantConfig config = getConfig(tenantId);
+if (!(config.strategy() instanceof TenantIsolationPolicy.Strict)) {
+    System.err.println("Non-strict isolation: " + tenantId);
+}
+```
+
+**Solution**: Use `Strict` isolation for critical tenants
+
+## Related Patterns
+
+- [Supervisor Pattern](/docs/patterns/supervision) - Core fault tolerance
+- [Proc Registry](/docs/patterns/proc-registry) - Process naming and discovery
+- [EventManager](/docs/patterns/event-management) - Tenant event broadcasting
+- [Bulkhead Isolation](/docs/patterns/enterprise/bulkhead) - Resource isolation patterns
+
+## References
+
+- [Erlang/OTP Supervisor Design Principles](https://www.erlang.org/doc/design_principles/sup_princ.html)
+- [Multi-Tenant Architecture Patterns](https://docs.microsoft.com/en-us/azure/architecture/patterns/multi-tenancy)
+- [SaaS Multi-Tenancy Best Practices](https://aws.amazon.com/blogs/architecture/saas-multi-tenancy/)
+
+## See Also
+
+- [`MultiTenantSupervisor.java`](/Users/sac/jotp/src/main/java/io/github/seanchatmangpt/jotp/enterprise/multitenancy/MultiTenantSupervisor.java) - Core implementation
+- [`TenantConfig.java`](/Users/sac/jotp/src/main/java/io/github/seanchatmangpt/jotp/enterprise/multitenancy/TenantConfig.java) - Configuration API
+- [`MultiTenantSupervisorTest.java`](/Users/sac/jotp/src/test/java/io/github/seanchatmangpt/jotp/enterprise/multitenancy/MultiTenantSupervisorTest.java) - Test examples

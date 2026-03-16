@@ -1,0 +1,1215 @@
+# Distributed System Issues Troubleshooting Guide
+
+import { Tabs } from '@nextra/components'
+import { Callout } from '@nextra/components'
+
+## Overview
+
+This guide covers troubleshooting distributed JOTP systems including cluster formation issues, network partitions, node failures, leader election problems, and distributed state management.
+
+<Callout type="warning">
+  Distributed system failures can cause data inconsistency. Always understand the consistency model before attempting recovery.
+</Callout>
+
+---
+
+## Cluster Formation Issues
+
+### Symptoms
+
+- Nodes fail to discover each other
+- `DistributedNode` startup timeout
+- Nodes start in standalone mode
+- No leader elected
+- Connection refused errors
+
+### Common Causes Checklist
+
+- [ ] Network firewall blocking ports
+- [ ] Incorrect hostnames/IPs in config
+- [ ] DNS resolution failures
+- [ ] Clock skew between nodes
+- [ ] Different JOTP versions
+- [ ] Mismatched node names
+
+### Diagnostic Steps
+
+#### 1. Verify Network Connectivity
+
+```bash
+# Test TCP connectivity between nodes
+nc -zv node1.example.com 8080
+nc -zv node2.example.com 8080
+
+# Check if ports are listening
+netstat -tuln | grep 8080
+ss -tuln | grep 8080
+
+# Test from each node to every other node
+for node in node1 node2 node3; do
+    echo "Testing $node"
+    ping -c 3 $node
+    nc -zv $node 8080
+done
+```
+
+#### 2. Check Node Configuration
+
+```java
+// Verify node configuration
+public class ConfigVerifier {
+    public static void main(String[] args) {
+        NodeConfig config = loadConfig();
+
+        System.out.println("Mandatory nodes: " + config.syncNodesMandatory());
+        System.out.println("Optional nodes: " + config.syncNodesOptional());
+        System.out.println("Timeout: " + config.syncNodesTimeout());
+
+        // Check if nodes are reachable
+        config.syncNodesMandatory().forEach(node -> {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(node.host(), node.port()), 1000);
+                System.out.println("✓ " + node + " is reachable");
+            } catch (IOException e) {
+                System.err.println("✗ " + node + " is NOT reachable: " + e.getMessage());
+            }
+        });
+    }
+}
+```
+
+#### 3. Enable Debug Logging
+
+```java
+// Enable distributed system debug logging
+Logger distributedLogger = Logger.getLogger("io.github.seanchatmangpt.jotp.distributed");
+distributedLogger.setLevel(Level.FINEST);
+
+// Or via system properties
+-Djava.util.logging.SimpleFormatter.format='%1$tF %1$tT %4$s %2$s %5$s%6$s%n'
+-Dio.github.seanchatmangpt.jotp.distributed.level=FINEST
+```
+
+#### 4. Monitor Cluster Formation
+
+```java
+// Monitor cluster formation progress
+public class ClusterFormationMonitor {
+
+    private final DistributedNode node;
+
+    @Scheduled(fixedRate = 5000)
+    public void checkClusterStatus() {
+        Set<NodeId> clusterMembers = node.getClusterMembers();
+        NodeId leader = node.getLeader();
+
+        log.info("Cluster size: {}, Leader: {}",
+            clusterMembers.size(),
+            leader != null ? leader : "None");
+
+        if (clusterMembers.size() < expectedClusterSize) {
+            log.warn("Cluster not fully formed: {}/{} nodes",
+                clusterMembers.size(), expectedClusterSize);
+
+            // Show missing nodes
+            expectedNodes.stream()
+                .filter(node -> !clusterMembers.contains(node))
+                .forEach(missing -> {
+                    log.warn("Missing node: {}", missing);
+                });
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Fix Network Configuration
+
+**Problem:** Firewalls blocking cluster communication
+
+```bash
+# Check firewall rules
+sudo iptables -L -n | grep 8080
+sudo firewall-cmd --list-ports
+
+# Open required ports (example for Linux)
+sudo iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8081 -j ACCEPT
+
+# For firewalld
+sudo firewall-cmd --add-port=8080/tcp --permanent
+sudo firewall-cmd --add-port=8081/tcp --permanent
+sudo firewall-cmd --reload
+
+# For AWS security groups
+# Allow inbound TCP on ports 8080-8081 from cluster subnet
+```
+
+#### Solution 2: Fix Hostname Resolution
+
+```java
+// Bad: Using localhost in cluster config
+NodeId node1 = new NodeId("node1", "localhost", 8080);  // Won't work across machines
+
+// Good: Use actual hostnames or IPs
+NodeId node1 = new NodeId("node1", "node1.example.com", 8080);
+NodeId node2 = new NodeId("node2", "192.168.1.10", 8080);
+
+// Better: Use service discovery
+NodeId node1 = new NodeId("node1",
+    ServiceDiscovery.resolve("jotp-node1"),
+    8080);
+```
+
+#### Solution 3: Adjust Timeouts
+
+```java
+// Bad: Timeout too short
+NodeConfig config = new NodeConfig(
+    List.of(node1, node2, node3),  // mandatory
+    List.of(),
+    Duration.ofMillis(100)  // Too short!
+);
+
+// Good: Allow sufficient time
+NodeConfig config = new NodeConfig(
+    List.of(node1, node2, node3),
+    List.of(node4, node5),  // optional
+    Duration.ofSeconds(30)  // Reasonable
+);
+
+// Calculate: timeout = (number_of_nodes * connection_timeout) + buffer
+// Example: (5 * 300ms) + 5s = 6.5s → Use 10s for safety
+```
+
+#### Solution 4: Handle Partial Cluster Formation
+
+```java
+// Allow cluster to start with subset of nodes
+NodeConfig config = new NodeConfig(
+    List.of(node1, node2),  // Only node1 and node2 mandatory
+    List.of(node3, node4, node5),  // Others optional
+    Duration.ofSeconds(10)
+);
+
+// Or use quorum-based startup
+int quorumSize = (expectedNodes.size() / 2) + 1;
+
+List<NodeId> mandatory = expectedNodes.stream()
+    .limit(quorumSize)
+    .toList();
+
+List<NodeId> optional = expectedNodes.stream()
+    .skip(quorumSize)
+    .toList();
+```
+
+### Prevention Strategies
+
+- Test network connectivity before deployment
+- Use service discovery for dynamic node resolution
+- Set appropriate timeouts based on network latency
+- Monitor cluster size with alerts
+- Use DNS names instead of IPs for flexibility
+- Document network requirements (ports, protocols)
+
+---
+
+## Network Partitions
+
+### Symptoms
+
+- Nodes report different cluster members
+- Multiple leaders elected
+- Inconsistent state across nodes
+- Split-brain scenarios
+- Requests timeout or return stale data
+
+### Common Causes Checklist
+
+- [ ] Network switch failure
+- [ ] Firewall rule changes
+- [ ] Network congestion
+- [ ] Partial network failure
+- [ ] Clock synchronization issues
+- [ ] Network partition tolerance not configured
+
+### Diagnostic Steps
+
+#### 1. Detect Network Partition
+
+```java
+// Monitor for network partition
+public class PartitionMonitor {
+
+    private final DistributedNode node;
+    private final Set<NodeId> lastKnownCluster = new HashSet<>();
+
+    @Scheduled(fixedRate = 5000)
+    public void checkPartition() {
+        Set<NodeId> currentCluster = node.getClusterMembers();
+
+        // Check if cluster size changed significantly
+        if (Math.abs(currentCluster.size() - lastKnownCluster.size()) >
+            lastKnownCluster.size() / 2) {
+
+            log.error("Potential network partition detected!");
+            log.error("Previous cluster: {}", lastKnownCluster);
+            log.error("Current cluster: {}", currentCluster);
+
+            alerting.sendAlert("Network partition detected",
+                "previous", lastKnownCluster.toString(),
+                "current", currentCluster.toString());
+        }
+
+        lastKnownCluster.clear();
+        lastKnownCluster.addAll(currentCluster);
+    }
+}
+```
+
+#### 2. Check Leader Consistency
+
+```java
+// Verify all nodes agree on leader
+@Scheduled(fixedRate = 10000)
+public void checkLeaderConsistency() {
+    NodeId localLeader = node.getLeader();
+
+    // Ask all nodes for their leader
+    Map<NodeId, NodeId> leaderViews = new HashMap<>();
+    for (NodeId clusterNode : node.getClusterMembers()) {
+        try {
+            NodeId remoteLeader = askNodeForLeader(clusterNode);
+            leaderViews.put(clusterNode, remoteLeader);
+        } catch (Exception e) {
+            log.error("Failed to get leader from {}", clusterNode);
+        }
+    }
+
+    // Check if all nodes agree
+    long uniqueLeaders = leaderViews.values().stream()
+        .distinct()
+        .count();
+
+    if (uniqueLeaders > 1) {
+        log.error("Multiple leaders detected: {}", leaderViews);
+        alerting.sendAlert("Split-brain detected", "leaders", leaderViews.toString());
+    }
+}
+```
+
+#### 3. Monitor Clock Skew
+
+```java
+// Check clock synchronization
+@Scheduled(fixedRate = 30000)
+public void checkClockSkew() {
+    Instant localTime = Instant.now();
+    Map<NodeId, Duration> skews = new HashMap<>();
+
+    for (NodeId clusterNode : node.getClusterMembers()) {
+        try {
+            Instant remoteTime = askNodeForTime(clusterNode);
+            Duration skew = Duration.between(localTime, remoteTime);
+            skews.put(clusterNode, skew);
+
+            if (Math.abs(skew.toMillis()) > 1000) {
+                log.warn("Clock skew > 1s with {}: {}", clusterNode, skew);
+            }
+        } catch (Exception e) {
+            log.error("Failed to get time from {}", clusterNode);
+        }
+    }
+
+    Duration maxSkew = skews.values().stream()
+        .map(Duration::toMillis)
+        .map(Math::abs)
+        .max(Long::compare)
+        .map(Duration::ofMillis)
+        .orElse(Duration.ZERO);
+
+    if (maxSkew.toMillis() > 5000) {
+        log.error("Excessive clock skew detected: {}", skews);
+        alerting.sendAlert("Clock skew too high", "max_skew_ms", maxSkew.toMillis());
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Implement Quorum-Based Decisions
+
+```java
+// Only proceed if quorum agrees
+public class QuorumBasedCoordinator {
+
+    private final int quorumSize;
+
+    public boolean achieveQuorum(Supplier<Boolean> operation) {
+        int successes = 0;
+        int failures = 0;
+        int required = quorumSize;
+
+        for (NodeId node : clusterMembers) {
+            try {
+                Boolean result = askNode(node, operation);
+                if (result) {
+                    successes++;
+                    if (successes >= required) {
+                        return true;  // Quorum achieved
+                    }
+                }
+            } catch (Exception e) {
+                failures++;
+                if (failures >= quorumSize) {
+                    return false;  // Quorum impossible
+                }
+            }
+        }
+
+        return false;
+    }
+}
+```
+
+#### Solution 2: Implement Heartbeat Monitoring
+
+```java
+// Monitor node liveness
+public class HeartbeatMonitor {
+
+    private final Map<NodeId, Instant> lastHeartbeat = new ConcurrentHashMap<>();
+    private final Duration heartbeatTimeout = Duration.ofSeconds(10);
+
+    @Scheduled(fixedRate = 1000)
+    public void checkHeartbeats() {
+        Instant now = Instant.now();
+
+        lastHeartbeat.entrySet().removeIf(entry -> {
+            Duration elapsed = Duration.between(entry.getValue(), now);
+            if (elapsed.compareTo(heartbeatTimeout) > 0) {
+                log.warn("Node {} missed heartbeat, last seen {}s ago",
+                    entry.getKey(), elapsed.getSeconds());
+
+                // Notify cluster of suspected failure
+                notifySuspectedFailure(entry.getKey());
+                return true;  // Remove from map
+            }
+            return false;
+        });
+    }
+
+    public void recordHeartbeat(NodeId node) {
+        lastHeartbeat.put(node, Instant.now());
+    }
+}
+```
+
+#### Solution 3: Implement Partition Recovery
+
+```java
+// Handle partition recovery
+public class PartitionRecoveryHandler {
+
+    public void onPartitionHealed() {
+        log.info("Partition healed, starting recovery");
+
+        // 1. Determine who has latest state
+        Map<NodeId, Long> vectorClocks = new HashMap<>();
+        for (NodeId node : clusterMembers) {
+            try {
+                Long clock = askNodeForVectorClock(node);
+                vectorClocks.put(node, clock);
+            } catch (Exception e) {
+                log.error("Failed to get vector clock from {}", node);
+            }
+        }
+
+        // 2. Identify node(s) with latest state
+        Long maxClock = vectorClocks.values().stream()
+            .max(Long::compare)
+            .orElse(0L);
+
+        List<NodeId> latestNodes = vectorClocks.entrySet().stream()
+            .filter(entry -> entry.getValue().equals(maxClock))
+            .map(Map.Entry::getKey)
+            .toList();
+
+        if (latestNodes.size() > 1) {
+            log.warn("Multiple nodes with same vector clock: {}", latestNodes);
+            // Need conflict resolution
+            resolveConflicts(latestNodes);
+        } else {
+            // Sync from latest node
+            syncState(latestNodes.get(0));
+        }
+
+        // 3. Resynchronize cluster
+        resynchronizeCluster();
+    }
+}
+```
+
+#### Solution 4: Use Distributed Coordination
+
+```java
+// Use ZooKeeper/etcd for coordination
+public class DistributedCoordinator {
+
+    private final CuratorFramework zkClient;
+
+    public boolean acquireLock(String lockPath) {
+        InterProcessMutex lock = new InterProcessMutex(zkClient, lockPath);
+
+        try {
+            return lock.acquire(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.error("Failed to acquire lock", e);
+            return false;
+        }
+    }
+
+    public void releaseLock(String lockPath) {
+        // Release lock
+    }
+
+    public NodeId getLeader() {
+        try {
+            byte[] data = zkClient.getData()
+                .forPath("/cluster/leader");
+
+            return NodeId.parseFrom(new String(data));
+        } catch (Exception e) {
+            log.error("Failed to get leader", e);
+            return null;
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Use quorum-based decisions for critical operations
+- Implement heartbeat monitoring
+- Use distributed coordination service (ZooKeeper, etcd)
+- Monitor clock synchronization with NTP
+- Implement partition recovery procedures
+- Test partition scenarios in staging
+- Use vector clocks for conflict detection
+
+---
+
+## Node Failures
+
+### Symptoms
+
+- Node stops responding
+- Leader election triggered
+- Applications failover
+- Increased load on remaining nodes
+- Data inconsistency
+
+### Common Causes Checklist
+
+- [ ] Hardware failure
+- [ ] OutOfMemoryError
+- [ ] Network connectivity loss
+- [ ] Process crash
+- [ ] OS crash
+- [ ] Resource exhaustion
+
+### Diagnostic Steps
+
+#### 1. Detect Node Failure
+
+```java
+// Monitor node health
+public class NodeHealthMonitor {
+
+    private final Map<NodeId, Instant> lastSeen = new ConcurrentHashMap<>();
+    private final Duration failureTimeout = Duration.ofSeconds(30);
+
+    @Scheduled(fixedRate = 5000)
+    public void checkNodeHealth() {
+        Instant now = Instant.now();
+
+        for (NodeId node : clusterMembers) {
+            if (!node.equals(selfId)) {
+                Duration elapsed = Duration.between(
+                    lastSeen.getOrDefault(node, now.minus(Duration.ofHours(1))),
+                    now
+                );
+
+                if (elapsed.compareTo(failureTimeout) > 0) {
+                    log.error("Node {} suspected failure, last seen {}s ago",
+                        node, elapsed.getSeconds());
+
+                    // Confirm failure
+                    if (confirmFailure(node)) {
+                        handleNodeFailure(node);
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean confirmFailure(NodeId node) {
+        // Try multiple times to confirm
+        for (int i = 0; i < 3; i++) {
+            try {
+                ping(node, Duration.ofSeconds(2));
+                return false;  // Node is alive
+            } catch (Exception e) {
+                log.warn("Ping attempt {} failed for {}", i + 1, node);
+            }
+        }
+        return true;  // Node is dead
+    }
+}
+```
+
+#### 2. Monitor Application Failover
+
+```java
+// Monitor application failover
+public class FailoverMonitor {
+
+    private final DistributedNode node;
+
+    @EventListener
+    public void onFailover(FailoverEvent event) {
+        log.warn("Failover event: {} from {} to {}",
+            event.appName(),
+            event.previousLeader(),
+            event.newLeader());
+
+        metrics.increment("distributed.failover",
+            "app", event.appName(),
+            "from", event.previousLeader().toString(),
+            "to", event.newLeader().toString());
+
+        // Check if failover was expected
+        if (!isExpectedFailover(event)) {
+            log.error("Unexpected failover detected!");
+            alerting.sendAlert("Unexpected failover",
+                "app", event.appName(),
+                "reason", "unexpected");
+        }
+
+        // Verify new leader is healthy
+        if (!verifyLeaderHealth(event.newLeader())) {
+            log.error("New leader is unhealthy!");
+            alerting.sendAlert("Unhealthy leader",
+                "leader", event.newLeader().toString());
+        }
+    }
+}
+```
+
+#### 3. Check Resource Usage
+
+```java
+// Monitor resource usage on all nodes
+@Scheduled(fixedRate = 30000)
+public void checkClusterResources() {
+    for (NodeId node : clusterMembers) {
+        try {
+            NodeResources resources = askNodeForResources(node);
+
+            log.info("Node {} - CPU: {}%, Memory: {}%, Heap: {}MB/{}MB",
+                node,
+                resources.cpuUsage(),
+                resources.memoryUsage(),
+                resources.heapUsed(),
+                resources.heapMax());
+
+            // Alert if resources critical
+            if (resources.cpuUsage() > 90) {
+                log.warn("High CPU on {}: {}%", node, resources.cpuUsage());
+                alerting.sendAlert("High CPU",
+                    "node", node.toString(),
+                    "usage", String.valueOf(resources.cpuUsage()));
+            }
+
+            if (resources.memoryUsage() > 90) {
+                log.warn("High memory on {}: {}%", node, resources.memoryUsage());
+                alerting.sendAlert("High memory",
+                    "node", node.toString(),
+                    "usage", String.valueOf(resources.memoryUsage()));
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to get resources from {}", node);
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Graceful Shutdown
+
+```java
+// Implement graceful shutdown
+public class GracefulShutdown {
+
+    @PreDestroy
+    public void shutdown() {
+        log.info("Starting graceful shutdown");
+
+        // 1. Stop accepting new work
+        loadBalancer.drain();
+
+        // 2. Notify cluster we're leaving
+        broadcastShutdownNotification();
+
+        // 3. Wait for in-flight work to complete
+        waitForWorkCompletion(Duration.ofMinutes(2));
+
+        // 4. Trigger failover for leadership
+        if (amLeader()) {
+            triggerFailover();
+        }
+
+        // 5. Close connections
+        closeConnections();
+
+        // 6. Shutdown processes
+        ProcRegistry.getInstance().shutdown();
+
+        log.info("Graceful shutdown complete");
+    }
+}
+```
+
+#### Solution 2: Implement Health Checks
+
+```java
+// Health check endpoint
+public class HealthCheckEndpoint {
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {
+        Map<String, String> health = new HashMap<>();
+
+        // Check process health
+        long processCount = ProcRegistry.getInstance().stream().count();
+        health.put("processes", String.valueOf(processCount));
+
+        // Check memory
+        MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+        MemoryUsage heapUsage = memoryMXBean.getHeapMemoryUsage();
+        double memoryUsagePercent = (double) heapUsage.getUsed() / heapUsage.getMax() * 100;
+        health.put("memory_usage", String.format("%.2f%%", memoryUsagePercent));
+
+        // Check CPU
+        OperatingSystemMXBean osMXBean = ManagementFactory.getOperatingSystemMXBean();
+        double cpuUsage = osMXBean.getSystemLoadAverage() / osMXBean.getAvailableProcessors() * 100;
+        health.put("cpu_usage", String.format("%.2f%%", cpuUsage));
+
+        // Check cluster connectivity
+        int connectedNodes = distributedNode.getClusterMembers().size();
+        health.put("cluster_size", String.valueOf(connectedNodes));
+
+        // Determine overall health
+        boolean healthy = memoryUsagePercent < 90
+            && cpuUsage < 90
+            && connectedNodes >= quorumSize;
+
+        return ResponseEntity
+            .status(healthy ? 200 : 503)
+            .body(health);
+    }
+}
+```
+
+#### Solution 3: Automatic Failover
+
+```java
+// Configure automatic failover
+DistributedAppSpec appSpec = new DistributedAppSpec(
+    "payment-service",
+    List.of(
+        List.of(node1, node2),  // Priority 1
+        List.of(node3, node4)   // Priority 2 (failover)
+    ),
+    Duration.ofSeconds(30)  // Failover timeout
+);
+
+// JOTP will automatically:
+// 1. Detect leader failure
+// 2. Elect new leader from priority list
+// 3. Start application on new leader
+// 4. Resume operations
+```
+
+#### Solution 4: Data Replication
+
+```java
+// Replicate data across nodes
+public class DataReplicator {
+
+    private final int replicationFactor = 3;
+
+    public void write(String key, byte[] value) {
+        // Write to local node
+        localStore.put(key, value);
+
+        // Replicate to other nodes
+        List<NodeId> replicas = selectReplicas(key, replicationFactor);
+
+        CountDownLatch latch = new CountDownLatch(replicas.size());
+        AtomicInteger successes = new AtomicInteger(0);
+
+        for (NodeId replica : replicas) {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    replicateTo(replica, key, value);
+                    successes.incrementAndGet();
+                } catch (Exception e) {
+                    log.error("Replication failed to {}", replica, e);
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        try {
+            // Wait for replication to complete
+            boolean completed = latch.await(5, TimeUnit.SECONDS);
+
+            if (!completed || successes.get() < replicationFactor) {
+                log.warn("Replication incomplete: {}/{} succeeded",
+                    successes.get(), replicationFactor);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Implement graceful shutdown procedures
+- Use health checks with load balancers
+- Configure automatic failover
+- Replicate data across nodes
+- Monitor resource usage with alerts
+- Test failure scenarios in staging
+- Use circuit breakers for node communication
+
+---
+
+## Leader Election Issues
+
+### Symptoms
+
+- No leader elected
+- Multiple leaders (split-brain)
+- Frequent leader changes
+- Leader not responding
+- Applications stuck in STANDBY state
+
+### Common Causes Checklist
+
+- [ ] Network partition
+- [ ] Node failures
+- [ ] Clock skew
+- [ ] Incorrect priority configuration
+- [ ] All nodes same priority
+- [ ] Leader crash during election
+
+### Diagnostic Steps
+
+#### 1. Check Leader Status
+
+```java
+// Check leader status
+public class LeaderMonitor {
+
+    @Scheduled(fixedRate = 5000)
+    public void checkLeaderStatus() {
+        NodeId leader = distributedNode.getLeader();
+
+        if (leader == null) {
+            log.error("No leader elected!");
+            alerting.sendAlert("No leader");
+        } else {
+            log.info("Current leader: {}", leader);
+
+            // Verify leader is alive
+            if (!ping(leader, Duration.ofSeconds(2))) {
+                log.error("Leader {} not responding!", leader);
+                alerting.sendAlert("Leader not responding",
+                    "leader", leader.toString());
+            }
+        }
+    }
+}
+```
+
+#### 2. Monitor Election Frequency
+
+```java
+// Monitor leader elections
+public class ElectionMonitor {
+
+    private NodeId lastLeader = null;
+    private Instant lastElectionTime = null;
+    private final AtomicInteger electionCount = new AtomicInteger(0);
+
+    @EventListener
+    public void onLeaderElection(LeaderElectedEvent event) {
+        NodeId newLeader = event.newLeader();
+        Instant now = Instant.now();
+
+        log.info("Leader elected: {}", newLeader);
+
+        if (lastLeader != null && !lastLeader.equals(newLeader)) {
+            // Leader changed
+            electionCount.incrementAndGet();
+
+            if (lastElectionTime != null) {
+                Duration elapsed = Duration.between(lastElectionTime, now);
+                if (elapsed.getSeconds() < 60) {
+                    log.warn("Frequent leader changes: {} in {}s",
+                        electionCount.get(), elapsed.getSeconds());
+                    alerting.sendAlert("Frequent leader changes",
+                        "count", String.valueOf(electionCount.get()));
+                }
+            }
+        }
+
+        lastLeader = newLeader;
+        lastElectionTime = now;
+    }
+}
+```
+
+#### 3. Verify Priority Configuration
+
+```java
+// Verify priority configuration
+public class PriorityVerifier {
+
+    public void verifyConfiguration() {
+        List<DistributedAppSpec> specs = distributedNode.getAppSpecs();
+
+        for (DistributedAppSpec spec : specs) {
+            log.info("App: {}", spec.name());
+            log.info("  Priority groups:");
+
+            for (int i = 0; i < spec.nodes().size(); i++) {
+                List<NodeId> group = spec.nodes().get(i);
+                log.info("    Priority {}: {}", i + 1, group);
+
+                // Check for empty groups
+                if (group.isEmpty()) {
+                    log.error("Empty priority group at priority {}", i + 1);
+                }
+
+                // Check for duplicate nodes
+                Set<NodeId> uniqueNodes = new HashSet<>(group);
+                if (uniqueNodes.size() != group.size()) {
+                    log.error("Duplicate nodes in priority group {}", i + 1);
+                }
+            }
+
+            // Verify current leader is in priority list
+            NodeId leader = distributedNode.getLeader(spec.name());
+            if (leader != null) {
+                boolean inList = spec.nodes().stream()
+                    .flatMap(List::stream)
+                    .anyMatch(node -> node.equals(leader));
+
+                if (!inList) {
+                    log.error("Leader {} not in priority list!", leader);
+                }
+            }
+        }
+    }
+}
+```
+
+### Solutions
+
+#### Solution 1: Fix Priority Configuration
+
+```java
+// Bad: All nodes same priority (can cause flapping)
+DistributedAppSpec spec = new DistributedAppSpec(
+    "payment-service",
+    List.of(
+        List.of(node1, node2, node3, node4)  // All same priority
+    ),
+    Duration.ofSeconds(30)
+);
+
+// Good: Clear priority order
+DistributedAppSpec spec = new DistributedAppSpec(
+    "payment-service",
+    List.of(
+        List.of(node1),           // Priority 1 (primary)
+        List.of(node2, node3),    // Priority 2 (secondary)
+        List.of(node4)            // Priority 3 (tertiary)
+    ),
+    Duration.ofSeconds(30)
+);
+
+// Best: Pair primary/secondary for redundancy
+DistributedAppSpec spec = new DistributedAppSpec(
+    "payment-service",
+    List.of(
+        List.of(node1, node2),    // Priority 1 (both can lead)
+        List.of(node3, node4)     // Priority 2 (failover)
+    ),
+    Duration.ofSeconds(30)
+);
+```
+
+#### Solution 2: Handle Split-Brain
+
+```java
+// Detect and resolve split-brain
+public class SplitBrainResolver {
+
+    public void resolveSplitBrain() {
+        // 1. Identify all nodes claiming leadership
+        List<NodeId> claimLeaders = new ArrayList<>();
+        for (NodeId node : clusterMembers) {
+            try {
+                if (isLeader(node)) {
+                    claimLeaders.add(node);
+                }
+            } catch (Exception e) {
+                log.error("Failed to check leadership of {}", node);
+            }
+        }
+
+        if (claimLeaders.size() > 1) {
+            log.error("Split-brain detected: {} leaders", claimLeaders.size());
+
+            // 2. Use deterministic resolution
+            NodeId winner = claimLeaders.stream()
+                .min(Comparator.comparing(NodeId::name))  // Lowest name wins
+                .orElseThrow();
+
+            log.info("Resolving split-brain, winner: {}", winner);
+
+            // 3. Tell losers to step down
+            for (NodeId node : claimLeaders) {
+                if (!node.equals(winner)) {
+                    tellNodeToStandDown(node);
+                }
+            }
+        }
+    }
+}
+```
+
+#### Solution 3: Use Distributed Coordination
+
+```java
+// Use ZooKeeper for leader election
+public class ZkLeaderElection {
+
+    private final CuratorFramework zkClient;
+    private final LeaderLatch latch;
+
+    public void startElection() {
+        latch = new LeaderLatch(zkClient, "/election/payment-service");
+
+        latch.addListener(new LeaderLatchListener() {
+            @Override
+            public void isLeader() {
+                log.info("Became leader!");
+                onBecameLeader();
+            }
+
+            @Override
+            public void notLeader() {
+                log.info("No longer leader");
+                onLostLeadership();
+            }
+        });
+
+        latch.start();
+    }
+
+    public boolean amLeader() {
+        return latch.hasLeadership();
+    }
+}
+```
+
+#### Solution 4: Add Leadership Timeout
+
+```java
+// Add timeout for leader inactivity
+public class LeadershipTimeout {
+
+    private final Duration timeout = Duration.ofSeconds(30);
+    private volatile Instant lastLeaderActivity = Instant.now();
+
+    @Scheduled(fixedRate = 5000)
+    public void checkLeaderActivity() {
+        if (distributedNode.amLeader()) {
+            lastLeaderActivity = Instant.now();
+        } else {
+            Duration elapsed = Duration.between(
+                lastLeaderActivity,
+                Instant.now()
+            );
+
+            if (elapsed.compareTo(timeout) > 0) {
+                log.error("Leader inactive for {}s, triggering reelection",
+                    elapsed.getSeconds());
+                triggerElection();
+            }
+        }
+    }
+}
+```
+
+### Prevention Strategies
+
+- Configure clear priority order
+- Use distributed coordination for critical systems
+- Monitor leader election frequency
+- Implement split-brain detection
+- Add leadership timeouts
+- Test leader election in staging
+- Use odd number of nodes for elections
+
+---
+
+## Quick Reference: Distributed Commands
+
+<Tabs items={['Cluster', 'Leadership', 'Network', 'Failover']}>
+
+<Tabs.Tab>
+```java
+// Check cluster status
+Set<NodeId> members = distributedNode.getClusterMembers();
+NodeId self = distributedNode.getNodeId();
+NodeId leader = distributedNode.getLeader();
+
+// Get cluster size
+int size = members.size();
+
+// Check if node is in cluster
+boolean inCluster = members.contains(self);
+
+// List all applications
+List<DistributedAppSpec> specs = distributedNode.getAppSpecs();
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Check if current node is leader
+boolean amLeader = distributedNode.amLeader();
+
+// Check leader for specific app
+NodeId leader = distributedNode.getLeader("app-name");
+
+// Force leader election
+distributedNode.triggerElection("app-name");
+
+// Stand down from leadership
+distributedNode.standDown("app-name");
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Ping a node
+boolean alive = ping(nodeId, Duration.ofSeconds(2));
+
+// Check network connectivity
+nc -zv hostname port
+
+// Test from all nodes
+for node in node1 node2 node3; do
+    ping -c 3 $node
+    nc -zv $node 8080
+done
+
+// Check firewall rules
+sudo iptables -L -n
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```java
+// Check application status
+AppStatus status = distributedNode.getAppStatus("app-name");
+// RUNNING, STOPPED, STANDBY
+
+// Trigger failover
+distributedNode.failover("app-name");
+
+// Check failover history
+List<FailoverEvent> history = distributedNode.getFailoverHistory();
+
+// Configure automatic failover
+DistributedAppSpec spec = new DistributedAppSpec(
+    "app-name",
+    priorityList,
+    Duration.ofSeconds(30)
+);
+```
+</Tabs.Tab>
+
+</Tabs>
+
+---
+
+## Related Issues
+
+- **Enterprise Issues:** See [enterprise-issues.mdx](/docs/user-guide/troubleshooting/enterprise-issues) for circuit breaker and saga issues
+- **Production Issues:** See [production-issues.mdx](/docs/user-guide/troubleshooting/production-issues) for production monitoring
+- **Runtime Issues:** See [runtime-issues.mdx](/docs/user-guide/troubleshooting/runtime-issues) for process lifecycle problems
+
+---
+
+## Getting Help
+
+When reporting distributed system issues, collect:
+
+1. **Cluster State**
+   ```java
+   distributedNode.getClusterMembers().forEach(node -> {
+       System.out.println("Node: " + node);
+       System.out.println("  Leader: " + distributedNode.getLeader());
+       System.out.println("  Status: " + distributedNode.getNodeStatus(node));
+   });
+   ```
+
+2. **Network Diagnostics**
+   - Ping results between all nodes
+   - Firewall rules
+   - Network latency measurements
+
+3. **Configuration**
+   - NodeId configurations
+   - Priority lists
+   - Timeout values
+
+4. **Logs**
+   - Startup logs from all nodes
+   - Election logs
+   - Failover logs
+
+<Callout type="info">
+  Distributed systems are complex. Always have a runbook for common failure scenarios and test them regularly in staging.
+</Callout>
+
+---
+
+**Last Updated:** 2026-03-15
+**JOTP Version:** 1.0.0
+**Maintainer:** JOTP Core Team

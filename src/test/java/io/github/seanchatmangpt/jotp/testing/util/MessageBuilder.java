@@ -146,7 +146,7 @@ public class MessageBuilder {
      * type compatibility.
      */
     public void validate(Class<?> messageClass) {
-        if (!messageClass.isSealed()) {
+        if (messageClass == null || !messageClass.isSealed()) {
             return; // No sealed type constraints
         }
 

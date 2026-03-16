@@ -1,0 +1,1026 @@
+---
+title: Enterprise Pattern Decision Guide
+description: Comprehensive guide for choosing the right enterprise patterns in JOTP for your specific use cases
+sidebar_label: When to Use What
+---
+
+import { Tabs } from 'nextra/components'
+import { Callout } from 'nextra/components'
+
+# Enterprise Pattern Decision Guide
+
+**Strategic Pattern Selection** • Build Resilient Systems
+
+## Overview
+
+Choosing the right enterprise pattern is critical for building resilient distributed systems. This guide provides decision frameworks, comparison matrices, and real-world scenarios to help you select and combine JOTP patterns effectively.
+
+## Quick Decision Tree
+
+### Step 1: What's Your Primary Concern?
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ What problem are you trying to solve?                      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+        Cascading      Resource     Transient
+        Failures      Starvation   Failures
+              │               │               │
+              ▼               ▼               ▼
+    Circuit Breaker    Bulkhead         Retry
+              │               │               │
+              │               │               │
+        ┌─────┴─────┐   ┌─────┴─────┐   ┌─────┴─────┐
+        │           │   │           │   │           │
+    External    Multiple    Network    Idempotent
+    Service     Features    Glitches   Operations
+    Calls       Sharing     Timeout    Safe to Retry
+    Resources
+              │               │               │
+              └───────────────┼───────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   Need More?    │
+                    └─────────────────┘
+                      │           │
+                  Yes │           │ No
+                      │           │
+                      ▼           ▼
+              ┌───────────┐  ┌─────────┐
+              │  Fallback │  │ Timeout │
+              │  Saga     │  │ Combine │
+              └───────────┘  └─────────┘
+```
+
+## Pattern Selection Matrix
+
+### By Problem Type
+
+| Problem | Primary Pattern | Secondary Patterns | When to Use |
+|---------|----------------|-------------------|-------------|
+| **Service down/unreachable** | Circuit Breaker | Fallback, Retry | External service calls, API dependencies |
+| **Resource exhaustion** | Bulkhead | Circuit Breaker | Shared resources, connection pools |
+| **Network glitches** | Retry | Timeout, Circuit Breaker | Flaky connections, transient failures |
+| **Slow/hanging requests** | Timeout | Retry, Circuit Breaker | I/O operations, external calls |
+| **Service degradation** | Fallback | Circuit Breaker, Cache | User-facing operations, non-critical data |
+| **Distributed transactions** | Saga | Circuit Breaker, Retry | Multi-service workflows, data consistency |
+| **Feature isolation** | Bulkhead | Supervisor | Multi-tenant systems, feature flags |
+| **Rate limiting** | Bulkhead | Timeout | API quotas, resource protection |
+
+### By System Architecture
+
+<Callout type="info">
+**Architecture-First Selection**: Your system architecture should drive pattern selection, not the other way around.
+</Callout>
+
+#### Monolithic Applications
+
+```
+Pattern Stack: Bulkhead → Circuit Breaker → Retry → Timeout
+
+Use Case: Single JVM with multiple features sharing resources
+Example: E-commerce platform with search, checkout, and recommendations
+
+Priority:
+1. Bulkhead (prevent feature starvation)
+2. Circuit Breaker (protect external dependencies)
+3. Retry (handle transient failures)
+4. Timeout (prevent hanging operations)
+```
+
+#### Microservices
+
+```
+Pattern Stack: Circuit Breaker → Saga → Fallback → Timeout
+
+Use Case: Distributed services with network communication
+Example: Order service calling payment, inventory, and shipping services
+
+Priority:
+1. Circuit Breaker (prevent cascading failures)
+2. Saga (distributed transaction coordination)
+3. Fallback (graceful degradation)
+4. Timeout (resource management)
+```
+
+#### Event-Driven Systems
+
+```
+Pattern Stack: Retry → Circuit Breaker → Bulkhead
+
+Use Case: Async message processing, event streams
+Example: Event consumer processing Kafka events
+
+Priority:
+1. Retry (handle transient processing failures)
+2. Circuit Breaker (protect from bad events)
+3. Bulkhead (isolate consumer groups)
+```
+
+#### Multi-Tenant SaaS
+
+```
+Pattern Stack: Bulkhead → Circuit Breaker → Saga → Fallback
+
+Use Case: Multiple tenants sharing infrastructure
+Example: CRM platform with 1000+ tenants
+
+Priority:
+1. Bulkhead (per-tenant isolation)
+2. Circuit Breaker (protect shared services)
+3. Saga (tenant-specific workflows)
+4. Fallback (tenant-level degradation)
+```
+
+## Detailed Pattern Comparisons
+
+### Circuit Breaker vs. Bulkhead
+
+| Aspect | Circuit Breaker | Bulkhead |
+|--------|----------------|----------|
+| **Primary Goal** | Prevent cascading failures | Prevent resource starvation |
+| **Trigger** | Failure rate threshold | Resource utilization threshold |
+| **State** | CLOSED, OPEN, HALF_OPEN | HEALTHY, DEGRADED, EXHAUSTED |
+| **Recovery** | Automatic after timeout | Immediate when resources free |
+| **Best For** | External service calls | Feature isolation |
+| **Metric** | Failure count | Utilization percentage |
+
+**When to Choose Circuit Breaker:**
+- Calling external services that may be down
+- Service has recovery time (not permanent failures)
+- Need automatic fail-fast behavior
+- Failures are correlated (service down = all requests fail)
+
+**When to Choose Bulkhead:**
+- Multiple features compete for same resources
+- Need to guarantee resource availability
+- Features have different priority levels
+- Failures are independent (one feature doesn't affect others)
+
+**Use Both When:**
+- External service calls AND resource isolation needed
+```
+Request → Circuit Breaker (is it down?) → Bulkhead (do we have capacity?) → Service
+```
+
+### Retry vs. Circuit Breaker
+
+| Aspect | Retry | Circuit Breaker |
+|--------|-------|----------------|
+| **Primary Goal** | Handle transient failures | Prevent calling failing services |
+| **Behavior** | Re-attempt failed operations | Stop attempting after threshold |
+| **Assumption** | Failure is temporary | Service needs recovery time |
+| **Overhead** | Network/processing cost | Minimal (state tracking) |
+| **Risk** | Retry storms can overwhelm | May fail fast when service is fine |
+
+**When to Choose Retry:**
+- Network glitches, timeouts
+- Idempotent operations
+- Service recovers quickly
+- Have time to wait for recovery
+
+**When to Choose Circuit Breaker:**
+- Service is down or degraded
+- Need to prevent overload during outage
+- Want immediate failure feedback
+- Service has known recovery window
+
+**Use Both When:**
+```
+Circuit Breaker (should we even try?) → Retry (attempt with backoff) → Timeout
+```
+
+### Timeout vs. Circuit Breaker
+
+| Aspect | Timeout | Circuit Breaker |
+|--------|---------|----------------|
+| **Primary Goal** | Prevent hanging operations | Prevent cascading failures |
+| **Scope** | Per-operation | Per-service |
+| **Trigger** | Time elapsed | Failure rate |
+| **State** | None (fire-and-forget) | CLOSED/OPEN/HALF_OPEN |
+| **Recovery** | N/A | Automatic after timeout |
+
+**When to Choose Timeout:**
+- Operations have unpredictable duration
+- Need to prevent resource exhaustion
+- Want responsive user experience
+- Operations involve I/O or network calls
+
+**When to Choose Circuit Breaker:**
+- Service is consistently failing
+- Need to prevent calling failing service
+- Want automatic recovery detection
+- Failures are correlated
+
+**Use Both When:**
+- Always use timeout with circuit breaker
+- Timeout prevents individual hangs, circuit breaker prevents systemic failure
+
+### Saga vs. Distributed Transactions (2PC)
+
+| Aspect | Saga | 2-Phase Commit |
+|--------|------|----------------|
+| **Consistency** | Eventual | Immediate |
+| **Locking** | No | Yes (blocking) |
+| **Performance** | High | Lower (coordination cost) |
+| **Failure Handling** | Compensating actions | Rollback |
+| **Complexity** | Higher | Lower |
+| **Best For** | Long-running, cross-service | Short, critical transactions |
+
+**When to Choose Saga:**
+- Transactions span multiple services
+- Operations are long-running
+- Can define compensating actions
+- Need high availability and performance
+- Eventual consistency is acceptable
+
+**When to Choose 2PC:**
+- Need immediate consistency
+- Transactions are short
+- Can tolerate blocking
+- All services support XA transactions
+- Coordination overhead is acceptable
+
+## Real-World Scenario Examples
+
+### Scenario 1: E-Commerce Checkout Flow
+
+**Problem:** Checkout process calls payment gateway, inventory service, and shipping service. Each can fail independently.
+
+<Callout type="success">
+**Solution:** Circuit Breaker + Saga + Timeout + Fallback
+</Callout>
+
+```java
+@Service
+public class CheckoutService {
+    private final CircuitBreakerPattern paymentBreaker;
+    private final CircuitBreakerPattern inventoryBreaker;
+    private final CircuitBreakerPattern shippingBreaker;
+    private final SagaCoordinator sagaCoordinator;
+
+    public CheckoutResult checkout(Cart cart) {
+        // Define saga steps with circuit breakers
+        SagaConfig config = new SagaConfig(
+            "checkout-saga",
+            sagaId,
+            List.of(
+                // Step 1: Reserve inventory
+                new SagaStep.Action<>(
+                    "reserve-inventory",
+                    (input) -> inventoryBreaker.execute(
+                        timeout -> inventoryService.reserve(
+                            cart.getItems(),
+                            timeout
+                        ),
+                        Duration.ofSeconds(5)
+                    ),
+                    (input) -> inventoryService.release(
+                        cart.getItems()
+                    )
+                ),
+
+                // Step 2: Process payment
+                new SagaStep.Action<>(
+                    "process-payment",
+                    (input) -> paymentBreaker.execute(
+                        timeout -> paymentGateway.charge(
+                            cart.getTotal(),
+                            timeout
+                        ),
+                        Duration.ofSeconds(10)
+                    ),
+                    (input) -> paymentGateway.refund(
+                        input.getPaymentId()
+                    )
+                ),
+
+                // Step 3: Create shipment
+                new SagaStep.Action<>(
+                    "create-shipment",
+                    (input) -> shippingBreaker.execute(
+                        timeout -> shippingService.createShipment(
+                            input.getShippingAddress(),
+                            timeout
+                        ),
+                        Duration.ofSeconds(5)
+                    ),
+                    (input) -> shippingService.cancel(
+                        input.getShipmentId()
+                    )
+                )
+            ),
+            Duration.ofMinutes(5),
+            true
+        );
+
+        return sagaCoordinator.execute(config);
+    }
+}
+```
+
+**Why This Combination:**
+- **Circuit Breaker**: Each service has its own breaker, prevents cascading
+- **Saga**: Coordinates distributed transaction with compensation
+- **Timeout**: Each operation has time limit
+- **Fallback**: Not shown, but could add cached inventory, backup payment gateway
+
+### Scenario 2: Multi-Tenant SaaS API
+
+**Problem:** 1000+ tenants sharing infrastructure, one tenant's spike shouldn't affect others.
+
+<Callout type="success">
+**Solution:** Bulkhead (per-tenant) + Circuit Breaker + Fallback
+</Callout>
+
+```java
+@Service
+public class MultiTenantService {
+    private final Map<String, BulkheadIsolationEnterprise> tenantBulkheads =
+        new ConcurrentHashMap<>();
+    private final CircuitBreakerPattern databaseBreaker;
+
+    public <T> Result<T> executeForTenant(
+        String tenantId,
+        Supplier<T> operation
+    ) {
+        // Get or create tenant-specific bulkhead
+        BulkheadIsolationEnterprise bulkhead = tenantBulkheads
+            .computeIfAbsent(tenantId, this::createTenantBulkhead);
+
+        // Execute within bulkhead and circuit breaker
+        return bulkhead.execute(() ->
+            databaseBreaker.execute(
+                timeout -> operation.get(),
+                Duration.ofSeconds(5)
+            )
+        );
+    }
+
+    private BulkheadIsolationEnterprise createTenantBulkhead(String tenantId) {
+        TenantTier tier = tenantService.getTier(tenantId);
+
+        BulkheadConfig config = BulkheadConfig.builder(tenantId)
+            .limits(List.of(
+                new ResourceLimit.MaxConcurrentRequests(
+                    switch (tier) {
+                        case PREMIUM -> 100;
+                        case STANDARD -> 50;
+                        case BASIC -> 10;
+                    }
+                ),
+                new ResourceLimit.MaxQueueSize(
+                    switch (tier) {
+                        case PREMIUM -> 500;
+                        case STANDARD -> 200;
+                        case BASIC -> 50;
+                    }
+                )
+            ))
+            .queueTimeout(Duration.ofSeconds(30))
+            .alertThreshold(0.80)
+            .build();
+
+        return BulkheadIsolationEnterprise.create(config);
+    }
+}
+```
+
+**Why This Combination:**
+- **Bulkhead**: Per-tenant isolation, noisy neighbor protection
+- **Circuit Breaker**: Protects database from overload
+- **Tier-Based Limits**: Different limits per subscription tier
+
+### Scenario 3: High-Frequency Trading Platform
+
+**Problem:** Millisecond latency requirements, external market data feeds can be slow or fail.
+
+<Callout type="success">
+**Solution:** Timeout + Circuit Breaker + Fallback (cached data)
+</Callout>
+
+```java
+@Service
+public class MarketDataService {
+    private final CircuitBreakerPattern marketDataBreaker;
+    private final Cache<String, MarketData> cache;
+    private final TimeoutManager timeoutManager;
+
+    public MarketData getMarketData(String symbol) {
+        // Very short timeout for trading
+        Duration timeout = Duration.ofMillis(50);
+
+        Result<MarketData> result = marketDataBreaker.execute(
+            t -> {
+                // Try to get fresh data
+                return marketDataFeed.fetch(symbol, t);
+            },
+            timeout
+        );
+
+        return switch (result) {
+            case Result.Success<MarketData>(MarketData data) -> {
+                // Cache the fresh data
+                cache.put(symbol, data, Duration.ofMillis(100));
+                yield data;
+            }
+            case Result.Failure<CircuitBreakerException>(_) -> {
+                // Circuit open or timeout - use cache
+                MarketData cached = cache.get(symbol);
+                if (cached != null && cached.getAge() < Duration.ofSeconds(5)) {
+                    return cached; // Stale but acceptable
+                }
+                // No cached data - fail fast
+                throw new ServiceUnavailableException(
+                    "Market data unavailable for " + symbol
+                );
+            }
+        };
+    }
+}
+```
+
+**Why This Combination:**
+- **Timeout**: 50ms timeout prevents hanging trades
+- **Circuit Breaker**: Fast fail when market data feed is down
+- **Fallback**: Cache provides stale-but-acceptable data
+- **Short Cache TTL**: 100ms ensures data doesn't get too stale
+
+### Scenario 4: Batch Processing System
+
+**Problem:** Nightly batch jobs processing millions of records, external APIs can be flaky.
+
+<Callout type="success">
+**Solution:** Retry + Timeout + Circuit Breaker + Bulkhead
+</Callout>
+
+```java
+@Service
+public class BatchProcessingService {
+    private final EnterpriseRecovery retry;
+    private final CircuitBreakerPattern apiBreaker;
+    private final BulkheadIsolationEnterprise bulkhead;
+
+    public BatchResult processBatch(List<Record> records) {
+        BulkheadConfig config = BulkheadConfig.builder("batch-processing")
+            .limits(List.of(
+                new ResourceLimit.MaxConcurrentRequests(20),
+                new ResourceLimit.MaxQueueSize(100)
+            ))
+            .build();
+
+        return bulkhead.execute(() -> {
+            return records.parallelStream()
+                .map(record -> retry.retry(
+                    () -> apiBreaker.execute(
+                        timeout -> externalApi.process(record, timeout),
+                        Duration.ofSeconds(30)
+                    )
+                ))
+                .collect(Collectors.collectingAndThen(
+                    Collectors.toList(),
+                    BatchResult::new
+                ));
+        }).value();
+    }
+}
+```
+
+**Why This Combination:**
+- **Retry**: Handle transient API failures
+- **Timeout**: 30s timeout per record
+- **Circuit Breaker**: Stop calling if API is down
+- **Bulkhead**: Limit concurrent API calls
+
+## Anti-Patterns to Avoid
+
+<Callout type="error">
+**CRITICAL**: These anti-patterns cause production incidents. Avoid them at all costs.
+</Callout>
+
+### Anti-Pattern 1: Circuit Breaker Without Timeout
+
+**Problem:** Circuit breaker trips, but individual requests still hang.
+
+```java
+// WRONG
+Result<String> result = circuitBreaker.execute(
+    timeout -> externalApi.call(),  // No timeout!
+    Duration.ofSeconds(0)  // Infinite!
+);
+
+// RIGHT
+Result<String> result = circuitBreaker.execute(
+    timeout -> externalApi.call(timeout),  // Use timeout
+    Duration.ofSeconds(5)  // 5 second limit
+);
+```
+
+### Anti-Pattern 2: Retry Without Idempotency
+
+**Problem:** Retrying non-idempotent operations causes duplicate charges, double-spending.
+
+```java
+// WRONG - Charging payment is NOT idempotent
+retry.retry(() -> paymentGateway.charge(amount));
+
+// RIGHT - Use idempotency key
+retry.retry(() ->
+    paymentGateway.charge(amount, idempotencyKey)
+);
+```
+
+### Anti-Pattern 3: Bulkhead with Infinite Queue
+
+**Problem:** Queue grows without bound, causes memory exhaustion.
+
+```java
+// WRONG
+BulkheadConfig.builder("feature")
+    .limits(List.of(new ResourceLimit.MaxConcurrentRequests(10)))
+    .queueTimeout(Duration.ofHours(1))  // Way too long!
+    .build();
+
+// RIGHT
+BulkheadConfig.builder("feature")
+    .limits(List.of(
+        new ResourceLimit.MaxConcurrentRequests(10),
+        new ResourceLimit.MaxQueueSize(50)  // Bound the queue
+    ))
+    .queueTimeout(Duration.ofSeconds(5))  // Fail fast
+    .build();
+```
+
+### Anti-Pattern 4: Saga Without Compensation
+
+**Problem:** Saga step fails, can't roll back previous steps, data inconsistency.
+
+```java
+// WRONG - No compensation defined
+new SagaStep.Action<>(
+    "charge-payment",
+    (input) -> paymentService.charge(input),
+    null  // No compensation!
+);
+
+// RIGHT - Always define compensation
+new SagaStep.Action<>(
+    "charge-payment",
+    (input) -> paymentService.charge(input),
+    (input) -> paymentService.refund(input.getPaymentId())
+);
+```
+
+### Anti-Pattern 5: Fallback Without Monitoring
+
+**Problem:** Fallback always used, service degraded but no one knows.
+
+```java
+// WRONG - Silent fallback
+return switch (result) {
+    case Result.Success_(var v) -> v;
+    case Result.Failure_(_) -> getCachedData();  // No logging!
+};
+
+// RIGHT - Monitor fallback rate
+return switch (result) {
+    case Result.Success_(var v) -> v;
+    case Result.Failure_(var e) -> {
+        metrics.counter("fallback.rate").increment();
+        logger.warn("Using fallback for service", e);
+        yield getCachedData();
+    }
+};
+```
+
+## Composition Patterns
+
+### Pattern 1: The Protection Stack
+
+**When:** Calling external services, need comprehensive protection
+
+```
+Request → Circuit Breaker → Bulkhead → Retry → Timeout → Service
+```
+
+```java
+public Response callExternalService(Request request) {
+    return circuitBreaker.execute(
+        timeout -> bulkhead.execute(() ->
+            retry.retry(() ->
+                externalService.call(request, timeout)
+            ).value()
+        ).value(),
+        Duration.ofSeconds(10)
+    ).value();
+}
+```
+
+**Why This Order:**
+1. **Circuit Breaker**: Fail fast if service is down
+2. **Bulkhead**: Ensure we have capacity
+3. **Retry**: Handle transient failures
+4. **Timeout**: Prevent hanging
+
+### Pattern 2: The Resilience Stack
+
+**When:** User-facing operations, need graceful degradation
+
+```
+Request → Circuit Breaker → Timeout → Service → Fallback
+```
+
+```java
+public Response getUserData(String userId) {
+    Result<Response> result = circuitBreaker.execute(
+        timeout -> userService.get(userId, timeout),
+        Duration.ofSeconds(5)
+    );
+
+    return switch (result) {
+        case Result.Success_(Response r) -> r;
+        case Result.Failure_(_) -> getCachedUserData(userId);
+    };
+}
+```
+
+**Why This Order:**
+1. **Circuit Breaker**: Protect from failing service
+2. **Timeout**: Prevent hanging
+3. **Fallback**: Provide cached data on failure
+
+### Pattern 3: The Transaction Stack
+
+**When:** Distributed transactions, data consistency critical
+
+```
+Request → Circuit Breaker (per service) → Saga → Services
+```
+
+```java
+public void executeDistributedTransaction(Input input) {
+    SagaConfig config = new SagaConfig(
+        "distributed-tx",
+        sagaId,
+        List.of(
+            new SagaStep.Action<>("service1",
+                (i) -> cb1.execute(t -> service1.call(i, t), t),
+                (i) -> service1.compensate(i)
+            ),
+            new SagaStep.Action<>("service2",
+                (i) -> cb2.execute(t -> service2.call(i, t), t),
+                (i) -> service2.compensate(i)
+            )
+        ),
+        Duration.ofMinutes(10),
+        true
+    );
+
+    sagaCoordinator.execute(config);
+}
+```
+
+**Why This Order:**
+1. **Circuit Breaker**: Each service has its own breaker
+2. **Saga**: Coordinates transaction with compensation
+
+## Migration Paths
+
+### From Spring Boot
+
+<Callout type="info">
+**JOTP Advantage**: No annotations, full programmatic control, better virtual thread support
+</Callout>
+
+#### Migrating from @CircuitBreaker
+
+```java
+// Spring Cloud OpenFeign + Resilience4j
+@CircuitBreaker(name = "backend")
+@Bulkhead(name = "backend")
+@Retry(name = "backend")
+public String backendCall() {
+    return backend.doSomething();
+}
+
+// JOTP
+public String backendCall() {
+    return circuitBreaker.execute(
+        timeout -> bulkhead.execute(() ->
+            retry.retry(() ->
+                backend.doSomething()
+            ).value()
+        ).value(),
+        Duration.ofSeconds(5)
+    ).value();
+}
+```
+
+#### Migrating from @HystrixCommand
+
+```java
+// Hystrix
+@HystrixCommand(
+    fallbackMethod = "fallback",
+    commandProperties = {
+        @HystrixProperty(name = "execution.isolation.thread.timeoutInMilliseconds", value = "5000")
+    }
+)
+public String doSomething() {
+    return riskyCall();
+}
+
+public String fallback() {
+    return "default";
+}
+
+// JOTP
+public String doSomething() {
+    return circuitBreaker.execute(
+        timeout -> riskyCall(),
+        Duration.ofSeconds(5)
+    ).recover(error -> "default").value();
+}
+```
+
+### From Akka
+
+```java
+// Akka
+CircuitBreaker breaker = CircuitBreaker.create(
+    system.scheduler(),
+    5,
+    Duration.ofMinutes(1),
+    Duration.ofMinutes(2)
+);
+
+CompletionStage<String> result = breaker
+    .callWithCircuitBreakerCS(
+        () -> futureService.call()
+    )
+    .handle((val, err) -> err != null ? "fallback" : val);
+
+// JOTP
+Result<String> result = circuitBreaker.execute(
+    timeout -> futureService.call().toCompletableFuture().get(timeout),
+    Duration.ofSeconds(5)
+);
+
+String value = switch (result) {
+    case Result.Success_(String v) -> v;
+    case Result.Failure_(_) -> "fallback";
+};
+```
+
+### From Resilience4j
+
+```java
+// Resilience4j
+CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("backend");
+Bulkhead bulkhead = Bulkhead.ofDefaults("backend");
+Retry retry = Retry.ofDefaults("backend");
+
+Supplier<String> supplier = CircuitBreaker
+    .decorateSupplier(circuitBreaker,
+        Bulkhead.decorateSupplier(bulkhead,
+            Retry.decorateSupplier(retry,
+                () -> backend.doSomething()
+            )
+        )
+    );
+
+// JOTP
+String result = circuitBreaker.execute(
+    timeout -> bulkhead.execute(() ->
+        retry.retry(() ->
+            backend.doSomething()
+        ).value()
+    ).value(),
+    Duration.ofSeconds(5)
+).value();
+```
+
+## Performance Considerations
+
+### Pattern Overhead
+
+| Pattern | Setup Cost | Per-Request Overhead | Memory Footprint |
+|---------|------------|---------------------|------------------|
+| **Circuit Breaker** | ~1ms | < 0.1ms | ~1 KB per instance |
+| **Bulkhead** | ~5ms | < 0.5ms | ~100 B per request |
+| **Retry** | ~1ms | Backoff time | ~500 B per attempt |
+| **Timeout** | Negligible | Negligible | Negligible |
+| **Fallback** | Cache size | Cache lookup | Cache size |
+| **Saga** | ~10ms | ~1ms per step | ~10 KB per saga |
+
+### Optimization Strategies
+
+1. **Reuse Pattern Instances**
+   ```java
+   // GOOD - Create once, reuse
+   private final CircuitBreakerPattern breaker =
+       CircuitBreakerPattern.create(config);
+
+   // BAD - Create per request
+   public void call() {
+       CircuitBreakerPattern breaker =
+           CircuitBreakerPattern.create(config);
+   }
+   ```
+
+2. **Use Appropriate Timeouts**
+   ```java
+   // GOOD - Timeout based on SLA
+   Duration timeout = Duration.ofMillis(slaLatency - 100);
+
+   // BAD - Arbitrary timeout
+   Duration timeout = Duration.ofMinutes(1);
+   ```
+
+3. **Monitor and Tune**
+   ```java
+   // GOOD - Adjust based on metrics
+   if (breaker.getFailureRate() > 0.05) {
+       config = config.withLowerThreshold();
+   }
+
+   // BAD - Set and forget
+   CircuitBreakerConfig config = CircuitBreakerConfig.of("service");
+   ```
+
+4. **Combine Patterns Judiciously**
+   ```java
+   // GOOD - Only what's needed
+   circuitBreaker.execute(timeout -> service.call(timeout), timeout);
+
+   // BAD - Over-engineered
+   circuitBreaker.execute(
+       t1 -> bulkhead.execute(() ->
+           retry.retry(() ->
+               saga.execute(() ->
+                   timeout.execute(() -> service.call())
+               )
+           )
+       ),
+       t1
+   );
+   ```
+
+## Testing Strategies
+
+### Unit Testing Patterns
+
+```java
+@Test
+public void testCircuitBreakerTrips() {
+    CircuitBreakerConfig config = new CircuitBreakerConfig(
+        "test",
+        3,
+        Duration.ofSeconds(10),
+        Duration.ofMillis(100),
+        3
+    );
+    CircuitBreakerPattern breaker = CircuitBreakerPattern.create(config);
+
+    // Trigger failures
+    for (int i = 0; i < 4; i++) {
+        Result<String> result = breaker.execute(
+            t -> { throw new RuntimeException("Fail"); },
+            Duration.ofSeconds(1)
+        );
+        assertTrue(result instanceof Result.Failure);
+    }
+
+    // Verify circuit is open
+    assertEquals(CircuitState.Status.OPEN, breaker.getState().status());
+}
+```
+
+### Integration Testing
+
+```java
+@Test
+public void testBulkheadWithRealLoad() {
+    BulkheadConfig config = BulkheadConfig.builder("test")
+        .limits(List.of(new ResourceLimit.MaxConcurrentRequests(2)))
+        .build();
+    BulkheadIsolationEnterprise bulkhead = BulkheadIsolationEnterprise.create(config);
+
+    // Submit 10 concurrent requests
+    List<CompletableFuture<Result<String>>> futures = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+        futures.add(CompletableFuture.supplyAsync(() ->
+            bulkhead.execute(() -> {
+                Thread.sleep(1000);
+                return "done";
+            })
+        ));
+    }
+
+    // Count successes vs rejections
+    long successes = futures.stream()
+        .map(CompletableFuture::join)
+        .filter(r -> r instanceof Result.Success)
+        .count();
+
+    // Only 2 should succeed (max concurrent)
+    assertEquals(2, successes);
+}
+```
+
+## Quick Reference Tables
+
+### Pattern Selection by Error Type
+
+| Error Type | Pattern | Rationale |
+|------------|---------|-----------|
+| **Connection refused** | Circuit Breaker | Service is down, don't keep trying |
+| **Connection timeout** | Retry + Timeout | Network issue, may recover |
+| **Read timeout** | Timeout + Retry | Slow service, may recover |
+| **HTTP 5xx** | Retry + Circuit Breaker | Transient server error |
+| **HTTP 429** | Bulkhead + Retry | Rate limited, back off |
+| **HTTP 4xx** | Fallback | Client error, retry won't help |
+| **DNS failure** | Circuit Breaker | Service unreachable |
+| **SSL handshake error** | Circuit Breaker | Service misconfigured |
+
+### Pattern Selection by Latency SLA
+
+| SLA | Pattern Stack | Example |
+|-----|---------------|---------|
+| **< 10ms** | Timeout (5ms) + Fallback | In-memory cache, high-frequency trading |
+| **< 100ms** | Timeout (50ms) + Circuit Breaker | Real-time bidding, gaming |
+| **< 1s** | Circuit Breaker + Retry + Timeout | Web APIs, user interactions |
+| **< 10s** | Full stack + Saga | Batch processing, workflows |
+| **Best effort** | Retry only | Analytics, background jobs |
+
+### Pattern Selection by Consistency Requirement
+
+| Consistency | Pattern Stack | Example |
+|-------------|---------------|---------|
+| **Strong** | Saga + 2PC | Financial transactions, inventory |
+| **Eventual** | Saga + Event Sourcing | Social media feeds, notifications |
+| **Best effort** | Circuit Breaker + Fallback | Analytics, logging |
+| **Tunable** | Saga + CQRS | E-commerce, search indexing |
+
+## Decision Checklist
+
+Use this checklist when designing a new service or feature:
+
+<Callout type="success">
+**Pre-Deployment Checklist**
+</Callout>
+
+### Protection
+- [ ] Are there external service calls? → **Circuit Breaker**
+- [ ] Do multiple features share resources? → **Bulkhead**
+- [ ] Are operations idempotent? → **Retry**
+- [ ] Can operations hang? → **Timeout**
+
+### Recovery
+- [ ] Do we have alternative data sources? → **Fallback**
+- [ ] Are transactions distributed? → **Saga**
+
+### Monitoring
+- [ ] Are pattern metrics exposed to Prometheus?
+- [ ] Are alert thresholds configured?
+- [ ] Is fallback rate monitored?
+- [ ] Are circuit state transitions logged?
+
+### Testing
+- [ ] Are circuit breaker thresholds tested?
+- [ ] Is bulkhead rejection tested?
+- [ ] Are saga compensation actions tested?
+- [ ] Is timeout behavior tested?
+
+## Conclusion
+
+Choosing the right enterprise patterns is about understanding your requirements:
+
+1. **What can fail?** (External services, resources, network)
+2. **How should it fail?** (Fail fast, degrade gracefully, retry)
+3. **What's the impact?** (User experience, data consistency, system stability)
+
+Start with the basics:
+- **External calls?** → Circuit Breaker
+- **Resource sharing?** → Bulkhead
+- **Transient failures?** → Retry
+- **Hanging operations?** → Timeout
+
+Then add sophistication:
+- **Need alternatives?** → Fallback
+- **Distributed transactions?** → Saga
+
+Remember: Patterns are tools, not goals. Use what you need, monitor what you use, and tune based on real traffic.
+
+---
+
+**Related Documentation:**
+- [Circuit Breaker](../../reference/patterns/circuit-breaker.mdx)
+- [Bulkhead](../../reference/patterns/bulkhead.mdx)
+- [Retry](../../reference/patterns/retry.mdx)
+- [Saga](../../reference/patterns/saga.mdx)
+- [Migration from Spring Boot](../../migration/from-spring-boot.mdx)

@@ -7,14 +7,123 @@ import java.util.Random;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Enterprise-grade retry coordinator with exponential backoff and jitter.
+ * Enterprise-grade retry coordinator with exponential backoff, jitter, and circuit breaker
+ * integration.
  *
- * <p>Implements advanced recovery strategies including circuit breaker integration, fresh virtual
- * thread per attempt (via CrashRecovery pattern), and adaptive backoff.
+ * <p>Implements advanced recovery strategies for transient failures including exponential backoff
+ * with jitter (to prevent thundering herd), circuit breaker integration (to prevent retry storms),
+ * fresh virtual thread per attempt (via CrashRecovery pattern), and adaptive backoff based on
+ * failure patterns.
  *
- * <p>State Machine: - INITIAL: First attempt - BACKOFF: Waiting between retries - RETRY: Executing
- * attempt N - COMPLETED: Success - FAILED: All attempts exhausted - CIRCUIT_BREAKER_TRIPPED: Too
- * many consecutive failures
+ * <h2>Problem Solved:</h2>
+ *
+ * Distributed systems experience transient failures:
+ *
+ * <ul>
+ *   <li><b>Network glitches</b>: Temporary packet loss, DNS timeouts
+ *   <li><b>Service restarts</b>: Brief downtime during deployments
+ *   <li><b>Load spikes</b>: Momentary overload causing timeouts
+ *   <li><b>Deadlocks</b>: Transient lock contention
+ * </ul>
+ *
+ * <h2>State Machine:</h2>
+ *
+ * <ul>
+ *   <li><b>INITIAL</b>: First attempt, no failures yet
+ *   <li><b>RETRYING</b>: Executing attempt N (N > 1)
+ *   <li><b>COMPLETED</b>: Success on attempt N
+ *   <li><b>FAILED</b>: All attempts exhausted
+ *   <li><b>CIRCUIT_BREAKER_TRIPPED</b>: Too many consecutive failures, aborting
+ * </ul>
+ *
+ * <h2>Backoff with Jitter:</h2>
+ *
+ * <pre>
+ * delay = min(initialDelay * 2^(attempt-1), maxDelay)
+ * jitteredDelay = delay * (1 ± jitterFactor)
+ * </pre>
+ *
+ * <p>Jitter prevents retry storms when multiple clients retry simultaneously.
+ *
+ * <h2>Behavior:</h2>
+ *
+ * <ol>
+ *   <li>Execute task attempt
+ *   <li>On success: emit AttemptSucceeded event, return result
+ *   <li>On failure: emit AttemptFailed event, check maxAttempts
+ *   <li>If maxAttempts not exceeded: calculate backoff, sleep, retry
+ *   <li>If maxAttempts exceeded: return failure
+ *   <li>If circuitBreakerThreshold exceeded: trip circuit, abort immediately
+ * </ol>
+ *
+ * <h2>Enterprise Value:</h2>
+ *
+ * <ul>
+ *   <li><b>Self-healing</b>: Automatic recovery from transient failures
+ *   <li><b>Thundering herd prevention</b>: Jitter spreads out retry attempts
+ *   <li><b>Fail-fast</b>: Circuit breaker prevents retrying dead services
+ *   <li><b>Fresh execution</b>: Each attempt in new virtual thread (no state pollution)
+ * </ul>
+ *
+ * <h2>Thread Safety:</h2>
+ *
+ * <ul>
+ *   <li>Thread-safe: Uses {@link CopyOnWriteArrayList} for listeners
+ *   <li>Process-based coordinator ensures serialized state updates
+ *   <li>Random jitter source is thread-safe
+ * </ul>
+ *
+ * <h2>Performance Characteristics:</h2>
+ *
+ * <ul>
+ *   <li>Memory: O(1) for coordinator state
+ *   <li>Latency: O(backoff) between attempts (exponential growth)
+ *   <li>Throughput: Limited by maxAttempts and backoff duration
+ * </ul>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Uses {@link io.github.seanchatmangpt.jotp.Proc} for coordinator state management
+ *   <li>Emits {@link RecoveryEvent} via {@link io.github.seanchatmangpt.jotp.EventManager}
+ *   <li>Compatible with {@link
+ *       io.github.seanchatmangpt.jotp.enterprise.circuitbreaker.CircuitBreakerPattern}
+ * </ul>
+ *
+ * @example
+ *     <pre>{@code
+ * // Create recovery coordinator with exponential backoff
+ * RecoveryConfig config = RecoveryConfig.builder("database-connection")
+ *     .maxAttempts(5)
+ *     .initialDelay(Duration.ofMillis(100))
+ *     .maxDelay(Duration.ofSeconds(30))
+ *     .jitterFactor(0.1)
+ *     .backoffMultiplier(2.0)
+ *     .circuitBreakerThreshold(5)
+ *     .policy(new RetryPolicy.ExponentialCapped())
+ *     .build();
+ *
+ * EnterpriseRecovery recovery = EnterpriseRecovery.create(config);
+ *
+ * // Execute task with retry
+ * Result<Connection> result = recovery.retry(() -> {
+ *     return dataSource.getConnection();
+ * });
+ *
+ * if (result instanceof Result.Success<Connection> s) {
+ *     return s.value();
+ * } else {
+ *     // All retries failed
+ *     log.error("Failed to connect after all retries");
+ *     return fallbackConnection();
+ * }
+ * }</pre>
+ *
+ * @see RecoveryConfig
+ * @see RetryPolicy
+ * @see RecoveryEvent
+ * @see io.github.seanchatmangpt.jotp.Proc
+ * @since 1.0
  */
 public class EnterpriseRecovery {
     private final RecoveryConfig config;

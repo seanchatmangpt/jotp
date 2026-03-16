@@ -1,0 +1,165 @@
+# Messaging Patterns in JOTP
+
+## Overview
+
+JOTP provides a comprehensive implementation of Enterprise Integration Patterns (EIP), bringing battle-tested messaging patterns to the JVM with modern Java 21 features. These patterns enable loose coupling between systems while maintaining strong type safety and fault tolerance.
+
+## Pattern Categories
+
+### Channel Patterns
+Message channels form the backbone of asynchronous communication, providing different delivery semantics for various use cases.
+
+- **[Point-to-Point Channel](./channels)** - Direct one-to-one messaging where exactly one consumer receives each message
+- **[Publish-Subscribe Channel](./channels)** - One-to-many broadcasting where all subscribers receive every message
+- **[Data Type Channel](./channels)** - Type-based routing using sealed interfaces and pattern matching
+- **[Dead Letter Channel](./channels)** - Fault tolerance for undeliverable messages with inspection and retry capabilities
+
+### Routing Patterns
+Intelligent message distribution based on content, correlation, or dynamic conditions.
+
+- **[Content-Based Router](./routing)** - Route messages based on their content using predicates
+- **[Recipient List Router](./routing)** - Dynamic recipient determination at runtime
+- **[Scatter-Gather](./routing)** - Broadcast requests and aggregate responses with timeout handling
+- **[Aggregator](./routing)** - Collect correlated messages and emit combined results
+- **[Splitter](./routing)** - Decompose composite messages into individual parts for processing
+
+### Transformation Patterns
+Convert messages between formats while maintaining semantic integrity.
+
+- **[Content Filter](./transformation)** - Remove unnecessary data from messages
+- **[Normalizer](./transformation)** - Transform different formats into a canonical form
+- **[Claim Check](./transformation)** - Store large payloads externally and pass references
+
+### Construction Patterns
+Build messages with proper structure, metadata, and intent.
+
+- **[Command Message](./construction)** - Imperative instructions requesting specific actions
+- **[Document Message](./construction)** - Complete data packages for processing
+- **[Event Message](./construction)** - Notifications of state changes or occurrences
+- **[Envelope Wrapper](./construction)** - Universal container with metadata and headers
+
+### System Patterns
+Infrastructure-level messaging concerns like monitoring and control.
+
+- **[Control Bus](./system)** - Centralized management and monitoring of messaging components
+- **[Detour](./system)** - Conditional routing for special cases or error handling
+- **[Wire Tap](./system)** - Transparent message observation without affecting primary flow
+- **[Process Manager](./system)** - Coordinate long-running business processes across messages
+
+### Management Patterns
+Operational concerns like transactionality and smart routing.
+
+- **[Pipes and Filters](./management)** - Chain processing stages for complex transformations
+- **[Smart Proxy](./management)** - Intelligent message forwarding with caching and routing
+- **[Transactional Actor](./management)** - Ensure atomic message processing with rollback
+
+## Key Principles
+
+### Fault Tolerance
+All messaging patterns in JOTP inherit the fault tolerance of the OTP framework:
+- Processes crash and restart automatically under supervision
+- Failed message delivery is captured in Dead Letter Channels
+- Timeout handling prevents indefinite blocking
+- Isolation ensures one component's failure doesn't cascade
+
+### Type Safety
+Modern Java features enable compile-time guarantees:
+- Sealed interfaces for exhaustive pattern matching
+- Record patterns for deconstruction
+- Generic type parameters prevent runtime ClassCastExceptions
+- Pattern matching in switch expressions for route selection
+
+### Backpressure
+Built-in flow control prevents overwhelming consumers:
+- Mailbox size monitoring with `queueDepth()`
+- Bounded channels with configurable capacity
+- Blocking vs. non-blocking send operations
+- Flow control through Supervision strategies
+
+### Observability
+Every pattern provides visibility into message flow:
+- Message IDs and correlation IDs for tracing
+- Timestamps for latency measurement
+- Statistics collection in Control Bus
+- Wire Tap for non-invasive monitoring
+
+## When to Use Messaging Patterns
+
+### Use When:
+- Systems need loose coupling
+- Different time zones of operation
+- Variable processing loads
+- Need for guaranteed delivery
+- Complex routing requirements
+- Multiple consumers of the same event
+
+### Avoid When:
+- Simple method calls suffice
+- Performance is critical and overhead unacceptable
+- Strong consistency required (consider transactions instead)
+- Learning curve exceeds project complexity
+
+## Integration with OTP Primitives
+
+Messaging patterns in JOTP are built on top of core OTP primitives:
+
+```java
+// Channels use Proc for mailbox-based processing
+var channel = new PointToPointChannel<String>(msg -> process(msg));
+
+// Routing uses ProcRef for stable handles
+DataTypeChannel.addRoute(channel, OrderMsg.class, orderProcRef);
+
+// Aggregation uses Proc for stateful message collection
+var aggregator = new Aggregator<>(keyExtractor, aggregateFunction, resultConsumer);
+
+// System patterns use Supervisor for fault tolerance
+var supervisor = Supervisor.builder()
+    .child("router", routerSpec)
+    .strategy(RestartStrategy.oneForOne())
+    .build();
+```
+
+## Testing Support
+
+JOTP provides comprehensive testing support for messaging patterns:
+
+```java
+@Test
+void testChannelDelivery() {
+    var channel = new PointToOnePointChannel<String>();
+    var received = new ArrayList<String>();
+
+    channel.subscribe(received::add);
+    channel.send("test");
+
+    await().atMost(Duration.ofSeconds(1))
+        .until(() -> received.contains("test"));
+}
+```
+
+## Performance Considerations
+
+### Virtual Thread Overhead
+- ~1KB heap per process (channel)
+- Millions of channels possible on modern hardware
+- Context switching is negligible compared to OS threads
+
+### Serialization
+- Messages must be Serializable for distributed systems
+- Consider external storage with Claim Check for large payloads
+- Immutable messages enable safe sharing without copies
+
+### Monitoring
+- Enable Control Bus for production visibility
+- Monitor mailbox depths for backpressure signals
+- Use Wire Tap for message flow inspection
+- Dead Letter Channel analysis for failure patterns
+
+## Further Reading
+
+- **[Channel Patterns](./channels)** - Detailed channel implementation guide
+- **[Routing Patterns](./routing)** - Advanced routing strategies
+- **[Transformation Patterns](./transformation)** - Message conversion techniques
+- **[Enterprise Integration Patterns](https://www.enterpriseintegrationpatterns.com/)** - Gregor Hohpe and Bobby Woolf
+- **[Reactive Messaging Patterns](https://www Vaughnvernon.com/?page_id=168)** - Vaughn Vernon

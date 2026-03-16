@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,7 +33,14 @@ import org.junit.jupiter.api.Order;
  *   <li>Rate limiting
  *   <li>CQRS command/query dispatch
  * </ul>
+ *
+ * @see Application
+ * @see ServiceRegistry
+ * @see CircuitBreaker
+ * @see MessageBus
+ * @see EventStore
  */
+@DtrTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class EnterpriseCompositionIT implements WithAssertions {
 
@@ -42,7 +51,11 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Test
     @Order(1)
     @DisplayName("Application: should build and start application with services")
-    void applicationShouldBuildAndStart() throws Exception {
+    void applicationShouldBuildAndStart(DtrContext ctx) throws Exception {
+        ctx.say(
+                "Application.builder() creates a composed application with supervisor, services, and infrastructure.");
+        ctx.say(
+                "Services are Proc instances registered by name, discoverable via app.service(name).");
         // Create infrastructure
         var messageBus = MessageBus.create("test-bus");
         var eventStore = EventStore.create("test-events");
@@ -121,7 +134,10 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Test
     @Order(3)
     @DisplayName("ServiceRegistry: should register and discover services")
-    void serviceRegistryShouldRegisterAndDiscover() throws Exception {
+    void serviceRegistryShouldRegisterAndDiscover(DtrContext ctx) throws Exception {
+        ctx.say(
+                "ServiceRegistry provides service discovery with metadata (version, tags, properties).");
+        ctx.say("Services can be looked up by name or found by tag for dynamic routing.");
         ServiceRegistry.reset();
 
         // Create and register a service
@@ -232,7 +248,10 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Test
     @Order(6)
     @DisplayName("CircuitBreaker: should open and close circuit based on failures")
-    void circuitBreakerShouldOpenAndClose() throws Exception {
+    void circuitBreakerShouldOpenAndClose(DtrContext ctx) throws Exception {
+        ctx.say(
+                "CircuitBreaker state machine: CLOSED -> OPEN (after failure threshold) -> HALF_OPEN (after timeout) -> CLOSED.");
+        ctx.say("In OPEN state, requests fail fast without invoking the protected operation.");
         CircuitBreaker breaker =
                 CircuitBreaker.builder("test-breaker")
                         .failureThreshold(3)
@@ -284,7 +303,9 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Test
     @Order(7)
     @DisplayName("MessageBus: should publish and subscribe to topics")
-    void messageBusShouldPublishAndSubscribe() throws Exception {
+    void messageBusShouldPublishAndSubscribe(DtrContext ctx) throws Exception {
+        ctx.say("MessageBus implements pub-sub messaging with topic-based routing.");
+        ctx.say("Subscriptions can be cancelled to stop receiving messages on that topic.");
         MessageBus bus = MessageBus.create();
         List<String> received = new CopyOnWriteArrayList<>();
 
@@ -369,7 +390,9 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Test
     @Order(10)
     @DisplayName("EventStore: should append and load events")
-    void eventStoreShouldAppendAndLoad() {
+    void eventStoreShouldAppendAndLoad(DtrContext ctx) {
+        ctx.say("EventStore appends events to entity streams with automatic version numbering.");
+        ctx.say("Events are loaded as a stream of StoredEvent objects with version and timestamp.");
         EventStore store = EventStore.create();
 
         // Append events
@@ -735,7 +758,10 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Test
     @Order(100)
     @DisplayName("Full Application: should compose and run complete telemetry application")
-    void fullApplicationShouldComposeAndRun() throws Exception {
+    void fullApplicationShouldComposeAndRun(DtrContext ctx) throws Exception {
+        ctx.say(
+                "Full enterprise composition: Application + MessageBus + EventStore + MetricsCollector + HealthChecker.");
+        ctx.say("Services communicate via message bus, events are persisted, health is monitored.");
         // Infrastructure
         MessageBus messageBus = MessageBus.create("telemetry-bus");
         EventStore eventStore = EventStore.create("telemetry-events");

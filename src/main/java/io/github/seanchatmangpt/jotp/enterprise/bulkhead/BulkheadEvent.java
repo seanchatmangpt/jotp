@@ -3,7 +3,50 @@ package io.github.seanchatmangpt.jotp.enterprise.bulkhead;
 /**
  * Sealed interface for bulkhead lifecycle events.
  *
- * <p>Broadcast via EventManager to track resource utilization and rejections.
+ * <p>Broadcast via {@link io.github.seanchatmangpt.jotp.EventManager} to track resource
+ * utilization, request rejections, state transitions, and performance metrics. These events provide
+ * observability into bulkhead behavior for monitoring, alerting, and capacity planning.
+ *
+ * <h2>Event Types:</h2>
+ *
+ * <ul>
+ *   <li><b>RequestEnqueued</b>: Request queued (waiting for available capacity)
+ *   <li><b>RequestRejected</b>: Request rejected (queue timeout or capacity exceeded)
+ *   <li><b>BulkheadHealthy</b>: Utilization dropped below alert threshold
+ *   <li><b>BulkheadDegraded</b>: Utilization exceeded alert threshold (warning)
+ *   <li><b>BulkheadExhausted</b>: At 100% capacity (rejecting requests)
+ *   <li><b>RequestCompleted</b>: Request finished successfully (updates utilization)
+ * </ul>
+ *
+ * <h2>Usage Example:</h2>
+ *
+ * <pre>{@code
+ * // Subscribe to bulkhead events
+ * EventManager<BulkheadEvent> events = EventManager.create();
+ * events.subscribe(BulkheadEvent.class, event -> {
+ *     switch (event) {
+ *         case BulkheadEvent.BulkheadExhausted(var feature, var reason, var ts) ->
+ *             log.error("Bulkhead exhausted for {}: {}", feature, reason);
+ *         case BulkheadEvent.BulkheadDegraded(var feature, var utilization, var ts) ->
+ *             log.warn("Bulkhead degraded for {}: {}% utilized", feature, utilization);
+ *         case BulkheadEvent.RequestRejected(var feature, var reason, var ts) ->
+ *             metrics.counter("bulkhead.rejections", "feature", feature).increment();
+ *         default -> {}
+ *     }
+ * });
+ * }</pre>
+ *
+ * <h2>Integration with JOTP:</h2>
+ *
+ * <ul>
+ *   <li>Emitted by {@link BulkheadIsolationEnterprise} coordinator on state changes
+ *   <li>Consumed by monitoring systems, alerting pipelines, dashboards
+ *   <li>Type-safe via sealed interface with exhaustive pattern matching
+ * </ul>
+ *
+ * @see BulkheadIsolationEnterprise
+ * @see io.github.seanchatmangpt.jotp.EventManager
+ * @since 1.0
  */
 public sealed interface BulkheadEvent
         permits BulkheadEvent.RequestEnqueued,

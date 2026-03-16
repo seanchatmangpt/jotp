@@ -209,7 +209,7 @@ public class ZeroCostComparativeBenchmark {
 
         // Reconstruct JOTP's fast path logic
         if (!enabled || !running || list.isEmpty()) {
-            return;
+            return; // Fast path exit
         }
         // Slow path (never reached in this benchmark)
         Blackhole.consumeCPU(1);
