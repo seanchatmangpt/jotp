@@ -1,0 +1,29 @@
+apiVersion: v2
+name: jotp
+description: Production-ready Java 26 framework implementing all 15 OTP (Erlang/OTP) primitives with virtual threads, supervision trees, and fault tolerance
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - otp
+  - concurrency
+  - fault-tolerance
+  - java-26
+  - virtual-threads
+maintainers:
+  - name: JOTP Community
+    email: community@jotp.io
+home: https://github.com/seanchatmangpt/jotp
+sources:
+  - https://github.com/seanchatmangpt/jotp
+icon: https://raw.githubusercontent.com/seanchatmangpt/jotp/main/docs/assets/jotp-logo.png
+annotations:
+  artifacthub.io/category: "developer-tools"
+  artifacthub.io/license: "MIT"
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://jotp.io/docs
+    - name: Support
+      url: https://github.com/seanchatmangpt/jotp/discussions
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "false"

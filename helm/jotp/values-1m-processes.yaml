@@ -1,0 +1,25 @@
+# Configuration optimized for 1 million concurrent processes
+# Use this with: helm install jotp ./helm/jotp -f values-1m-processes.yaml
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "2"
+    memory: "12Gi"
+  limits:
+    cpu: "4"
+    memory: "16Gi"
+
+jvm:
+  xmx: "8G"
+  xms: "8G"
+  gc: "ZGC"
+  gcOptions: "-XX:+UseZGC -XX:+DisableExplicitGC -XX:ConcGCThreads=2 -XX:ParallelGCThreads=4"
+  extraOpts: "-XX:+AlwaysPreTouch -XX:+PrintGCDetails"
+
+jotp:
+  maxProcesses: 1000000  # 1M processes
+  mailbox:
+    capacity: 10000
+    fair: true

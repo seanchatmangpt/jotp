@@ -1,0 +1,94 @@
+---
+# Distributed Counter Cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-counter
+  namespace: jotp-distributed
+  labels:
+    app: jotp-counter
+    example: distributed-counter
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp-counter
+  template:
+    metadata:
+      labels:
+        app: jotp-counter
+        example: distributed-counter
+    spec:
+      containers:
+      - name: counter
+        image: jotp:latest
+        imagePullPolicy: IfNotPresent
+        command: ["java"]
+        args:
+          - "-XX:+UseZGC"
+          - "-Xms512m"
+          - "-Xmx1g"
+          - "io.github.seanchatmangpt.jotp.examples.DistributedCounterExample"
+          - "node-$(POD_NAME)"
+          - "8081"
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: JAVA_OPTS
+            value: "-XX:+UseZGC -Xms512m -Xmx1g"
+        ports:
+          - containerPort: 8081
+            name: counter
+            protocol: TCP
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-counter
+  namespace: jotp-distributed
+  labels:
+    app: jotp-counter
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: 8081
+      protocol: TCP
+      name: counter
+  selector:
+    app: jotp-counter
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-counter-external
+  namespace: jotp-distributed
+  labels:
+    app: jotp-counter
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8081
+      targetPort: 8081
+      protocol: TCP
+  selector:
+    app: jotp-counter

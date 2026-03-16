@@ -334,6 +334,95 @@ events.notify(new OrderCreated(orderId, customerId));
 
 ---
 
+### Pattern 8: JVM Crash Survival (Atomic State Persistence)
+
+**Problem:** JVM crash mid-write corrupts state → duplicate processing on restart (double charging, lost data).
+
+**JOTP Solution:** Atomic batch writes + idempotent recovery via `AtomicStateWriter` + `RocksDBBackend`
+
+```java
+// Define sequenced state
+record PaymentState(String txId, int amount, long lastProcessedSeq)
+        implements SequencedState {
+    @Override
+    public long lastProcessedSeq() {
+        return lastProcessedSeq;
+    }
+}
+
+// Create atomic state writer
+PersistenceBackend backend = new RocksDBBackend(Path.of("/var/lib/jotp"));
+AtomicStateWriter<PaymentState> writer = new AtomicStateWriter<>(
+    backend,
+    new JsonSnapshotCodec<>(PaymentState.class)
+);
+
+// Process message with idempotence
+ProcRef<PaymentState, PaymentMsg> paymentProc = supervisor.supervise(
+    "payment-processor",
+    new PaymentState("tx-001", 0, 0),
+    (state, msg) -> {
+        // Check for duplicate (idempotence)
+        if (writer.isDuplicate(state.txId(), msg.sequenceNumber())) {
+            return state;  // Skip already-processed message
+        }
+
+        // Process payment
+        PaymentState newState = state.withAmount(state.amount() + msg.charge());
+
+        // Atomic write: state + ACK in single batch
+        writer.writeAtomic(state.txId(), newState, msg.sequenceNumber());
+
+        return newState;
+    }
+);
+```
+
+**How it works:**
+1. **Atomic batch write:** State + ACK written in single `WriteBatch` with WAL
+2. **Sequence numbers:** Each state change increments monotonically
+3. **ACK verification:** On recovery, verify state sequence matches ACK sequence
+4. **Idempotent processing:** Skip messages with sequence ≤ last processed
+
+**Crash recovery flow:**
+```
+JVM crashes during write
+        ↓
+On restart: load state + ACK
+        ↓
+Verify: state.lastProcessedSeq() == ackSeq ?
+        ├─ Yes: Resume processing
+        └─ No: Rebuild from event log starting from ackSeq
+```
+
+**Dual-write problem solved:**
+```
+Without atomic writes:
+  1. Process message (payment charged)
+  2. JVM crashes ← Here!
+  3. State write incomplete
+  4. Replay on restart → DOUBLE CHARGING
+
+With atomic writes:
+  1. Process message (payment charged)
+  2. WriteBatch(state + ACK) ← JVM crashes here
+  3. RocksDB WAL: both succeed or both fail
+  4. On restart: ACK missing → skip message → NO DOUBLE CHARGING
+```
+
+**Enterprise impact:**
+- **Zero data loss:** Atomic writes guarantee consistency
+- **Idempotent recovery:** Skip already-processed messages automatically
+- **Fast restart:** No full event log replay needed (just verify ACK)
+- **Production proven:** RocksDB used by Meta, LinkedIn, Spotify
+
+**Documentation:**
+- [JVM Crash Survival](jvm-crash-survival.md) - Deep dive on atomic writes and recovery
+- [Persistence Backends](persistence-backends.md) - Backend comparison and configuration
+- [Distributed Patterns](distributed-patterns.md) - Distributed system integration
+
+---
+
 ## Part 3: Integration into Brownfield Java
 
 ### Approach 1: Parallel Systems Architecture

@@ -1,0 +1,208 @@
+version: '3.8'
+
+# JOTP Observability Stack
+# Complete monitoring, tracing, and visualization for JOTP clusters
+#
+# Quick Start:
+#   docker-compose -f docker-compose-jotp-monitoring.yml up -d
+#
+# Access dashboards:
+#   - Prometheus: http://localhost:9090
+#   - Grafana: http://localhost:3000 (admin/admin)
+#   - Jaeger: http://localhost:16686
+#   - AlertManager: http://localhost:9093
+
+services:
+  # Prometheus - Metrics collection and storage
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: jotp-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+  # Grafana - Visualization dashboards
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: jotp-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Jaeger - Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: jotp-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=badger
+      - BADGER_EPHEMERAL=false
+      - BADGER_DIRECTORY_VALUE=/badger/data
+      - BADGER_DIRECTORY_KEY=/badger/key
+    ports:
+      - "5775:5775/udp"   # accept zipkin.thrift over compact thrift protocol
+      - "6831:6831/udp"   # accept jaeger.thrift over compact thrift protocol
+      - "6832:6832/udp"   # accept jaeger.thrift over binary thrift protocol
+      - "5778:5778"       # serve configs
+      - "16686:16686"     # serve frontend (Jaeger UI)
+      - "14268:14268"     # accept jaeger.thrift directly from clients
+      - "14250:14250"     # accept model.proto
+      - "9411:9411"       # Zipkin compatible endpoint
+      - "4317:4317"       # OTLP gRPC receiver
+      - "4318:4318"       # OTLP HTTP receiver
+    volumes:
+      - jaeger-data:/badger
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+  # AlertManager - Alert routing and notification
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: jotp-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+  # Loki - Log aggregation (optional)
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: jotp-loki
+    command:
+      - '-config.file=/etc/loki/local-config.yaml'
+      - '-print-config-stderr=true'
+    ports:
+      - "3100:3100"   # HTTP API
+      - "9080:9080"   # gRPC
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+  # Promtail - Log agent for Loki
+  promtail:
+    image: grafana/promtail:2.9.2
+    container_name: jotp-promtail
+    command:
+      - '-config.file=/etc/promtail/config.yml'
+      - '-config.expand-env=true'
+    volumes:
+      - ./docker/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  # JOTP Node Exporter - System metrics
+  jotp-node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: jotp-node-exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+  # JOTP Process Exporter - JVM process metrics
+  jotp-process-exporter:
+    image: ncabatoff/process-exporter:v0.7.5
+    container_name: jotp-process-exporter
+    command:
+      - '-config.path=/etc/process-exporter/config.yml'
+    ports:
+      - "9256:9256"
+    volumes:
+      - ./docker/exporter/process-exporter.yml:/etc/process-exporter/config.yml:ro
+      - /proc:/host/proc:ro
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+  # cAdvisor - Container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: jotp-cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - jotp-monitoring-network
+    restart: unless-stopped
+
+networks:
+  jotp-monitoring-network:
+    driver: bridge
+    name: jotp-monitoring-network
+
+volumes:
+  prometheus-data:
+    name: jotp-prometheus-data
+  grafana-data:
+    name: jotp-grafana-data
+  jaeger-data:
+    name: jotp-jaeger-data
+  alertmanager-data:
+    name: jotp-alertmanager-data
+  loki-data:
+    name: jotp-loki-data

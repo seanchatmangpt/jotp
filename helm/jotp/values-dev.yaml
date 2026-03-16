@@ -1,0 +1,43 @@
+# Development environment values for JOTP
+
+replicaCount: 1
+
+image:
+  tag: "latest"  # Use latest for development
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "4Gi"
+  limits:
+    cpu: "1"
+    memory: "6Gi"
+
+jvm:
+  xmx: "2G"
+  xms: "2G"
+
+jotp:
+  maxProcesses: 100000
+  cookie: "jotp-dev-cookie"
+
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: false
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: false  # Disable in dev unless testing
+
+podDisruptionBudget:
+  enabled: false  # Not needed for single replica
+
+networkPolicy:
+  enabled: false  # Relaxed for development
+
+logging:
+  level: "DEBUG"
+  format: "text"

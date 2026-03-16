@@ -1,0 +1,41 @@
+# Example: High-memory configuration for 5M+ processes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jotp-config
+  namespace: default
+data:
+  java-opts: >
+    --enable-preview
+    -XX:+UseContainerSupport
+    -XX:MaxRAMPercentage=75.0
+    -XX:InitialRAMPercentage=50.0
+    -XX:+UseZGC
+    -XX:+ZGenerational
+    -XX:SoftMaxHeapSize=18g
+    -Xms16g
+    -Xmx16g
+    -XX:MaxMetaspaceSize=1g
+    -XX:MetaspaceSize=512m
+    -XX:+AlwaysPreTouch
+    -Djdk.virtualThreadScheduler.parallelism=32
+    -Djdk.virtualThreadScheduler.maxPoolSize=512
+    -Djava.util.concurrent.ForkJoinPool.common.parallelism=32
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jotp
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - name: jotp
+        resources:
+          requests:
+            memory: "24Gi"
+            cpu: "8000m"
+          limits:
+            memory: "32Gi"
+            cpu: "16000m"

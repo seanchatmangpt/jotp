@@ -1,0 +1,113 @@
+# Example Prometheus alerts for JOTP
+# These alerts require Prometheus Operator to be installed
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jotp-alerts
+  namespace: jotp
+  labels:
+    release: prometheus
+spec:
+  groups:
+  - name: jotp_alerts
+    interval: 30s
+    rules:
+    # High alert for critical issues
+    - alert: JOTPPodDown
+      expr: up{job="jotp"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JOTP pod is down (instance {{ $labels.instance }})"
+        description: "JOTP pod has been down for more than 1 minute."
+
+    - alert: JOTPHighMemoryUsage
+      expr: |
+        (jvm_memory_bytes_used{area="heap", job="jotp"} / jvm_memory_bytes_max{area="heap", job="jotp"}) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP high memory usage (instance {{ $labels.instance }})"
+        description: "JOTP heap memory usage is above 90% for more than 5 minutes."
+
+    - alert: JOTPHighProcessCount
+      expr: jotp_proc_count > 900000
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP high process count (instance {{ $labels.instance }})"
+        description: "JOTP process count is above 900K (current: {{ $value }})."
+
+    - alert: JOTPHighGCTime
+      expr: |
+        rate(jvm_gc_collection_time_seconds_sum{job="jotp"}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP high GC time (instance {{ $labels.instance }})"
+        description: "JOTP is spending more than 10% of time in GC."
+
+    # Medium alert for degraded performance
+    - alert: JOTPHighMailboxBacklog
+      expr: jotp_mailbox_size > 50000
+      for: 5m
+      labels:
+        severity: info
+      annotations:
+        summary: "JOTP high mailbox backlog (instance {{ $labels.instance }})"
+        description: "JOTP mailbox backlog is above 50K messages (current: {{ $value }})."
+
+    - alert: JOTPManyRestarts
+      expr: |
+        rate(jotp_supervisor_restarts_total{job="jotp"}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP frequent process restarts (instance {{ $labels.instance }})"
+        description: "JOTP supervisor is restarting more than 0.1 processes per second."
+
+    - alert: JOTPDeadlockDetected
+      expr: jotp_deadlock_detected{job="jotp"} > 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JOTP deadlock detected (instance {{ $labels.instance }})"
+        description: "JOTP has detected a deadlock in the system."
+
+    - alert: JOTPNodeNotConnected
+      expr: |
+        count(jotp_cluster_connected{job="jotp"} == 0) > 0
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP cluster node disconnected (instance {{ $labels.instance }})"
+        description: "One or more JOTP cluster nodes are disconnected."
+
+    # Info alert for operational awareness
+    - alert: JOTPScaleUpRecommended
+      expr: |
+        (jvm_memory_bytes_used{area="heap", job="jotp"} / jvm_memory_bytes_max{area="heap", job="jotp"}) > 0.8
+      for: 10m
+      labels:
+        severity: info
+      annotations:
+        summary: "JOTP scale up recommended (instance {{ $labels.instance }})"
+        description: "JOTP memory usage is consistently above 80%, consider scaling up."
+
+    - alert: JOTPVersionMismatch
+      expr: |
+        count(count by (version) (jotp_version{job="jotp"})) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP version mismatch detected"
+        description: "Different JOTP versions are running in the cluster."

@@ -1,0 +1,75 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jotp-alerts
+  namespace: default
+  labels:
+    app: jotp
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: jotp
+    interval: 30s
+    rules:
+    - alert: JOTPPodDown
+      expr: up{job="jotp"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JOTP pod is down"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is down"
+
+    - alert: JOTPHighMemoryUsage
+      expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP high memory usage"
+        description: "Pod {{ $labels.pod }} heap usage is {{ $value }}%"
+
+    - alert: JOTPHighProcessCount
+      expr: jotp_processes_total > 1000000
+      for: 5m
+      labels:
+        severity: info
+      annotations:
+        summary: "JOTP process count exceeded"
+        description: "Pod {{ $labels.pod }} has {{ $value }} processes"
+
+    - alert: JOTPHighMessageLatency
+      expr: rate(jotp_messages_duration_seconds_sum[5m]) / rate(jotp_messages_duration_seconds_count[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP high message latency"
+        description: "Pod {{ $labels.pod }} message latency is {{ $value }}s"
+
+    - alert: JOTPSupervisorRestartsHigh
+      expr: rate(jotp_supervisor_restarts_total[5m]) > 10
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP high supervisor restart rate"
+        description: "Pod {{ $labels.pod }} supervisor restart rate is {{ $value }}/s"
+
+    - alert: JOTPLeaderElectionFrequent
+      expr: rate(jotp_leader_elections_total[10m]) > 0.1
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "JOTP frequent leader elections"
+        description: "Pod {{ $labels.pod }} is experiencing frequent leader elections"
+
+    - alert: JOTPPeerConnectionFailure
+      expr: jotp_peer_connections_failed > 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JOTP peer connection failure"
+        description: "Pod {{ $labels.pod }} has {{ $value }} failed peer connections"

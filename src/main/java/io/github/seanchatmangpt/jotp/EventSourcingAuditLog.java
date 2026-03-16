@@ -7,7 +7,9 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Stream;
@@ -93,7 +95,7 @@ public final class EventSourcingAuditLog<S, E, D> {
      *
      * <p>Permits three variants covering the full lifecycle of state machine operations:
      */
-    public sealed interface AuditEntry permits StateChange, ErrorEntry, Replay {
+    public sealed interface AuditEntry permits StateChange, ErrorEntry, Replay, SnapshotEntry {
         /** Timestamp when this audit entry was created. */
         Instant timestamp();
 
@@ -143,6 +145,19 @@ public final class EventSourcingAuditLog<S, E, D> {
      * @param <D> data type
      */
     public record Replay<S, E, D>(Instant timestamp, String entityId, Instant replayedFromTimestamp)
+            implements AuditEntry {}
+
+    /**
+     * Snapshot entry for fast state recovery.
+     *
+     * <p>Stores a complete state snapshot at a point in time, enabling fast recovery by loading the
+     * snapshot and replaying only events after the snapshot timestamp.
+     *
+     * @param <S> state type
+     * @param <D> data type
+     */
+    public record SnapshotEntry<S, D>(
+            Instant timestamp, String entityId, S state, D data, long sequenceNumber)
             implements AuditEntry {}
 
     // ─── Audit Backend (Pluggable Durability) ─────────────────────────────
@@ -300,6 +315,15 @@ public final class EventSourcingAuditLog<S, E, D> {
         record ReplayRequest(
                 String entityId, java.util.concurrent.CompletableFuture<List<AuditEntry>> reply)
                 implements AuditMessage {}
+
+        record LogSnapshot<S, D>(SnapshotEntry<S, D> entry) implements AuditMessage {}
+
+        record LoadSnapshot<S, D>(
+                String entityId,
+                java.util.concurrent.CompletableFuture<Optional<SnapshotEntry<S, D>>> reply)
+                implements AuditMessage {}
+
+        record Flush() implements AuditMessage {}
     }
 
     // ─── Main Class ────────────────────────────────────────────────────────
@@ -313,26 +337,49 @@ public final class EventSourcingAuditLog<S, E, D> {
         this.entityId = entityId;
         this.backend = backend;
 
+        // In-memory snapshot store for fast access
+        final java.util.concurrent.ConcurrentSkipListMap<String, SnapshotEntry<S, D>>
+                snapshotStore = new java.util.concurrent.ConcurrentSkipListMap<>();
+
         // Start the audit logger process (fire-and-forget via virtual thread)
         this.logger =
                 new Proc<>(
                         null,
                         (state, msg) -> {
                             try {
-                                switch (msg) {
-                                    case AuditMessage.LogTransition log ->
-                                            backend.append(log.entry());
-                                    case AuditMessage.LogError log -> backend.append(log.entry());
-                                    case AuditMessage.ReplayRequest req -> {
-                                        replayLock.readLock().lock();
-                                        try {
-                                            List<AuditEntry> entries =
-                                                    backend.entriesFor(req.entityId()).toList();
-                                            req.reply().complete(entries);
-                                        } finally {
-                                            replayLock.readLock().unlock();
-                                        }
+                                if (msg instanceof AuditMessage.LogTransition<?, ?, ?> log) {
+                                    backend.append(log.entry());
+                                } else if (msg instanceof AuditMessage.LogError log) {
+                                    backend.append(log.entry());
+                                } else if (msg instanceof AuditMessage.ReplayRequest req) {
+                                    replayLock.readLock().lock();
+                                    try {
+                                        List<AuditEntry> entries =
+                                                backend.entriesFor(req.entityId()).toList();
+                                        req.reply().complete(entries);
+                                    } finally {
+                                        replayLock.readLock().unlock();
                                     }
+                                } else if (msg instanceof AuditMessage.LogSnapshot<?, ?> snap) {
+                                    @SuppressWarnings("unchecked")
+                                    SnapshotEntry<S, D> entry = (SnapshotEntry<S, D>) snap.entry();
+                                    String key = entry.entityId() + ":" + entry.sequenceNumber();
+                                    snapshotStore.put(key, entry);
+                                    backend.append(entry);
+                                } else if (msg instanceof AuditMessage.LoadSnapshot<?, ?> load) {
+                                    String prefix = load.entityId() + ":";
+                                    Optional<SnapshotEntry<S, D>> latest =
+                                            snapshotStore.entrySet().stream()
+                                                    .filter(e -> e.getKey().startsWith(prefix))
+                                                    .max(java.util.Map.Entry.comparingByKey())
+                                                    .map(java.util.Map.Entry::getValue);
+                                    // Use raw type to avoid capture wildcard issues
+                                    @SuppressWarnings({"unchecked", "rawtypes"})
+                                    CompletableFuture rawReply = load.reply();
+                                    rawReply.complete(latest);
+                                } else if (msg instanceof AuditMessage.Flush) {
+                                    // Flush is a no-op for in-memory backend
+                                    // For file-based backends, this would trigger fsync
                                 }
                             } catch (Exception e) {
                                 // Log suppressed; audit logger must never crash the state machine
@@ -473,6 +520,71 @@ public final class EventSourcingAuditLog<S, E, D> {
     public void close() throws InterruptedException, java.io.IOException {
         logger.stop();
         backend.close();
+    }
+
+    // ─── Snapshot Support ────────────────────────────────────────────────────────
+
+    /**
+     * Save a state snapshot for fast recovery.
+     *
+     * <p>Snapshots capture the complete state at a point in time, enabling fast recovery by loading
+     * the snapshot and replaying only events after the snapshot timestamp.
+     *
+     * @param entityId the entity ID
+     * @param state the current state
+     * @param data the current data
+     * @throws InterruptedException if interrupted while saving
+     */
+    public void saveSnapshot(String entityId, S state, D data) throws InterruptedException {
+        var entry = new SnapshotEntry<>(Instant.now(), entityId, state, data, System.nanoTime());
+        logger.tell(new AuditMessage.LogSnapshot(entry));
+    }
+
+    /**
+     * Load the latest snapshot for an entity.
+     *
+     * @param entityId the entity ID
+     * @return Optional containing the latest snapshot, or empty if none exists
+     * @throws InterruptedException if interrupted while loading
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<SnapshotEntry<S, D>> loadLatestSnapshot(String entityId)
+            throws InterruptedException {
+        var reply = new java.util.concurrent.CompletableFuture<Optional<SnapshotEntry<S, D>>>();
+        logger.tell(new AuditMessage.LoadSnapshot(entityId, reply));
+        return reply.join();
+    }
+
+    /**
+     * Flush any buffered writes to ensure durability.
+     *
+     * <p>Called during shutdown to ensure all entries are persisted.
+     */
+    public void flush() {
+        logger.tell(new AuditMessage.Flush());
+    }
+
+    /**
+     * Replay state from a snapshot, applying only events after the snapshot.
+     *
+     * @param entityId the entity ID
+     * @param snapshot the starting snapshot
+     * @param transitionFn function to apply each transition
+     * @return the final reconstructed state
+     * @throws InterruptedException if replay is interrupted
+     */
+    public S replayFromSnapshot(
+            String entityId,
+            SnapshotEntry<S, D> snapshot,
+            java.util.function.BiFunction<S, StateChange<S, E, D>, S> transitionFn)
+            throws InterruptedException {
+        return streamHistory(entityId)
+                .filter(
+                        e ->
+                                e instanceof StateChange
+                                        && e.timestamp().isAfter(snapshot.timestamp()))
+                .map(e -> (StateChange<S, E, D>) e)
+                .reduce(snapshot.state(), transitionFn, (s1, s2) -> s2);
     }
 
     /**

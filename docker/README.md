@@ -1,232 +1,324 @@
-# JOTP Docker Support
+# JOTP Docker Configuration
 
-This directory contains Docker-related scripts and documentation for the JOTP project.
+This directory contains all Docker-related configuration for running JOTP clusters locally and in production.
 
 ## Quick Start
 
-### Build the Docker image
-
 ```bash
-./docker/docker-build.sh
+# Run the quick start script
+./start-jotp-cluster.sh
+
+# Or manually:
+cp .env.jotp.example .env.jotp
+docker-compose -f docker-compose-jotp-cluster.yml --env-file .env.jotp up -d
+docker-compose -f docker-compose-jotp-monitoring.yml up -d
+docker-compose -f docker-compose-jotp-services.yml up -d
 ```
 
-### Run the application
+## Directory Structure
 
-```bash
-./docker/docker-run.sh
+```
+docker/
+├── postgres/
+│   ├── init/
+│   │   └── 01-init-databases.sh       # Database initialization script
+│   └── conf/                           # PostgreSQL configuration
+├── prometheus/
+│   ├── prometheus.yml                  # Scrape configuration
+│   └── rules/
+│       └── jotp-alerts.yml             # Alert rules
+├── grafana/
+│   ├── provisioning/
+│   │   ├── datasources/
+│   │   │   └── prometheus.yml          # Prometheus datasource
+│   │   └── dashboards/
+│   │       └── dashboard.yml           # Dashboard provisioning
+│   └── dashboards/
+│       ├── jotp-cluster-overview.json  # Cluster overview dashboard
+│       └── jotp-node-details.json      # Node details dashboard
+├── alertmanager/
+│   └── alertmanager.yml                # Alert routing configuration
+├── loki/
+│   └── loki-config.yml                 # Log aggregation configuration
+├── promtail/
+│   └── promtail-config.yml             # Log collection configuration
+├── redis/
+│   └── redis.conf                      # Redis configuration
+└── exporter/
+    └── process-exporter.yml            # Process monitoring configuration
 ```
 
-### Run tests in Docker
+## Docker Compose Files
 
-```bash
-./docker/docker-test.sh
-```
+### docker-compose-jotp-cluster.yml
+Main cluster configuration with 3 JOTP nodes:
+- Peer-to-peer gRPC networking
+- Leader election
+- Health checks
+- Resource limits
 
-### Using docker-compose
+### docker-compose-jotp-monitoring.yml
+Complete observability stack:
+- Prometheus (metrics)
+- Grafana (dashboards)
+- Jaeger (tracing)
+- Loki (logs)
+- AlertManager (alerts)
 
-```bash
-# Start all services (application + dependencies)
-docker-compose up -d
+### docker-compose-jotp-services.yml
+Supporting services:
+- PostgreSQL (state persistence)
+- Redis (caching)
+- NATS (messaging)
+- Kafka (event streaming)
+- RabbitMQ (message broker)
+- MongoDB (document store)
 
-# Start only the application
-docker-compose up -d jotp
+## Configuration Files
 
-# View logs
-docker-compose logs -f jotp
+### PostgreSQL
+- **init/01-init-databases.sh**: Initializes databases for saga state, events, and distributed state
+- Creates tables: `saga_state`, `saga_log`, `event_store`, `process_registry`, `distributed_lock`
 
-# Stop all services
-docker-compose down
-```
+### Prometheus
+- **prometheus.yml**: Scrape configs for JOTP nodes, databases, and system metrics
+- **rules/jotp-alerts.yml**: Alert rules for cluster health, performance, and failures
 
-## Script Details
+### Grafana
+- **provisioning/datasources/prometheus.yml**: Prometheus datasource configuration
+- **provisioning/dashboards/dashboard.yml**: Dashboard auto-provisioning
+- **dashboards/**: Pre-built dashboards for cluster monitoring
 
-### `docker-build.sh`
+### AlertManager
+- **alertmanager.yml**: Alert routing to email, Slack, webhooks
+- Inhibition rules to prevent alert spam
 
-Builds Docker images for the JOTP project.
+### Loki & Promtail
+- **loki-config.yml**: Log aggregation configuration
+- **promtail-config.yml**: Log collection from containers and system logs
 
-**Usage:**
-```bash
-./docker/docker-build.sh [OPTIONS]
-```
+### Redis
+- **redis.conf**: Production Redis configuration with persistence and memory limits
 
-**Options:**
-- `--target=TARGET` - Build target: `runtime`, `test`, or `development` [default: runtime]
-- `--tag=TAG` - Docker image tag [default: latest]
-- `--no-cache` - Build without using cache
-- `--push` - Push to registry after build
-- `--registry=URL` - Docker registry [default: docker.io]
-- `--help` - Show help message
-
-**Examples:**
-```bash
-# Build runtime image
-./docker/docker-build.sh
-
-# Build test image with specific tag
-./docker/docker-build.sh --target=test --tag=v1.0.0
-
-# Build without cache and push
-./docker/docker-build.sh --no-cache --push
-```
-
-### `docker-run.sh`
-
-Runs JOTP containers with configurable options.
-
-**Usage:**
-```bash
-./docker/docker-run.sh [OPTIONS]
-```
-
-**Options:**
-- `--target=TARGET` - Build target [default: runtime]
-- `--tag=TAG` - Docker image tag [default: latest]
-- `--port=PORT` - Host port mapping [default: 8080]
-- `--debug` - Enable debug port (5005)
-- `--build` - Build image before running
-- `--detach` - Run in detached mode
-- `--rm` - Remove container on exit
-- `--env=FILE` - Load environment variables from file
-- `--help` - Show help message
-
-**Examples:**
-```bash
-# Run in interactive mode
-./docker/docker-run.sh
-
-# Run in detached mode with debug port
-./docker/docker-run.sh --detach --debug
-
-# Run with custom port and environment file
-./docker/docker-run.sh --port=9090 --env=.env.production
-```
-
-### `docker-test.sh`
-
-Runs tests inside a Docker container.
-
-**Usage:**
-```bash
-./docker/docker-test.sh [OPTIONS]
-```
-
-**Options:**
-- `--tag=TAG` - Docker image tag [default: latest]
-- `--build` - Build test image before running
-- `--coverage` - Generate coverage report
-- `--integration` - Run integration tests
-- `--unit` - Run unit tests only
-- `--parallel=N` - Run tests with N threads [default: auto]
-- `--help` - Show help message
-
-**Examples:**
-```bash
-# Run all tests
-./docker/docker-test.sh
-
-# Run unit tests only with coverage
-./docker/docker-test.sh --unit --coverage
-
-# Run integration tests in parallel
-./docker/docker-test.sh --integration --parallel=4
-```
-
-## Docker Stages
-
-The Dockerfile includes multiple build stages:
-
-1. **builder** - Compiles the project
-2. **runtime** - Minimal runtime image (default)
-3. **test** - Test execution environment
-4. **development** - Full development environment with debugging
+### Exporters
+- **process-exporter.yml**: Monitor JOTP, PostgreSQL, Redis, and other processes
 
 ## Environment Variables
 
-Configure using environment variables or `.env` file:
+See `/Users/sac/jotp/.env.jotp.example` for all available environment variables.
 
-- `VERSION` - Docker image version tag
-- `SPRING_PROFILES_ACTIVE` - Spring profile (prod/dev/test)
-- `LOG_LEVEL` - Logging level (INFO/DEBUG/ERROR)
-- `POSTGRES_DB` - PostgreSQL database name
-- `POSTGRES_USER` - PostgreSQL user
-- `POSTGRES_PASSWORD` - PostgreSQL password
+Key variables:
+- `JOTP_CLUSTER_MODE`: Distributed cluster mode
+- `JOTP_PEER_SEEDS`: Comma-separated list of peer addresses
+- `JAVA_OPTS`: JVM configuration
+- `POSTGRES_PASSWORD`: Database password
+- `JOTP_METRICS_ENABLED`: Enable metrics collection
 
-## Volumes
+## Operations
 
-- `jotp-logs` - Application logs
-- `jotp-postgres-data` - PostgreSQL data
-- `jotp-redis-data` - Redis data
-- `jotp-test-results` - Test result reports
+### Start Services
 
-## Networking
+```bash
+# Start cluster only
+docker-compose -f docker-compose-jotp-cluster.yml --env-file .env.jotp up -d
 
-All services communicate over the `jotp-network` bridge network for isolation.
+# Start monitoring
+docker-compose -f docker-compose-jotp-monitoring.yml up -d
+
+# Start services
+docker-compose -f docker-compose-jotp-services.yml up -d
+
+# Start all
+docker-compose -f docker-compose-jotp-cluster.yml \
+               -f docker-compose-jotp-monitoring.yml \
+               -f docker-compose-jotp-services.yml \
+               --env-file .env.jotp up -d
+```
+
+### View Logs
+
+```bash
+# All cluster logs
+docker-compose -f docker-compose-jotp-cluster.yml logs -f
+
+# Specific node
+docker-compose -f docker-compose-jotp-cluster.yml logs -f jotp-node-1
+
+# Monitoring logs
+docker-compose -f docker-compose-jotp-monitoring.yml logs -f prometheus
+```
+
+### Stop Services
+
+```bash
+# Stop cluster
+docker-compose -f docker-compose-jotp-cluster.yml down
+
+# Stop all
+docker-compose -f docker-compose-jotp-cluster.yml \
+               -f docker-compose-jotp-monitoring.yml \
+               -f docker-compose-jotp-services.yml down
+
+# Stop and remove volumes
+docker-compose -f docker-compose-jotp-cluster.yml down -v
+```
+
+### Scale Cluster
+
+```bash
+# Scale to 5 nodes
+docker-compose -f docker-compose-jotp-cluster.yml up -d --scale jotp-node=5
+```
 
 ## Health Checks
 
-The application includes health checks at:
-- HTTP: `http://localhost:8080/actuator/health`
-- Container-level health checks configured
+```bash
+# Check container health
+docker-compose -f docker-compose-jotp-cluster.yml ps
 
-## Security
+# Application health
+curl http://localhost:8081/health/ready
+curl http://localhost:8082/health/ready
+curl http://localhost:8083/health/ready
 
-- Non-root user (`jotp`) for runtime
-- Minimal base images (Alpine)
-- Security scanning support (Trivy)
-- Secrets via environment variables
+# Metrics
+curl http://localhost:9091/metrics
+```
+
+## Monitoring
+
+### Access Dashboards
+
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **Jaeger**: http://localhost:16686
+- **Kafka UI**: http://localhost:8090
+- **RabbitMQ**: http://localhost:15672
+
+### Prometheus Queries
+
+```promql
+# Cluster health
+count(up{job="jotp-cluster"} == 1)
+
+# Message throughput
+sum(rate(jotp_messages_processed_total[5m])) by (instance)
+
+# Active processes
+sum(jotp_process_registry_size) by (instance)
+
+# Memory usage
+jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}
+```
 
 ## Troubleshooting
 
-### View container logs
+### Container Won't Start
+
 ```bash
-docker logs -f jotp-app
+# Check logs
+docker-compose -f docker-compose-jotp-cluster.yml logs jotp-node-1
+
+# Verify configuration
+docker-compose -f docker-compose-jotp-cluster.yml config
+
+# Check resource limits
+docker stats jotp-node-1
 ```
 
-### Execute commands in container
+### Network Issues
+
 ```bash
-docker exec -it jotp-app bash
+# Inspect network
+docker network inspect jotp-cluster-network
+
+# Test connectivity
+docker exec jotp-node-1 ping jotp-node-2
+
+# Rebuild network
+docker-compose -f docker-compose-jotp-cluster.yml down
+docker network rm jotp-cluster-network
+docker-compose -f docker-compose-jotp-cluster.yml up -d
 ```
 
-### Rebuild without cache
+### Database Issues
+
 ```bash
-docker-compose build --no-cache
+# Enter PostgreSQL
+docker exec -it jotp-postgres psql -U jotp -d jotp_cluster
+
+# Check connections
+docker exec jotp-postgres psql -U jotp -c "SELECT * FROM pg_stat_activity;"
+
+# Restart database
+docker-compose -f docker-compose-jotp-services.yml restart postgres
 ```
 
-### Clean up everything
+## Development
+
+### Local Development
+
 ```bash
-docker-compose down -v
-docker system prune -a
+# Mount source for development
+docker-compose -f docker-compose-jotp-cluster.yml up -d --build
+
+# Run with debug port
+docker-compose -f docker-compose-jotp-cluster.yml up -d --scale jotp-node=1
+
+# Connect debugger to localhost:5005
 ```
 
-## Production Considerations
+### Testing
 
-For production deployments:
+```bash
+# Run tests in container
+docker-compose -f docker-compose-jotp-cluster.yml run --rm jotp-node-1 mvn test
 
-1. Use specific version tags instead of `latest`
-2. Enable resource limits in docker-compose.yml
-3. Configure proper secrets management (not environment variables)
-4. Set up log aggregation drivers
-5. Configure restart policies appropriately
-6. Use health checks for orchestration
-7. Scan images for vulnerabilities
-8. Sign images for trust verification
-
-## CI/CD Integration
-
-Example GitHub Actions workflow:
-
-```yaml
-name: Docker
-
-on: push
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image
-        run: ./docker/docker-build.sh --tag=${{ github.sha }}
-      - name: Run tests
-        run: ./docker/docker-test.sh --tag=${{ github.sha }}
+# Load test
+ab -n 10000 -c 100 http://localhost:8081/api/process
 ```
+
+## Production Deployment
+
+### Security
+
+1. Change default passwords in `.env.jotp`
+2. Enable TLS: Set `TLS_ENABLED=true`
+3. Enable authentication: Set `AUTH_ENABLED=true`
+4. Use secrets management for sensitive data
+
+### Resource Planning
+
+**Minimum (3 nodes):**
+- CPU: 6 cores (2 per node)
+- Memory: 6GB (2GB per node)
+- Disk: 20GB
+
+**Recommended:**
+- CPU: 12 cores (4 per node)
+- Memory: 12GB (4GB per node)
+- Disk: 50GB SSD
+
+### Backup
+
+```bash
+# Backup PostgreSQL
+docker exec jotp-postgres pg_dump -U jotp jotp_cluster > backup.sql
+
+# Backup volumes
+docker run --rm -v jotp-state-1:/data -v $(pwd):/backup \
+  ubuntu tar czf /backup/state-1-backup.tar.gz -C /data .
+```
+
+## Additional Resources
+
+- **Setup Guide**: `/Users/sac/jotp/docs/docker/COMPOSE-SETUP.md`
+- **Main Documentation**: `/Users/sac/jotp/docs/`
+- **Examples**: `/Users/sac/jotp/src/main/java/io/github/seanchatmangpt/jotp/examples/`
+- **Tests**: `/Users/sac/jotp/src/test/java/io/github/seanchatmangpt/jotp/`
+
+## Support
+
+For issues and questions:
+- GitHub Issues: https://github.com/seanchatmangpt/jotp/issues
+- Documentation: `/Users/sac/jotp/docs/`

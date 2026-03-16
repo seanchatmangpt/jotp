@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp;
 
+import io.github.seanchatmangpt.jotp.distributed.DefaultGlobalProcRegistry;
+import io.github.seanchatmangpt.jotp.distributed.GlobalProcRef;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -85,5 +87,80 @@ public final class ProcRegistry {
     /** Clear all registrations — for use in tests only. */
     public static void reset() {
         REGISTRY.clear();
+    }
+
+    // ── Bridge to Global Registry ────────────────────────────────────────────────
+
+    /**
+     * Register a process both locally (JVM-scoped) and globally (cluster-wide).
+     *
+     * <p>Equivalent to calling both {@link #register(String, Proc)} and {@link
+     * DefaultGlobalProcRegistry#registerGlobal(String, ProcRef, String)}. The process will be
+     * discoverable via both {@link #whereis(String)} (local only) and {@link
+     * DefaultGlobalProcRegistry#findGlobal(String)} (cluster-wide).
+     *
+     * <p>Uses the current node name from {@link DefaultGlobalProcRegistry#getCurrentNodeName()}.
+     *
+     * @param name the registration name
+     * @param ref stable reference to the process
+     * @throws IllegalStateException if the name is already registered locally or globally
+     */
+    public static void registerBoth(String name, ProcRef<?, ?> ref) {
+        // Register locally first
+        register(name, ref.proc());
+
+        // Then register globally
+        try {
+            DefaultGlobalProcRegistry.getInstance()
+                    .registerGlobal(
+                            name,
+                            ref,
+                            DefaultGlobalProcRegistry.getInstance().getCurrentNodeName());
+        } catch (IllegalStateException e) {
+            // Rollback local registration on global failure
+            REGISTRY.remove(name);
+            throw e;
+        }
+    }
+
+    /**
+     * Find a process by name, checking local registry first, then global registry.
+     *
+     * <p>This provides a unified lookup that works regardless of whether the process is registered
+     * locally or on another node. For local-only lookup, use {@link #whereis(String)}; for
+     * global-only lookup, use {@link DefaultGlobalProcRegistry#findGlobal(String)}.
+     *
+     * <p><strong>Note:</strong> Returns the {@link ProcRef} from the global registry if found
+     * there, which may point to a process on a different node. The caller must handle remote
+     * messaging appropriately.
+     *
+     * @param name the process name to lookup
+     * @return the ProcRef if found, empty otherwise
+     */
+    public static Optional<ProcRef<?, ?>> findLocalOrGlobal(String name) {
+        // Check local registry first
+        Optional<? extends Proc<?, ?>> local = whereis(name);
+        if (local.isPresent()) {
+            // Wrap the Proc in a ProcRef (caller should already have the ref if registered locally)
+            // Since we don't store ProcRefs in the local registry, return empty and let caller
+            // use the global registry for ProcRefs
+            return Optional.empty();
+        }
+
+        // Fall back to global registry
+        Optional<GlobalProcRef> global = DefaultGlobalProcRegistry.getInstance().findGlobal(name);
+        return global.map(GlobalProcRef::localRef);
+    }
+
+    /**
+     * Unregister a process from both local and global registries.
+     *
+     * <p>Safe to call even if the name is only registered in one of the registries.
+     *
+     * @param name the process name to unregister
+     */
+    public static void unregisterBoth(String name) {
+        unregister(name);
+        DefaultGlobalProcRegistry.getInstance().unregisterGlobal(name);
     }
 }

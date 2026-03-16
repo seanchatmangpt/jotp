@@ -1,0 +1,164 @@
+---
+# Distributed Saga Coordinator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-saga-coordinator
+  namespace: jotp-distributed
+  labels:
+    app: jotp-saga-coordinator
+    example: distributed-saga
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jotp-saga-coordinator
+  template:
+    metadata:
+      labels:
+        app: jotp-saga-coordinator
+        example: distributed-saga
+    spec:
+      containers:
+      - name: coordinator
+        image: jotp:latest
+        imagePullPolicy: IfNotPresent
+        command: ["java"]
+        args:
+          - "-XX:+UseZGC"
+          - "-Xms512m"
+          - "-Xmx1g"
+          - "io.github.seanchatmangpt.jotp.examples.DistributedSagaExample"
+          - "coordinator"
+          - "7071"
+        env:
+          - name: JAVA_OPTS
+            value: "-XX:+UseZGC -Xms512m -Xmx1g"
+        ports:
+          - containerPort: 7071
+            name: saga
+            protocol: TCP
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: 7071
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 7071
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-saga-coordinator
+  namespace: jotp-distributed
+  labels:
+    app: jotp-saga-coordinator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7071
+      targetPort: 7071
+      protocol: TCP
+      name: saga
+  selector:
+    app: jotp-saga-coordinator
+---
+# Saga Service Nodes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-saga-service
+  namespace: jotp-distributed
+  labels:
+    app: jotp-saga-service
+    example: distributed-saga
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jotp-saga-service
+  template:
+    metadata:
+      labels:
+        app: jotp-saga-service
+        example: distributed-saga
+    spec:
+      containers:
+      - name: service
+        image: jotp:latest
+        imagePullPolicy: IfNotPresent
+        command: ["java"]
+        args:
+          - "-XX:+UseZGC"
+          - "-Xms512m"
+          - "-Xmx1g"
+          - "io.github.seanchatmangpt.jotp.examples.DistributedSagaExample"
+          - "service"
+          - "7072"
+        env:
+          - name: JAVA_OPTS
+            value: "-XX:+UseZGC -Xms512m -Xmx1g"
+        ports:
+          - containerPort: 7072
+            name: service
+            protocol: TCP
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: 7072
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 7072
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-saga-service
+  namespace: jotp-distributed
+  labels:
+    app: jotp-saga-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7072
+      targetPort: 7072
+      protocol: TCP
+      name: service
+  selector:
+    app: jotp-saga-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-saga-external
+  namespace: jotp-distributed
+  labels:
+    app: jotp-saga-coordinator
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 7071
+      targetPort: 7071
+      protocol: TCP
+  selector:
+    app: jotp-saga-coordinator

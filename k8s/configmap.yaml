@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jotp-config
+  namespace: default
+  labels:
+    app: jotp
+data:
+  # JVM options optimized for 1M+ processes with 4GB heap
+  java-opts: >
+    --enable-preview
+    -XX:+UseContainerSupport
+    -XX:MaxRAMPercentage=75.0
+    -XX:InitialRAMPercentage=50.0
+    -XX:+UseZGC
+    -XX:+ZGenerational
+    -XX:SoftMaxHeapSize=6g
+    -Xms4g
+    -Xmx4g
+    -XX:MaxMetaspaceSize=512m
+    -XX:MetaspaceSize=256m
+    -XX:+AlwaysPreTouch
+    -XX:+UseStringDeduplication
+    -XX:+OptimizeStringConcat
+    -Djdk.virtualThreadScheduler.parallelism=16
+    -Djdk.virtualThreadScheduler.maxPoolSize=256
+    -Djava.util.concurrent.ForkJoinPool.common.parallelism=16
+    -Dio.netty.leakDetection.level=disabled
+    -Dio.netty.allocator.type=pooled
+    -Dlogging.level.root=INFO
+    -Dlogging.level.io.github.seanchatmangpt.jotp=DEBUG
+    -Dlogging.pattern.console="%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n"
+    -Dmanagement.endpoints.web.exposure.include=health,info,metrics,prometheus
+    -Dmanagement.endpoint.health.show-details=always
+    -Dmanagement.health.livenessState.enabled=true
+    -Dmanagement.health.readinessState.enabled=true
+    -Dmanagement.metrics.export.prometheus.enabled=true
+    -Dmanagement.tracing.enabled=true
+    -Dspring.jmx.enabled=false
+    -Dfile.encoding=UTF-8
+
+  # Distributed node configuration
+  jotp-distributed.yaml: |
+    distributed:
+      nodes:
+        - name: jotp-0
+          host: jotp-0.jotp-headless.default.svc.cluster.local
+          port: 50051
+        - name: jotp-1
+          host: jotp-1.jotp-headless.default.svc.cluster.local
+          port: 50051
+        - name: jotp-2
+          host: jotp-2.jotp-headless.default.svc.cluster.local
+          port: 50051
+      sync_nodes_mandatory: []
+      sync_nodes_optional: []
+      sync_nodes_timeout: 5s
+      failover_timeout: 3s
+
+  # Application configuration
+  application.yaml: |
+    spring:
+      application:
+        name: jotp-distributed
+      main:
+        banner-mode: off
+    server:
+      port: 8080
+      shutdown: graceful
+      tomcat:
+        threads:
+          max: 200
+          min-spare: 10
+    management:
+      server:
+        port: 9091
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,prometheus,threaddump,heapdump
+      endpoint:
+        health:
+          probes:
+            enabled: true
+          show-details: always
+      health:
+        livenessState:
+          enabled: true
+        readinessState:
+          enabled: true
+      metrics:
+        export:
+          prometheus:
+            enabled: true
+        tags:
+          application: ${spring.application.name}
+          environment: kubernetes
+
+  # Logging configuration
+  logback-spring.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+          <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+      </appender>
+
+      <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/app/logs/jotp.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>/app/logs/jotp-%d{yyyy-MM-dd}.log</fileNamePattern>
+          <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+          <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+      </appender>
+
+      <logger name="io.github.seanchatmangpt.jotp" level="DEBUG"/>
+      <logger name="io.grpc" level="INFO"/>
+
+      <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+      </root>
+    </configuration>

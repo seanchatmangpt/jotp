@@ -184,6 +184,10 @@ public final class Proc<S, M> {
                                             S next = handler.apply(state, env.msg());
                                             state = next;
                                             messagesOut.increment();
+                                            // Invoke state change callback if registered
+                                            if (onStateChange != null) {
+                                                onStateChange.accept(state);
+                                            }
                                             if (env.reply() != null) {
                                                 env.reply().complete(state);
                                             }
@@ -394,6 +398,9 @@ public final class Proc<S, M> {
     /** Debug observer for trace operations — can be null. */
     private volatile DebugObserver<S, M> debugObserver = null;
 
+    /** Callback invoked after each state transition — for persistence hooks. */
+    private volatile Consumer<S> onStateChange = null;
+
     /** Package-private: offer a sys request to the high-priority channel. */
     <SR> void offerSysRequest(SR request) {
         // This is a placeholder. SysRequest handling would be implemented here.
@@ -408,5 +415,47 @@ public final class Proc<S, M> {
     /** Package-private: get the current debug observer (null if none). */
     DebugObserver<S, M> getDebugObserver() {
         return debugObserver;
+    }
+
+    /**
+     * Set a callback to be invoked after each state transition.
+     *
+     * <p>This is the primary hook for persistence integrations. The callback receives the new state
+     * after each message is processed, enabling automatic state persistence without modifying the
+     * handler function.
+     *
+     * <p><strong>Usage with DurableState:</strong>
+     *
+     * <pre>{@code
+     * DurableState<MyState> durable = DurableState.builder()
+     *     .entityId("my-process")
+     *     .initialState(new MyState())
+     *     .build();
+     *
+     * Proc<MyState, MyMessage> proc = Proc.spawn(new MyState(), handler);
+     * proc.setOnStateChange(state -> {
+     *     durable.save(state);
+     * });
+     * }</pre>
+     *
+     * <p><strong>Thread Safety:</strong> The callback is invoked on the process's virtual thread,
+     * so it should be thread-safe if it accesses shared resources.
+     *
+     * <p><strong>Error Handling:</strong> Exceptions thrown by the callback will crash the process
+     * (fire crash callbacks). Ensure the callback handles errors appropriately.
+     *
+     * @param callback the callback to invoke after state changes, or null to disable
+     */
+    public void setOnStateChange(Consumer<S> callback) {
+        this.onStateChange = callback;
+    }
+
+    /**
+     * Get the current state change callback.
+     *
+     * @return the current callback, or null if none is set
+     */
+    public Consumer<S> getOnStateChange() {
+        return onStateChange;
     }
 }

@@ -1,0 +1,43 @@
+# Example CronJob for periodic JOTP data backup
+# This example assumes you have StatefulSet enabled with persistent volumes
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jotp-backup
+  namespace: jotp
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: jotp-backup
+          containers:
+          - name: backup
+            image: velero/velero:v1.12.0
+            command:
+            - /velero
+            args:
+            - backup
+            - create
+            - jotp-backup-$(date +%Y%m%d)
+            - --namespace=jotp
+            - --selector=app.kubernetes.io/name=jotp
+            - --snapshot-volumes=true
+            - --wait
+            env:
+            - name: AWS_SHARED_CREDENTIALS_FILE
+              value: /credentials/credentials
+            volumeMounts:
+            - name: credentials
+              mountPath: /credentials
+              readOnly: true
+          volumes:
+          - name: credentials
+            secret:
+              secretName: jotp-backup-credentials

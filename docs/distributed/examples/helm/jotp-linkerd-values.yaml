@@ -1,0 +1,173 @@
+# Helm values override for JOTP with Linkerd mesh injection
+# Usage: helm install jotp ./jotp-chart -f linkerd-mesh-values.yaml
+
+# Global settings
+global:
+  imagePullSecrets: []
+
+# JOTP application configuration
+jotp:
+  image:
+    repository: jotp/telemetry-service
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 3
+
+  # Java runtime options
+  javaOpts: "-XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC"
+
+  # JOTP-specific settings
+  config:
+    supervision:
+      strategy: "ONE_FOR_ONE"
+      intensity: 5
+      period: "60s"
+    processes:
+      maxProcesses: 10000
+      queueDepth: 1000
+    metrics:
+      enabled: true
+      scrapeInterval: "15s"
+
+  # Resource limits (accounting for Linkerd proxy)
+  resources:
+    requests:
+      memory: "512Mi"    # JOTP: 400Mi + Linkerd: 112Mi
+      cpu: "500m"        # JOTP: 400m + Linkerd: 100m
+    limits:
+      memory: "2Gi"      # JOTP: 1.5Gi + Linkerd: 512Mi
+      cpu: "2000m"       # JOTP: 1800m + Linkerd: 200m
+
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    ports:
+      http: 8080
+      grpc: 9090
+
+  # Pod annotations for Linkerd
+  podAnnotations:
+    linkerd.io/inject: enabled
+    config.linkerd.io/proxy-throw-resource-overload: "true"
+    config.linkerd.io/proxy-memory-limit: "512Mi"
+    config.linkerd.io/proxy-cpu-limit: "500m"
+    config.linkerd.io/proxy-disable-external-profiles: "true"
+    config.linkerd.io/proxy-export-metrics: "true"
+
+# Linkerd configuration
+linkerd:
+  enabled: true
+
+  # ServiceProfile for better observability
+  serviceProfile:
+    enabled: true
+    routes:
+    - name: ProcessTelemetry
+      condition:
+        method: POST
+        pathRegex: "/api/v1/telemetry/process"
+      timeout: 30s
+      isRetryable: true
+      retries:
+        limit: 3
+        initialInterval: 100ms
+        maxInterval: 1s
+
+    - name: StreamTelemetry
+      condition:
+        method: POST
+        pathRegex: "/api/v1/telemetry/stream"
+      timeout: 5m
+      isRetryable: false
+
+    - name: HealthCheck
+      condition:
+        method: GET
+        pathRegex: "/health/.*"
+      timeout: 2s
+      isRetryable: true
+
+    - name: Metrics
+      condition:
+        method: GET
+        pathRegex: "/metrics"
+      timeout: 5s
+      isRetryable: true
+
+  # ServerAuthorization for mTLS
+  serverAuthorization:
+    enabled: true
+    clientAuthentication:
+      mTLS:
+        unauthenticated: false
+        cacheEnabled: true
+        identities:
+        - "cluster.local/ns/jotp-system/sa/jotp-telemetry"
+    rules:
+    - clientAuthentication:
+        mTLS:
+          unauthenticated: true  # Allow health checks
+      name: Health checks
+
+# ServiceMonitor for Prometheus
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 15s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
+
+# ConfigMap for application config
+configMap:
+  enabled: true
+
+# Secrets
+secrets: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Ingress
+ingress:
+  enabled: false

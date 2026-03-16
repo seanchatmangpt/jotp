@@ -1,0 +1,431 @@
+name: Infrastructure Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'infra/**'
+      - 'helm/**'
+      - 'k8s/**'
+      - 'docker/**'
+      - 'terraform/**'
+      - '.github/workflows/infra-validation.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'infra/**'
+      - 'helm/**'
+      - 'k8s/**'
+      - 'docker/**'
+      - 'terraform/**'
+  workflow_dispatch:
+
+env:
+  TERRAFORM_VERSION: '1.7.0'
+  HELM_VERSION: 'v3.16.0'
+  K8S_VERSION: 'v1.29.0'
+
+jobs:
+  # Terraform validation
+  terraform-validate:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component:
+          - oci-network
+          - oci-compute
+          - aws-network
+          - gcp-network
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: terraform/${{ matrix.component }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: terraform/${{ matrix.component }}
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: terraform/${{ matrix.component }}
+        run: terraform validate
+
+      - name: TFLint Setup
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: Run TFLint
+        working-directory: terraform/${{ matrix.component }}
+        run: |
+          tflint --init
+          tflint --recursive
+
+      - name: Terraform Security Scan (tfsec)
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: terraform/${{ matrix.component }}
+          soft_fail: false
+
+      - name: Checkov Security Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/${{ matrix.component }}
+          framework: terraform
+          soft_fail: false
+          output_format: cli
+
+      - name: Upload Terraform results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-results-${{ matrix.component }}
+          path: |
+            terraform/${{ matrix.component }}/terraform.tfplan
+            terraform/${{ matrix.component }}/.tfsec/
+            terraform/${{ matrix.component }}/.tflint.*
+          retention-days: 7
+
+  # Helm chart validation
+  helm-validate:
+    name: Helm Chart Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm Lint
+        run: |
+          helm lint helm/jotp
+          helm lint helm/jotp --values helm/jotp/values-production.yaml
+
+      - name: Helm Template (Dry-run)
+        run: |
+          helm template jotp helm/jotp --debug > /tmp/rendered.yaml
+          helm template jotp helm/jotp --values helm/jotp/values-production.yaml --debug > /tmp/rendered-prod.yaml
+
+      - name: Kubeconform validation
+        uses: instrumenta/kubeconform@master
+        with:
+          args: -summary /tmp/rendered.yaml
+
+      - name: Helm Unit Tests
+        run: |
+          helm plugin install https://github.com/quintush/helm-unittest
+          helm unittest helm/jotp -u
+
+      - name: Check for latest dependencies
+        run: |
+          helm dependency update helm/jotp
+          helm dependency list helm/jotp
+
+      - name: Upload Helm results
+        if: always()
+        uses: actions/upload-artifact@@v4
+        with:
+          name: helm-validation-results
+          path: |
+            /tmp/rendered.yaml
+            /tmp/rendered-prod.yaml
+          retention-days: 7
+
+  # Kubernetes manifests validation
+  k8s-validate:
+    name: Kubernetes Manifests Validation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        manifest:
+          - k8s/base
+          - k8s/overlays/production
+          - k8s/distributed
+          - k8s/monitoring
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.K8S_VERSION }}
+
+      - name: Kubeconform validation
+        uses: instrumenta/kubeconform@master
+        with:
+          args: -schema-location default -schema-location 'https://raw.githubusercontent.com/yannh/kubeconform/master/scripts/openapi.json' -summary ${{ matrix.manifest }}/*.yaml
+
+      - name: Kubeval validation
+        uses: redhat-cop/github-actions/k8s-kubeval@master
+        with:
+          files: ${{ matrix.manifest }}/*.yaml
+          version: ${{ env.K8S_VERSION }}
+
+      - name: Check for deprecated APIs
+        run: |
+          kubectl-convert -f ${{ matrix.manifest }} --output-version=v1 || true
+
+      - name: Validate resource limits
+        run: |
+          for file in ${{ matrix.manifest }}/*.yaml; do
+            if grep -q "kind: Deployment\|kind: StatefulSet\|kind: DaemonSet" "$file"; then
+              if ! grep -q "resources:" "$file"; then
+                echo "❌ Missing resource limits in $file"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Upload K8s results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-validation-${{ matrix.manifest }}
+          path: |
+            ${{ matrix.manifest }}/*.yaml
+          retention-days: 7
+
+  # Dockerfile validation
+  docker-validate:
+    name: Dockerfile Validation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dockerfile:
+          - docker/Dockerfile
+          - docker/Dockerfile.jre
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Hadolint Dockerfile lint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          failure-threshold: error
+          ignore: DL3008,DL3009
+
+      - name: Build Docker image (dry-run)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: jotp:validate-${{ matrix.dockerfile }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            JAVA_VERSION=26
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: jotp:validate-${{ matrix.dockerfile }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Docker Bench Security
+        uses: aquasecurity/docker-bench-action@v1.0.0
+        with:
+          files: ${{ matrix.dockerfile }}
+          dockerfile-path: ${{ matrix.dockerfile }}
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Analyze image layers
+        run: |
+          docker history jotp:validate-${{ matrix.dockerfile }}
+          docker images jotp:validate-${{ matrix.dockerfile }}
+
+  # Security scanning
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/golang@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v4
+        with:
+          image: 'alpine:latest'
+          format: 'sarif'
+          output: 'grype-results.sarif'
+
+      - name: Upload Grype results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'grype-results.sarif'
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+  # CI/CD configuration validation
+  cicd-validate:
+    name: CI/CD Configuration Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate GitHub Actions workflows
+        run: |
+          for workflow in .github/workflows/*.yml; do
+            echo "Validating $workflow"
+            yamllint -d "{extends: default, rules: {line-length: {max: 200}}}" "$workflow" || true
+          done
+
+      - name: Check for required workflow files
+        run: |
+          REQUIRED_WORKFLOWS=(
+            "build.yml"
+            "release.yml"
+            "distributed-test.yml"
+            "infra-validation.yml"
+          )
+
+          for workflow in "${REQUIRED_WORKFLOWS[@]}"; do
+            if [ ! -f ".github/workflows/$workflow" ]; then
+              echo "❌ Missing required workflow: $workflow"
+              exit 1
+            fi
+          done
+
+      - name: Validate Dependabot config
+        run: |
+          if [ -f ".github/dependabot.yml" ]; then
+            yamllint .github/dependabot.yml || true
+          fi
+
+      - name: Check CODEOWNERS syntax
+        run: |
+          if [ -f ".github/CODEOWNERS" ]; then
+            # Validate CODEOWNERS file format
+            while IFS= read -r line; do
+              # Skip comments and empty lines
+              [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+
+              # Check for valid ownership pattern
+              if ! [[ "$line" =~ ^[^\s]+\s+(@[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}) ]]; then
+                echo "⚠️  Invalid CODEOWNERS line: $line"
+              fi
+            done < .github/CODEOWNERS
+          fi
+
+      - name: Validate Makefile targets
+        run: |
+          make -n help > /dev/null || {
+            echo "❌ Makefile help target failed"
+            exit 1
+          }
+
+  # Infrastructure as Code testing
+  iac-test:
+    name: IaC Testing
+    runs-on: ubuntu-latest
+    needs: [terraform-validate, helm-validate, k8s-validate]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create test Kind cluster
+        run: |
+          kind create cluster --name jotp-infra-test --config k8s/kind-config.yaml
+
+      - name: Deploy test infrastructure
+        run: |
+          kubectl apply -f k8s/base/
+          kubectl wait --for=condition=ready pod -l app=jotp --timeout=60s
+
+      - name: Test Helm chart deployment
+        run: |
+          helm install test-jotp helm/jotp --set image.tag=latest
+          kubectl wait --for=condition=ready pod -l app=jotp --timeout=90s
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods,svc,deploy -l app=jotp
+          kubectl logs -l app=jotp --tail=20
+
+      - name: Cleanup test cluster
+        if: always()
+        run: |
+          kind delete cluster --name jotp-infra-test
+
+  # Summary report
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [terraform-validate, helm-validate, k8s-validate, docker-validate, security-scan, cicd-validate, iac-test]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## Infrastructure Validation Results
+
+          ### Status Overview
+          | Job | Status |
+          |-----|--------|
+          | Terraform Validation | ${{ needs.terraform-validate.result }} |
+          | Helm Validation | ${{ needs.helm-validate.result }} |
+          | K8s Validation | ${{ needs.k8s-validate.result }} |
+          | Docker Validation | ${{ needs.docker-validate.result }} |
+          | Security Scan | ${{ needs.security-scan.result }} |
+          | CI/CD Validation | ${{ needs.cicd-validate.result }} |
+          | IaC Testing | ${{ needs.iac-test.result }} |
+
+          EOF
+
+      - name: Check overall status
+        run: |
+          if [ "${{ needs.terraform-validate.result }}" != "success" ] || \
+             [ "${{ needs.helm-validate.result }}" != "success" ] || \
+             [ "${{ needs.k8s-validate.result }}" != "success" ] || \
+             [ "${{ needs.docker-validate.result }}" != "success" ] || \
+             [ "${{ needs.security-scan.result }}" != "success" ] || \
+             [ "${{ needs.cicd-validate.result }}" != "success" ] || \
+             [ "${{ needs.iac-test.result }}" != "success" ]; then
+            echo "❌ Infrastructure validation failed"
+            exit 1
+          fi
+          echo "✅ All infrastructure validations passed"
