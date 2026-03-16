@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of JOTP's
  * resilience under chaos. Run with DTR to see executable examples with actual recovery times.
  */
+@DtrTest
 @DisplayName("Chaos Engineering & Failure Injection Tests")
 class ChaosTest {
 

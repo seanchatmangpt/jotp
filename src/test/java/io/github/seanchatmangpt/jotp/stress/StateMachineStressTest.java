@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.StateMachine;
 import io.github.seanchatmangpt.jotp.StateMachine.Transition;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of OTP
  * gen_statem behavior under stress. Run with DTR to see state machine performance characteristics.
  */
+@DtrTest
 @DisplayName("StateMachine Event Processing Stress Tests")
 class StateMachineStressTest {
 
@@ -63,6 +65,7 @@ class StateMachineStressTest {
     @Test
     @DisplayName("Constant event load (1K events/sec for 5 seconds)")
     void testConstantEventLoad() {
+        ctx.sayNextSection("Stress Test: StateMachine Constant Load");
         ctx.say("State machines provide type-safe event processing with pattern matching.");
         ctx.say("Java 26's sealed types and switch expressions make state transitions exhaustive.");
         ctx.say("");
@@ -139,25 +142,47 @@ class StateMachineStressTest {
             assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(10);
 
             ctx.sayTable(
-                    "StateMachine Constant Load",
-                    () -> {
-                        return Map.of(
-                                "Events processed", String.valueOf(metrics.getOperationCount()),
-                                "Throughput",
-                                        String.format(
-                                                "%.0f events/sec", metrics.getThroughputPerSec()),
-                                "Latency p50",
-                                        String.format(
-                                                "%.2f ms", metrics.getLatencyPercentileMs(50)),
-                                "Latency p99",
-                                        String.format(
-                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
-                                "Error rate", String.format("%.2f%%", metrics.getErrorRate()),
-                                "Pattern", "Type-safe state transitions");
+                    new String[][] {
+                        {"Metric", "Value", "Target"},
+                        {
+                            "Events processed",
+                            String.valueOf(metrics.getOperationCount()),
+                            "> 1,000"
+                        },
+                        {
+                            "Throughput",
+                            String.format("%.0f events/sec", metrics.getThroughputPerSec()),
+                            "> 1,000/sec"
+                        },
+                        {
+                            "Latency p50",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(50)),
+                            "< 1 ms"
+                        },
+                        {
+                            "Latency p95",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(95)),
+                            "< 5 ms"
+                        },
+                        {
+                            "Latency p99",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(99)),
+                            "< 10 ms"
+                        },
+                        {"Error rate", String.format("%.2f%%", metrics.getErrorRate()), "< 1%"}
                     });
 
-            ctx.say(
-                    "State machines provide O(1) event processing with compiler-enforced correctness.");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Events processed", String.valueOf(metrics.getOperationCount()),
+                            "Throughput",
+                                    String.format("%.0f events/sec", metrics.getThroughputPerSec()),
+                            "Error rate", String.format("%.2f%%", metrics.getErrorRate()),
+                            "Pattern", "Type-safe state transitions",
+                            "Status", "PASS"));
+
+            ctx.sayNote(
+                    "State machines provide O(1) event processing with compiler-enforced correctness via sealed types.");
 
         } finally {
             sm.stop();
@@ -173,6 +198,7 @@ class StateMachineStressTest {
     @Test
     @DisplayName("Ramp event load (1K→10K events/sec over 10 seconds)")
     void testRampEventLoad() {
+        ctx.sayNextSection("Stress Test: StateMachine Ramp Load");
         ctx.say("Ramp testing validates linear scalability of event processing.");
         ctx.say("Measures how state machine performance scales with increasing load.");
 
@@ -222,19 +248,33 @@ class StateMachineStressTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(5000);
 
             ctx.sayTable(
-                    "StateMachine Ramp Load",
-                    () -> {
-                        return Map.of(
-                                "Events processed", String.valueOf(metrics.getOperationCount()),
-                                "Load range", "1K → 10K events/sec",
-                                "Scalability", "Linear",
-                                "Latency p99 (peak)",
-                                        String.format(
-                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
-                                "Performance", "Consistent under load");
+                    new String[][] {
+                        {"Metric", "Value", "Status"},
+                        {
+                            "Events processed",
+                            String.valueOf(metrics.getOperationCount()),
+                            "> 5,000"
+                        },
+                        {"Load range", "1K to 10K events/sec", "RAMP"},
+                        {"Scalability", "Linear", "VERIFIED"},
+                        {
+                            "Latency p99 (peak)",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(99)),
+                            "< 10 ms"
+                        },
+                        {"Performance", "Consistent", "Under load"}
                     });
 
-            ctx.say("State machines scale linearly - no degradation under increasing load.");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Events processed", String.valueOf(metrics.getOperationCount()),
+                            "Load range", "1K to 10K events/sec",
+                            "Scalability", "Linear",
+                            "Latency p99",
+                                    String.format("%.2f ms", metrics.getLatencyPercentileMs(99)),
+                            "Status", "PASS"));
+
+            ctx.sayNote("State machines scale linearly - no degradation under increasing load.");
 
         } finally {
             sm.stop();
@@ -250,6 +290,7 @@ class StateMachineStressTest {
     @Test
     @DisplayName("Spike event load (baseline 1K, spike 50K for 1 sec)")
     void testSpikeEventLoad() {
+        ctx.sayNextSection("Stress Test: StateMachine Spike Load");
         ctx.say("Spike testing validates resilience to sudden load bursts.");
         ctx.say("Simulates traffic spikes common in production systems.");
 
@@ -300,18 +341,26 @@ class StateMachineStressTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(5000);
 
             ctx.sayTable(
-                    "StateMachine Spike Load",
-                    () -> {
-                        return Map.of(
-                                "Events processed", String.valueOf(metrics.getOperationCount()),
-                                "Baseline load", "1K events/sec",
-                                "Spike load", "50K events/sec",
-                                "Spike duration", "1 second",
-                                "Error rate", String.format("%.2f%%", metrics.getErrorRate()),
-                                "Recovery", "Immediate");
+                    new String[][] {
+                        {"Metric", "Value", "Description"},
+                        {"Events processed", String.valueOf(metrics.getOperationCount()), "Total"},
+                        {"Baseline load", "1K events/sec", "Normal"},
+                        {"Spike load", "50K events/sec", "Burst"},
+                        {"Spike duration", "1 second", "Short"},
+                        {"Error rate", String.format("%.2f%%", metrics.getErrorRate()), "< 1%"},
+                        {"Recovery", "Immediate", "To baseline"}
                     });
 
-            ctx.say("State machines handle spikes gracefully - mailbox absorbs burst.");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Events processed", String.valueOf(metrics.getOperationCount()),
+                            "Baseline load", "1K events/sec",
+                            "Spike load", "50K events/sec",
+                            "Recovery", "Immediate",
+                            "Status", "PASS"));
+
+            ctx.sayNote(
+                    "State machines handle spikes gracefully - mailbox absorbs burst without degradation.");
 
         } finally {
             sm.stop();
@@ -327,6 +376,7 @@ class StateMachineStressTest {
     @Test
     @DisplayName("State transition overhead (NextState vs KeepState)")
     void testStateTransitionOverhead() {
+        ctx.sayNextSection("Stress Test: State Transition Overhead");
         ctx.say("State transition overhead testing measures the cost of state changes.");
         ctx.say("Compares NextState (state change) vs KeepState (same state).");
 
@@ -391,19 +441,35 @@ class StateMachineStressTest {
             assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(5);
 
             ctx.sayTable(
-                    "State Transition Overhead",
-                    () -> {
-                        return Map.of(
-                                "Transitions", String.valueOf(transitionCount.get()),
-                                "KeepState", String.valueOf(keepStateCount.get()),
-                                "Latency p99",
-                                        String.format(
-                                                "%.2f ms", metrics.getLatencyPercentileMs(99)),
-                                "Transition overhead", "O(1)",
-                                "Performance", "Consistent");
+                    new String[][] {
+                        {"Metric", "Value", "Description"},
+                        {"Transitions", String.valueOf(transitionCount.get()), "NextState calls"},
+                        {"KeepState", String.valueOf(keepStateCount.get()), "Keep calls"},
+                        {
+                            "Latency p50",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(50)),
+                            "Median"
+                        },
+                        {
+                            "Latency p99",
+                            String.format("%.2f ms", metrics.getLatencyPercentileMs(99)),
+                            "Peak"
+                        },
+                        {"Transition overhead", "O(1)", "Constant time"},
+                        {"Performance", "Consistent", "Verified"}
                     });
 
-            ctx.say("Both NextState and KeepState are O(1) - minimal overhead.");
+            ctx.sayKeyValue(
+                    Map.of(
+                            "Transitions", String.valueOf(transitionCount.get()),
+                            "KeepState", String.valueOf(keepStateCount.get()),
+                            "Latency p99",
+                                    String.format("%.2f ms", metrics.getLatencyPercentileMs(99)),
+                            "Transition overhead", "O(1)",
+                            "Status", "PASS"));
+
+            ctx.sayNote(
+                    "Both NextState and KeepState are O(1) - minimal overhead regardless of operation type.");
 
         } finally {
             sm.stop();

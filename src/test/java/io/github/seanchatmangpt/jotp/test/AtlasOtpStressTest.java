@@ -2,6 +2,8 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
+import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -67,6 +69,7 @@ import org.junit.jupiter.api.Timeout;
  * <p>Java 25 {@link Gatherers} ({@code fold} and {@code windowFixed}) aggregate and validate every
  * result using the finalized {@code Stream.gather} API.
  */
+@DtrTest
 @DisplayName("McLaren Atlas — OTP 1 M virtual-thread stress")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @Timeout(value = 300, unit = TimeUnit.SECONDS)
@@ -170,7 +173,11 @@ class AtlasOtpStressTest implements WithAssertions {
     @Order(1)
     @DisplayName(
             "1 M addSamples() → 1 K ONE_FOR_ONE supervised PDA procs — zero loss, totalSamples == 1 M")
-    void millionTelemetrySamples_acquisitionSupervisor_zeroLoss() throws Exception {
+    void millionTelemetrySamples_acquisitionSupervisor_zeroLoss(DtrContext ctx) throws Exception {
+        ctx.say("Stress Test: 1M telemetry samples via AcquisitionSupervisor");
+        ctx.say("Tests ONE_FOR_ONE supervision with 1K PDA processes handling 1M samples");
+        ctx.say("");
+        ctx.say("Configuration: 1M virtual threads, 20K concurrent, 1K processes");
         // Build 1 K distinct parameter/channel pairs — one PDA proc per pair
         var params = new ArrayList<SqlRaceParameter>(PARAM_COUNT);
         var channels = new ArrayList<SqlRaceChannel>(PARAM_COUNT);
@@ -230,6 +237,16 @@ class AtlasOtpStressTest implements WithAssertions {
             assertThat(acq.isRunning())
                     .as("AcquisitionSupervisor must still be running after 1 M samples")
                     .isTrue();
+
+            ctx.sayKeyValue(
+                    java.util.Map.of(
+                            "Virtual threads", String.valueOf(N),
+                            "Concurrent limit", String.valueOf(CONCURRENCY),
+                            "PDA processes", String.valueOf(PARAM_COUNT),
+                            "Total samples", String.valueOf(totalSamples),
+                            "Errors", String.valueOf(errors.get()),
+                            "Supervisor status", "RUNNING",
+                            "Result", "PASS - Zero sample loss"));
         }
         // AutoCloseable.close() calls supervisor.shutdown() — all PDA procs stopped cleanly
     }
@@ -242,7 +259,11 @@ class AtlasOtpStressTest implements WithAssertions {
     @Order(2)
     @DisplayName("1 M ProcRegistry.whereis() → PdaMsg.AddSamples — no stale entries, total == 1 M")
     @SuppressWarnings("unchecked")
-    void processRegistry_millionLookups_allPdaMsgDelivered() throws Exception {
+    void processRegistry_millionLookups_allPdaMsgDelivered(DtrContext ctx) throws Exception {
+        ctx.say("Stress Test: 1M ProcRegistry lookups with PdaMsg delivery");
+        ctx.say("Tests concurrent name resolution and message routing");
+        ctx.say("");
+        ctx.say("Configuration: 1K registered processes, 1M lookups");
         // 1 K Proc<AtomicLong, PdaMsg>: counts AddSamples; silently ignores other PdaMsg variants.
         // AtomicLong state avoids exposing the package-private ParameterDataAccess.State.
         Proc<AtomicLong, PdaMsg>[] procs = new Proc[PARAM_COUNT];
@@ -303,6 +324,14 @@ class AtlasOtpStressTest implements WithAssertions {
                 .as("ProcRegistry must route all 1 M PdaMsg.AddSamples to live procs")
                 .isEqualTo(N);
 
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Registry lookups", String.valueOf(N),
+                        "Registered processes", String.valueOf(PARAM_COUNT),
+                        "Messages delivered", String.valueOf(totalDelivered),
+                        "Stale entries", String.valueOf(empties.get()),
+                        "Result", "PASS - No stale entries, all messages delivered"));
+
         for (var p : procs) p.stop();
     }
 
@@ -314,7 +343,11 @@ class AtlasOtpStressTest implements WithAssertions {
     @Order(3)
     @DisplayName(
             "1 M AddLap events across 1 K SqlRaceSession state machines — all laps recorded, total == 1 M")
-    void millionAddLap_sqlRaceSessions_allLapsRecorded() throws Exception {
+    void millionAddLap_sqlRaceSessions_allLapsRecorded(DtrContext ctx) throws Exception {
+        ctx.say("Stress Test: 1M AddLap events across 1K SqlRaceSession state machines");
+        ctx.say("Tests StateMachine concurrent event handling");
+        ctx.say("");
+        ctx.say("Configuration: 1K sessions, 1M lap events");
         // Shared Configure event — SqlRaceSessionData.withConfiguration() calls List.copyOf(),
         // so sharing this immutable record across 1 K sessions is safe.
         var configure =
@@ -392,6 +425,14 @@ class AtlasOtpStressTest implements WithAssertions {
             assertThat(totalLaps)
                     .as("every AddLap must be recorded — 1 M events across 1 K sessions")
                     .isEqualTo(N);
+
+            ctx.sayKeyValue(
+                    java.util.Map.of(
+                            "Sessions", String.valueOf(SESSION_COUNT),
+                            "Lap events", String.valueOf(N),
+                            "Total laps recorded", String.valueOf(totalLaps),
+                            "Errors", String.valueOf(errors.get()),
+                            "Result", "PASS - All laps recorded"));
         }
 
         for (var s : sessions) s.stop();
@@ -405,7 +446,11 @@ class AtlasOtpStressTest implements WithAssertions {
     @Order(4)
     @DisplayName(
             "1 M SessionEventBus.notify(AddLap) — all 10 gen_event handlers receive every lap alert")
-    void millionLapAlerts_sessionEventBus_allHandlersReceiveAll() throws Exception {
+    void millionLapAlerts_sessionEventBus_allHandlersReceiveAll(DtrContext ctx) throws Exception {
+        ctx.say("Stress Test: 1M EventManager broadcasts with 10 handlers");
+        ctx.say("Tests gen_event pattern - all handlers receive every event");
+        ctx.say("");
+        ctx.say("Configuration: 10 handlers, 1M notifications");
         int handlerCount = 10;
         var bus = SessionEventBus.start();
         var handlerCounters = new AtomicLong[handlerCount];
@@ -457,6 +502,14 @@ class AtlasOtpStressTest implements WithAssertions {
                 .as("the slowest handler must have processed every lap alert")
                 .isGreaterThanOrEqualTo(N);
 
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Event notifications", String.valueOf(N),
+                        "Handlers", String.valueOf(handlerCount),
+                        "Min handled", String.valueOf(minHandled),
+                        "Errors", String.valueOf(errors.get()),
+                        "Result", "PASS - All handlers received all events"));
+
         bus.stop();
     }
 
@@ -469,7 +522,11 @@ class AtlasOtpStressTest implements WithAssertions {
     @DisplayName(
             "1 M PdaMsg.AddSamples (10 % poison) → ONE_FOR_ONE restarts all, root supervisor stays alive")
     @SuppressWarnings("unchecked")
-    void supervisorStorm_millionPoisonSamples_rootStaysAlive() throws Exception {
+    void supervisorStorm_millionPoisonSamples_rootStaysAlive(DtrContext ctx) throws Exception {
+        ctx.say("Stress Test: 1M messages with 10% poison (crash triggers)");
+        ctx.say("Tests ONE_FOR_ONE supervisor under crash storm");
+        ctx.say("");
+        ctx.say("Configuration: 1K procs, 100K expected crashes, maxRestarts=10K/proc");
         // maxRestarts = 10 K per proc (>> ~100 expected crashes each); window = 1 h (no expiry)
         var supervisor =
                 new Supervisor("atlas-storm", Strategy.ONE_FOR_ONE, 10_000, Duration.ofHours(1));
@@ -540,6 +597,21 @@ class AtlasOtpStressTest implements WithAssertions {
                                                                                                 [] {
                                                                                             1.0
                                                                                         })))));
+
+        ctx.sayKeyValue(
+                java.util.Map.of(
+                        "Virtual threads",
+                        String.valueOf(N),
+                        "Supervised processes",
+                        String.valueOf(PARAM_COUNT),
+                        "Expected crashes (~10%)",
+                        String.valueOf(N / 10),
+                        "Supervisor status",
+                        "RUNNING",
+                        "Fatal error",
+                        "NONE",
+                        "Result",
+                        "PASS - Supervisor survived crash storm"));
 
         supervisor.shutdown();
     }
