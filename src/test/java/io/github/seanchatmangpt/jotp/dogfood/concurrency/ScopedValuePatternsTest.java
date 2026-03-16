@@ -242,13 +242,13 @@ class ScopedValuePatternsTest implements WithAssertions {
             """,
                 "java");
 
-        var ctx = new ScopedValuePatterns.RequestContext("user-1", "trace-1", "tenant-1");
+        var requestCtx = new ScopedValuePatterns.RequestContext("user-1", "trace-1", "tenant-1");
         AtomicReference<String> capturedUser = new AtomicReference<>();
         AtomicReference<String> capturedTrace = new AtomicReference<>();
         AtomicReference<String> capturedTenant = new AtomicReference<>();
 
         ScopedValuePatterns.withRequestContext(
-                ctx,
+                requestCtx,
                 () -> {
                     capturedUser.set(ScopedValuePatterns.CURRENT_USER.get());
                     capturedTrace.set(ScopedValuePatterns.TRACE_ID.get());

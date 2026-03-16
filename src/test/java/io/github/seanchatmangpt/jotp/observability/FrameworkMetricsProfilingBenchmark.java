@@ -17,6 +17,7 @@
 package io.github.seanchatmangpt.jotp.observability;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
@@ -362,7 +363,8 @@ public class FrameworkMetricsProfilingBenchmark {
     public void B16_realFrameworkMetricsDisabled(Blackhole bh) {
         FrameworkMetrics metrics = FrameworkMetrics.create();
         FrameworkEventBus.FrameworkEvent event =
-                new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                        java.time.Instant.now(), "test-pid", "Proc");
 
         metrics.accept(event);
         bh.consume(true);
@@ -385,7 +387,8 @@ public class FrameworkMetricsProfilingBenchmark {
         // Otherwise it will measure the disabled path
         FrameworkMetrics metrics = FrameworkMetrics.create();
         FrameworkEventBus.FrameworkEvent event =
-                new FrameworkEventBus.FrameworkEvent.ProcessCreated("test-pid", "Proc", 0);
+                new FrameworkEventBus.FrameworkEvent.ProcessCreated(
+                        java.time.Instant.now(), "test-pid", "Proc");
 
         metrics.accept(event);
         bh.consume(true);

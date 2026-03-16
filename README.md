@@ -263,11 +263,11 @@ JOTP supports deployment to multiple cloud platforms with comprehensive infrastr
 - **[Innovations](docs/innovations/)** — Advanced patterns: OTP-JDBC, LLM Supervisor, Actor HTTP, Distributed OTP, Event Sourcing
 
 ### For Developers
-- **[Tutorials](docs/tutorials/)** — Step-by-step learning path
-  - [01: Getting Started](docs/tutorials/beginner/getting-started.md)
-  - [02: Your First Process](docs/tutorials/beginner/first-process.md)
-  - [03: Virtual Threads](docs/tutorials/03-virtual-threads.md)
-  - [04: Supervision Basics](docs/tutorials/04-supervision-basics.md)
+- **[Tutorials](docs/user-guide/tutorials/)** — Step-by-step learning path
+  - [01: Getting Started](docs/user-guide/tutorials/getting-started.mdx)
+  - [02: Your First Process](docs/user-guide/tutorials/your-first-process.mdx)
+  - [03: Virtual Threads](docs/user-guide/tutorials/03-virtual-threads.md)
+  - [04: Supervision Basics](docs/user-guide/tutorials/04-supervision-basics.md)
 - **[How-to Guides](docs/user-guide/how-to/)** — Solve specific problems
   - [Creating Processes](docs/user-guide/how-to/create-lightweight-processes.md)
   - [Handling Crashes](docs/user-guide/how-to/handling-process-crashes.md)
