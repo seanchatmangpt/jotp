@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.enterprise.eventbus;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -25,7 +23,6 @@ import org.junit.jupiter.api.DisplayName;
 @DisplayName("EventBus: Joe Armstrong gen_event pub-sub with ordered delivery and DLQ")
 class EventBusTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -40,12 +37,9 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("createWithValidConfig_returnsInstance: EventBus.create returns non-null")
     void createWithValidConfig_returnsInstance() {
-        ctx.sayNextSection("Event Bus: Decoupled Asynchronous Communication");
-        ctx.say(
                 "EventBus implements Joe Armstrong's gen_event pattern for publish-subscribe messaging."
                         + " Producers publish events without knowing consumers, enabling loose coupling and"
                         + " scalability.");
-        ctx.sayCode(
                 """
             // Create event bus with default configuration
             EventBusConfig config = EventBusConfig.builder()
@@ -62,13 +56,11 @@ class EventBusTest implements WithAssertions {
         var bus = EventBus.create(config);
         assertThat(bus).isNotNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Batch Size", "10 events",
                         "Batch Timeout", "100ms",
                         "Max Retries", "3",
                         "Delivery Policy", "AtLeastOnce (default)"));
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant P as Publisher
@@ -88,11 +80,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("configBuilder_rejectsZeroBatchSize: batchSize=0 throws IllegalArgumentException")
     void configBuilder_rejectsZeroBatchSize() {
-        ctx.sayNextSection("Configuration Validation: Batching Constraints");
-        ctx.say(
                 "Batching improves throughput by delivering multiple events together. Zero batch size"
                         + " prevents any event delivery.");
-        ctx.sayCode(
                 """
             assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder()
@@ -104,7 +93,6 @@ class EventBusTest implements WithAssertions {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder().batchSize(0).build());
 
-        ctx.sayTable(
                 List.of(
                         List.of("1", "Immediate delivery (no batching)"),
                         List.of("10", "Small batch, low latency"),
@@ -114,10 +102,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("configBuilder_rejectsZeroBatchTimeout: batchTimeoutMs=0 throws exception")
     void configBuilder_rejectsZeroBatchTimeout() {
-        ctx.say(
                 "Batch timeout determines maximum wait before flushing partial batch. Zero timeout"
                         + " defeats batching purpose.");
-        ctx.sayCode(
                 """
             assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder()
@@ -129,7 +115,6 @@ class EventBusTest implements WithAssertions {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder().batchTimeoutMs(0).build());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Recommended", "50-200ms",
                         "Short Timeout", "Faster delivery, less batching",
@@ -138,10 +123,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("configBuilder_rejectsNegativeMaxRetries: maxRetries=-1 throws exception")
     void configBuilder_rejectsNegativeMaxRetries() {
-        ctx.say(
                 "Max retries controls delivery attempts for failed subscribers. Negative values are"
                         + " invalid.");
-        ctx.sayCode(
                 """
             assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder()
@@ -153,7 +136,6 @@ class EventBusTest implements WithAssertions {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> EventBusConfig.builder().maxRetries(-1).build());
 
-        ctx.sayTable(
                 List.of(
                         List.of("0", "Fire-and-forget (no retry)"),
                         List.of("3", "Standard retry"),
@@ -165,11 +147,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("publish_noSubscribers_accepted: publish with no subscribers returns ACCEPTED")
     void publish_noSubscribers_accepted() {
-        ctx.sayNextSection("Publishing: Fire-and-Forget Semantics");
-        ctx.say(
                 "EventBus accepts events even with no subscribers. This enables pub-decoupling where"
                         + " publishers don't need to know if subscribers exist.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             var result = bus.publish("test-event");
@@ -183,7 +162,6 @@ class EventBusTest implements WithAssertions {
         var result = bus.publish("test-event");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.ACCEPTED);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Status", "ACCEPTED",
                         "Event ID", "UUID assigned",
@@ -195,11 +173,8 @@ class EventBusTest implements WithAssertions {
     @DisplayName(
             "subscribe_thenPublish_handlerReceivesEvent: subscribed handler is called when event published")
     void subscribe_thenPublish_handlerReceivesEvent() {
-        ctx.sayNextSection("Subscription: Event Delivery");
-        ctx.say(
                 "Subscribers register handlers with unique IDs. When events are published, all"
                         + " subscribers receive the event asynchronously.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             var received = new AtomicBoolean(false);
@@ -219,7 +194,6 @@ class EventBusTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(3)).untilTrue(received);
 
-        ctx.sayTable(
                 List.of(
                         List.of("Subscriber ID", "sub1"),
                         List.of("Event Received", "true"),
@@ -231,11 +205,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("unsubscribe_handlerNoLongerCalled: handler not called after unsubscribing")
     void unsubscribe_handlerNoLongerCalled() {
-        ctx.sayNextSection("Unsubscription: Stopping Event Delivery");
-        ctx.say(
                 "Subscribers can be removed by ID. After unsubscription, handler no longer receives"
                         + " events. Delivery is idempotent - unsubscribing twice is safe.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             var callCount = new AtomicInteger(0);
@@ -264,7 +235,6 @@ class EventBusTest implements WithAssertions {
 
         assertThat(callCount.get()).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial Publish", "Delivered (count=1)",
                         "After Unsubscribe", "Not delivered (count=1)",
@@ -276,11 +246,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("publishWhenPaused_returnsRejected: publish after pause() returns REJECTED")
     void publishWhenPaused_returnsRejected() {
-        ctx.sayNextSection("Flow Control: Pause and Resume");
-        ctx.say(
                 "EventBus can be paused to stop accepting new events. Useful for backpressure,"
                         + " maintenance, or graceful shutdown. Paused bus returns REJECTED.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             bus.pause();
@@ -295,7 +262,6 @@ class EventBusTest implements WithAssertions {
         var result = bus.publish("event");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.REJECTED);
 
-        ctx.sayTable(
                 List.of(
                         List.of("RUNNING", "Accepts and delivers events"),
                         List.of("PAUSED", "Rejects new events"),
@@ -306,10 +272,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("resume_afterPause_publishAccepted: publish after resume() returns ACCEPTED")
     void resume_afterPause_publishAccepted() {
-        ctx.say(
                 "Resuming a paused bus restores normal operation. Events are accepted and delivered"
                         + " to subscribers.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             bus.pause();
@@ -326,7 +290,6 @@ class EventBusTest implements WithAssertions {
         var result = bus.publish("event");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.ACCEPTED);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "After Resume", "Running state",
                         "Publish Result", "ACCEPTED",
@@ -339,12 +302,9 @@ class EventBusTest implements WithAssertions {
     @DisplayName(
             "subscriberFails_nextPublishStillWorks: bus continues working after a subscriber throws")
     void subscriberFails_nextPublishStillWorks() {
-        ctx.sayNextSection("Fault Isolation: Subscriber Failures");
-        ctx.say(
                 "Subscriber failures don't kill the event bus. Bad subscribers are isolated, good"
                         + " subscribers continue receiving events. This is Joe Armstrong's 'let it crash'"
                         + " principle.");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant B as EventBus
@@ -362,7 +322,6 @@ class EventBusTest implements WithAssertions {
                 Good-->>B: ACK
             """);
 
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             var goodReceived = new AtomicBoolean(false);
@@ -400,7 +359,6 @@ class EventBusTest implements WithAssertions {
         var result = bus.publish("event2");
         assertThat(result.status()).isEqualTo(EventBus.PublishResult.Status.ACCEPTED);
 
-        ctx.sayTable(
                 List.of(
                         List.of("Bad Subscriber", "Throws exception"),
                         List.of("Good Subscriber", "Receives both events"),
@@ -415,11 +373,8 @@ class EventBusTest implements WithAssertions {
     @DisplayName(
             "getSubscribers_afterSubscribeAndUnsubscribe_correct: size reflects subscribe/unsubscribe")
     void getSubscribers_afterSubscribeAndUnsubscribe_correct() {
-        ctx.sayNextSection("Observability: Subscriber Inspection");
-        ctx.say(
                 "EventBus provides introspection of current subscribers. Useful for monitoring,"
                         + " debugging, and operational visibility.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
 
@@ -441,7 +396,6 @@ class EventBusTest implements WithAssertions {
         bus.unsubscribe("sub1");
         assertThat(bus.getSubscribers()).hasSize(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial Subscribers", "2 (sub1, sub2)",
                         "After Unsubscribe", "1 (sub2)",
@@ -453,11 +407,8 @@ class EventBusTest implements WithAssertions {
 
     @DisplayName("shutdown_doesNotThrow: calling shutdown does not throw any exception")
     void shutdown_doesNotThrow() {
-        ctx.sayNextSection("Lifecycle: Graceful Shutdown");
-        ctx.say(
                 "EventBus must be shutdown to release process resources. Shutdown is idempotent and"
                         + " safe to call multiple times.");
-        ctx.sayCode(
                 """
             var bus = EventBus.create(config);
             bus.shutdown();
@@ -467,7 +418,6 @@ class EventBusTest implements WithAssertions {
         var bus = EventBus.create(defaultConfig());
         assertThatNoException().isThrownBy(bus::shutdown);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Process Shutdown", "Coordinator process terminated",
                         "Subscriber Cleanup", "All subscribers removed",

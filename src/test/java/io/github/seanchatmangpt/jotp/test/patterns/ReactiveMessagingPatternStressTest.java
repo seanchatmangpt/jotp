@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.test.patterns;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
@@ -55,10 +52,8 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 @Timeout(300)
 @Execution(ExecutionMode.SAME_THREAD)
 @DisplayName("Reactive Messaging Pattern Stress Tests — REAL NUMBERS")
-@DtrTest
 class ReactiveMessagingPatternStressTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     // ── Message Types ───────────────────────────────────────────────────────────
 
@@ -133,8 +128,6 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         @Test
         @DisplayName("1. Message Channel: 1M messages through Proc — target 2M+ msg/s")
         void messageChannel_1MMessages_2MPerSecond() throws Exception {
-            ctx.sayNextSection("Pattern Stress Test: Message Channel");
-            ctx.say("Tests fire-and-forget messaging throughput via Proc tell().");
 
             int count = 1_000_000;
             var proc = new Proc<>(State.initial(), ReactiveMessagingPatternStressTest::handler);
@@ -156,7 +149,6 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
                     "[message-channel] %,d messages in %,d ns = %,.0f msg/s%n",
                     count, elapsed, throughput);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Pattern", "Messages", "Throughput", "Target"},
                         {
@@ -167,7 +159,6 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
                         }
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Pattern",
                             "Message Channel",
@@ -273,8 +264,6 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
         @Test
         @DisplayName("5. Request-Reply: 100K ask() round-trips — target 50K+ rt/s")
         void requestReply_100KRoundTrips_50KPerSecond() throws Exception {
-            ctx.sayNextSection("Pattern Stress Test: Request-Reply");
-            ctx.say("Tests synchronous request-reply messaging via Proc ask().");
 
             int count = 100_000;
             var proc = new Proc<>(State.initial(), ReactiveMessagingPatternStressTest::handler);
@@ -291,7 +280,6 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
                     "[request-reply] %,d round-trips in %,d ns = %,.0f rt/s%n",
                     count, elapsed, rtPerSec);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Pattern", "Round-Trips", "Throughput", "Target"},
                         {
@@ -302,7 +290,6 @@ class ReactiveMessagingPatternStressTest implements WithAssertions {
                         }
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Pattern",
                             "Request-Reply",

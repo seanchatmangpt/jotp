@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.assertj.core.api.WithAssertions;
@@ -18,7 +16,6 @@ import org.junit.jupiter.api.Timeout;
  * <p>Verifies that duplicate idempotency keys are silently discarded while distinct keys and
  * non-idempotent messages are always forwarded to the delegate process.
  */
-@DtrTest
 @Timeout(10)
 class IdempotentProcTest implements WithAssertions {
 
@@ -73,9 +70,7 @@ class IdempotentProcTest implements WithAssertions {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    void tell_deduplicatesIdempotentMessages(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("IdempotentProc: Message Deduplication Wrapper");
-        ctx.say(
+    void tell_deduplicatesIdempotentMessages() throws InterruptedException {
                 """
                 IdempotentProc wraps any Proc to provide automatic message deduplication.
                 Messages implementing the Idempotent interface are checked for duplicate keys.
@@ -105,8 +100,7 @@ class IdempotentProcTest implements WithAssertions {
     }
 
     @Test
-    void tell_processesDistinctKeys(DtrContext ctx) throws InterruptedException {
-        ctx.say(
+    void tell_processesDistinctKeys() throws InterruptedException {
                 """
                 Different idempotency keys are processed independently.
                 Each unique key represents a distinct operation that should be executed once.
@@ -130,8 +124,7 @@ class IdempotentProcTest implements WithAssertions {
     }
 
     @Test
-    void tell_nonIdempotentMessages_alwaysDelivered(DtrContext ctx) throws InterruptedException {
-        ctx.say(
+    void tell_nonIdempotentMessages_alwaysDelivered() throws InterruptedException {
                 """
                 Messages NOT implementing Idempotent are always delivered without deduplication.
                 This allows mixing idempotent and non-idempotent messages in the same Proc.

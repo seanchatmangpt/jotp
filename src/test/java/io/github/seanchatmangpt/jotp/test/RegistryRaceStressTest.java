@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.time.Duration;
@@ -48,7 +46,6 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of
  * ProcRegistry race condition handling. Run with DTR to see concurrent access safety guarantees.
  */
-@DtrTest
 @Timeout(30)
 @Execution(ExecutionMode.SAME_THREAD) // Isolate from parallel tests due to global ProcRegistry
 class RegistryRaceStressTest implements WithAssertions {
@@ -82,14 +79,7 @@ class RegistryRaceStressTest implements WithAssertions {
      * violation in OTP (two processes believing they own the same name).
      */
     @Test
-    void registrationStampede_exactlyOneWinner(DtrContext ctx) throws Exception {
-        ctx.say("ProcRegistry race condition test: registration stampede");
-        ctx.say("Tests atomicity of ConcurrentHashMap.putIfAbsent() under concurrent load.");
-        ctx.say("");
-        ctx.say("Breaking point under investigation:");
-        ctx.say("- N threads race to register the same name");
-        ctx.say("- Exactly one must win; others get IllegalStateException");
-        ctx.say("- Zero silent overwrites allowed");
+    void registrationStampede_exactlyOneWinner() throws Exception {
         int competitors = 100;
         var successCount = new AtomicInteger(0);
         var latch = new CountDownLatch(1);
@@ -122,7 +112,6 @@ class RegistryRaceStressTest implements WithAssertions {
 
         assertThat(successCount.get()).as("exactly one registration must succeed").isEqualTo(1);
 
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "Competitors", String.valueOf(competitors),
                         "Winners", String.valueOf(successCount.get()),

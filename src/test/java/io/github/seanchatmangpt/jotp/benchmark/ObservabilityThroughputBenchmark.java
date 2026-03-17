@@ -18,9 +18,6 @@ package io.github.seanchatmangpt.jotp.benchmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.observability.FrameworkEventBus;
 import io.github.seanchatmangpt.jotp.observability.FrameworkMetrics;
@@ -44,7 +41,6 @@ import org.junit.jupiter.api.Test;
  * ./mvnw test -Dtest=ObservabilityThroughputBenchmark
  * }</pre>
  */
-@DtrTest
 @DisplayName("Observability Throughput Benchmark")
 class ObservabilityThroughputBenchmark {
 
@@ -52,7 +48,6 @@ class ObservabilityThroughputBenchmark {
     private static final int MEASUREMENT_ITERATIONS = 1_000_000;
     private static final int TEST_DURATION_MS = 5000;
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -67,9 +62,6 @@ class ObservabilityThroughputBenchmark {
     @Test
     @DisplayName("Benchmark: Throughput - Disabled vs Enabled")
     void measureThroughput() throws Exception {
-        ctx.sayNextSection("Benchmark: Observability Throughput");
-        ctx.say("Measures message throughput with observability disabled vs enabled.");
-        ctx.say("Validates that async event bus design maintains high throughput.");
 
         // Phase 1: Baseline with observability disabled
         System.clearProperty("jotp.observability.enabled");
@@ -131,7 +123,6 @@ class ObservabilityThroughputBenchmark {
                 ((disabledThroughput - enabledThroughput) / disabledThroughput) * 100.0;
         boolean pass = degradationPercent < 5.0; // Less than 5% degradation
 
-        ctx.sayTable(
                 new String[][] {
                     {"Configuration", "Messages", "Duration (ms)", "Throughput (msg/sec)"},
                     {
@@ -148,7 +139,6 @@ class ObservabilityThroughputBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Disabled Throughput",
                         String.format("%.0f msg/sec", disabledThroughput),
@@ -159,7 +149,6 @@ class ObservabilityThroughputBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "Throughput benchmark validates async event bus design. "
                         + "Degradation should be < 5% for zero-overhead observability.");
 
@@ -170,8 +159,6 @@ class ObservabilityThroughputBenchmark {
     @Test
     @DisplayName("Benchmark: Batch Throughput")
     void measureBatchThroughput() throws Exception {
-        ctx.sayNextSection("Benchmark: Batch Message Throughput");
-        ctx.say("Measures throughput for batch message delivery with observability.");
 
         System.setProperty("jotp.observability.enabled", "true");
         FrameworkMetrics metrics = FrameworkMetrics.create();
@@ -202,7 +189,6 @@ class ObservabilityThroughputBenchmark {
         metrics.close();
         proc.stop();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value"},
                     {"Batch Size", String.valueOf(batchSize)},
@@ -212,7 +198,6 @@ class ObservabilityThroughputBenchmark {
                     {"Throughput (msg/sec)", String.format("%.0f", throughput)}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Total Messages",
                         String.valueOf(totalMessages),
@@ -221,7 +206,6 @@ class ObservabilityThroughputBenchmark {
                         "Batch Size",
                         String.valueOf(batchSize)));
 
-        ctx.sayNote("Batch throughput measurement shows sustained message delivery rate.");
 
         // Throughput should be substantial
         assertThat(throughput).as("Throughput should exceed 1M msg/sec").isGreaterThan(1_000_000.0);

@@ -130,13 +130,6 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.24.0</version>
         </dependency>
-        <!-- DTR: Documentation Testing Runtime - living documentation from tests -->
-        <dependency>
-            <groupId>io.github.seanchatmangpt.dtr</groupId>
-            <artifactId>dtr-core</artifactId>
-            <version>2026.4.1</version>
-            <scope>test</scope>
-        </dependency>
         <!-- RocksDB: Persistent state storage for JVM crash survival -->
         <dependency>
             <groupId>org.rocksdb</groupId>

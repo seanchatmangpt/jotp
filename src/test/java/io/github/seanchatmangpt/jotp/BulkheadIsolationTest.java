@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
@@ -34,7 +32,6 @@ import org.junit.jupiter.api.Test;
 @DisplayName("BulkheadIsolation: Process-per-Feature Isolation")
 class BulkheadIsolationTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -58,8 +55,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Create bulkhead and send message successfully")
     void testCreateBulkheadAndSend() {
-        ctx.sayNextSection("BulkheadIsolation: Process-Pool-Based Feature Isolation");
-        ctx.say(
                 """
                 BulkheadIsolation implements Joe Armstrong's bulkhead pattern using JOTP's supervision trees.
                 Each feature gets its own isolated process pool with bounded queue depth, preventing
@@ -72,7 +67,6 @@ class BulkheadIsolationTest {
                 - Graceful rejection when degraded or failed
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-1",     // Feature identifier
@@ -104,7 +98,6 @@ class BulkheadIsolationTest {
         assertThat(bulkhead.featureId()).isEqualTo("feature-1");
         assertThat(bulkhead.processCount()).isGreaterThan(0);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Feature ID",
                         bulkhead.featureId(),
@@ -115,7 +108,6 @@ class BulkheadIsolationTest {
                         "Send Result",
                         result.getClass().getSimpleName()));
 
-        ctx.sayTable(
                 new String[][] {
                     {"Component", "Purpose", "Key Benefit"},
                     {
@@ -138,8 +130,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Bulkhead spawns workers up to pool size")
     void testWorkerPooling() {
-        ctx.sayNextSection("Worker Pool: On-Demand Process Spawning");
-        ctx.say(
                 """
                 BulkheadIsolation creates worker processes on-demand up to the pool size limit.
                 This provides efficient resource utilization while maintaining isolation boundaries.
@@ -151,7 +141,6 @@ class BulkheadIsolationTest {
                 - Workers handle messages sequentially per process
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-pool",
@@ -198,7 +187,6 @@ class BulkheadIsolationTest {
         await().timeout(AWAIT_TIMEOUT)
                 .untilAsserted(() -> assertThat(bulkhead.processCount()).isGreaterThan(0));
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Pool Size Limit",
                         "5 workers",
@@ -209,7 +197,6 @@ class BulkheadIsolationTest {
                         "Strategy",
                         "On-demand spawning"));
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value"},
                     {"Memory per Worker", "~1KB (virtual thread)"},
@@ -228,8 +215,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Bulkhead starts in ACTIVE status")
     void testInitialActiveStatus() {
-        ctx.sayNextSection("Bulkhead Status: ACTIVE State");
-        ctx.say(
                 """
                 Freshly created bulkheads start in ACTIVE status, indicating:
                 - All workers healthy and responsive
@@ -242,7 +227,6 @@ class BulkheadIsolationTest {
                 - totalRejections: Cumulative rejected messages
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-status",
@@ -270,7 +254,6 @@ class BulkheadIsolationTest {
         assertThat(status).isInstanceOf(BulkheadIsolation.BulkheadStatus.Active.class);
 
         var activeStatus = (BulkheadIsolation.BulkheadStatus.Active) status;
-        ctx.sayKeyValue(
                 Map.of(
                         "Status",
                         "ACTIVE",
@@ -287,8 +270,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Bulkhead transitions to DEGRADED when queue depth exceeds threshold")
     void testDegradedStatus() {
-        ctx.sayNextSection("Bulkhead Status: DEGRADED State");
-        ctx.say(
                 """
                 When queue depth exceeds maxQueueDepth threshold, bulkhead transitions to DEGRADED:
                 - At least one worker's mailbox is overloaded
@@ -301,7 +282,6 @@ class BulkheadIsolationTest {
                 - totalRejections: Running count of rejected messages
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-degraded",
@@ -349,7 +329,6 @@ class BulkheadIsolationTest {
                         () -> {
                             var status = bulkhead.status();
                             if (status instanceof BulkheadIsolation.BulkheadStatus.Degraded d) {
-                                ctx.sayKeyValue(
                                         Map.of(
                                                 "Status",
                                                 "DEGRADED",
@@ -368,8 +347,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Bulkhead transitions to FAILED when supervisor crashes")
     void testFailedStatus() {
-        ctx.sayNextSection("Bulkhead Status: FAILED State");
-        ctx.say(
                 """
                 When supervisor exceeds max restarts, bulkhead transitions to FAILED:
                 - Supervisor has terminated (cannot recover)
@@ -384,7 +361,6 @@ class BulkheadIsolationTest {
                 - System remains partially available
                 """);
 
-        ctx.sayCode(
                 """
             var crashCounter = new AtomicInteger(0);
             var bulkhead = BulkheadIsolation.create(
@@ -444,7 +420,6 @@ class BulkheadIsolationTest {
                                     .isInstanceOf(BulkheadIsolation.BulkheadStatus.Failed.class);
 
                             var failed = (BulkheadIsolation.BulkheadStatus.Failed) status;
-                            ctx.sayKeyValue(
                                     Map.of(
                                             "Status",
                                             "FAILED",
@@ -466,8 +441,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Send returns Rejected when bulkhead is FAILED")
     void testRejectionOnFailed() {
-        ctx.sayNextSection("Rejection Handling: FAILED State");
-        ctx.say(
                 """
                 When bulkhead is in FAILED state, all messages are rejected:
                 - SendResult is Rejected with Reason.FAILED
@@ -482,7 +455,6 @@ class BulkheadIsolationTest {
                 - Prevents resource waste on doomed requests
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-reject-failed",
@@ -540,7 +512,6 @@ class BulkheadIsolationTest {
         var rejected = (BulkheadIsolation.Send.Rejected) result;
         assertThat(rejected.reason()).isEqualTo(BulkheadIsolation.Send.Rejected.Reason.FAILED);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Send Result",
                         "Rejected",
@@ -551,7 +522,6 @@ class BulkheadIsolationTest {
                         "Caller Action",
                         "Apply fallback strategy"));
 
-        ctx.sayTable(
                 new String[][] {
                     {"Rejection Reason", "When", "Caller Action"},
                     {"DEGRADED", "Queue depth exceeded", "Retry with backoff, shed load"},
@@ -569,8 +539,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Multiple concurrent senders")
     void testConcurrentSenders() throws InterruptedException {
-        ctx.sayNextSection("Concurrency: Multiple Senders");
-        ctx.say(
                 """
                 BulkheadIsolation handles concurrent message sends safely:
                 - Thread-safe send() operation
@@ -585,7 +553,6 @@ class BulkheadIsolationTest {
                 - Fair message distribution
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-concurrent",
@@ -653,7 +620,6 @@ class BulkheadIsolationTest {
         assertThat(completed).isTrue();
         assertThat(successes.get()).isGreaterThan(0);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Concurrent Senders",
                         "10 threads",
@@ -677,8 +643,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Resource limits: Pool size and queue depth")
     void testResourceLimits() {
-        ctx.sayNextSection("Resource Limits: Pool Size and Queue Depth");
-        ctx.say(
                 """
                 BulkheadIsolation enforces two key resource limits:
 
@@ -699,7 +663,6 @@ class BulkheadIsolationTest {
                 - Graceful degradation under load
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-limits",
@@ -714,7 +677,6 @@ class BulkheadIsolationTest {
 
         var bulkhead = BulkheadIsolation.create("feature-limits", 5, 100, (state, msg) -> state);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Pool Size",
                         "5 workers",
@@ -727,7 +689,6 @@ class BulkheadIsolationTest {
                         "Rejection Policy",
                         "Fail-fast when exceeded"));
 
-        ctx.sayTable(
                 new String[][] {
                     {"Resource Limit", "Purpose", "Typical Range", "Exceeded Behavior"},
                     {
@@ -750,7 +711,6 @@ class BulkheadIsolationTest {
                     }
                 });
 
-        ctx.sayTable(
                 new String[][] {
                     {"Resource", "Per-Worker Cost", "Max Pool (20 workers)"},
                     {"Memory", "~1KB", "~20KB"},
@@ -765,8 +725,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Performance trade-offs: Isolation vs efficiency")
     void testPerformanceTradeoffs() {
-        ctx.sayNextSection("Performance Trade-offs: Isolation vs Efficiency");
-        ctx.say(
                 """
                 BulkheadIsolation represents a trade-off between isolation and efficiency:
 
@@ -789,7 +747,6 @@ class BulkheadIsolationTest {
                 - Supervision trees: Efficient restart handling
                 """);
 
-        ctx.sayCode(
                 """
             // High isolation, lower efficiency
             var isolated = BulkheadIsolation.create(
@@ -807,7 +764,6 @@ class BulkheadIsolationTest {
             """,
                 "java");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Configuration", "Isolation", "Efficiency", "Use Case"},
                     {"Pool=2, Queue=10", "High", "Low", "Critical features, strict limits"},
@@ -815,7 +771,6 @@ class BulkheadIsolationTest {
                     {"Pool=20, Queue=1000", "Low", "High", "Non-critical, high throughput"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Virtual Thread Advantage",
                         "1000x less memory than platform threads",
@@ -826,7 +781,6 @@ class BulkheadIsolationTest {
                         "Recommendation",
                         "Use larger pools with virtual threads"));
 
-        ctx.sayTable(
                 new String[][] {
                     {"Configuration", "Max Throughput", "Memory Usage"},
                     {"Small (2/10)", "~20 msg/sec", "~20KB"},
@@ -838,8 +792,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Supervision: Crash recovery without message loss")
     void testWorkerCrashRecovery() {
-        ctx.sayNextSection("Fault Tolerance: Supervision-Based Recovery");
-        ctx.say(
                 """
                 BulkheadIsolation uses JOTP's supervision for fault tolerance:
                 - ONE_FOR_ONE restart strategy: only crashed worker restarts
@@ -854,7 +806,6 @@ class BulkheadIsolationTest {
                 - Observability: Crashes tracked via status metrics
                 """);
 
-        ctx.sayCode(
                 """
             var crashCount = new AtomicInteger(0);
             var bulkhead = BulkheadIsolation.create(
@@ -917,7 +868,6 @@ class BulkheadIsolationTest {
                             // but eventually it should work again
                         });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Crashes Detected",
                         String.valueOf(crashCount.get()),
@@ -930,7 +880,6 @@ class BulkheadIsolationTest {
                         "Manual Intervention",
                         "Not required"));
 
-        ctx.sayTable(
                 new String[][] {
                     {"Supervision Feature", "Benefit", "Enterprise Value"},
                     {
@@ -965,8 +914,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Shutdown stops accepting messages")
     void testShutdown() {
-        ctx.sayNextSection("Lifecycle: Graceful Shutdown");
-        ctx.say(
                 """
                 BulkheadIsolation supports graceful shutdown:
                 - Stops accepting new messages immediately
@@ -981,7 +928,6 @@ class BulkheadIsolationTest {
                 - Supervisor terminates all workers
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead = BulkheadIsolation.create(
                 "feature-shutdown",
@@ -1009,7 +955,6 @@ class BulkheadIsolationTest {
         var result = bulkhead.send(new TestMsg.Noop());
         assertThat(result).isInstanceOf(BulkheadIsolation.Send.Rejected.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Pre-Shutdown Send",
                         "Success",
@@ -1024,8 +969,6 @@ class BulkheadIsolationTest {
     @Test
     @DisplayName("Bulkhead can be recreated after shutdown")
     void testRecreateAfterShutdown() {
-        ctx.sayNextSection("Lifecycle: Recreation After Shutdown");
-        ctx.say(
                 """
                 After shutdown, bulkheads can be recreated for the same feature:
                 - Clean state: No residual messages or workers
@@ -1040,7 +983,6 @@ class BulkheadIsolationTest {
                 4. Fresh isolation boundaries
                 """);
 
-        ctx.sayCode(
                 """
             var bulkhead1 = BulkheadIsolation.create(
                 "feature-recreate",
@@ -1070,7 +1012,6 @@ class BulkheadIsolationTest {
         var result = bulkhead2.send(new TestMsg.Noop());
         assertThat(result).isInstanceOf(BulkheadIsolation.Send.Success.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "First Bulkhead",
                         "Shut down",

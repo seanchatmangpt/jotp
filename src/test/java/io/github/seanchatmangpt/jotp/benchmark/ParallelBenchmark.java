@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.benchmark;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.dogfood.concurrency.StructuredTaskScopePatterns;
 import java.util.List;
@@ -37,7 +34,6 @@ import org.openjdk.jmh.annotations.Warmup;
  *   <li>{@code structured_scope_fanout} — StructuredTaskScopePatterns.fanOut() for comparison
  * </ul>
  */
-@DtrTest
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @Fork(1)
@@ -46,7 +42,6 @@ import org.openjdk.jmh.annotations.Warmup;
 @State(Scope.Benchmark)
 public class ParallelBenchmark {
 
-    @DtrContextField private DtrContext ctx;
 
     @Param({"4", "8", "16"})
     public int taskCount;
@@ -104,12 +99,8 @@ public class ParallelBenchmark {
     @Test
     @DisplayName("Benchmark: Parallel Fan-Out Performance")
     void reportBenchmarkResults() {
-        ctx.sayNextSection("Benchmark: Parallel Fan-Out Performance");
-        ctx.say("Measures Parallel.all() fan-out with compute-bound tasks on virtual threads.");
-        ctx.say(
                 "Thesis claim: Parallel.all() achieves >= 4x speedup over sequential on 8-core with 8 tasks.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Benchmark", "Task Count", "Description"},
                     {"parallel_fanout", "4/8/16", "Parallel.all() concurrent execution"},
@@ -117,7 +108,6 @@ public class ParallelBenchmark {
                     {"structured_scope_fanout", "4/8/16", "StructuredTaskScopePatterns comparison"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Unit",
                         "Milliseconds (average time)",

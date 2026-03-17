@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;
 import java.time.Duration;
@@ -34,11 +31,9 @@ import org.junit.jupiter.api.Timeout;
  *   <li>{@code demonitor} prevents DOWN from firing after cancellation
  * </ol>
  */
-@DtrTest
 @Timeout(10)
 class ProcMonitorTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     sealed interface Msg permits Msg.Ping, Msg.Crash {
         record Ping() implements Msg {}
@@ -62,10 +57,7 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_abnormalExit_firesDownWithReason() {
-        ctx.sayNextSection("ProcMonitor: Abnormal Exit Detection");
-        ctx.say(
                 "ProcMonitor observes a process and fires a callback when it exits abnormally (crashes). The exception that caused the crash is passed as the reason.");
-        ctx.sayCode(
                 """
             var target = counter();
             var downReason = new AtomicReference<Throwable>();
@@ -84,7 +76,6 @@ class ProcMonitorTest implements WithAssertions {
             // downReason.get().getMessage() == "BOOM"
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant M as Monitor
@@ -99,7 +90,6 @@ class ProcMonitorTest implements WithAssertions {
 
                 style T fill:#ff6b6b
             """);
-        ctx.sayNote(
                 "Unlike links, monitors are one-way. The monitoring side is NOT affected when the target crashes. The callback is invoked asynchronously.");
 
         var target = counter();
@@ -118,7 +108,6 @@ class ProcMonitorTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
         assertThat(downReason.get()).isNotNull().hasMessage("BOOM");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Target Status",
                         "Crashed",
@@ -136,10 +125,7 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_normalExit_firesDownWithNullReason() throws InterruptedException {
-        ctx.sayNextSection("ProcMonitor: Normal Exit Detection");
-        ctx.say(
                 "Monitors also fire on normal exit (stop()), but with a null reason. This distinguishes graceful shutdown from crashes.");
-        ctx.sayCode(
                 """
             var target = counter();
             var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
@@ -157,13 +143,11 @@ class ProcMonitorTest implements WithAssertions {
             // downReason.get() == null (normal exit)
             """,
                 "java");
-        ctx.sayTable(
                 new String[][] {
                     {"Exit Type", "Reason Value", "Interpretation"},
                     {"Normal (stop())", "null", "Graceful shutdown"},
                     {"Abnormal (crash)", "Exception", "Process crashed"}
                 });
-        ctx.sayNote(
                 "This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.");
 
         var target = counter();
@@ -182,7 +166,6 @@ class ProcMonitorTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
         assertThat(downReason.get()).isNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Target Exit",
                         "Normal (stop())",
@@ -200,10 +183,7 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_targetCrashes_monitoringSideKeepsRunning() throws InterruptedException {
-        ctx.sayNextSection("ProcMonitor: Unilateral Observation");
-        ctx.say(
                 "Monitors are unilateral - the monitoring side is NOT affected when the target crashes. Unlike links, crashes don't propagate through monitors.");
-        ctx.sayCode(
                 """
             var target = counter();
             var watcher = counter();
@@ -221,7 +201,6 @@ class ProcMonitorTest implements WithAssertions {
                 .until(() -> watcher.ask(new Msg.Ping()).join() >= 1);
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph LR
                 W[Watcher] -->|monitor| T[Target]
@@ -231,7 +210,6 @@ class ProcMonitorTest implements WithAssertions {
                 style W fill:#51cf66
                 style X fill:#ffd43b
             """);
-        ctx.sayNote(
                 "This is key difference from links: links are bidirectional (both die), monitors are unilateral (only callback fires). Monitors are for observation, links are for coupling.");
 
         var target = counter();
@@ -252,7 +230,6 @@ class ProcMonitorTest implements WithAssertions {
         watcher.stop();
         assertThat(aliveAfterCrash.get()).isTrue();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Target Status",
                         "Crashed",
@@ -270,10 +247,7 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void demonitor_preventsDownOnSubsequentCrash() throws InterruptedException {
-        ctx.sayNextSection("ProcMonitor: Demonitor (Cancel Monitoring)");
-        ctx.say(
                 "demonitor() cancels an active monitor. After cancellation, the DOWN callback will not fire, even if the target crashes later.");
-        ctx.sayCode(
                 """
             var target = counter();
             var downFired = new AtomicBoolean(false);
@@ -291,7 +265,6 @@ class ProcMonitorTest implements WithAssertions {
             assertThat(downFired.get()).isFalse();
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Monitoring: monitor()
@@ -299,7 +272,6 @@ class ProcMonitorTest implements WithAssertions {
                 Cancelled --> TargetCrashes: target.crash()
                 TargetCrashes --> [*]: NO callback
             """);
-        ctx.sayNote(
                 "demonitor is useful for temporary monitoring. Monitor only during specific operations, then cancel when no longer needed.");
 
         var target = counter();
@@ -315,7 +287,6 @@ class ProcMonitorTest implements WithAssertions {
         Thread.sleep(100);
         assertThat(downFired.get()).isFalse();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Monitor Status",
                         "Cancelled (demonitor)",
@@ -333,10 +304,7 @@ class ProcMonitorTest implements WithAssertions {
 
     @Test
     void monitor_multipleMonitors_allFire() {
-        ctx.sayNextSection("ProcMonitor: Multiple Independent Monitors");
-        ctx.say(
                 "Multiple processes can monitor the same target. All monitors fire independently when the target exits.");
-        ctx.sayCode(
                 """
             var target = counter();
             var fired1 = new AtomicBoolean(false);
@@ -353,7 +321,6 @@ class ProcMonitorTest implements WithAssertions {
                 .until(() -> fired1.get() && fired2.get());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph TB
                 T[Target] --> M1[Monitor 1]
@@ -366,7 +333,6 @@ class ProcMonitorTest implements WithAssertions {
                 style M1 fill:#51cf66
                 style M2 fill:#51cf66
             """);
-        ctx.sayNote(
                 "Each monitor is independent. Canceling one monitor doesn't affect others. This enables multiple observers of the same process.");
 
         var target = counter();
@@ -380,7 +346,6 @@ class ProcMonitorTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(3)).until(() -> fired1.get() && fired2.get());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Monitors Registered",
                         "2",

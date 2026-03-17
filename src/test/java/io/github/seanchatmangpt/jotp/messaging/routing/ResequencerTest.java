@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
@@ -18,7 +16,6 @@ import org.junit.jupiter.api.Test;
  * <p>The Resequencer pattern (EIP) reorders messages that arrive out of sequence. Messages are held
  * in a buffer until all preceding messages arrive, then released in order.
  */
-@DtrTest
 @DisplayName("Resequencer Pattern (EIP)")
 class ResequencerTest {
 
@@ -37,12 +34,9 @@ class ResequencerTest {
 
     @Test
     @DisplayName("should deliver messages in order when they arrive in sequence")
-    void testInOrderSequence(DtrContext ctx) throws ExecutionException, InterruptedException {
-        ctx.sayNextSection("Resequencer Pattern");
-        ctx.say(
+    void testInOrderSequence() throws ExecutionException, InterruptedException {
                 "The Resequencer pattern reorders messages that arrive out of sequence. Messages are"
                         + " held in a buffer until all preceding messages arrive, then released in order.");
-        ctx.sayCode(
                 """
                 var resequencer = Resequencer.create(1L);
 
@@ -55,7 +49,6 @@ class ResequencerTest {
                 assertThat(resequencer.offer(msg3).get()).contains("third");
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Msg 3] --> B[Resequencer]
@@ -64,7 +57,6 @@ class ResequencerTest {
                     B -->|buffer| E[Wait for 1]
                     B -->|deliver| F[1, 2, 3 in order]
                 """);
-        ctx.sayNote(
                 "Use when message order matters but the transport doesn't guarantee ordering, such as"
                         + " with UDP or parallel processing pipelines.");
         // Arrange
@@ -85,12 +77,9 @@ class ResequencerTest {
 
     @Test
     @DisplayName("should buffer out-of-order messages and deliver when sequence is complete")
-    void testOutOfOrderSequence(DtrContext ctx) throws ExecutionException, InterruptedException {
-        ctx.sayNextSection("Resequencer: Out-of-Order Handling");
-        ctx.say(
+    void testOutOfOrderSequence() throws ExecutionException, InterruptedException {
                 "When messages arrive out of order, the resequencer buffers them until the expected"
                         + " sequence number arrives.");
-        ctx.sayCode(
                 """
                 // Messages arrive: 3, 1, 2
                 var result3 = resequencer.offer(msg3).get();

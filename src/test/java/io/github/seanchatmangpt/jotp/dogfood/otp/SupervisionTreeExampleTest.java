@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.dogfood.otp;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.Test;
  *   <li>Max restart limit enforcement: supervisor terminates after exceeding limit
  * </ul>
  */
-@DtrTest
 @DisplayName("Supervision Tree Example Tests")
 class SupervisionTreeExampleTest {
 

@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.WithAssertions;
@@ -14,7 +12,6 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>"The sender monitors the node, detects DOWN, and resends." — Joe Armstrong
  */
-@DtrTest
 @Timeout(10)
 class AckRetryTest implements WithAssertions {
 
@@ -44,9 +41,7 @@ class AckRetryTest implements WithAssertions {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    void send_succeedsOnFirstAttempt(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("AckRetry: Joe Armstrong's Idempotent Retry Pattern");
-        ctx.say(
+    void send_succeedsOnFirstAttempt() throws InterruptedException {
                 """
                 AckRetry implements Joe Armstrong's advice: "The sender monitors the node, detects DOWN, and resends."
                 It provides automatic retry with configurable timeout and max attempts.
@@ -64,8 +59,7 @@ class AckRetryTest implements WithAssertions {
     }
 
     @Test
-    void send_retriesOnTimeoutAndEventuallySucceeds(DtrContext ctx) throws InterruptedException {
-        ctx.say(
+    void send_retriesOnTimeoutAndEventuallySucceeds() throws InterruptedException {
                 """
                 When an attempt fails (timeout or exception), AckRetry automatically retries.
                 Each retry is a fresh attempt with the same message.
@@ -131,8 +125,7 @@ class AckRetryTest implements WithAssertions {
     }
 
     @Test
-    void sendWithBackoff_respectsBackoffDelay(DtrContext ctx) throws InterruptedException {
-        ctx.say(
+    void sendWithBackoff_respectsBackoffDelay() throws InterruptedException {
                 """
                 sendWithBackoff adds exponential backoff between retries to avoid thundering herd problems.
                 After each failure, the system waits before retrying, giving the target time to recover.

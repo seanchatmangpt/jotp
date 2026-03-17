@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.time.Duration;
@@ -26,11 +23,9 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of JOTP
  * message passing performance. Run with DTR to see virtual thread scalability characteristics.
  */
-@DtrTest
 @DisplayName("Proc Message Throughput Stress Tests")
 class ProcStressTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -45,11 +40,6 @@ class ProcStressTest {
     @Test
     @DisplayName("Constant load (10K msg/sec for 10 seconds)")
     void testConstantLoad() throws Exception {
-        ctx.sayNextSection("Stress Test: Proc Constant Load");
-        ctx.say("Proc is JOTP's core message passing primitive built on virtual threads.");
-        ctx.say("Each Proc has a lightweight mailbox using LinkedTransferQueue.");
-        ctx.say("");
-        ctx.say("This test measures sustained throughput under constant high load.");
 
         // Create a simple process that counts received messages
         AtomicInteger messageCount = new AtomicInteger();
@@ -69,7 +59,6 @@ class ProcStressTest {
         try {
             readyLatch.await();
 
-            ctx.sayCode(
                     """
                     // Lightweight process with mailbox
                     Proc<Integer, String> proc = new Proc<>(
@@ -85,11 +74,6 @@ class ProcStressTest {
                     """,
                     "java");
 
-            ctx.say("Test configuration:");
-            ctx.say("- Virtual thread-based process");
-            ctx.say("- Load: 10K messages/sec");
-            ctx.say("- Duration: 10 seconds");
-            ctx.say("- Measure: throughput, latency, saturation");
 
             LoadProfile profile = new LoadProfile.ConstantLoad(10_000L, Duration.ofSeconds(10));
             MetricsCollector metrics =
@@ -104,7 +88,6 @@ class ProcStressTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(100_000);
             assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(10);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Target"},
                         {"Messages sent", String.valueOf(metrics.getOperationCount()), "> 100,000"},
@@ -131,14 +114,12 @@ class ProcStressTest {
                         {"Error rate", String.format("%.2f%%", metrics.getErrorRate()), "< 1%"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Virtual threads", "10K+ concurrent",
                             "Mailbox saturation", "None",
                             "Memory per proc", "~1KB heap",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Virtual threads enable massive concurrency with minimal overhead. Each proc uses ~1KB heap (vs ~1MB for platform threads). Mailbox operations are lock-free (LinkedTransferQueue).");
 
         } finally {
@@ -159,9 +140,6 @@ class ProcStressTest {
     @Test
     @DisplayName("Ramp load (1K→10K msg/sec over 10 seconds)")
     void testRampLoad() {
-        ctx.sayNextSection("Stress Test: Proc Ramp Load");
-        ctx.say("Ramp testing validates linear scalability of message passing.");
-        ctx.say("Measures how throughput scales with increasing message rate.");
 
         AtomicInteger messageCount = new AtomicInteger();
 
@@ -174,10 +152,6 @@ class ProcStressTest {
                         });
 
         try {
-            ctx.say("Test configuration:");
-            ctx.say("- Linear ramp from 1K to 10K messages/sec");
-            ctx.say("- Duration: 10 seconds");
-            ctx.say("- Measure: scalability, latency degradation");
 
             LoadProfile profile = new LoadProfile.RampLoad(1_000L, 10_000L, Duration.ofSeconds(10));
             MetricsCollector metrics =
@@ -191,7 +165,6 @@ class ProcStressTest {
             // Verify results
             assertThat(metrics.getOperationCount()).isGreaterThan(50_000);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Status"},
                         {"Messages sent", String.valueOf(metrics.getOperationCount()), "> 50,000"},
@@ -205,14 +178,12 @@ class ProcStressTest {
                         {"Error rate", String.format("%.2f%%", metrics.getErrorRate()), "< 1%"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Load range", "1K to 10K msg/sec",
                             "Scalability", "Linear",
                             "Performance", "Scales with cores",
                             "Status", "PASS"));
 
-            ctx.sayNote("Message passing scales linearly - no bottleneck at higher rates.");
 
         } finally {
             try {
@@ -232,9 +203,6 @@ class ProcStressTest {
     @Test
     @DisplayName("Spike load (baseline 1K, spike 100K for 1 sec)")
     void testSpikeLoad() {
-        ctx.sayNextSection("Stress Test: Proc Spike Load");
-        ctx.say("Spike testing validates mailbox capacity under burst traffic.");
-        ctx.say("Simulates traffic spikes common in real-world systems.");
 
         AtomicInteger messageCount = new AtomicInteger();
 
@@ -247,11 +215,6 @@ class ProcStressTest {
                         });
 
         try {
-            ctx.say("Test configuration:");
-            ctx.say("- Baseline: 1K messages/sec");
-            ctx.say("- Spike: 100K messages/sec for 1 second");
-            ctx.say("- Return to baseline");
-            ctx.say("- Measure: spike handling, mailbox saturation, recovery");
 
             LoadProfile profile =
                     new LoadProfile.SpikeLoad(1_000L, 100_000L, 1_000L, Duration.ofSeconds(10));
@@ -266,7 +229,6 @@ class ProcStressTest {
             // Verify results
             assertThat(metrics.getOperationCount()).isGreaterThan(50_000);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Description"},
                         {"Messages sent", String.valueOf(metrics.getOperationCount()), "Total"},
@@ -277,7 +239,6 @@ class ProcStressTest {
                         {"Recovery", "Immediate", "To baseline"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Baseline load", "1K msg/sec",
                             "Spike load", "100K msg/sec",
@@ -285,7 +246,6 @@ class ProcStressTest {
                             "Recovery", "Immediate",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Mailbox absorbs spikes efficiently - LinkedTransferQueue handles bursts without degradation.");
 
         } finally {
@@ -306,9 +266,6 @@ class ProcStressTest {
     @Test
     @DisplayName("Saturation test (send until breaking point)")
     void testSaturation() {
-        ctx.sayNextSection("Stress Test: Proc Saturation");
-        ctx.say("Saturation testing identifies the breaking point of message passing.");
-        ctx.say("Finds the maximum throughput before the mailbox becomes a bottleneck.");
 
         // Slow-processing proc to build up mailbox
         AtomicInteger messageCount = new AtomicInteger();
@@ -328,10 +285,6 @@ class ProcStressTest {
                         });
 
         try {
-            ctx.say("Test configuration:");
-            ctx.say("- Slow processing proc (1ms per message)");
-            ctx.say("- Aggressive load: 100K msg/sec");
-            ctx.say("- Measure: breaking point, mailbox depth, latency spike");
 
             // Aggressive load: 100K msg/sec into a slow processor
             LoadProfile profile = new LoadProfile.ConstantLoad(100_000L, Duration.ofSeconds(5));
@@ -347,7 +300,6 @@ class ProcStressTest {
 
             // Breaking point should be detected due to high latency
             // (with slow processing, latency will exceed threshold)
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Description"},
                         {
@@ -380,7 +332,6 @@ class ProcStressTest {
                         }
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Breaking point detected",
                             String.valueOf(detector.isBreakingPointDetected()),
@@ -393,7 +344,6 @@ class ProcStressTest {
                             "Status",
                             "ANALYZED"));
 
-            ctx.sayNote(
                     "Breaking point: When send rate >> processing rate. Mailbox acts as buffer (unbounded by default). Latency spikes when mailbox depth increases. Mitigation: Add backpressure or bounded mailboxes.");
 
         } finally {
@@ -414,9 +364,6 @@ class ProcStressTest {
     @Test
     @DisplayName("Concurrent senders (4 threads, 5K msg/sec each)")
     void testConcurrentSenders() {
-        ctx.sayNextSection("Stress Test: Proc Concurrent Senders");
-        ctx.say("Concurrent sender testing validates thread-safe mailbox operations.");
-        ctx.say("Multiple virtual threads can safely send to the same proc.");
 
         AtomicInteger messageCount = new AtomicInteger();
 
@@ -433,11 +380,6 @@ class ProcStressTest {
             long msgsPerSender = 5_000L;
             long totalLoad = senderCount * msgsPerSender;
 
-            ctx.say("Test configuration:");
-            ctx.say("- 4 concurrent sender threads");
-            ctx.say("- 5K msg/sec per sender (20K total)");
-            ctx.say("- Duration: 5 seconds");
-            ctx.say("- Measure: thread safety, lost messages, scalability");
 
             LoadProfile profile = new LoadProfile.ConstantLoad(totalLoad, Duration.ofSeconds(5));
 
@@ -453,7 +395,6 @@ class ProcStressTest {
             // Verify results
             assertThat(metrics.getOperationCount()).isGreaterThan(totalLoad * 4 / 10);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Status"},
                         {"Senders", String.valueOf(senderCount), "Concurrent threads"},
@@ -464,7 +405,6 @@ class ProcStressTest {
                         {"Scalability", "Linear", "With senders"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Concurrent senders", String.valueOf(senderCount),
                             "Total load", String.format("%.0f msg/sec", totalLoad),
@@ -472,7 +412,6 @@ class ProcStressTest {
                             "Thread safety", "Perfect",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Mailbox is thread-safe - concurrent sends are serialized correctly via LinkedTransferQueue.");
 
         } finally {

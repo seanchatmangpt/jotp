@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,11 +20,9 @@ import org.junit.jupiter.api.Test;
  * observability overhead impacts. Run with DTR to see actual overhead measurements and breaking
  * points.
  */
-@DtrTest
 @DisplayName("Observability Capacity Planner — Monitoring Overhead Analysis")
 class ObservabilityCapacityPlanner {
 
-    @DtrContextField private DtrContext ctx;
 
     private ObservabilityOverheadPlanner planner;
 
@@ -44,11 +39,7 @@ class ObservabilityCapacityPlanner {
     @Test
     @DisplayName("Observability: Latency Overhead Measurement")
     void testLatencyOverheadMeasurement() {
-        ctx.sayNextSection("Observability Capacity: Latency Overhead");
-        ctx.say("Measures the latency impact of observability instrumentation.");
-        ctx.say("Compares baseline latency (no observability) vs observed latency (with tracing).");
 
-        ctx.sayCode(
                 """
                 // Record overhead at different throughputs
                 planner.recordMeasurement(
@@ -68,7 +59,6 @@ class ObservabilityCapacityPlanner {
         planner.recordMeasurement(100_000, 20.0, 28.0, 15.0, 320.0); // 40% overhead
         planner.recordMeasurement(200_000, 35.0, 56.0, 28.0, 512.0); // 60% overhead
 
-        ctx.sayTable(
                 new String[][] {
                     {"Throughput", "Baseline Latency", "Observed Latency", "Overhead %", "Status"},
                     {"10K ops/sec", "5.0 ms", "5.5 ms", "10%", "ACCEPTABLE"},
@@ -78,7 +68,6 @@ class ObservabilityCapacityPlanner {
                     {"200K ops/sec", "35.0 ms", "56.0 ms", "60%", "CRITICAL"},
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "System name",
                         "JOTP-Observability-Test",
@@ -91,7 +80,6 @@ class ObservabilityCapacityPlanner {
                         "Analysis status",
                         "DOCUMENTED"));
 
-        ctx.sayNote(
                 "Observability overhead increases non-linearly with throughput. "
                         + "Consider sampling strategies above 50K ops/sec.");
 
@@ -106,12 +94,8 @@ class ObservabilityCapacityPlanner {
     @Test
     @DisplayName("Observability: Breaking Point Detection")
     void testBreakingPointDetection() {
-        ctx.sayNextSection("Observability Capacity: Breaking Point");
-        ctx.say(
                 "Identifies the throughput level where observability overhead becomes unacceptable.");
-        ctx.say("Breaking point defined as overhead exceeding threshold (5% or 10%).");
 
-        ctx.sayCode(
                 """
                 // Find breaking point at 5% overhead threshold
                 double breakingPoint = planner.findBreakingPoint(5.0);
@@ -129,7 +113,6 @@ class ObservabilityCapacityPlanner {
         double breakingPoint10Percent = planner.findBreakingPoint(10.0);
         double breakingPoint20Percent = planner.findBreakingPoint(20.0);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Overhead Threshold", "Breaking Point", "Status"},
                     {
@@ -149,7 +132,6 @@ class ObservabilityCapacityPlanner {
                     },
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "5% overhead breaking point",
                         String.format("%.0f ops/sec", breakingPoint5Percent),
@@ -160,7 +142,6 @@ class ObservabilityCapacityPlanner {
                         "Recommendation",
                         "Sample below breaking point"));
 
-        ctx.sayNote(
                 "At 5% overhead tolerance, limit tracing to "
                         + String.format("%.0f", breakingPoint5Percent)
                         + " ops/sec. "
@@ -177,9 +158,6 @@ class ObservabilityCapacityPlanner {
     @Test
     @DisplayName("Observability: Resource Overhead Analysis")
     void testResourceOverheadAnalysis() {
-        ctx.sayNextSection("Observability Capacity: Resource Overhead");
-        ctx.say("Analyzes CPU and memory overhead of the observability stack.");
-        ctx.say("Helps size monitoring infrastructure appropriately.");
 
         // Record resource-focused measurements
         planner.recordMeasurement(10_000, 5.0, 5.2, 3.0, 128.0);
@@ -191,7 +169,6 @@ class ObservabilityCapacityPlanner {
         ObservabilityOverheadPlanner.ResourceOverhead resources100k =
                 planner.getResourceOverhead(100_000);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Throughput", "CPU Overhead", "Memory Overhead", "Total Resource Impact"},
                     {"10K ops/sec", "3.0%", "128 MB", "LOW"},
@@ -209,7 +186,6 @@ class ObservabilityCapacityPlanner {
                     },
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "At 50K ops/sec",
                         String.format(
@@ -224,7 +200,6 @@ class ObservabilityCapacityPlanner {
                         "Planning status",
                         "DOCUMENTED"));
 
-        ctx.sayNote(
                 "Observability infrastructure should be provisioned with "
                         + String.format("%.0f", resources100k.memoryMb())
                         + "MB memory for 100K ops/sec workload.");
@@ -241,9 +216,6 @@ class ObservabilityCapacityPlanner {
     @Test
     @DisplayName("Observability: Recommendation Generation")
     void testRecommendationGeneration() {
-        ctx.sayNextSection("Observability Capacity: Recommendations");
-        ctx.say("Generates actionable recommendations for scaling observability.");
-        ctx.say("Considers overhead tolerance and throughput requirements.");
 
         // Record comprehensive measurements
         planner.recordMeasurement(5_000, 3.0, 3.1, 1.0, 32.0);
@@ -254,12 +226,10 @@ class ObservabilityCapacityPlanner {
 
         String recommendations = planner.generateRecommendations();
 
-        ctx.sayCode(recommendations, "text");
 
         double avgOverhead = planner.getAverageOverhead();
         double maxOverhead = planner.getMaxOverhead();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Average latency overhead",
                         String.format("%.2f%%", avgOverhead),
@@ -270,7 +240,6 @@ class ObservabilityCapacityPlanner {
                         "Action items",
                         "Review sampling strategy"));
 
-        ctx.sayNote(
                 "For production workloads above 60K ops/sec, implement tail-based sampling "
                         + "to reduce overhead while maintaining error visibility.");
 

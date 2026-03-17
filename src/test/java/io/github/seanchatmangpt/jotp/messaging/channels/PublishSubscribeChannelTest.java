@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.channels;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.*;
@@ -30,12 +29,9 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should deliver message to all subscribers")
-    void testBroadcastToAllSubscribers(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe Channel");
-        ctx.say(
+    void testBroadcastToAllSubscribers() throws InterruptedException {
                 "Broadcasts messages to all subscribed consumers. Each subscriber receives a copy of"
                         + " every message, enabling fan-out notification patterns.");
-        ctx.sayCode(
                 """
                 var channel = PublishSubscribeChannel.create();
                 channel.subscribe(sub1Events::add);
@@ -51,7 +47,6 @@ class PublishSubscribeChannelTest {
                 assertThat(sub3Events).containsExactly(message);
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Publisher] -->|Message| B[Pub-Sub Channel]
@@ -59,7 +54,6 @@ class PublishSubscribeChannelTest {
                     B -->|Copy 2| D[Subscriber 2]
                     B -->|Copy N| E[Subscriber N]
                 """);
-        ctx.sayNote(
                 "Use when multiple consumers need to receive the same message, such as event"
                         + " notifications, cache invalidation, or audit logging.");
 
@@ -86,10 +80,7 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should handle multiple published events for each subscriber")
-    void testMultipleEventsToMultipleSubscribers(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Event Ordering");
-        ctx.say("Messages are delivered to each subscriber in the order they were published.");
-        ctx.sayCode(
+    void testMultipleEventsToMultipleSubscribers() throws InterruptedException {
                 """
                 channel.publish(event1);
                 channel.publish(event2);
@@ -100,7 +91,6 @@ class PublishSubscribeChannelTest {
                 assertThat(sub2Events).containsExactly(event1, event2, event3);
                 """,
                 "java");
-        ctx.sayNote(
                 "Ordering guarantees are per-subscriber. Different subscribers may process messages at"
                         + " different rates, but each sees messages in publication order.");
 
@@ -129,10 +119,7 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should support unsubscribe")
-    void testUnsubscribe(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Dynamic Unsubscription");
-        ctx.say("Subscribers can dynamically unsubscribe to stop receiving messages.");
-        ctx.sayCode(
+    void testUnsubscribe() throws InterruptedException {
                 """
                 var h1 = channel.subscribe(handler1);
                 var h2 = channel.subscribe(handler2);
@@ -146,7 +133,6 @@ class PublishSubscribeChannelTest {
                 assertThat(sub2Events).isEmpty();
                 """,
                 "java");
-        ctx.sayNote(
                 "Dynamic subscription allows consumers to join and leave the channel at runtime"
                         + " without disrupting other subscribers.");
 
@@ -176,10 +162,7 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should allow dynamic subscription during publishing")
-    void testDynamicSubscription(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Dynamic Subscription");
-        ctx.say("New subscribers can be added at runtime, receiving messages from that point on.");
-        ctx.sayCode(
+    void testDynamicSubscription() throws InterruptedException {
                 """
                 channel.subscribe(sub1);
                 channel.publish(msg1);  // sub1 receives
@@ -192,7 +175,6 @@ class PublishSubscribeChannelTest {
                 assertThat(sub2Events).containsExactly(msg2);
                 """,
                 "java");
-        ctx.sayNote(
                 "Late-joining subscribers don't receive historical messages. They only receive"
                         + " messages published after subscription.");
 
@@ -221,12 +203,9 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should isolate subscriber exceptions")
-    void testSubscriberExceptionIsolation(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Exception Isolation");
-        ctx.say(
+    void testSubscriberExceptionIsolation() throws InterruptedException {
                 "Exceptions in one subscriber don't prevent other subscribers from receiving the"
                         + " message.");
-        ctx.sayCode(
                 """
                 channel.subscribe(msg -> {
                     throw new RuntimeException("Simulated failure");
@@ -240,7 +219,6 @@ class PublishSubscribeChannelTest {
                 assertThat(okEvents).containsExactly(message);
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Message] --> B[Subscriber 1: Throws]
@@ -248,7 +226,6 @@ class PublishSubscribeChannelTest {
                     B -.->|exception| D[Error Handler]
                     C --> E[Processed]
                 """);
-        ctx.sayNote(
                 "Exception isolation is critical for reliability—a buggy subscriber shouldn't break"
                         + " the entire notification system.");
 
@@ -272,12 +249,9 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should support different message types")
-    void testMessageTypeFiltering(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Message Types");
-        ctx.say(
+    void testMessageTypeFiltering() throws InterruptedException {
                 "Subscribers can filter messages by type, processing only the message types they care"
                         + " about.");
-        ctx.sayCode(
                 """
                 channel.subscribe(msg -> {
                     if (msg instanceof Message.EventMsg evt) {
@@ -296,7 +270,6 @@ class PublishSubscribeChannelTest {
                     "EVENT: ORDER_PLACED", "COMMAND: PROCESS_ORDER", "EVENT: SHIPMENT_SENT");
                 """,
                 "java");
-        ctx.sayNote(
                 "Type filtering enables polymorphic message handling—different subscribers can"
                         + " interpret the same message stream differently.");
 
@@ -327,12 +300,9 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should preserve message uniqueness across subscribers")
-    void testMessageIdConsistency(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Message Identity");
-        ctx.say(
+    void testMessageIdConsistency() throws InterruptedException {
                 "All subscribers receive the same message instance with the same message ID. This"
                         + " enables correlation and tracing.");
-        ctx.sayCode(
                 """
                 channel.publish(msg);
 
@@ -340,7 +310,6 @@ class PublishSubscribeChannelTest {
                 assertThat(sub1.get(0).messageId()).isEqualTo(sub2.get(0).messageId());
                 """,
                 "java");
-        ctx.sayNote(
                 "Consistent message IDs enable distributed tracing and correlation across multiple"
                         + " subscribers.");
 
@@ -363,12 +332,9 @@ class PublishSubscribeChannelTest {
 
     @Test
     @DisplayName("should support publishSync for blocking behavior")
-    void testPublishSync(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Publish-Subscribe: Synchronous Publishing");
-        ctx.say(
+    void testPublishSync() throws InterruptedException {
                 "publishSync() blocks until all subscribers have processed the message, enabling"
                         + " reliable broadcast semantics.");
-        ctx.sayCode(
                 """
                 var msg = Message.event("TEST", null);
                 int notified = channel.publishSync(msg);
@@ -379,7 +345,6 @@ class PublishSubscribeChannelTest {
                 assertThat(sub2).containsExactly(msg);
                 """,
                 "java");
-        ctx.sayNote(
                 "Use publishSync() when you need to ensure all subscribers have received the message"
                         + " before proceeding, such as in shutdown scenarios.");
 

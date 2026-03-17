@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.*;
 import org.junit.jupiter.api.*;
@@ -25,7 +23,6 @@ import org.junit.jupiter.api.*;
  *   <li>Error conditions (null inputs, invalid splitters)
  * </ul>
  */
-@DtrTest
 @DisplayName("Splitter Pattern (EIP)")
 class SplitterTest {
 
@@ -39,13 +36,10 @@ class SplitterTest {
 
     @DisplayName("Basic split: one message -> multiple parts")
     @Test
-    void testBasicSplit(DtrContext ctx) {
-        ctx.sayNextSection("Splitter Pattern");
-        ctx.say(
+    void testBasicSplit() {
                 "The Splitter pattern breaks a composite message into individual parts for"
                         + " independent processing. Each part becomes a separate message that can be"
                         + " routed and processed independently.");
-        ctx.sayCode(
                 """
                 List<Splitter.MessagePart<String>> parts =
                     Splitter.split(msg, m -> List.of("Hello", "World"));
@@ -59,14 +53,12 @@ class SplitterTest {
                     });
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Composite Message] --> B[Splitter]
                     B --> C[Part 1: seq=1/2]
                     B --> D[Part 2: seq=2/2]
                 """);
-        ctx.sayNote(
                 "Use when you need to process elements of a collection independently, such as"
                         + " processing individual items in an order or lines in a batch file.");
 
@@ -95,10 +87,7 @@ class SplitterTest {
 
     @DisplayName("Split result is immutable")
     @Test
-    void testImmutability(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Immutability");
-        ctx.say("The returned list of parts is immutable, preventing accidental modification.");
-        ctx.sayCode(
+    void testImmutability() {
                 """
                 List<Splitter.MessagePart<String>> parts =
                     Splitter.split("test", m -> List.of("a", "b", "c"));
@@ -107,7 +96,6 @@ class SplitterTest {
                     .isInstanceOf(UnsupportedOperationException.class);
                 """,
                 "java");
-        ctx.sayNote(
                 "Immutability ensures thread safety and prevents bugs caused by unintended"
                         + " modification of message parts.");
 
@@ -122,12 +110,9 @@ class SplitterTest {
 
     @DisplayName("Correlation ID can be provided explicitly")
     @Test
-    void testExplicitCorrelationId(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Correlation ID");
-        ctx.say(
+    void testExplicitCorrelationId() {
                 "All parts of a split message share the same correlation ID, which can be provided"
                         + " explicitly for tracking.");
-        ctx.sayCode(
                 """
                 UUID corrId = UUID.randomUUID();
                 List<Splitter.MessagePart<String>> parts =
@@ -137,7 +122,6 @@ class SplitterTest {
                     .allSatisfy(p -> assertThat(p.metadata().correlationId()).isEqualTo(corrId));
                 """,
                 "java");
-        ctx.sayNote(
                 "Explicit correlation IDs are useful when you need to correlate split messages with"
                         + " an external request ID or transaction ID.");
 
@@ -151,12 +135,9 @@ class SplitterTest {
 
     @DisplayName("Auto-generated correlation IDs are unique")
     @Test
-    void testUniqueCorrelationIds(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Unique Correlation IDs");
-        ctx.say(
+    void testUniqueCorrelationIds() {
                 "If no correlation ID is provided, the splitter generates a unique UUID for each"
                         + " split operation.");
-        ctx.sayCode(
                 """
                 var parts1 = Splitter.split("msg1", m -> List.of("a", "b"));
                 var parts2 = Splitter.split("msg2", m -> List.of("c", "d"));
@@ -179,10 +160,7 @@ class SplitterTest {
 
     @DisplayName("Payloads are preserved exactly")
     @Test
-    void testPayloadPreservation(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Payload Preservation");
-        ctx.say("The splitter preserves payloads exactly as returned by the splitter function.");
-        ctx.sayCode(
+    void testPayloadPreservation() {
                 """
                 List<Item> items = List.of(new Item(1, "one"), new Item(2, "two"));
 
@@ -206,10 +184,7 @@ class SplitterTest {
 
     @DisplayName("Single-part split")
     @Test
-    void testSinglePartSplit(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Single Part");
-        ctx.say("A message can be split into a single part if needed.");
-        ctx.sayCode(
+    void testSinglePartSplit() {
                 """
                 var parts = Splitter.split("message", m -> List.of("single part"));
 
@@ -228,10 +203,7 @@ class SplitterTest {
 
     @DisplayName("Large split (100+ parts)")
     @Test
-    void testLargeSplit(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Large Splits");
-        ctx.say("The splitter can handle large numbers of parts efficiently.");
-        ctx.sayCode(
+    void testLargeSplit() {
                 """
                 int partCount = 150;
                 var parts = Splitter.split("message", m -> {
@@ -249,7 +221,6 @@ class SplitterTest {
                 }
                 """,
                 "java");
-        ctx.sayNote(
                 "Consider performance and memory when splitting into very large numbers of parts."
                         + " Use partitioning for batch processing.");
 
@@ -274,12 +245,9 @@ class SplitterTest {
 
     @DisplayName("Partition: split collection into chunks")
     @Test
-    void testPartition(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Partitioning");
-        ctx.say(
+    void testPartition() {
                 "Partitioning splits a large collection into fixed-size chunks, useful for batch"
                         + " processing.");
-        ctx.sayCode(
                 """
                 record Batch(List<String> items) {}
 
@@ -292,7 +260,6 @@ class SplitterTest {
                 assertThat(parts.get(2).payload().items()).containsExactly("e");
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Batch of 5] --> B[Partition by 2]
@@ -300,7 +267,6 @@ class SplitterTest {
                     B --> D[Chunk 2: c,d]
                     B --> E[Chunk 3: e]
                 """);
-        ctx.sayNote(
                 "Use partitioning when you need to process large collections in batches to control"
                         + " memory usage or parallelize work.");
 
@@ -322,11 +288,8 @@ class SplitterTest {
 
     @DisplayName("MessagePart metadata: sequence out of bounds throws IAE")
     @Test
-    void testPartMetadataValidation(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Metadata Validation");
-        ctx.say(
+    void testPartMetadataValidation() {
                 "Message part metadata validates that sequence numbers are 1-indexed and in range.");
-        ctx.sayCode(
                 """
                 UUID corrId = UUID.randomUUID();
 
@@ -339,7 +302,6 @@ class SplitterTest {
                     .hasMessageContaining("1-indexed");
                 """,
                 "java");
-        ctx.sayNote(
                 "Validation catches programming errors early, preventing invalid message parts from"
                         + " being created.");
 
@@ -356,10 +318,7 @@ class SplitterTest {
 
     @DisplayName("MessagePart: describe() provides readable description")
     @Test
-    void testPartDescribe(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Debugging");
-        ctx.say("Message parts provide a describe() method for debugging and logging.");
-        ctx.sayCode(
+    void testPartDescribe() {
                 """
                 var part = new Splitter.MessagePart<>(
                     "payload", new Splitter.PartMetadata(UUID.randomUUID(), 3, 5));
@@ -381,10 +340,7 @@ class SplitterTest {
 
     @DisplayName("Splitter returns empty list throws IAE")
     @Test
-    void testEmptySplitterResult(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Error Handling");
-        ctx.say("The splitter validates that the result is non-empty.");
-        ctx.sayCode(
+    void testEmptySplitterResult() {
                 """
                 assertThatThrownBy(() -> Splitter.split("message", m -> List.of()))
                     .isInstanceOf(IllegalArgumentException.class)
@@ -399,10 +355,7 @@ class SplitterTest {
 
     @DisplayName("Null message throws NPE")
     @Test
-    void testNullMessage(DtrContext ctx) {
-        ctx.sayNextSection("Splitter: Null Handling");
-        ctx.say("The splitter validates that the message is not null.");
-        ctx.sayCode(
+    void testNullMessage() {
                 """
                 assertThatThrownBy(() -> Splitter.split(null, m -> List.of("a")))
                     .isInstanceOf(NullPointerException.class)

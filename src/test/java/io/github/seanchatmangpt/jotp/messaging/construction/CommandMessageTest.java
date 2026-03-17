@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.construction;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.io.Serializable;
 import java.time.Duration;
@@ -19,7 +18,6 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Tests cover message creation, factory methods, correlation IDs, timeouts, and type safety.
  */
-@DtrTest
 @DisplayName("CommandMessage — Command message construction pattern")
 class CommandMessageTest implements WithAssertions {
 

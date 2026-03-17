@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.enterprise.health;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -27,7 +25,6 @@ import org.junit.jupiter.api.Test;
 @DisplayName("HealthCheckManager: Joe Armstrong-style non-invasive process health monitoring")
 class HealthCheckManagerTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -39,8 +36,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("register and execute health checks with status tracking")
     void registerAndExecute_checksStatus() {
-        ctx.sayNextSection("Health Checks: System Status Monitoring");
-        ctx.say(
                 """
                 HealthCheckManager provides non-invasive monitoring of service health without killing the target on failures (unlike ProcLink crash propagation).
 
@@ -57,7 +52,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 4. **Custom**: Domain-specific async health logic (database, cache, etc.)
                 """);
 
-        ctx.sayCode(
                 """
             // Create health check configuration
             HealthCheckConfig config = HealthCheckConfig.builder("payment-service")
@@ -116,7 +110,6 @@ class HealthCheckManagerTest implements WithAssertions {
         var dbResult = manager.getLastResult("database");
         var cacheResult = manager.getLastResult("cache");
 
-        ctx.sayTable(
                 new String[][] {
                     {
                         "Property",
@@ -136,7 +129,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Check Execution",
                         "Parallel (non-blocking)",
@@ -153,8 +145,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("aggregate check results into UP, DOWN, and DEGRADED statuses")
     void aggregateResults_statusTypes() {
-        ctx.sayNextSection("Status Aggregation: UP, DOWN, DEGRADED");
-        ctx.say(
                 """
                 HealthCheckManager aggregates multiple check results into four distinct status types:
 
@@ -170,7 +160,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - Load balancers should shift traffic away when `!isOperational()`
                 """);
 
-        ctx.sayCode(
                 """
             // Test all four status types
             long now = System.currentTimeMillis();
@@ -205,7 +194,6 @@ class HealthCheckManagerTest implements WithAssertions {
         assertThat(unhealthyOps).isFalse();
         assertThat(unreachableOps).isFalse();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Status", "isOperational()", "Traffic Decision", "Remediation"},
                     {"HEALTHY", "true", "Route normally", "None - monitor"},
@@ -214,7 +202,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     {"UNREACHABLE", "false", "Shift away", "Check process/network, escalate"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Production Strategy",
                         "Allow DEGRADED traffic (partial capacity > no capacity)",
@@ -229,8 +216,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("handle check timeouts without blocking manager")
     void timeoutHandling_nonBlocking() {
-        ctx.sayNextSection("Timeout Handling: Preventing Cascade Failures");
-        ctx.say(
                 """
                 Health checks MUST timeout to prevent slow/deadlocked services from blocking the health manager.
 
@@ -246,7 +231,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - Validation: `timeout <= checkInterval` enforced at build time
                 """);
 
-        ctx.sayCode(
                 """
             // Valid configuration: timeout < checkInterval
             HealthCheckConfig validConfig = HealthCheckConfig.builder("api-service")
@@ -299,7 +283,6 @@ class HealthCheckManagerTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Parameter", "Description", "Example Value"},
                     {"checkInterval", "Frequency of check cycles", "10 seconds"},
@@ -312,7 +295,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayWarning(
                 """
                 **Timeout Anti-Pattern:**
                 Setting `timeout = checkInterval` leaves no buffer for network latency or GC pauses.
@@ -329,8 +311,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("cascade health failures through dependency graph")
     void dependencyCascading_propagatesFailures() {
-        ctx.sayNextSection("Dependency Health Cascading: Failure Propagation");
-        ctx.say(
                 """
                 In distributed systems, service dependencies form a directed graph. Health failures cascade downstream:
 
@@ -346,7 +326,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - **Fail-fast** for critical dependencies (immediate UNHEALTHY)
                 """);
 
-        ctx.sayMermaid(
                 """
             graph TD
                 DB[(Database)] -->|ping| API[API Service]
@@ -370,7 +349,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 class MQ,WORKER healthy
             """);
 
-        ctx.sayCode(
                 """
             // Simulate dependency cascade
             var dbManager = HealthCheckManager.create(
@@ -442,7 +420,6 @@ class HealthCheckManagerTest implements WithAssertions {
         HealthStatus cacheStatus = cacheManager.getStatus();
         boolean isCascading = !dbStatus.isOperational() && !cacheStatus.isOperational();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Database Status",
                         dbStatus.getClass().getSimpleName(),
@@ -453,7 +430,6 @@ class HealthCheckManagerTest implements WithAssertions {
                         "Mitigation Strategy",
                         "Circuit breaker + bulkhead isolation"));
 
-        ctx.sayWarning(
                 """
                 **Cascading Failure Risk:**
                 Without circuit breakers, a single dependency failure can propagate through the entire dependency graph, causing system-wide outage.
@@ -474,8 +450,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("integrate with Kubernetes readiness and liveness probes")
     void kubernetesIntegration_probeMapping() {
-        ctx.sayNextSection("Kubernetes Probe Integration: Readiness and Liveness");
-        ctx.say(
                 """
                 Kubernetes uses three probe types to manage pod lifecycle. HealthCheckManager maps directly to these probes:
 
@@ -491,7 +465,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - `HealthStatus.isOperational()` → Ready condition (traffic routing)
                 """);
 
-        ctx.sayCode(
                 """
             // Kubernetes-ready health check configuration
             HealthCheckConfig k8sConfig = HealthCheckConfig.builder("web-api")
@@ -569,7 +542,6 @@ class HealthCheckManagerTest implements WithAssertions {
                         .failThreshold(3)
                         .build();
 
-        ctx.sayTable(
                 new String[][] {
                     {
                         "Probe Type",
@@ -597,7 +569,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "HTTP Endpoint",
                         "/health/ready (or /health/live for liveness)",
@@ -608,7 +579,6 @@ class HealthCheckManagerTest implements WithAssertions {
                         "Traffic Decision",
                         "Kubernetes sends traffic only when 200 OK"));
 
-        ctx.sayCode(
                 """
             # Kubernetes Pod configuration (YAML)
             apiVersion: v1
@@ -651,7 +621,6 @@ class HealthCheckManagerTest implements WithAssertions {
             """,
                 "yaml");
 
-        ctx.say(
                 """
                 **Production Best Practices:**
 
@@ -674,8 +643,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("track individual check results with timestamps and latency")
     void resultTracking_detailedMetrics() {
-        ctx.sayNextSection("Health Check Result Tracking: Detailed Metrics");
-        ctx.say(
                 """
                 HealthCheckManager tracks detailed results for each check, enabling observability and debugging:
 
@@ -691,7 +658,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - Error message (for failures)
                 """);
 
-        ctx.sayCode(
                 """
             long now = System.currentTimeMillis();
 
@@ -733,7 +699,6 @@ class HealthCheckManagerTest implements WithAssertions {
         assertThat(fail.isPassed()).isFalse();
         assertThat(fail.checkName()).isEqualTo("database-ping");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Error Message", "N/A"},
                     {"Check Name", "Pass Result", "Fail Result"},
@@ -741,7 +706,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     {"Latency", "ms", "ms"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Observability Value",
                         "Track check latency trends for performance degradation",
@@ -756,8 +720,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("notify listeners on health status transitions")
     void statusTransitionListeners_reactiveActions() {
-        ctx.sayNextSection("Status Transition Listeners: Reactive Health Actions");
-        ctx.say(
                 """
                 HealthCheckManager supports reactive callbacks on status transitions, enabling automated remediation:
 
@@ -769,7 +731,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 5. **Logging**: Log status changes for audit trail
                 """);
 
-        ctx.sayCode(
                 """
             var manager = HealthCheckManager.create(
                 HealthCheckConfig.builder("critical-service")
@@ -837,7 +798,6 @@ class HealthCheckManagerTest implements WithAssertions {
 
         manager.addListener(listener);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Transition", "Severity", "Action"},
                     {"HEALTHY → DEGRADED", "WARNING", "Log warning, send notification"},
@@ -846,7 +806,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     {"HEALTHY → UNREACHABLE", "CRITICAL", "Escalate, shift traffic away"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Listener Registration",
                         "Thread-safe (CopyOnWriteArrayList)",
@@ -863,8 +822,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("validate configuration constraints at build time")
     void configurationValidation_preventsErrors() {
-        ctx.sayNextSection("Configuration Validation: Fail Fast at Build Time");
-        ctx.say(
                 """
                 HealthCheckConfig validates all constraints at build time, preventing runtime errors:
 
@@ -877,7 +834,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 6. **failThreshold > 0** (zero or negative → IllegalArgumentException)
                 """);
 
-        ctx.sayCode(
                 """
             // Valid configuration
             HealthCheckConfig valid = HealthCheckConfig.builder("service")
@@ -966,7 +922,6 @@ class HealthCheckManagerTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Constraint", "Rationale", "Error Type"},
                     {"checks non-empty", "Must check something", "IllegalArgumentException"},
@@ -981,7 +936,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     {"failThreshold > 0", "Must fail eventually", "IllegalArgumentException"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Fail-Fast Philosophy",
                         "Detect configuration errors at build time, not runtime",
@@ -996,8 +950,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("manage health check manager lifecycle (create and shutdown)")
     void lifecycleManagement_createAndShutdown() {
-        ctx.sayNextSection("Health Check Manager Lifecycle: Create and Shutdown");
-        ctx.say(
                 """
                 HealthCheckManager follows a simple lifecycle: create → monitor → shutdown.
 
@@ -1012,7 +964,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - First check cycle runs after checkInterval elapses
                 """);
 
-        ctx.sayCode(
                 """
             // Create manager with valid configuration
             HealthCheckConfig config = HealthCheckConfig.builder("my-service")
@@ -1059,7 +1010,6 @@ class HealthCheckManagerTest implements WithAssertions {
 
         assertThatNoException().isThrownBy(manager::shutdown);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Lifecycle Stage", "Coordinator Process", "Status", "Listeners"},
                     {"create()", "Spawned", "HEALTHY (initial)", "Can register"},
@@ -1067,7 +1017,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     {"shutdown()", "Terminated", "Final state", "Inactive"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial Status Design",
                         "Optimistic (HEALTHY) assumes service is healthy until proven otherwise",
@@ -1082,8 +1031,6 @@ class HealthCheckManagerTest implements WithAssertions {
     @Test
     @DisplayName("register and remove health status listeners")
     void listenerManagement_addAndRemove() {
-        ctx.sayNextSection("Listener Management: Register and Remove Callbacks");
-        ctx.say(
                 """
                 HealthCheckManager supports dynamic listener registration for reactive health monitoring:
 
@@ -1107,7 +1054,6 @@ class HealthCheckManagerTest implements WithAssertions {
                 - Logging and audit trails
                 """);
 
-        ctx.sayCode(
                 """
             var manager = HealthCheckManager.create(
                 HealthCheckConfig.builder("api-service")
@@ -1172,7 +1118,6 @@ class HealthCheckManagerTest implements WithAssertions {
 
         assertThat(called.get()).isFalse();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Operation", "Behavior", "Thread Safety"},
                     {
@@ -1197,7 +1142,6 @@ class HealthCheckManagerTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Listener Storage",
                         "CopyOnWriteArrayList (thread-safe, iterator-safe)",

@@ -18,9 +18,6 @@ package io.github.seanchatmangpt.jotp.benchmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.observability.FrameworkEventBus;
 import io.github.seanchatmangpt.jotp.observability.FrameworkMetrics;
@@ -46,13 +43,11 @@ import org.junit.jupiter.api.Test;
  * ./mvnw test -Dtest=SimpleObservabilityBenchmark
  * }</pre>
  */
-@DtrTest
 @DisplayName("Simple Observability Benchmark")
 class SimpleObservabilityBenchmark {
 
     private static final int ITERATIONS = 50_000;
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -67,9 +62,6 @@ class SimpleObservabilityBenchmark {
     @Test
     @DisplayName("Benchmark: Quick Observability Overhead Check")
     void quickOverheadCheck() throws Exception {
-        ctx.sayNextSection("Simple Observability Benchmark");
-        ctx.say("Quick validation of observability overhead for CI/CD pipelines.");
-        ctx.say("Compares Proc.tell() latency with and without observability.");
 
         // Phase 1: Baseline (disabled)
         Proc<Integer, String> proc1 = createTestProcess();
@@ -123,7 +115,6 @@ class SimpleObservabilityBenchmark {
         double overhead = enabled.mean() - baseline.mean();
         boolean pass = overhead < 100 && enabled.p95() < 1_000;
 
-        ctx.sayTable(
                 new String[][] {
                     {"Configuration", "Mean (ns)", "p50 (ns)", "p95 (ns)", "p99 (ns)"},
                     {
@@ -142,7 +133,6 @@ class SimpleObservabilityBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Overhead",
                         String.format("%.2f ns", overhead),
@@ -155,7 +145,6 @@ class SimpleObservabilityBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "Simple benchmark validates zero-overhead principle: overhead < 100ns, p95 < 1us.");
 
         // Assertions
@@ -166,8 +155,6 @@ class SimpleObservabilityBenchmark {
     @Test
     @DisplayName("Benchmark: Event Bus Publishing Overhead")
     void eventBusPublishOverhead() throws Exception {
-        ctx.sayNextSection("Event Bus Publishing Overhead");
-        ctx.say("Measures the overhead of publishing events to the FrameworkEventBus.");
 
         System.setProperty("jotp.observability.enabled", "true");
         FrameworkEventBus eventBus = FrameworkEventBus.getDefault();
@@ -198,7 +185,6 @@ class SimpleObservabilityBenchmark {
 
         boolean pass = stats.mean() < 500;
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value (ns)"},
                     {"Mean", String.format("%.2f", stats.mean())},
@@ -209,7 +195,6 @@ class SimpleObservabilityBenchmark {
                     {"Max", String.valueOf(stats.max())}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Event Type",
                         "ProcessCreated",
@@ -220,7 +205,6 @@ class SimpleObservabilityBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote("Event bus publishing should be fast even with observability enabled.");
 
         assertThat(stats.mean()).as("Event bus publish should be < 500ns mean").isLessThan(500.0);
     }

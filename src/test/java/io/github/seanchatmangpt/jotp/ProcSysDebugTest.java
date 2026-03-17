@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.Duration;
@@ -24,7 +22,6 @@ import org.junit.jupiter.api.Test;
  *   <li>{@code system_code_change/4} — hot state transformation via {@link ProcSys#codeChange}
  * </ol>
  */
-@DtrTest
 @DisplayName("ProcSys: sys:trace, sys:handle_debug, system_code_change")
 class ProcSysDebugTest {
 
@@ -59,9 +56,7 @@ class ProcSysDebugTest {
 
     @Test
     @DisplayName("trace(proc, true) prints In and Out events to output stream")
-    void traceToCustomWriter(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("ProcSys: OTP sys Module Equivalent");
-        ctx.say(
+    void traceToCustomWriter() throws Exception {
                 """
                 ProcSys provides JOTP's equivalent to Erlang/OTP's sys module for process introspection.
                 The trace/2 function enables debug logging of all message events (In/Out) to a PrintStream,
@@ -112,8 +107,7 @@ class ProcSysDebugTest {
 
     @Test
     @DisplayName("getLog returns In and Out events for each message processed")
-    void getLogReturnsEvents(DtrContext ctx) throws Exception {
-        ctx.say(
+    void getLogReturnsEvents() throws Exception {
                 """
                 getLog retrieves the debug event log - a bounded buffer of In (message received)
                 and Out (reply sent) events. This mirrors Erlang's sys:get_log/1 for inspecting
@@ -183,8 +177,7 @@ class ProcSysDebugTest {
 
     @Test
     @DisplayName("handleDebug appends events to the log and returns updated DebugOptions")
-    void handleDebugBuildsLog(DtrContext ctx) {
-        ctx.say(
+    void handleDebugBuildsLog() {
                 """
                 handleDebug is the process-internal API (equivalent to sys:handle_debug/4) that
                 appends debug events to the log. Processes call this in their message handlers to
@@ -251,8 +244,7 @@ class ProcSysDebugTest {
 
     @Test
     @DisplayName("getState resolves via sysQueue with priority over user mailbox")
-    void getStateViaSystemChannel(DtrContext ctx) throws Exception {
-        ctx.say(
+    void getStateViaSystemChannel() throws Exception {
                 """
                 getState uses the high-priority sys channel to retrieve process state without
                 waiting for the user mailbox to drain. This is critical for production introspection
@@ -296,8 +288,7 @@ class ProcSysDebugTest {
 
     @Test
     @DisplayName("codeChange applies transformer atomically between messages")
-    void codeChangeTransformsState(DtrContext ctx) throws Exception {
-        ctx.say(
+    void codeChangeTransformsState() throws Exception {
                 """
                 codeChange implements hot code upgrade - applying a state transformation function
                 atomically between message processing. This mirrors Erlang's system_code_change/4

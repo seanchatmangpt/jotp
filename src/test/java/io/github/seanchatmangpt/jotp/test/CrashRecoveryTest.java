@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.test;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.CrashRecovery;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.jqwik.api.ForAll;
@@ -31,14 +29,11 @@ import org.junit.jupiter.api.Test;
  * @see CrashRecovery
  * @see io.github.seanchatmangpt.jotp.Result
  */
-@DtrTest
 class CrashRecoveryTest implements WithAssertions {
 
     @Test
-    void successOnFirstAttempt(DtrContext ctx) {
-        ctx.say(
+    void successOnFirstAttempt() {
                 "CrashRecovery.retry() returns Ok immediately when the supplier succeeds on the first attempt.");
-        ctx.say("No retries are performed when the operation succeeds.");
 
         var result = CrashRecovery.retry(3, () -> 42);
         assertThat(result.isSuccess()).isTrue();
@@ -46,10 +41,8 @@ class CrashRecoveryTest implements WithAssertions {
     }
 
     @Test
-    void recoversAfterInitialFailures(DtrContext ctx) {
-        ctx.say(
+    void recoversAfterInitialFailures() {
                 "CrashRecovery.retry() automatically retries on failure until success or max attempts exhausted.");
-        ctx.say("The supplier is invoked in an isolated virtual thread on each attempt.");
 
         var attempts = new AtomicInteger(0);
         var result =
@@ -65,14 +58,11 @@ class CrashRecoveryTest implements WithAssertions {
         assertThat(result.orElseThrow()).isEqualTo("recovered");
         assertThat(attempts.get()).isEqualTo(3);
 
-        ctx.say("After 2 failures, the 3rd attempt succeeded with value 'recovered'.");
     }
 
     @Test
-    void failureWhenAllAttemptsExhausted(DtrContext ctx) {
-        ctx.say(
+    void failureWhenAllAttemptsExhausted() {
                 "When all retry attempts are exhausted, CrashRecovery returns Err containing the final exception.");
-        ctx.say(
                 "This enables railway-oriented error handling without catching exceptions at the call site.");
 
         var result =
@@ -83,14 +73,11 @@ class CrashRecoveryTest implements WithAssertions {
                         });
         assertThat(result.isFailure()).isTrue();
 
-        ctx.say(
                 "Result is Err after 3 failed attempts — the caller decides how to handle the failure.");
     }
 
     @Test
-    void singleAttemptAllowed(DtrContext ctx) {
-        ctx.say("CrashRecovery.retry(1, ...) performs exactly one attempt with no retries.");
-        ctx.say("This is useful for isolating a single operation in a virtual thread.");
+    void singleAttemptAllowed() {
 
         var result = CrashRecovery.retry(1, () -> "ok");
         assertThat(result.isSuccess()).isTrue();

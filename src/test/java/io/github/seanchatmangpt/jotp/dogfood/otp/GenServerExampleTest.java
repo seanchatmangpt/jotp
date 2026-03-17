@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.dogfood.otp.GenServerExample.CounterMessage;
@@ -26,11 +23,9 @@ import org.junit.jupiter.api.Test;
  * <p>Key patterns: - Proc<S,M> for stateful processes - ask() for request-response - Immutable" + "
  * state records - Sealed message types - Timeout handling
  */
-@DtrTest
 @DisplayName("GenServerExample (Counter Service) - OTP GenServer Pattern in Java")
 class GenServerExampleTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     private Proc<CounterState, CounterMessage> counterService;
     private Duration timeout;
@@ -54,13 +49,10 @@ class GenServerExampleTest implements WithAssertions {
     @Test
     @DisplayName("should initialize with count = 0")
     void shouldInitializeWithZero() throws InterruptedException {
-        ctx.sayNextSection("OTP GenServer Pattern: Stateful Processes");
-        ctx.say(
                 "JOTP's Proc<S,M> implements the OTP GenServer pattern — a stateful process that handles"
                         + " messages and updates state immutably. Each message creates a new state instead"
                         + " of mutating existing state.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Concept", "State", "Request/Response"},
                     {"Erlang/OTP", "Immutable record", "call/2"},
@@ -70,7 +62,6 @@ class GenServerExampleTest implements WithAssertions {
                     {"Proc<S,M>", "Sealed + pattern matching", "tell()"}
                 });
 
-        ctx.sayCode(
                 """
             // Create a GenServer-style process
             Proc<CounterState, CounterMessage> counterService = new Proc<>(
@@ -96,7 +87,6 @@ class GenServerExampleTest implements WithAssertions {
         assertThat(result.count()).isEqualTo(0);
         counterService.stop();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial State",
                         "CounterState(0)",
@@ -107,7 +97,6 @@ class GenServerExampleTest implements WithAssertions {
                         "State Change",
                         "None (query)"));
 
-        ctx.sayNote(
                 "Proc<S,M> uses sealed message types and pattern matching, ensuring exhaustive handling"
                         + " at compile time. The state is always immutable — transitions create new state"
                         + " records.");
@@ -116,12 +105,9 @@ class GenServerExampleTest implements WithAssertions {
     @Test
     @DisplayName("should increment correctly via ask()")
     void shouldIncrementCorrectly() throws InterruptedException {
-        ctx.sayNextSection("Request-Response Messaging with ask()");
-        ctx.say(
                 "The ask() method implements OTP's call/2 pattern — send a request and wait for a"
                         + " response. It returns CompletableFuture<State>, enabling async/await patterns.");
 
-        ctx.sayCode(
                 """
             // Send command and wait for new state
             counterService.ask(new CounterMessage.IncrementBy(5), timeout)
@@ -143,7 +129,6 @@ class GenServerExampleTest implements WithAssertions {
         assertThat(result.count()).isEqualTo(5);
         counterService.stop();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Command",
                         "IncrementBy(5)",
@@ -156,7 +141,6 @@ class GenServerExampleTest implements WithAssertions {
                         "Pattern",
                         "Command Query Responsibility Segregation (CQRS)"));
 
-        ctx.sayNote(
                 "ask() returns the new state after message processing. This enables CQRS-style"
                         + " operations where commands change state and queries read it. All state"
                         + " transitions are immutable.");
@@ -165,12 +149,9 @@ class GenServerExampleTest implements WithAssertions {
     @Test
     @DisplayName("should handle multiple sequential asks")
     void shouldHandleMultipleSequentialAsks() throws InterruptedException {
-        ctx.sayNextSection("Sequential State Transitions");
-        ctx.say(
                 "GenServers process messages sequentially from their mailbox. This ensures consistent"
                         + " state — no race conditions from concurrent state updates.");
 
-        ctx.sayCode(
                 """
             // Sequential message processing
             counterService.ask(new CounterMessage.IncrementBy(2), timeout).join();  // 0 → 2
@@ -192,7 +173,6 @@ class GenServerExampleTest implements WithAssertions {
         assertThat(result.count()).isEqualTo(10);
         counterService.stop();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Message 1",
                         "IncrementBy(2) → state = 2",
@@ -205,7 +185,6 @@ class GenServerExampleTest implements WithAssertions {
                         "Processing",
                         "Sequential, ordered"));
 
-        ctx.sayNote(
                 "Sequential processing eliminates race conditions. Each message sees the state left by"
                         + " the previous message. This is the essence of the Actor model — message passing"
                         + " instead of shared mutable state.");
@@ -218,13 +197,10 @@ class GenServerExampleTest implements WithAssertions {
         @Test
         @DisplayName("should handle multiple concurrent asks")
         void shouldHandleConcurrentAsks() throws InterruptedException {
-            ctx.sayNextSection("Concurrent Requests with Serialized Processing");
-            ctx.say(
                     "Multiple callers can send concurrent ask() requests. The GenServer processes them"
                             + " one at a time (serial execution) but responses return as soon as each message"
                             + " is handled.");
 
-            ctx.sayCode(
                     """
             // Fire three concurrent asks
             CompletableFuture<CounterState> async1 =
@@ -259,7 +235,6 @@ class GenServerExampleTest implements WithAssertions {
 
             counterService.stop();
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Concurrent Requests",
                             "3 concurrent IncrementBy(1)",
@@ -272,7 +247,6 @@ class GenServerExampleTest implements WithAssertions {
                             "Pattern",
                             "Mailbox queue"));
 
-            ctx.sayNote(
                     "The mailbox serializes concurrent requests — no locks needed. This is the Actor"
                             + " model's solution to concurrency: message passing instead of shared mutable"
                             + " state.");
@@ -281,12 +255,9 @@ class GenServerExampleTest implements WithAssertions {
         @Test
         @DisplayName("should maintain order and consistency with concurrent asks")
         void shouldMaintainOrderWithConcurrentAsks() throws InterruptedException {
-            ctx.sayNextSection("State Consistency Under Concurrency");
-            ctx.say(
                     "Even with concurrent requests, state transitions are consistent. Each message is"
                             + " processed atomically, seeing the state left by the previous message.");
 
-            ctx.sayCode(
                     """
             // Concurrent increments of different amounts
             CompletableFuture<CounterState> f1 =
@@ -329,7 +300,6 @@ class GenServerExampleTest implements WithAssertions {
 
             counterService.stop();
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Increments",
                             "10 + 20 + 30",
@@ -340,7 +310,6 @@ class GenServerExampleTest implements WithAssertions {
                             "Consistency",
                             "Guaranteed by serialization"));
 
-            ctx.sayNote(
                     "The final state is deterministic (sum of all increments) even though intermediate"
                             + " states depend on message ordering. This is because each state transition is"
                             + " atomic — no partially applied updates.");
@@ -354,13 +323,10 @@ class GenServerExampleTest implements WithAssertions {
         @Test
         @DisplayName("should respect timeout on ask()")
         void shouldRespectTimeout() throws InterruptedException {
-            ctx.sayNextSection("Timeout Handling in ask()");
-            ctx.say(
                     "ask() accepts a timeout parameter. If the GenServer doesn't respond within the"
                             + " timeout, the CompletableFuture completes exceptionally with"
                             + " TimeoutException.");
 
-            ctx.sayCode(
                     """
             // Create a slow GenServer (sleeps 2 seconds)
             Proc<CounterState, CounterMessage> slowCounterService = new Proc<>(
@@ -413,7 +379,6 @@ class GenServerExampleTest implements WithAssertions {
 
             slowCounterService.stop();
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Operation Time",
                             "2000ms (2 seconds)",
@@ -424,7 +389,6 @@ class GenServerExampleTest implements WithAssertions {
                             "Process State",
                             "Still running (not crashed)"));
 
-            ctx.sayNote(
                     "Timeouts don't crash the GenServer — the process continues running. The caller"
                             + " gets a TimeoutException, but the GenServer is unaffected. This prevents"
                             + " cascading failures from slow operations.");
@@ -433,12 +397,9 @@ class GenServerExampleTest implements WithAssertions {
         @Test
         @DisplayName("should complete within timeout for fast operations")
         void shouldCompleteWithinTimeout() throws InterruptedException {
-            ctx.sayNextSection("Normal Completion with Timeout");
-            ctx.say(
                     "For fast operations that complete within the timeout, ask() returns the new state"
                             + " normally. Timeouts only trigger when the deadline expires.");
 
-            ctx.sayCode(
                     """
             // Fast operation with generous timeout
             Duration generousTimeout = Duration.ofSeconds(5);
@@ -460,7 +421,6 @@ class GenServerExampleTest implements WithAssertions {
 
             counterService.stop();
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Operation",
                             "IncrementBy(5)",
@@ -471,7 +431,6 @@ class GenServerExampleTest implements WithAssertions {
                             "Result",
                             "Success (no timeout)"));
 
-            ctx.sayNote(
                     "Always use timeouts in production, even for fast operations. This prevents"
                             + " indefinite hangs if the GenServer crashes or enters an infinite loop.");
         }
@@ -484,12 +443,9 @@ class GenServerExampleTest implements WithAssertions {
         @Test
         @DisplayName("should maintain immutable state records")
         void shouldMaintainImmutableState() throws InterruptedException {
-            ctx.sayNextSection("Immutable State Records");
-            ctx.say(
                     "GenServer state is always immutable — a record. Each state transition creates a"
                             + " new state record instead of mutating the existing one.");
 
-            ctx.sayCode(
                     """
             // Record-based state (immutable)
             public record CounterState(int count) {
@@ -518,7 +474,6 @@ class GenServerExampleTest implements WithAssertions {
 
             counterService.stop();
 
-            ctx.sayKeyValue(
                     Map.of(
                             "State Type",
                             "Record (immutable)",
@@ -529,7 +484,6 @@ class GenServerExampleTest implements WithAssertions {
                             "s1 After s2 Created",
                             "Still CounterState(5) (unchanged)"));
 
-            ctx.sayNote(
                     "Immutable state eliminates race conditions — no need for locks or synchronized"
                             + " blocks. The JVM can optimize immutable records more aggressively than"
                             + " mutable objects.");
@@ -538,12 +492,9 @@ class GenServerExampleTest implements WithAssertions {
         @Test
         @DisplayName("CounterState should validate non-negative count")
         void shouldValidateNonNegativeCount() {
-            ctx.sayNextSection("State Validation with Compact Constructors");
-            ctx.say(
                     "Records support compact constructors for validation. The CounterState record"
                             + " validates that count is non-negative at construction time.");
 
-            ctx.sayCode(
                     """
             // Record with validation
             public record CounterState(int count) {
@@ -562,7 +513,6 @@ class GenServerExampleTest implements WithAssertions {
 
             assertThatIllegalArgumentException().isThrownBy(() -> new CounterState(-1));
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Validation",
                             "Compact constructor",
@@ -573,7 +523,6 @@ class GenServerExampleTest implements WithAssertions {
                             "Timing",
                             "Construction time"));
 
-            ctx.sayNote(
                     "State validation at construction prevents invalid states from ever existing."
                             + " This is fail-fast design — bugs are caught immediately rather than"
                             + " propagating invalid state.");

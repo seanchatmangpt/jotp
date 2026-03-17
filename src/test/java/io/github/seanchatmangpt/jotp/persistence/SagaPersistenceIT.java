@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.DurableState;
 import io.github.seanchatmangpt.jotp.EventSourcingAuditLog;
@@ -49,12 +46,10 @@ import org.junit.jupiter.api.io.TempDir;
  * @see EventSourcingAuditLog
  * @see io.github.seanchatmangpt.jotp.DistributedSagaCoordinator
  */
-@DtrTest
 class SagaPersistenceIT {
 
     @TempDir Path tempDir;
 
-    @DtrContextField private DtrContext ctx;
 
     private PersistenceConfig config;
 
@@ -137,8 +132,7 @@ class SagaPersistenceIT {
     // ── Tests ───────────────────────────────────────────────────────────────────
 
     @org.junit.jupiter.api.Test
-    void shouldRecoverSagaStateAfterCrashDuringExecution(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldRecoverSagaStateAfterCrashDuringExecution() throws Exception {
                 """
                 Saga crash recovery ensures that long-running distributed transactions
                 can survive JVM failures and resume from where they left off. This test
@@ -156,7 +150,6 @@ class SagaPersistenceIT {
 
         var steps = createOrderFulfillmentSteps();
 
-        ctx.say("Phase 1: Start saga and execute first step - State persisted to disk.");
 
         var saga1 =
                 DurableState.<SagaState>builder()
@@ -178,7 +171,6 @@ class SagaPersistenceIT {
         saga1.recordEvent(new SagaEvent.StepCompleted("order-123", steps.get(0), "reserved"));
         saga1.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -197,7 +189,6 @@ class SagaPersistenceIT {
         // Verify state
         assertThat(saga1.getCurrentState()).isInstanceOf(SagaState.InProgress.class);
 
-        ctx.say(
                 """
                 Saga state before crash:
                 - Saga ID: order-123 ✓
@@ -207,11 +198,9 @@ class SagaPersistenceIT {
                 - Remaining steps: 3 ✓
                 """);
 
-        ctx.say("Phase 2: Simulate crash - No graceful shutdown.");
 
         var stateBeforeCrash = saga1.getCurrentState();
 
-        ctx.say("Phase 3: Recover after crash - Load state from durable storage.");
 
         var saga2 =
                 DurableState.<SagaState>builder()
@@ -222,7 +211,6 @@ class SagaPersistenceIT {
 
         SagaState recoveredState = saga2.recover(() -> new SagaState.NotStarted());
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -241,7 +229,6 @@ class SagaPersistenceIT {
         assertThat(recoveredInProgress.sagaId()).isEqualTo("order-123");
         assertThat(recoveredInProgress.completedSteps()).hasSize(1);
 
-        ctx.say(
                 """
                 Recovery verification:
                 Saga state recovered successfully:
@@ -259,8 +246,7 @@ class SagaPersistenceIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldExecuteCompensationOnRecoveryAfterCrash(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldExecuteCompensationOnRecoveryAfterCrash() throws Exception {
                 """
                 Saga compensation is the mechanism that ensures distributed transaction
                 atomicity. When a saga fails after completing some steps, compensation
@@ -284,7 +270,6 @@ class SagaPersistenceIT {
         var compensationLog = new ArrayList<String>();
         var steps = createCompensatableSteps(compensationLog);
 
-        ctx.say("Phase 1: Execute 2 steps, then crash - Steps 1 and 2 completed.");
 
         var saga1 =
                 DurableState.<SagaState>builder()
@@ -311,7 +296,6 @@ class SagaPersistenceIT {
         saga1.recordEvent(new SagaEvent.StepCompleted("saga-1", steps.get(1), "done"));
         saga1.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -333,7 +317,6 @@ class SagaPersistenceIT {
         saga.saveCurrentState();
         """);
 
-        ctx.say(
                 """
                 Saga state before crash:
                 - Completed steps: 2 ✓
@@ -343,7 +326,6 @@ class SagaPersistenceIT {
                 - Next: Crash on step 3 ✓
                 """);
 
-        ctx.say("Phase 2: Recover and compensate - Trigger compensation flow.");
 
         var saga2 =
                 DurableState.<SagaState>builder()
@@ -359,7 +341,6 @@ class SagaPersistenceIT {
         var inProgressRecovered = (SagaState.InProgress) recoveredState;
         assertThat(inProgressRecovered.completedSteps()).hasSize(2);
 
-        ctx.say(
                 """
                 Recovered state:
                 - Saga ID: sga-1 ✓
@@ -367,7 +348,6 @@ class SagaPersistenceIT {
                 - Ready for compensation: ✓
                 """);
 
-        ctx.say("Phase 3: Simulate step 3 failure - Trigger compensation.");
 
         // Simulate step 3 failure triggering compensation
         var failedState =
@@ -381,7 +361,6 @@ class SagaPersistenceIT {
         saga2.updateState(failedState);
         saga2.recordEvent(new SagaEvent.Compensate("saga-1"));
 
-        ctx.sayCode(
                 "java",
                 """
         // Execute compensations in reverse order
@@ -407,7 +386,6 @@ class SagaPersistenceIT {
         // Verify compensations executed
         assertThat(compensationLog).containsExactly("COMPENSATED: step-2", "COMPENSATED: step-1");
 
-        ctx.say(
                 """
                 Compensation verification:
                 Compensation executed successfully:
@@ -423,8 +401,7 @@ class SagaPersistenceIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyAtomicStateTransitionsDuringSagaExecution(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldVerifyAtomicStateTransitionsDuringSagaExecution() throws Exception {
                 """
                 Atomic state transitions ensure that saga state changes are all-or-nothing.
                 Either a transition completes fully and is persisted, or it doesn't happen
@@ -451,12 +428,10 @@ class SagaPersistenceIT {
 
         var steps = createOrderFulfillmentSteps();
 
-        ctx.say("Initial state: NotStarted");
 
         // Verify initial state
         assertThat(saga.getCurrentState()).isInstanceOf(SagaState.NotStarted.class);
 
-        ctx.say("Transition 1: NotStarted → InProgress - Atomic transition");
 
         // Transition to InProgress (atomic)
         var inProgress =
@@ -465,7 +440,6 @@ class SagaPersistenceIT {
         saga.updateState(inProgress);
         saga.recordEvent(new SagaEvent.StepCompleted("atomic-saga-1", steps.get(0), "done"));
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -483,7 +457,6 @@ class SagaPersistenceIT {
 
         assertThat(saga.getCurrentState()).isInstanceOf(SagaState.InProgress.class);
 
-        ctx.say("Transition 2: InProgress → Completed - Atomic transition");
 
         // Transition to Completed (atomic)
         var completed =
@@ -493,12 +466,10 @@ class SagaPersistenceIT {
 
         assertThat(saga.getCurrentState()).isInstanceOf(SagaState.Completed.class);
 
-        ctx.say("Persist final state - Atomic write to disk");
 
         // Verify persistence
         saga.saveCurrentState();
 
-        ctx.say("Recover and verify atomicity - Should see Completed, not intermediate");
 
         // Recover and verify atomicity
         var recovered =
@@ -513,7 +484,6 @@ class SagaPersistenceIT {
         // Should be in Completed state, not intermediate state
         assertThat(recoveredState).isInstanceOf(SagaState.Completed.class);
 
-        ctx.say(
                 """
                 Atomicity verification:
                 State transitions verified atomic:
@@ -536,8 +506,7 @@ class SagaPersistenceIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldRecoverMidSagaAndContinueExecution(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldRecoverMidSagaAndContinueExecution() throws Exception {
                 """
                 Mid-saga recovery is a critical capability for long-running distributed
                 transactions. When a saga crashes partway through execution, it must be
@@ -560,7 +529,6 @@ class SagaPersistenceIT {
 
         var steps = createOrderFulfillmentSteps();
 
-        ctx.say("Phase 1: Execute first 2 of 4 steps - Progress: 50% complete");
 
         var saga1 =
                 DurableState.<SagaState>builder()
@@ -587,7 +555,6 @@ class SagaPersistenceIT {
         saga1.recordEvent(new SagaEvent.StepCompleted("mid-saga", steps.get(1), "done"));
         saga1.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -608,7 +575,6 @@ class SagaPersistenceIT {
         saga.saveCurrentState();
         """);
 
-        ctx.say(
                 """
                 Saga state before crash:
                 - Completed steps: 2/4 (50%) ✓
@@ -618,7 +584,6 @@ class SagaPersistenceIT {
                 - Remaining: step-3, step-4 ✓
                 """);
 
-        ctx.say("Phase 2: Crash and recover - Resume from step 3");
 
         var saga2 =
                 DurableState.<SagaState>builder()
@@ -635,7 +600,6 @@ class SagaPersistenceIT {
         assertThat(inProgressRecovered.completedSteps()).hasSize(2);
         assertThat(inProgressRecovered.currentStep().stepId()).isEqualTo("step-3");
 
-        ctx.say(
                 """
                 Recovered state:
                 - Saga ID: mid-saga ✓
@@ -645,7 +609,6 @@ class SagaPersistenceIT {
                 - Ready to resume: ✓
                 """);
 
-        ctx.say("Phase 3: Continue execution - Complete steps 3 and 4");
 
         // Continue execution: Complete step 3
         saga2.recordEvent(new SagaEvent.StepCompleted("mid-saga", steps.get(2), "done"));
@@ -665,7 +628,6 @@ class SagaPersistenceIT {
         saga2.updateState(completed);
         saga2.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         // Step 3
@@ -685,7 +647,6 @@ class SagaPersistenceIT {
         // Verify saga completed
         assertThat(saga2.getCurrentState()).isInstanceOf(SagaState.Completed.class);
 
-        ctx.say(
                 """
                 Mid-saga recovery verification:
                 Saga recovered and completed successfully:
@@ -710,8 +671,7 @@ class SagaPersistenceIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyCompensationLogAfterCrash(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldVerifyCompensationLogAfterCrash() throws Exception {
                 """
                 The compensation log is a critical audit trail that records all compensation
                 actions executed during saga failure recovery. This log provides visibility
@@ -736,7 +696,6 @@ class SagaPersistenceIT {
         var compensationLog = new ArrayList<String>();
         var steps = createCompensatableSteps(compensationLog);
 
-        ctx.say("Phase 1: Execute steps, fail, compensate - 3 steps completed, then failure");
 
         var saga1 =
                 DurableState.<SagaState>builder()
@@ -754,7 +713,6 @@ class SagaPersistenceIT {
 
         saga1.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -781,7 +739,6 @@ class SagaPersistenceIT {
                         Instant.now(),
                         new ArrayList<>(compensationLog));
 
-        ctx.say("Execute compensations - Record in compensation log");
 
         // Execute compensations
         for (int i = completedSteps.size() - 1; i >= 0; i--) {
@@ -792,7 +749,6 @@ class SagaPersistenceIT {
             compensationLog.add("COMPENSATED: " + steps.get(i).stepId());
         }
 
-        ctx.sayCode(
                 "java",
                 """
         // Execute compensations in reverse order
@@ -814,7 +770,6 @@ class SagaPersistenceIT {
         saga1.updateState(failed);
         saga1.saveCurrentState();
 
-        ctx.say(
                 """
                 Compensation log before crash:
                 - Failed state: Failed ✓
@@ -826,7 +781,6 @@ class SagaPersistenceIT {
                   3. COMPENSATED: step-1
                 """);
 
-        ctx.say("Phase 2: Recover and verify compensation log - Log persists across crash");
 
         var saga2 =
                 DurableState.<SagaState>builder()
@@ -845,7 +799,6 @@ class SagaPersistenceIT {
                 .containsExactly(
                         "COMPENSATED: step-3", "COMPENSATED: step-2", "COMPENSATED: step-1");
 
-        ctx.say(
                 """
                 Compensation log verification:
                 Compensation log persisted and recovered successfully:
@@ -871,8 +824,7 @@ class SagaPersistenceIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleMultipleSagaCrashesWithRecovery(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleMultipleSagaCrashesWithRecovery() throws Exception {
                 """
                 Production systems may experience multiple crashes over their lifetime.
                 A saga must be resilient to repeated failures, correctly persisting
@@ -892,7 +844,6 @@ class SagaPersistenceIT {
 
         var steps = createOrderFulfillmentSteps();
 
-        ctx.say("Cycle 1: Start saga, crash - Execute step 1 before crash");
 
         var saga1 =
                 DurableState.<SagaState>builder()
@@ -906,7 +857,6 @@ class SagaPersistenceIT {
                         "multi-crash", List.of(), steps.get(0), steps.subList(1, steps.size())));
         saga1.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         var saga = DurableState.<SagaState>builder()
@@ -921,9 +871,7 @@ class SagaPersistenceIT {
         // State: InProgress, current step = step-1
         """);
 
-        ctx.say("Crash 1 - JVM terminates abruptly");
 
-        ctx.say("Recover from crash 1 - Load persisted state");
 
         // Crash 1: Recover
         var saga2 =
@@ -935,7 +883,6 @@ class SagaPersistenceIT {
 
         saga2.recover(() -> new SagaState.NotStarted());
 
-        ctx.say(
                 """
                 Recovery 1 verification:
                 - State recovered: InProgress ✓
@@ -943,7 +890,6 @@ class SagaPersistenceIT {
                 - Ready to continue: ✓
                 """);
 
-        ctx.say("Cycle 2: Execute step, crash again - Execute step 2 before second crash");
 
         // Cycle 2: Execute step, crash again
         saga2.recordEvent(new SagaEvent.StepCompleted("multi-crash", steps.get(0), "done"));
@@ -955,7 +901,6 @@ class SagaPersistenceIT {
                         steps.subList(2, steps.size())));
         saga2.saveCurrentState();
 
-        ctx.sayCode(
                 "java",
                 """
         saga.recordEvent(new SagaEvent.StepCompleted("multi-crash", steps.get(0), "done"));
@@ -968,9 +913,7 @@ class SagaPersistenceIT {
         // State: InProgress, completed = [step-1], current = step-2
         """);
 
-        ctx.say("Crash 2 - Second JVM failure");
 
-        ctx.say("Recover from crash 2 - Load persisted state again");
 
         // Crash 2: Recover
         var saga3 =
@@ -988,7 +931,6 @@ class SagaPersistenceIT {
         assertThat(inProgress.completedSteps()).hasSize(1);
         assertThat(inProgress.currentStep().stepId()).isEqualTo("step-2");
 
-        ctx.say(
                 """
                 Multi-crash resilience verification:
                 Successfully survived 2 crash-recovery cycles:

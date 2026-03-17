@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -18,11 +15,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Verifies distributed node discovery with backend abstraction and cluster management.
  */
-@DtrTest
 @DisplayName("NodeDiscovery — OTP distributed cluster membership")
 class NodeDiscoveryTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private StaticNodeDiscovery nodeDiscovery;
     private InMemoryNodeDiscoveryBackend backend;
@@ -56,10 +51,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should get healthy nodes from the cluster")
-    void getHealthyNodes_returnsAllHealthyNodes(DtrContext ctx) {
-        ctx.say("Node discovery provides a filtered view of healthy cluster members.");
-        ctx.say("Only nodes with HEALTHY status are included in failover target selection.");
-        ctx.say("This implements OTP's node availability monitoring for distributed applications.");
+    void getHealthyNodes_returnsAllHealthyNodes() {
 
         List<String> healthyNodes = nodeDiscovery.getHealthyNodes();
 
@@ -82,10 +74,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should start health check service")
-    void startHealthChecks_activatesService(DtrContext ctx) {
-        ctx.say("Health check service monitors node liveness via periodic heartbeats.");
-        ctx.say("Nodes exceeding timeout thresholds are marked DOWN or DEGRADED.");
-        ctx.say("This implements OTP's distributed node failure detection protocol.");
+    void startHealthChecks_activatesService() {
 
         assertThatCode(() -> nodeDiscovery.startHealthChecks()).doesNotThrowAnyException();
         assertThat(nodeDiscovery.isRunning()).isTrue();
@@ -121,10 +110,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should mark node as down")
-    void onNodeDown_marksNodeAsDown(DtrContext ctx) {
-        ctx.say("Node DOWN status excludes nodes from healthy node list.");
-        ctx.say("Triggered by heartbeat timeout or explicit failure detection.");
-        ctx.say("This implements OTP's node failure monitoring for cluster reconfiguration.");
+    void onNodeDown_marksNodeAsDown() {
 
         nodeDiscovery.onNodeDown("node2");
 
@@ -135,10 +121,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should mark node as healthy after recovery")
-    void onNodeUp_marksNodeAsHealthy(DtrContext ctx) {
-        ctx.say("Node recovery restores HEALTHY status and re-enables failover targeting.");
-        ctx.say("Recovered nodes rejoin the cluster and participate in process distribution.");
-        ctx.say("This implements OTP's node rejoining and self-healing cluster semantics.");
+    void onNodeUp_marksNodeAsHealthy() {
 
         nodeDiscovery.onNodeDown("node2");
         nodeDiscovery.onNodeUp("node2");
@@ -150,10 +133,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should filter out unhealthy nodes")
-    void getHealthyNodes_filtersUnhealthyNodes(DtrContext ctx) {
-        ctx.say("getHealthyNodes() dynamically filters based on current node status.");
-        ctx.say("DOWN and DEGRADED nodes are excluded from failover target selection.");
-        ctx.say("This ensures process migrations target only viable cluster members.");
+    void getHealthyNodes_filtersUnhealthyNodes() {
 
         nodeDiscovery.onNodeDown("node2");
 
@@ -166,11 +146,8 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should register new node")
-    void registerNode_addsNodeToCluster(DtrContext ctx) {
-        ctx.say("Dynamic node registration enables cluster growth without restart.");
-        ctx.say(
+    void registerNode_addsNodeToCluster() {
                 "New nodes enter with HEALTHY status and immediately participate in cluster operations.");
-        ctx.say("This supports scaling out distributed OTP applications incrementally.");
 
         var result = nodeDiscovery.registerNode("node4", "localhost:8083");
 
@@ -214,11 +191,8 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should handle concurrent node registration")
-    void registerNode_handlesConcurrentAccess(DtrContext ctx) throws InterruptedException {
-        ctx.say("Concurrent node registration must be thread-safe in distributed environments.");
-        ctx.say(
+    void registerNode_handlesConcurrentAccess() throws InterruptedException {
                 "Multiple nodes may join simultaneously during cluster bootstrap or scaling events.");
-        ctx.say("The discovery backend ensures atomic registration without race conditions.");
 
         var threads = new java.util.ArrayList<Thread>();
         var latch = new java.util.concurrent.CountDownLatch(10);
@@ -249,10 +223,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should send heartbeat for this node")
-    void sendHeartbeat_updatesTimestamp(DtrContext ctx) {
-        ctx.say("Heartbeats signal node liveness to the discovery backend.");
-        ctx.say("Regular heartbeat updates prevent false-positive node failure detection.");
-        ctx.say("This implements OTP's distributed node liveness protocol.");
+    void sendHeartbeat_updatesTimestamp() {
 
         var before = backend.getNode("node1").get().lastHeartbeat();
 
@@ -271,10 +242,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should add node down listener")
-    void addNodeDownListener_notifiesOnNodeDown(DtrContext ctx) {
-        ctx.say("Node down listeners enable reactive cluster reconfiguration.");
-        ctx.say("Applications can trigger failover or alerting when nodes fail.");
-        ctx.say("This implements OTP's event-driven cluster monitoring pattern.");
+    void addNodeDownListener_notifiesOnNodeDown() {
 
         var listenerCalled = new java.util.concurrent.atomic.AtomicBoolean(false);
         nodeDiscovery.addNodeDownListener(
@@ -291,10 +259,7 @@ class NodeDiscoveryTest {
 
     @Test
     @DisplayName("Should add node up listener")
-    void addNodeUpListener_notifiesOnNodeUp(DtrContext ctx) {
-        ctx.say("Node up listeners enable reactive cluster recovery handling.");
-        ctx.say("Applications can trigger rebalancing or cleanup when nodes rejoin.");
-        ctx.say("This implements OTP's self-healing cluster monitoring pattern.");
+    void addNodeUpListener_notifiesOnNodeUp() {
 
         var listenerCalled = new java.util.concurrent.atomic.AtomicBoolean(false);
         nodeDiscovery.addNodeUpListener(

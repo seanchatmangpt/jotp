@@ -4,8 +4,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
@@ -30,7 +28,6 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * <p>Each test shows a different facet of supervision: crash-and-restart, isolation between
  * children (ONE_FOR_ONE), cascaded restart (ONE_FOR_ALL), and max-restart threshold propagation.
  */
-@DtrTest
 @Execution(ExecutionMode.SAME_THREAD) // Isolate from parallel tests due to timing sensitivity
 class SupervisorTest implements WithAssertions {
 
@@ -65,15 +62,11 @@ class SupervisorTest implements WithAssertions {
     // ── Tests ──────────────────────────────────────────────────────────────
 
     @Test
-    void crashAndRestartResumesService(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: Crash and Restart Recovery");
-        ctx.say(
+    void crashAndRestartResumesService() throws Exception {
                 "When a supervised process crashes, the supervisor automatically restarts it. The process resets to its initial state.");
 
         // CROSS-REFERENCE: Link to basic process creation
-        ctx.sayRef(ProcTest.class, "proc-basic-creation");
 
-        ctx.sayCode(
                 """
             var sup = new Supervisor(Strategy.ONE_FOR_ONE, 3, Duration.ofSeconds(10));
             var ref = sup.supervise("counter", 0, SupervisorTest::counterHandler);
@@ -87,7 +80,6 @@ class SupervisorTest implements WithAssertions {
             await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(tryGet(ref)).isEqualTo(0));
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph TD
                 A[Supervisor] --> B[Counter Process: 10]
@@ -119,7 +111,6 @@ class SupervisorTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(1))
                 .untilAsserted(() -> assertThat(tryGet(ref)).isEqualTo(5));
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Strategy",
                         "ONE_FOR_ONE",
@@ -133,11 +124,8 @@ class SupervisorTest implements WithAssertions {
     }
 
     @Test
-    void oneForOneOnlyRestartsTheCrashedChild(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: ONE_FOR_ONE Strategy");
-        ctx.say(
+    void oneForOneOnlyRestartsTheCrashedChild() throws Exception {
                 "ONE_FOR_ONE means only the crashed child is restarted. Siblings are unaffected — fault isolation at the process level.");
-        ctx.sayCode(
                 """
             var sup = new Supervisor(Strategy.ONE_FOR_ONE, 3, Duration.ofSeconds(10));
             var ref1 = sup.supervise("c1", 0, SupervisorTest::counterHandler);
@@ -153,7 +141,6 @@ class SupervisorTest implements WithAssertions {
             assertThat(ref2.ask(new CounterMsg.Get()).get(1, SECONDS)).isEqualTo(142);
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph TD
                 A[Supervisor] --> B[Child c1: 0]
@@ -185,7 +172,6 @@ class SupervisorTest implements WithAssertions {
         // c2 was NOT restarted — its state is preserved at 142
         assertThat(ref2.ask(new CounterMsg.Get()).get(1, SECONDS)).isEqualTo(142);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Strategy",
                         "ONE_FOR_ONE",
@@ -197,11 +183,8 @@ class SupervisorTest implements WithAssertions {
     }
 
     @Test
-    void oneForAllRestartsAllChildren(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: ONE_FOR_ALL Strategy");
-        ctx.say(
+    void oneForAllRestartsAllChildren() throws Exception {
                 "ONE_FOR_ALL means all children are restarted when any one crashes. Use when children are tightly coupled.");
-        ctx.sayCode(
                 """
             var sup = new Supervisor(Strategy.ONE_FOR_ALL, 3, Duration.ofSeconds(10));
             var ref1 = sup.supervise("c1", 0, SupervisorTest::counterHandler);
@@ -219,7 +202,6 @@ class SupervisorTest implements WithAssertions {
             });
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph TD
                 A[Supervisor] --> B[Child c1: 7]
@@ -234,7 +216,6 @@ class SupervisorTest implements WithAssertions {
                 style F fill:#51cf66
                 style G fill:#51cf66
                 """);
-        ctx.sayWarning(
                 "ONE_FOR_ALL causes cascading restarts. All children reset to initial state, even those that were healthy. Use only when children have strong dependencies.");
 
         var sup = new Supervisor(Strategy.ONE_FOR_ALL, 3, Duration.ofSeconds(10));
@@ -258,7 +239,6 @@ class SupervisorTest implements WithAssertions {
                             assertThat(tryGet(ref2)).isEqualTo(100);
                         });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Strategy",
                         "ONE_FOR_ALL",
@@ -274,11 +254,8 @@ class SupervisorTest implements WithAssertions {
     }
 
     @Test
-    void restForOneRestartsCrashedAndAllAfterIt(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: REST_FOR_ONE Strategy");
-        ctx.say(
+    void restForOneRestartsCrashedAndAllAfterIt() throws Exception {
                 "REST_FOR_ONE means the crashed child and ALL children started AFTER IT are restarted. Children before the crash are unaffected. Use for ordered dependencies where later processes depend on earlier ones.");
-        ctx.sayCode(
                 """
             var sup = new Supervisor(Strategy.REST_FOR_ONE, 3, Duration.ofSeconds(10));
             var ref1 = sup.supervise("first", 0, SupervisorTest::counterHandler);
@@ -301,7 +278,6 @@ class SupervisorTest implements WithAssertions {
             });
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph TD
                 A[Supervisor] --> B[first: 5]
@@ -319,7 +295,6 @@ class SupervisorTest implements WithAssertions {
                 style G fill:#51cf66
                 style H fill:#51cf66
                 """);
-        ctx.sayWarning(
                 "REST_FOR_ONE provides partial isolation. Only the crashed process and later siblings restart. Earlier processes maintain state, making this ideal for ordered pipelines where stage N+1 depends on stage N.");
 
         var sup = new Supervisor(Strategy.REST_FOR_ONE, 3, Duration.ofSeconds(10));
@@ -348,7 +323,6 @@ class SupervisorTest implements WithAssertions {
                             assertThat(tryGet(ref3)).isEqualTo(1000);
                         });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Strategy",
                         "REST_FOR_ONE",
@@ -362,11 +336,8 @@ class SupervisorTest implements WithAssertions {
     }
 
     @Test
-    void maxRestartsExceededTerminatesSupervisor(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: Max Restarts Threshold");
-        ctx.say(
+    void maxRestartsExceededTerminatesSupervisor() throws Exception {
                 "Supervisors track restart frequency. If a child crashes more than maxRestarts times within the time window, the supervisor terminates itself (cascading failure).");
-        ctx.sayCode(
                 """
             // Allow only 2 restarts in a 5-second window
             var sup = new Supervisor(Strategy.ONE_FOR_ONE, 2, Duration.ofSeconds(5));
@@ -382,7 +353,6 @@ class SupervisorTest implements WithAssertions {
             assertThat(sup.fatalError()).isNotNull();
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant S as Supervisor
@@ -402,7 +372,6 @@ class SupervisorTest implements WithAssertions {
 
                 style S fill:#ff6b6b
                 """);
-        ctx.sayWarning(
                 "When maxRestarts is exceeded, the supervisor TERMINATES ITSELF to prevent crash loops. This is a fail-fast mechanism — the entire supervision tree shuts down to contain the fault. The supervisor's parent (if any) can then decide whether to restart the entire subtree.");
 
         // Allow only 2 restarts in a 5-second window
@@ -421,7 +390,6 @@ class SupervisorTest implements WithAssertions {
         assertThat(sup.fatalError()).isNotNull();
         assertThat(sup.fatalError().getMessage()).startsWith("crash");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Max Restarts",
                         "2",
@@ -434,11 +402,8 @@ class SupervisorTest implements WithAssertions {
     }
 
     @Test
-    void strategyComparisonTable(DtrContext ctx) {
-        ctx.sayNextSection("Supervisor: Strategy Comparison");
-        ctx.say(
+    void strategyComparisonTable() {
                 "Choosing the right supervision strategy is critical for fault tolerance. Each strategy offers different trade-offs between fault isolation and consistency.");
-        ctx.sayTable(
                 new String[][] {
                     {"Strategy", "What Restarts", "Fault Isolation", "Use Case", "State Impact"},
                     {
@@ -463,7 +428,6 @@ class SupervisorTest implements WithAssertions {
                         "Earlier children preserve; later reset"
                     }
                 });
-        ctx.sayMermaid(
                 """
             graph TB
                 subgraph "Strategy Decision Tree"
@@ -482,17 +446,13 @@ class SupervisorTest implements WithAssertions {
                 style E fill:#ffd43b
                 style F fill:#ff6b6b
                 """);
-        ctx.sayWarning(
                 "Strategy selection affects availability during failure. ONE_FOR_ONE keeps most services running; ONE_FOR_ALL causes brief but complete service interruption. REST_FOR_ONE offers a middle ground for ordered processing pipelines.");
     }
 
     @Property
     void supervisedProcessIsAlwaysEventuallyReachable(
-            @ForAll @IntRange(min = 1, max = 5) int crashCount, DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: Property-Based Resilience");
-        ctx.say(
+            @ForAll @IntRange(min = 1, max = 5) int crashCount) throws Exception {
                 "For any crash count within the max restart threshold, the supervised process is always eventually reachable again.");
-        ctx.sayMermaid(
                 """
             graph LR
                 A[Property Test] --> B[Random Crash Count: 1-5]
@@ -505,7 +465,6 @@ class SupervisorTest implements WithAssertions {
                 style E fill:#51cf66
                 style F fill:#ff6b6b
                 """);
-        ctx.say(
                 "This property-based test verifies that supervisors maintain availability under fault pressure. jqwik generates random crash counts (1-5), and for each, the process must recover and respond. The buffer of +2 restarts ensures we test within the threshold, not the boundary condition.");
 
         var sup = new Supervisor(Strategy.ONE_FOR_ONE, crashCount + 2, Duration.ofSeconds(30));
@@ -524,7 +483,6 @@ class SupervisorTest implements WithAssertions {
 
         assertThat(sup.isRunning()).isTrue();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Crash Count",
                         String.valueOf(crashCount),

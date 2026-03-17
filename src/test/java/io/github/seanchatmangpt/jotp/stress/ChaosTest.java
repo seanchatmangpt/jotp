@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -29,11 +26,9 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of JOTP's
  * resilience under chaos. Run with DTR to see executable examples with actual recovery times.
  */
-@DtrTest
 @DisplayName("Chaos Engineering & Failure Injection Tests")
 class ChaosTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -48,10 +43,7 @@ class ChaosTest {
     @Test
     @DisplayName("Process crash recovery (random crashes, supervised restart)")
     void testProcessCrashRecovery() {
-        ctx.say("Chaos testing in JOTP validates system resilience under failure conditions.");
-        ctx.say(
                 "The supervisor monitors worker processes and automatically restarts them on failure.");
-        ctx.sayCode(
                 """
                 Supervisor supervisor = new Supervisor(
                     Strategy.ONE_FOR_ONE,
@@ -70,10 +62,6 @@ class ChaosTest {
             int workerCount = 10;
             List<AtomicInteger> workerCrashCounts = new ArrayList<>();
 
-            ctx.say("Supervising 10 workers with crash simulation:");
-            ctx.say("- Each worker has a 2% chance of crashing per message");
-            ctx.say("- Supervisor automatically restarts crashed workers");
-            ctx.say("- Load: 100 messages/sec for 10 seconds");
 
             // Supervise 10 workers with crash simulation
             for (int i = 0; i < workerCount; i++) {
@@ -110,7 +98,6 @@ class ChaosTest {
             // Verify recovery: total crashes tracked, but supervisor keeps workers running
             int totalCrashes = workerCrashCounts.stream().mapToInt(AtomicInteger::get).sum();
 
-            ctx.sayTable(
                     "Process Crash Recovery with Supervisor",
                     () -> {
                         assertThat(totalCrashes).isGreaterThan(0);
@@ -125,7 +112,6 @@ class ChaosTest {
                                                 "%.2f ms", metrics.getLatencyPercentileMs(99)));
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Supervisor strategy", "ONE_FOR_ONE",
                             "Worker count", "10",
@@ -147,9 +133,6 @@ class ChaosTest {
     @Test
     @DisplayName("Cascading failure (single crash, ONE_FOR_ONE containment)")
     void testCascadingFailureContainment() {
-        ctx.say("Cascading failures can bring down entire systems if not properly contained.");
-        ctx.say("JOTP's supervision strategies provide different containment mechanisms:");
-        ctx.sayCode(
                 """
                 // ONE_FOR_ONE: Only the crashed worker restarts
                 // ONE_FOR_ALL: All workers restart when one crashes
@@ -164,10 +147,6 @@ class ChaosTest {
         try {
             int workerCount = 5;
 
-            ctx.say("Testing ONE_FOR_ONE strategy with 5 workers:");
-            ctx.say("- Worker 2 will crash intentionally");
-            ctx.say("- Only worker 2 should restart (siblings unaffected)");
-            ctx.say("- Load: 200 messages/sec for 5 seconds");
 
             // Supervise 5 workers
             for (int i = 0; i < workerCount; i++) {
@@ -202,7 +181,6 @@ class ChaosTest {
             // Verify cascade was contained (ONE_FOR_ONE only restarts worker 2)
             assertThat(metrics.getOperationCount()).isGreaterThan(200);
 
-            ctx.sayTable(
                     "Cascading Failure Containment",
                     () -> {
                         assertThat(metrics.getErrorRate()).isLessThan(5.0);
@@ -217,8 +195,6 @@ class ChaosTest {
                                 "<100ms");
                     });
 
-            ctx.say("With ONE_FOR_ONE strategy, failures are isolated to individual workers.");
-            ctx.say("Sibling workers continue processing without interruption.");
 
         } finally {
             supervisor.shutdown();
@@ -234,18 +210,12 @@ class ChaosTest {
     @Test
     @DisplayName("Exception isolation (handler exception, worker restart)")
     void testExceptionIsolation() {
-        ctx.say("Exception isolation prevents handler errors from crashing the supervisor.");
-        ctx.say("Each worker process is isolated - exceptions don't propagate to siblings.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 30, Duration.ofSeconds(60));
         AtomicInteger exceptionCount = new AtomicInteger(0);
         AtomicInteger successCount = new AtomicInteger(0);
 
         try {
-            ctx.say("Single worker with intentional exceptions:");
-            ctx.say("- Worker throws exception every 5th message");
-            ctx.say("- Supervisor catches exception and restarts worker");
-            ctx.say("- Load: 100 messages/sec for 5 seconds");
 
             // Single worker that throws exceptions
             supervisor.supervise(
@@ -275,7 +245,6 @@ class ChaosTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(100);
             assertThat(exceptionCount.get()).isGreaterThan(0);
 
-            ctx.sayTable(
                     "Exception Isolation",
                     () -> {
                         assertThat(metrics.getErrorRate()).isEqualTo(0.0);
@@ -290,7 +259,6 @@ class ChaosTest {
                                 "true");
                     });
 
-            ctx.say(
                     "Exceptions are fully isolated - the supervisor and other workers remain healthy.");
 
         } finally {
@@ -307,17 +275,11 @@ class ChaosTest {
     @Test
     @DisplayName("Memory pressure (large object allocation during processing)")
     void testMemoryPressure() {
-        ctx.say("Memory pressure tests validate GC behavior under stress.");
-        ctx.say("Virtual threads have smaller stack footprints, reducing heap pressure.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 20, Duration.ofSeconds(60));
         AtomicInteger allocations = new AtomicInteger(0);
 
         try {
-            ctx.say("Worker allocating 1MB objects:");
-            ctx.say("- Each message allocates a 1MB byte array");
-            ctx.say("- Only last 5 allocations retained (bounded memory)");
-            ctx.say("- Load: 50 messages/sec for 5 seconds");
 
             // Worker that allocates large objects
             supervisor.supervise(
@@ -350,7 +312,6 @@ class ChaosTest {
             assertThat(allocations.get()).isGreaterThan(0);
             assertThat(metrics.getHeapGrowthMb()).isLessThan(500);
 
-            ctx.sayTable(
                     "Memory Pressure Handling",
                     () -> {
                         return Map.of(
@@ -364,7 +325,6 @@ class ChaosTest {
                                 "None");
                     });
 
-            ctx.say("Bounded memory usage with GC pauses <100ms. No memory leaks detected.");
 
         } finally {
             supervisor.shutdown();
@@ -380,8 +340,6 @@ class ChaosTest {
     @Test
     @DisplayName("Event delivery guarantee (no silent message loss)")
     void testEventDeliveryGuarantee() {
-        ctx.say("EventManager guarantees delivery to all registered handlers.");
-        ctx.say("Even under stress, no events should be silently dropped.");
 
         EventManager<Integer> eventManager = new EventManager<>();
         AtomicInteger expectedCount = new AtomicInteger(0);
@@ -389,10 +347,6 @@ class ChaosTest {
 
         try {
             int handlerCount = 3;
-            ctx.say("Testing event delivery with " + handlerCount + " handlers:");
-            ctx.say("- Each event must be delivered to all handlers");
-            ctx.say("- Load: 300 events/sec for 5 seconds");
-            ctx.say("- Expected: 900 total deliveries (300 × 3)");
 
             // Register handlers
             for (int i = 0; i < handlerCount; i++) {
@@ -421,7 +375,6 @@ class ChaosTest {
 
             assertThat(lossRate).isLessThan(1.0);
 
-            ctx.sayTable(
                     "Event Delivery Guarantee",
                     () -> {
                         return Map.of(
@@ -432,7 +385,6 @@ class ChaosTest {
                                 "Delivery guarantee", "100%");
                     });
 
-            ctx.say("Event delivery is guaranteed - no silent message loss detected.");
 
         } finally {
             eventManager.stop();

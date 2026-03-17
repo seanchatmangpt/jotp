@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.concurrency;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -24,10 +21,8 @@ import org.junit.jupiter.api.Test;
  * Drop-in replacement for thread pools in most cases
  */
 @DisplayName("VirtualThreadPatterns")
-@DtrTest
 class VirtualThreadPatternsTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -37,13 +32,10 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("startNamed creates a virtual thread with the given name")
     void startNamedCreatesVirtualThread() throws InterruptedException {
-        ctx.sayNextSection("Java 26: Virtual Threads vs Platform Threads");
-        ctx.say(
                 "Project Loom introduces virtual threads as lightweight, user-mode threads scheduled on"
                         + " carrier threads (platform threads). Unlike platform threads, virtual threads are cheap"
                         + " enough to create millions of them.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Characteristic", "Max Count", "Blocking I/O"},
                     {"Platform Threads", "~Thousands (OS-limited)", "Wastes thread resources"},
@@ -61,7 +53,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayCode(
                 """
             var counter = new AtomicInteger();
             var thread = VirtualThreadPatterns.startNamed("test-thread", counter::incrementAndGet);
@@ -78,7 +69,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
         assertThat(counter.get()).isEqualTo(1);
         assertThat(thread.isVirtual()).isTrue();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Thread Type",
                         thread.isVirtual() ? "Virtual Thread" : "Platform Thread",
@@ -87,7 +77,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Counter Value",
                         String.valueOf(counter.get())));
 
-        ctx.sayNote(
                 "Use platform threads for CPU-intensive work, virtual threads for I/O-bound work. The naming"
                         + " pattern ('test-thread') helps with debugging and observability.");
     }
@@ -95,13 +84,10 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("startFireAndForget runs the task")
     void startFireAndForgetRunsTask() throws InterruptedException {
-        ctx.sayNextSection("Creating Millions of Lightweight Processes");
-        ctx.say(
                 "Virtual threads are so lightweight that creating millions of them is practical. This"
                         + " contrasts sharply with platform threads, which are limited to thousands by OS"
                         + " resources.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Operation", "10K Threads", "Context Switch"},
                     {"Virtual Threads", "~10 MB", "JVM scheduling"},
@@ -111,7 +97,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                     {"~2 MB stack", "Out of Memory", "~1 millisecond"}
                 });
 
-        ctx.sayCode(
                 """
             // Fire-and-forget pattern: start a virtual thread without tracking it
             var counter = new AtomicInteger();
@@ -128,7 +113,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
         thread.join(Duration.ofSeconds(2));
         assertThat(counter.get()).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Execution Pattern",
                         "Fire-and-Forget",
@@ -137,7 +121,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Counter Value",
                         String.valueOf(counter.get())));
 
-        ctx.sayNote(
                 "Fire-and-forget virtual threads are ideal for logging, metrics, and async tasks where"
                         + " you don't need the result. However, for structured concurrency, prefer"
                         + " StructuredTaskScope to ensure proper cleanup and error handling.");
@@ -146,13 +129,10 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("startAll creates multiple virtual threads")
     void startAllCreatesMultipleThreads() throws InterruptedException {
-        ctx.sayNextSection("Blocking Without Scaling Limits");
-        ctx.say(
                 "With platform threads, blocking I/O wastes thread resources. A thread pool of 200"
                         + " threads can only handle 200 concurrent blocking operations. Virtual threads change the"
                         + " equation: blocking just parks the virtual thread, releasing the carrier thread.");
 
-        ctx.sayCode(
                 """
             // Create multiple virtual threads with automatic naming
             var counter = new AtomicInteger();
@@ -185,7 +165,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
         assertThat(counter.get()).isEqualTo(2);
         assertThat(threads).allMatch(Thread::isVirtual);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Threads Created",
                         String.valueOf(threads.size()),
@@ -196,7 +175,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Counter Value",
                         String.valueOf(counter.get())));
 
-        ctx.sayNote(
                 "The naming prefix ('worker-') plus counter creates thread names like 'worker-0',"
                         + " 'worker-1', etc. This is critical for debugging and observability in production.");
     }
@@ -204,12 +182,9 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("processAllConcurrently processes all items")
     void processAllConcurrentlyProcessesAllItems() throws InterruptedException {
-        ctx.sayNextSection("Structured Concurrency Patterns");
-        ctx.say(
                 "Structured concurrency ensures that concurrent tasks complete as a unit, with proper error"
                         + " propagation and resource cleanup. Java 26 provides StructuredTaskScope for this purpose.");
 
-        ctx.sayCode(
                 """
             // Process multiple I/O-bound items concurrently using virtual threads
             var items = List.of(1, 2, 3, 4, 5);
@@ -227,7 +202,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
 
         assertThat(results).hasSize(5).containsExactlyInAnyOrder(2, 4, 6, 8, 10);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input Items",
                         String.valueOf(items.size()),
@@ -238,7 +212,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Thread Type",
                         "Virtual (per-item)"));
 
-        ctx.sayNote(
                 "While this example uses CountDownLatch for compatibility, production code should prefer"
                         + " StructuredTaskScope (JEP 453) for proper structured concurrency with automatic"
                         + " error propagation and timeout handling.");
@@ -247,13 +220,10 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("handleRequests dispatches to virtual threads")
     void handleRequestsDispatchesToVirtualThreads() throws InterruptedException {
-        ctx.sayNextSection("Migration from Thread Pools");
-        ctx.say(
                 "Virtual threads eliminate the need for thread pools in most I/O-bound scenarios. Instead of"
                         + " managing a fixed-size thread pool, create a virtual thread per task and let the JVM"
                         + " handle scheduling.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Aspect", "Queue full → reject", "Minimal per-thread overhead"},
                     {"Thread Pool", "Never rejects (creates thread)", "Typical Use"},
@@ -264,7 +234,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                     {"Rejection Policy", "Pool overhead", "Simple (no tuning)"}
                 });
 
-        ctx.sayCode(
                 """
             // Old approach: fixed thread pool
             // ExecutorService pool = Executors.newFixedThreadPool(10);
@@ -291,7 +260,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
 
         assertThat(counter.get()).isEqualTo(3);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Requests Processed",
                         String.valueOf(requests.size()),
@@ -302,7 +270,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Pool Required",
                         "No"));
 
-        ctx.sayNote(
                 "Virtual threads make thread pools obsolete for I/O-bound work. Keep thread pools only for"
                         + " CPU-intensive tasks where parallelism is limited by CPU cores, not I/O.");
     }
@@ -310,13 +277,10 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("runWithTimeout completes within timeout")
     void runWithTimeoutCompletesWithinTimeout() throws InterruptedException {
-        ctx.sayNextSection("Timeout and Cancellation in Virtual Threads");
-        ctx.say(
                 "Virtual threads support interruption via Thread.interrupt(). For timeout handling, join"
                         + " the thread with a timeout and interrupt if still alive. This pattern is safer than"
                         + " platform threads where interruption might be delayed.");
 
-        ctx.sayCode(
                 """
             // Run a task on a virtual thread with timeout
             boolean completed = VirtualThreadPatterns.runWithTimeout(
@@ -339,7 +303,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
 
         assertThat(result).isTrue();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Task Completed",
                         "Within timeout",
@@ -350,7 +313,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Timeout Pattern",
                         "join() + interrupt()"));
 
-        ctx.sayNote(
                 "For more sophisticated timeout handling, use StructuredTaskScope with ShutdownOnSuccess"
                         + " or ShutdownOnFailure policies. These provide better error aggregation and"
                         + " cancellation propagation.");
@@ -359,12 +321,9 @@ class VirtualThreadPatternsTest implements WithAssertions {
     @Test
     @DisplayName("runWithTimeout returns false when task exceeds timeout")
     void runWithTimeoutReturnsFalseOnTimeout() throws InterruptedException {
-        ctx.sayNextSection("Handling Timeout and Interruption");
-        ctx.say(
                 "When a virtual thread times out, interrupt it to release resources. The task should check"
                         + " Thread.interrupted() or handle InterruptedException cooperatively.");
 
-        ctx.sayCode(
                 """
             // Task that exceeds timeout
             boolean completed = VirtualThreadPatterns.runWithTimeout(
@@ -395,7 +354,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
 
         assertThat(result).isFalse();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Task Completed",
                         "Exceeded timeout",
@@ -406,7 +364,6 @@ class VirtualThreadPatternsTest implements WithAssertions {
                         "Task Response",
                         "Caught InterruptedException"));
 
-        ctx.sayNote(
                 "Always handle InterruptedException properly: either propagate it or restore the interrupt"
                         + " flag with Thread.currentThread().interrupt(). This ensures callers know the thread"
                         + " was interrupted.");
