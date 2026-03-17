@@ -6,6 +6,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * Saga Orchestrator — coordinates distributed transactions across services.
@@ -277,6 +278,29 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
         return future;
     }
 
+    /** Saga events for event sourcing and crash recovery. */
+    sealed interface SagaEvent
+            permits SagaEvent.StepAttempt,
+                    SagaEvent.StepFailed,
+                    SagaEvent.StepSucceeded,
+                    SagaEvent.CompensationStarted,
+                    SagaEvent.CompensationCompleted {
+        record StepAttempt(String stepName, int attemptCount, Instant timestamp)
+                implements SagaEvent {}
+
+        record StepFailed(String stepName, String errorMessage, int attemptCount, Instant timestamp)
+                implements SagaEvent {}
+
+        record StepSucceeded(String stepName, Object result, Instant timestamp)
+                implements SagaEvent {}
+
+        record CompensationStarted(String failedStep, String reason, Instant timestamp)
+                implements SagaEvent {}
+
+        record CompensationCompleted(List<String> compensatedSteps, Instant timestamp)
+                implements SagaEvent {}
+    }
+
     // ── Message handling ──────────────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
@@ -375,6 +399,21 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
 
         Step<S, D> step = steps.get(stepIndex);
 
+        // Execute step with retry logic and idempotency
+        executeStepWithRetry(sagaId, data, ctx, step, 0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void executeStepWithRetry(
+            UUID sagaId, D data, SagaContext ctx, Step<S, D> step, int attemptCount) {
+        // Log step execution attempt if event store is available
+        if (eventStore != null) {
+            eventStore.append(
+                    "saga-" + sagaId,
+                    new SagaEvent.StepAttempt(
+                            step.name(), attemptCount, Instant.now()));
+        }
+
         step.action()
                 .apply(data, ctx)
                 .thenAccept(
@@ -383,9 +422,80 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                                         new SagaMsg.StepComplete(sagaId, step.name(), result)))
                 .exceptionally(
                         error -> {
-                            coordinator.tell(new SagaMsg.StepFailed(sagaId, step.name(), error));
-                            throw new UnsupportedOperationException("not implemented: saga error recovery");
+                            // Determine if we should retry
+                            if (shouldRetry(error, step, attemptCount)) {
+                                long backoffMs = calculateBackoff(attemptCount);
+                                // Schedule retry with exponential backoff
+                                Thread.ofVirtual()
+                                        .start(
+                                                () -> {
+                                                    try {
+                                                        Thread.sleep(backoffMs);
+                                                        executeStepWithRetry(
+                                                                sagaId,
+                                                                data,
+                                                                ctx,
+                                                                step,
+                                                                attemptCount + 1);
+                                                    } catch (InterruptedException e) {
+                                                        Thread.currentThread().interrupt();
+                                                        coordinator.tell(
+                                                                new SagaMsg.StepFailed(
+                                                                        sagaId, step.name(), e));
+                                                    }
+                                                });
+                            } else {
+                                // No more retries, fail the saga
+                                logStepFailure(sagaId, step.name(), error, attemptCount);
+                                coordinator.tell(
+                                        new SagaMsg.StepFailed(sagaId, step.name(), error));
+                            }
+                            return null;
                         });
+    }
+
+    /**
+     * Determine if a transient error should trigger a retry.
+     *
+     * <p>Returns true if:
+     * <ul>
+     *   <li>The step's retryOn predicate accepts the error, AND
+     *   <li>We haven't exceeded maxRetries
+     * </ul>
+     */
+    private boolean shouldRetry(Throwable error, Step<S, D> step, int attemptCount) {
+        if (attemptCount >= step.maxRetries()) {
+            return false;
+        }
+        return step.retryOn().test(error);
+    }
+
+    /**
+     * Calculate exponential backoff with jitter.
+     *
+     * <p>Formula: min(300s, 100ms * 2^attempt + random jitter)
+     */
+    private long calculateBackoff(int attemptCount) {
+        long baseMs = 100L;
+        long exponentialMs = baseMs * (1L << attemptCount); // 2^attempt
+        long maxMs = 300_000L; // 5 minutes
+        long jitterMs = (long) (Math.random() * 100);
+        return Math.min(exponentialMs + jitterMs, maxMs);
+    }
+
+    /**
+     * Log step failure to event store for crash recovery.
+     *
+     * <p>This ensures that if the coordinator process crashes after a failed step,
+     * recovery can replay the saga and resume compensation.
+     */
+    private void logStepFailure(UUID sagaId, String stepName, Throwable error, int attemptCount) {
+        if (eventStore != null) {
+            eventStore.append(
+                    "saga-" + sagaId,
+                    new SagaEvent.StepFailed(
+                            stepName, error.getMessage(), attemptCount, Instant.now()));
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -394,9 +504,24 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
             SagaContext ctx,
             CompletableFuture<SagaResult> pendingFuture,
             Throwable originalError) {
-        // Compensate in reverse order
+        // Log compensation start
+        if (eventStore != null) {
+            String failedStep =
+                    ctx.completedSteps().isEmpty()
+                            ? "unknown"
+                            : ctx.completedSteps().getLast();
+            eventStore.append(
+                    "saga-" + sagaId,
+                    new SagaEvent.CompensationStarted(
+                            failedStep, originalError.getMessage(), Instant.now()));
+        }
+
+        // Compensate in reverse order (LIFO)
         List<String> toCompensate = new ArrayList<>(ctx.completedSteps());
         Collections.reverse(toCompensate);
+
+        List<String> successfullyCompensated = new ArrayList<>();
+        List<String> failedCompensations = new ArrayList<>();
 
         for (String stepName : toCompensate) {
             steps.stream()
@@ -406,32 +531,98 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                             step -> {
                                 Object result = ctx.results().get(stepName);
                                 if (result != null && step.compensation() != null) {
-                                    try {
-                                        step.compensation()
-                                                .apply(null, (S) result)
-                                                .get(30, TimeUnit.SECONDS);
-                                    } catch (Exception e) {
-                                        // Log but continue compensation
-                                        System.err.println(
-                                                "[Saga] Compensation failed for "
-                                                        + stepName
-                                                        + ": "
-                                                        + e.getMessage());
+                                    // Execute compensation with timeout and retry
+                                    if (executeCompensation(sagaId, step, result)) {
+                                        successfullyCompensated.add(stepName);
+                                    } else {
+                                        failedCompensations.add(stepName);
                                     }
+                                } else if (step.compensation() == null) {
+                                    // No compensation needed for this step
+                                    successfullyCompensated.add(stepName);
                                 }
                             });
         }
 
+        // Log compensation completion
+        if (eventStore != null) {
+            eventStore.append(
+                    "saga-" + sagaId,
+                    new SagaEvent.CompensationCompleted(successfullyCompensated, Instant.now()));
+        }
+
         // Complete the pending future with compensated result
         if (pendingFuture != null) {
+            String failedStep =
+                    ctx.completedSteps().isEmpty()
+                            ? "unknown"
+                            : ctx.completedSteps().getLast();
             pendingFuture.complete(
-                    new SagaResult.Compensated(
-                            ctx.completedSteps().isEmpty()
-                                    ? "unknown"
-                                    : ctx.completedSteps().getLast(),
-                            originalError,
-                            toCompensate));
+                    new SagaResult.Compensated(failedStep, originalError, successfullyCompensated));
         }
+    }
+
+    /**
+     * Execute a single compensation with retry logic and timeout handling.
+     *
+     * <p>Returns true if compensation succeeded, false if it failed after retries.
+     * Logs compensation failures but continues with remaining compensations (crash-resilient).
+     */
+    @SuppressWarnings("unchecked")
+    private boolean executeCompensation(UUID sagaId, Step<S, D> step, Object result) {
+        int maxAttempts = 3; // Compensation retries
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                step.compensation()
+                        .apply(null, (S) result)
+                        .get(step.timeout().toMillis(), TimeUnit.MILLISECONDS);
+                return true; // Success
+            } catch (TimeoutException e) {
+                // Log timeout and retry
+                if (eventStore != null) {
+                    eventStore.append(
+                            "saga-" + sagaId,
+                            new SagaEvent.StepFailed(
+                                    step.name() + "-compensation",
+                                    "Timeout after " + step.timeout(),
+                                    attempt,
+                                    Instant.now()));
+                }
+                if (attempt < maxAttempts - 1) {
+                    try {
+                        Thread.sleep(100L * (1L << attempt)); // Exponential backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                }
+            } catch (Exception e) {
+                // Log compensation failure and retry
+                if (eventStore != null) {
+                    eventStore.append(
+                            "saga-" + sagaId,
+                            new SagaEvent.StepFailed(
+                                    step.name() + "-compensation",
+                                    e.getMessage(),
+                                    attempt,
+                                    Instant.now()));
+                }
+                if (attempt < maxAttempts - 1) {
+                    try {
+                        Thread.sleep(100L * (1L << attempt)); // Exponential backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                } else {
+                    // After all retries, log but continue (idempotency)
+                    System.err.println(
+                            "[Saga] Compensation failed for " + step.name() + " after " + maxAttempts
+                                    + " attempts: " + e.getMessage());
+                }
+            }
+        }
+        return false; // All retries exhausted
     }
 
     // ── Infrastructure ────────────────────────────────────────────────────────────

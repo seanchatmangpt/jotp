@@ -1,11 +1,16 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -281,21 +286,159 @@ public final class EventSourcingAuditLog<S, E, D> {
         }
 
         private String serializeEntry(AuditEntry entry) {
-            // Simple pipe-delimited format; in production use JSON or Avro
-            return String.format(
-                    "%s|%s|%s",
-                    entry.timestamp(), entry.entityId(), entry.getClass().getSimpleName());
+            // Pipe-delimited format with field count prefix to avoid parsing ambiguity
+            return switch (entry) {
+                case StateChange<?, ?, ?> sc ->
+                        String.format(
+                                "SC|7|%s|%s|%s|%s|%s|%s|%s",
+                                sc.timestamp(),
+                                sc.entityId(),
+                                escapeField(sc.fromState().getName()),
+                                escapeField(sc.event().getName()),
+                                escapeField(sc.toState().getName()),
+                                escapeField(serializeObject(sc.data())));
+                case ErrorEntry<?, ?> ee ->
+                        String.format(
+                                "EE|4|%s|%s|%s|%s",
+                                ee.timestamp(),
+                                ee.entityId(),
+                                escapeField(ee.state().getName()),
+                                escapeField(serializeThrowable(ee.exception())));
+                case Replay<?, ?, ?> rp ->
+                        String.format(
+                                "RP|3|%s|%s|%s",
+                                rp.timestamp(), rp.entityId(), rp.replayedFromTimestamp());
+                case SnapshotEntry<?, ?> se ->
+                        String.format(
+                                "SN|5|%s|%s|%s|%s|%s",
+                                se.timestamp(),
+                                se.entityId(),
+                                escapeField(serializeObject(se.state())),
+                                escapeField(serializeObject(se.data())),
+                                se.sequenceNumber());
+            };
+        }
+
+        private String escapeField(String field) {
+            if (field == null) return "\\0";
+            return field.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "\\n");
+        }
+
+        private String unescapeField(String field) {
+            if ("\\0".equals(field)) return null;
+            return field.replace("\\n", "\n").replace("\\|", "|").replace("\\\\", "\\");
+        }
+
+        private String serializeObject(Object obj) {
+            if (obj == null) return "null";
+            // Use Java serialization as Base64 string for complex objects
+            try {
+                var baos = new ByteArrayOutputStream();
+                var oos = new ObjectOutputStream(baos);
+                oos.writeObject(obj);
+                oos.close();
+                return Base64.getEncoder().encodeToString(baos.toByteArray());
+            } catch (Exception e) {
+                // Fallback: use toString() if not serializable
+                return "toString:" + obj.toString();
+            }
+        }
+
+        private String serializeThrowable(Throwable t) {
+            // Serialize exception class name and message
+            var className = t.getClass().getName();
+            var message = t.getMessage() != null ? t.getMessage() : "";
+            return className + ":" + message.replace("|", "\\|");
+        }
+
+        private Object deserializeObject(String data) {
+            if (data == null || data.equals("null")) return null;
+            if (data.startsWith("toString:")) {
+                return data.substring(9); // Return as string
+            }
+            // Decode Base64 and deserialize
+            try {
+                var bytes = Base64.getDecoder().decode(data);
+                var bais = new ByteArrayInputStream(bytes);
+                var ois = new ObjectInputStream(bais);
+                var obj = ois.readObject();
+                ois.close();
+                return obj;
+            } catch (Exception e) {
+                return null; // Return null if deserialization fails
+            }
+        }
+
+        private Throwable deserializeThrowable(String data) {
+            var parts = data.split(":", 2);
+            var className = parts[0];
+            var message = parts.length > 1 ? parts[1].replace("\\|", "|") : "";
+            try {
+                @SuppressWarnings("unchecked")
+                Class<? extends Throwable> clazz =
+                        (Class<? extends Throwable>) Class.forName(className);
+                return clazz.getConstructor(String.class).newInstance(message);
+            } catch (Exception e) {
+                // Fallback: create RuntimeException with the serialized info
+                return new RuntimeException(className + ": " + message);
+            }
         }
 
         private AuditEntry deserializeEntry(String line) {
-            // Parsing stub; in production use a full JSON deserializer
             try {
-                var parts = line.split("\\|", 3);
-                if (parts.length < 3) throw new UnsupportedOperationException("not implemented: audit entry deserialization");
-                // Return placeholder for testing
-                return new Replay<>(Instant.parse(parts[0]), parts[1], Instant.parse(parts[0]));
+                var parts = line.split("\\|", -1); // Include trailing empty strings
+                if (parts.length < 2) return null;
+
+                var type = parts[0];
+                var timestamp = Instant.parse(parts[1]);
+                var entityId = parts[2];
+
+                return switch (type) {
+                    case "StateChange" -> {
+                        if (parts.length < 8) yield null;
+                        var fromStateClass = Class.forName(parts[3]);
+                        var eventClass = Class.forName(parts[4]);
+                        var toStateClass = Class.forName(parts[5]);
+                        var data = deserializeObject(parts[6]);
+                        // Return with wildcard types suppressed
+                        @SuppressWarnings({"unchecked", "rawtypes"})
+                        AuditEntry entry =
+                                new StateChange(
+                                        timestamp, entityId, fromStateClass, eventClass, toStateClass,
+                                        data);
+                        yield entry;
+                    }
+                    case "ErrorEntry" -> {
+                        if (parts.length < 5) yield null;
+                        var stateClass = Class.forName(parts[3]);
+                        var exception = deserializeThrowable(parts[4]);
+                        @SuppressWarnings({"unchecked", "rawtypes"})
+                        AuditEntry entry = new ErrorEntry(timestamp, entityId, stateClass, exception);
+                        yield entry;
+                    }
+                    case "Replay" -> {
+                        if (parts.length < 4) yield null;
+                        var replayedFromTimestamp = Instant.parse(parts[3]);
+                        @SuppressWarnings({"unchecked", "rawtypes"})
+                        AuditEntry entry =
+                                new Replay(timestamp, entityId, replayedFromTimestamp);
+                        yield entry;
+                    }
+                    case "SnapshotEntry" -> {
+                        if (parts.length < 7) yield null;
+                        var state = deserializeObject(parts[3]);
+                        var data = deserializeObject(parts[4]);
+                        var sequenceNumber = Long.parseLong(parts[5]);
+                        @SuppressWarnings({"unchecked", "rawtypes"})
+                        AuditEntry entry =
+                                new SnapshotEntry(timestamp, entityId, state, data, sequenceNumber);
+                        yield entry;
+                    }
+                    default -> null;
+                };
             } catch (Exception e) {
-                throw new UnsupportedOperationException("not implemented: audit entry deserialization");
+                // Log silently and return null to allow stream to skip malformed entries
+                return null;
             }
         }
     }

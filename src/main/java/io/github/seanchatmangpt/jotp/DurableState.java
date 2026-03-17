@@ -402,20 +402,64 @@ public final class DurableState<S> {
     /**
      * Get snapshot file path from TestAtomicStateWriter using reflection.
      *
+     * <p>This method retrieves the file path from either TestAtomicStateWriter or AtomicStateWriter
+     * using reflection. It gracefully handles missing fields, accessibility issues, and returns null
+     * if the file path cannot be determined.
+     *
      * @return the snapshot file path, or null if not available
      */
     private Path getSnapshotFile() {
         if (writer == null) {
-            throw new UnsupportedOperationException("not implemented: snapshot file retrieval");
+            return null;
         }
+
         try {
-            // Works for both TestAtomicStateWriter and AtomicStateWriter
-            java.lang.reflect.Field field = writer.getClass().getDeclaredField("stateFile");
-            field.setAccessible(true);
-            return (Path) field.get(writer);
+            // Try to get stateFile field (works for TestAtomicStateWriter)
+            return getFieldValue("stateFile");
+        } catch (NoSuchFieldException e) {
+            // If stateFile doesn't exist, try alternative field names
+            try {
+                return getFieldValue("snapshotPath");
+            } catch (NoSuchFieldException e2) {
+                // Field not found, return null to indicate no persistent storage
+                return null;
+            } catch (Exception e3) {
+                // Reflection or access error, return null as fallback
+                return null;
+            }
         } catch (Exception e) {
-            throw new UnsupportedOperationException("not implemented: snapshot file retrieval");
+            // Reflection failed (accessibility, type mismatch), return null
+            return null;
         }
+    }
+
+    /**
+     * Helper method to retrieve a Path field from the writer object using reflection.
+     *
+     * <p>This method safely accesses a private field on the writer object by:
+     * <ul>
+     *   <li>Finding the declared field by name
+     *   <li>Making it accessible (bypassing Java access controls)
+     *   <li>Retrieving and casting the field value
+     *   <li>Handling all reflection exceptions
+     * </ul>
+     *
+     * @param fieldName the name of the field to retrieve
+     * @return the Path value of the field
+     * @throws NoSuchFieldException if the field doesn't exist
+     * @throws IllegalAccessException if the field cannot be accessed
+     * @throws ClassCastException if the field is not a Path
+     */
+    private Path getFieldValue(String fieldName)
+            throws NoSuchFieldException, IllegalAccessException, ClassCastException {
+        java.lang.reflect.Field field = writer.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        Object value = field.get(writer);
+        if (value instanceof Path) {
+            return (Path) value;
+        }
+        throw new ClassCastException(
+                "Field '" + fieldName + "' is not a Path, got: " + value.getClass().getName());
     }
 
     /**

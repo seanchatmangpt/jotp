@@ -254,14 +254,20 @@ public final class BulkheadIsolation<F, M> {
      * Get an existing worker or spawn a new one (up to poolSize).
      *
      * <p>Strategy: select the worker with the smallest queue depth (load-balanced).
+     * If no workers are available and capacity remains, spawn new workers up to the limit.
      */
     private ProcRef<WorkerState, M> getOrSpawnWorker() {
-        if (workers.isEmpty() && workerCount.get() < poolSize) {
-            spawnWorker();
+        // Attempt to spawn workers while the queue is empty and we have capacity
+        int maxAttempts = poolSize - workerCount.get() + 1;
+        for (int i = 0; i < maxAttempts && workers.isEmpty(); i++) {
+            if (workerCount.get() < poolSize) {
+                spawnWorker();
+            }
         }
 
+        // If still no workers available, return null to signal allocation failure
         if (workers.isEmpty()) {
-            throw new UnsupportedOperationException("not implemented: worker allocation");
+            return null;
         }
 
         // Load-balance: find worker with smallest queue

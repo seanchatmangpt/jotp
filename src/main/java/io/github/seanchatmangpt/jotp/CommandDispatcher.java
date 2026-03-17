@@ -76,7 +76,7 @@ public final class CommandDispatcher {
     public interface Middleware {
         /** Process command before dispatch. Return null to continue, or result to short-circuit. */
         default <T> CommandResult<T> before(Command command) {
-            throw new UnsupportedOperationException("not implemented: command middleware before");
+            return null;
         }
 
         /** Process result after dispatch. */

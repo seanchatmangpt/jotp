@@ -701,6 +701,72 @@ class EnterpriseCompositionIT implements WithAssertions {
     }
 
     @Test
+    @Order(18)
+    @DisplayName("CommandDispatcher: middleware should validate and transform commands")
+    void commandDispatcherMiddlewareShouldValidateAndTransform() {
+        // This test verifies the before/after middleware hooks work correctly
+        // The before hook validates input and can short-circuit dispatch
+        // The after hook processes results after handler execution
+        AtomicInteger beforeCount = new AtomicInteger(0);
+        AtomicInteger afterCount = new AtomicInteger(0);
+
+        CommandDispatcher dispatcher =
+                CommandDispatcher.create()
+                        .register(
+                                CreateOrderCmd.class,
+                                cmd ->
+                                        CommandDispatcher.CommandResult.ok(
+                                                new OrderCreated(cmd.orderId, Instant.now())))
+                        .middleware(
+                                new CommandDispatcher.Middleware() {
+                                    @Override
+                                    public <T> CommandDispatcher.CommandResult<T> before(
+                                            CommandDispatcher.Command command) {
+                                        beforeCount.incrementAndGet();
+                                        // Validation middleware: reject empty order IDs
+                                        if (command instanceof CreateOrderCmd(var orderId)) {
+                                            if (orderId == null || orderId.isBlank()) {
+                                                return (CommandDispatcher.CommandResult<T>)
+                                                        CommandDispatcher.CommandResult.err(
+                                                                "Order ID cannot be empty");
+                                            }
+                                        }
+                                        return null; // Continue to handler
+                                    }
+
+                                    @Override
+                                    public <T> CommandDispatcher.CommandResult<T> after(
+                                            CommandDispatcher.Command command,
+                                            CommandDispatcher.CommandResult<T> result) {
+                                        afterCount.incrementAndGet();
+                                        // Post-processing: log results
+                                        return result;
+                                    }
+                                });
+
+        // Valid command should pass through both middleware hooks
+        CommandDispatcher.CommandResult<OrderCreated> result1 =
+                dispatcher.dispatch(new CreateOrderCmd("order-1"));
+        assertThat(result1.isSuccess()).isTrue();
+        assertThat(beforeCount.get()).isEqualTo(1);
+        assertThat(afterCount.get()).isEqualTo(1);
+
+        // Invalid command should be rejected by before middleware (short-circuit)
+        CommandDispatcher.CommandResult<OrderCreated> result2 =
+                dispatcher.dispatch(new CreateOrderCmd(""));
+        assertThat(result2.isSuccess()).isFalse();
+        assertThat(beforeCount.get()).isEqualTo(2);
+        // after middleware NOT called because before short-circuited
+        assertThat(afterCount.get()).isEqualTo(1);
+
+        // Stats should reflect short-circuit as failure
+        Map<String, Long> stats = dispatcher.stats();
+        assertThat(stats.get("dispatched")).isEqualTo(2L);
+        assertThat(stats.get("succeeded")).isEqualTo(1L);
+        assertThat(stats.get("failed")).isEqualTo(1L);
+    }
+
+    @Test
     @Order(19)
     @DisplayName("QueryDispatcher: should execute queries with optional caching")
     void queryDispatcherShouldExecuteQueries() {
