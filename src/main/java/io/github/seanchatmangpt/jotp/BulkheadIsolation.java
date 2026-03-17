@@ -255,22 +255,51 @@ public final class BulkheadIsolation<F, M> {
      *
      * <p>Strategy: select the worker with the smallest queue depth (load-balanced).
      * If no workers are available and capacity remains, spawn new workers up to the limit.
+     * If pool is full, reuse existing workers with least queue depth.
+     * With backpressure: if unable to allocate within timeout, return null to allow rejection.
      */
     private ProcRef<WorkerState, M> getOrSpawnWorker() {
-        // Attempt to spawn workers while the queue is empty and we have capacity
-        int maxAttempts = poolSize - workerCount.get() + 1;
-        for (int i = 0; i < maxAttempts && workers.isEmpty(); i++) {
-            if (workerCount.get() < poolSize) {
+        // Attempt to dynamically allocate workers up to pool size
+        if (workers.isEmpty() && workerCount.get() < poolSize) {
+            // Allocate first worker immediately
+            spawnWorker();
+
+            // Brief wait for worker to appear in queue (spinlock with bounded iterations)
+            int attempts = 0;
+            int maxSpinAttempts = 10; // ~10ms max spin
+            while (workers.isEmpty() && attempts < maxSpinAttempts) {
+                try {
+                    Thread.sleep(1); // Yield control briefly
+                    attempts++;
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+
+            // If worker still not available, escalate: try spawning more workers
+            // in case first allocation is pending
+            if (workers.isEmpty() && workerCount.get() < poolSize) {
                 spawnWorker();
+                // One more brief wait
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
 
-        // If still no workers available, return null to signal allocation failure
+        // If still no workers available and pool is at capacity, attempt to reuse
+        // existing workers. If truly no workers exist, apply backpressure by returning null
+        // (allowing caller to reject the message gracefully)
         if (workers.isEmpty()) {
+            // Allocation failed: pool exhausted or workers not yet initialized
+            // Return null to allow rejection; caller will apply backpressure strategy
             return null;
         }
 
-        // Load-balance: find worker with smallest queue
+        // Load-balance: find worker with smallest queue depth for fair distribution
         ProcRef<WorkerState, M> best = null;
         int minDepth = Integer.MAX_VALUE;
 
