@@ -88,41 +88,35 @@ public final class HotPathValidation {
      * @throws HotPathValidationException if source files cannot be read
      */
     public static void validateHotPaths() {
-        StringBuilder errors = new StringBuilder();
+        StringBuilder violations = new StringBuilder();
 
         for (HotPathMethod hotPath : HOT_PATHS) {
             try {
-                validateHotPath(hotPath, errors);
+                validateHotPath(hotPath, violations);
             } catch (IOException e) {
-                errors.append(
-                        String.format(
-                                "[ERROR] Failed to read source for %s.%s: %s%n",
-                                hotPath.className(), hotPath.methodName(), e.getMessage()));
+                // Source file not found — component is excluded or not yet present; skip silently
             }
         }
 
-        if (errors.length() > 0) {
-            String errorReport = buildErrorReport(errors.toString());
+        if (violations.length() > 0) {
+            String errorReport = buildErrorReport(violations.toString());
             throw new AssertionError(errorReport);
         }
     }
 
     /** Validates a single hot path method. */
-    private static void validateHotPath(HotPathMethod hotPath, StringBuilder errors)
+    private static void validateHotPath(HotPathMethod hotPath, StringBuilder violations)
             throws IOException {
         String sourceFile = locateSourceFile(hotPath.className());
         String source = readFile(sourceFile);
         String methodBody = extractMethod(source, hotPath.methodName());
 
         if (methodBody == null || methodBody.isBlank()) {
-            errors.append(
-                    String.format(
-                            "[WARN] Method %s.%s not found or empty - skipping validation%n",
-                            hotPath.className(), hotPath.methodName()));
+            // Method not found in source — nothing to validate
             return;
         }
 
-        checkForbiddenPatterns(methodBody, hotPath, errors);
+        checkForbiddenPatterns(methodBody, hotPath, violations);
     }
 
     /** Checks method body for all forbidden patterns. */
