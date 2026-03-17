@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  # Nexus Maven Repository Manager (optional - for Maven artifact caching)
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: jotp-nexus
+    ports:
+      - "8081:8081"
+      - "8082:8082"  # Docker registry
+    environment:
+      - NEXUS_CONTEXT=nexus
+      - JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - nexus-data:/nexus-data
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/nexus/service/rest/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Artifactory Maven Proxy (lightweight alternative to Nexus)
+  artifactory:
+    image: releases-docker.jfrog.io/jfrog/artifactory-oss:latest
+    container_name: jotp-artifactory
+    ports:
+      - "8082:8081"
+    environment:
+      - ARTIFACTORY_HOME=/var/opt/jfrog/artifactory
+    volumes:
+      - artifactory-data:/var/opt/jfrog/artifactory
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    profiles:
+      - artifactory
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: jotp-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-jotp}
+      - POSTGRES_USER=${POSTGRES_USER:-jotp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-jotp_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jotp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: jotp-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - jotp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  jotp-network:
+    driver: bridge
+    name: jotp-network
+
+volumes:
+  postgres-data:
+    name: jotp-postgres-data
+  redis-data:
+    name: jotp-redis-data
+  nexus-data:
+    name: jotp-nexus-data
+  artifactory-data:
+    name: jotp-artifactory-data

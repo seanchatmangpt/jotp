@@ -117,6 +117,7 @@ release.properties
 dependency-reduced-pom.xml
 
 # Cloud configuration (contains secrets)
+.env
 .env.cloud
 *.pkrvars.hcl
 terraform.tfvars

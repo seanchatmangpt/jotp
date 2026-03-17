@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven Settings Configuration Template for JOTP Project
+
+  This file configures Maven with proxy settings for faster artifact resolution.
+
+  Usage:
+    1. Copy this file to ~/.m2/settings.xml (user level)
+    2. Or reference it with: mvn -s .mvn/settings-template.xml <goal>
+    3. Or set MAVEN_OPTS environment variable:
+       export MAVEN_OPTS="-s $(pwd)/.mvn/settings-template.xml"
+
+  Proxy Options:
+    - Option 1: Local Nexus Repository Manager (Sonatype)
+      Host: localhost, Port: 8081, Path: /nexus/repository/maven-public/
+
+    - Option 2: Local Artifactory (JFrog)
+      Host: localhost, Port: 8082, Path: /artifactory/repo/
+
+    - Option 3: Maven Central Direct (no proxy, slowest)
+      Uncomment the repositories section for direct access
+-->
+
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              http://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+    <!-- ========================================================================
+         PROXY CONFIGURATION - Uncomment the proxy you want to use
+         ======================================================================== -->
+
+    <proxies>
+        <!-- Option 1: Nexus Repository Manager (recommended for production) -->
+        <proxy>
+            <id>nexus-proxy</id>
+            <active>false</active>
+            <protocol>http</protocol>
+            <host>localhost</host>
+            <port>8081</port>
+            <username></username>
+            <password></password>
+            <nonProxyHosts>localhost|127.0.0.1|*.internal</nonProxyHosts>
+        </proxy>
+
+        <!-- Option 2: Artifactory (lightweight alternative) -->
+        <proxy>
+            <id>artifactory-proxy</id>
+            <active>false</active>
+            <protocol>http</protocol>
+            <host>localhost</host>
+            <port>8082</port>
+            <username></username>
+            <password></password>
+            <nonProxyHosts>localhost|127.0.0.1|*.internal</nonProxyHosts>
+        </proxy>
+
+        <!-- Option 3: Custom Maven Proxy Server -->
+        <proxy>
+            <id>custom-proxy</id>
+            <active>false</active>
+            <protocol>http</protocol>
+            <host>${maven.proxy.host}</host>
+            <port>${maven.proxy.port}</port>
+            <username>${maven.proxy.username}</username>
+            <password>${maven.proxy.password}</password>
+            <nonProxyHosts>localhost|127.0.0.1|*.internal</nonProxyHosts>
+        </proxy>
+    </proxies>
+
+    <!-- ========================================================================
+         MIRROR CONFIGURATION - Routes all artifact requests through proxy
+         ======================================================================== -->
+
+    <mirrors>
+        <!-- Nexus Mirror (uncomment if using Nexus) -->
+        <mirror>
+            <id>nexus-mirror</id>
+            <mirrorOf>central,!java-net</mirrorOf>
+            <url>http://localhost:8081/nexus/repository/maven-public/</url>
+            <blocked>false</blocked>
+        </mirror>
+
+        <!-- Artifactory Mirror (uncomment if using Artifactory) -->
+        <!--
+        <mirror>
+            <id>artifactory-mirror</id>
+            <mirrorOf>*</mirrorOf>
+            <url>http://localhost:8082/artifactory/repo/</url>
+            <blocked>false</blocked>
+        </mirror>
+        -->
+
+        <!-- Central Repository Direct (fallback) -->
+        <mirror>
+            <id>maven-central</id>
+            <mirrorOf>central</mirrorOf>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <blocked>false</blocked>
+        </mirror>
+    </mirrors>
+
+    <!-- ========================================================================
+         LOCAL REPOSITORY CONFIGURATION
+         ======================================================================== -->
+
+    <!-- Local repository path (default: ~/.m2/repository) -->
+    <localRepository>${user.home}/.m2/repository</localRepository>
+
+    <!-- ========================================================================
+         REPOSITORY CONFIGURATION
+         ======================================================================== -->
+
+    <repositories>
+        <!-- Maven Central Repository -->
+        <repository>
+            <id>central</id>
+            <name>Maven Central Repository</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+                <updatePolicy>never</updatePolicy>
+            </snapshots>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>daily</updatePolicy>
+            </releases>
+        </repository>
+
+        <!-- Java.net Repository (if needed) -->
+        <repository>
+            <id>java-net</id>
+            <name>Java.net Repository</name>
+            <url>https://maven.java.net/content/repositories/public/</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
+        <!-- JCenter Repository (if needed) -->
+        <repository>
+            <id>jcenter</id>
+            <name>JCenter Repository</name>
+            <url>https://jcenter.bintray.com</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
+        <!-- Spring Repository (for early releases) -->
+        <repository>
+            <id>spring-releases</id>
+            <name>Spring Releases</name>
+            <url>https://repo.spring.io/release</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
+        <!-- Spring Snapshots (if needed) -->
+        <repository>
+            <id>spring-snapshots</id>
+            <name>Spring Snapshots</name>
+            <url>https://repo.spring.io/snapshot</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <!-- ========================================================================
+         PLUGIN REPOSITORIES
+         ======================================================================== -->
+
+    <pluginRepositories>
+        <!-- Maven Central Plugin Repository -->
+        <pluginRepository>
+            <id>central</id>
+            <name>Maven Central Plugin Repository</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+
+        <!-- Spring Plugin Repository -->
+        <pluginRepository>
+            <id>spring-plugins</id>
+            <name>Spring Plugin Repository</name>
+            <url>https://repo.spring.io/plugins-release</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <!-- ========================================================================
+         SERVER CREDENTIALS (for authenticated repositories)
+         ======================================================================== -->
+
+    <servers>
+        <!-- Nexus Repository Credentials -->
+        <server>
+            <id>nexus-proxy</id>
+            <username>deployment</username>
+            <password>deployment123</password>
+        </server>
+
+        <!-- Artifactory Credentials -->
+        <server>
+            <id>artifactory-proxy</id>
+            <username>admin</username>
+            <password>password</password>
+        </server>
+
+        <!-- Maven Central Credentials (if deploying) -->
+        <server>
+            <id>maven-central</id>
+            <username></username>
+            <password></password>
+        </server>
+    </servers>
+
+    <!-- ========================================================================
+         PROFILE CONFIGURATION
+         ======================================================================== -->
+
+    <profiles>
+        <!-- Development Profile -->
+        <profile>
+            <id>dev</id>
+            <activation>
+                <property>
+                    <name>environment</name>
+                    <value>dev</value>
+                </property>
+            </activation>
+            <properties>
+                <maven.compiler.debug>true</maven.compiler.debug>
+                <maven.compiler.debuglevel>lines,vars,source</maven.compiler.debuglevel>
+            </properties>
+        </profile>
+
+        <!-- Production Profile -->
+        <profile>
+            <id>prod</id>
+            <activation>
+                <property>
+                    <name>environment</name>
+                    <value>prod</value>
+                </property>
+            </activation>
+            <properties>
+                <maven.compiler.debug>false</maven.compiler.debug>
+                <maven.compiler.optimize>true</maven.compiler.optimize>
+            </properties>
+        </profile>
+
+        <!-- Offline Build Profile -->
+        <profile>
+            <id>offline</id>
+            <activation>
+                <property>
+                    <name>offline</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <maven.repo.local>${project.basedir}/.m2/repository</maven.repo.local>
+            </properties>
+        </profile>
+
+        <!-- Java 26 Preview Features Profile -->
+        <profile>
+            <id>java26</id>
+            <activation>
+                <jdk>26</jdk>
+            </activation>
+            <properties>
+                <maven.compiler.release>26</maven.compiler.release>
+                <maven.compiler.enablePreview>true</maven.compiler.enablePreview>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <release>26</release>
+                            <enablePreview>true</enablePreview>
+                            <compilerArgs>
+                                <arg>--enable-preview</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+    <!-- ========================================================================
+         ACTIVE PROFILES
+         ======================================================================== -->
+
+    <activeProfiles>
+        <activeProfile>java26</activeProfile>
+    </activeProfiles>
+
+</settings>
