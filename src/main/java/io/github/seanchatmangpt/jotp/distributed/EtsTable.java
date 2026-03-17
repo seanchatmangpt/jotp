@@ -16,7 +16,7 @@ import java.util.*;
  *
  * <p>Each variant provides pattern matching capabilities for queries.
  */
-public sealed interface EtsTable {
+public sealed interface EtsTable permits EtsTable.Set, EtsTable.Bag, EtsTable.OrderedSet {
 
     /**
      * Put a tuple into the table. Semantics depend on table type:

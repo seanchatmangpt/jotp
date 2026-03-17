@@ -44,7 +44,7 @@ public final class InMemoryPartitionDetector implements PartitionDetector {
   @Override
   public Set<String> getReachableNodes() {
     return healthChecker.getAllHealthStatus().entrySet().stream()
-        .filter(e -> !e.getValue().failureCount() > 0)
+        .filter(e -> e.getValue().failureCount() == 0)
         .map(java.util.Map.Entry::getKey)
         .collect(java.util.stream.Collectors.toSet());
   }
@@ -52,7 +52,7 @@ public final class InMemoryPartitionDetector implements PartitionDetector {
   @Override
   public Set<String> getUnreachableNodes() {
     return healthChecker.getAllHealthStatus().entrySet().stream()
-        .filter(e -> e.getValue().failureCount() > 0)
+        .filter(e -> e.getValue().failureCount() != 0)
         .map(java.util.Map.Entry::getKey)
         .collect(java.util.stream.Collectors.toSet());
   }
