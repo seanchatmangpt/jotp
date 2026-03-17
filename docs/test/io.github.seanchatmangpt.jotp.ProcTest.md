@@ -10,16 +10,6 @@ With trapExits(true), EXIT signals are converted to ExitSignal messages in the m
 This enables the "trap_exit" pattern where processes can handle linked process failures gracefully.
 
 
-The ask() method provides synchronous request-reply semantics.
-It sends a message and returns a CompletableFuture that completes when the handler processes the message.
-The handler's return value becomes the future's result, enabling type-safe request-response patterns.
-
-
-Proc mailboxes guarantee FIFO (First-In-First-Out) message ordering.
-Messages are delivered in the exact order they were sent, ensuring deterministic behavior.
-This is critical for protocols where message sequence matters (e.g., state machine transitions).
-
-
 When a Proc's handler throws an unhandled exception, the process terminates abnormally.
 Crash callbacks are invoked ONLY on abnormal termination, enabling cleanup and monitoring.
 This is the "Let It Crash" philosophy - processes don't catch exceptions, supervisors restart them.
@@ -30,6 +20,16 @@ This is the "Let It Crash" philosophy - processes don't catch exceptions, superv
 Proc<S,M> is the fundamental OTP primitive in JOTP - a lightweight process backed by a virtual thread.
 Each Proc has its own mailbox (LinkedTransferQueue) and processes messages sequentially.
 The tell() method provides fire-and-forget message delivery - the sender doesn't wait for a response.
+
+
+Proc mailboxes guarantee FIFO (First-In-First-Out) message ordering.
+Messages are delivered in the exact order they were sent, ensuring deterministic behavior.
+This is critical for protocols where message sequence matters (e.g., state machine transitions).
+
+
+The ask() method provides synchronous request-reply semantics.
+It sends a message and returns a CompletableFuture that completes when the handler processes the message.
+The handler's return value becomes the future's result, enabling type-safe request-response patterns.
 
 
 ---

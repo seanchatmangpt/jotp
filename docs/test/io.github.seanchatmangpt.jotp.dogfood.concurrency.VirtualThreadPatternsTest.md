@@ -27,10 +27,10 @@ assertThat(results).hasSize(5);
 
 | Key | Value |
 | --- | --- |
-| `Processing Pattern` | `Concurrent, unordered` |
 | `Input Items` | `5` |
-| `Thread Type` | `Virtual (per-item)` |
+| `Processing Pattern` | `Concurrent, unordered` |
 | `Results Collected` | `5` |
+| `Thread Type` | `Virtual (per-item)` |
 
 > [!NOTE]
 > While this example uses CountDownLatch for compatibility, production code should prefer StructuredTaskScope (JEP 453) for proper structured concurrency with automatic error propagation and timeout handling.
@@ -57,10 +57,10 @@ assertThat(completed).isFalse();
 
 | Key | Value |
 | --- | --- |
-| `Result` | `false` |
 | `Thread Interrupted` | `Yes (after timeout)` |
-| `Task Completed` | `Exceeded timeout` |
+| `Result` | `false` |
 | `Task Response` | `Caught InterruptedException` |
+| `Task Completed` | `Exceeded timeout` |
 
 > [!NOTE]
 > Always handle InterruptedException properly: either propagate it or restore the interrupt flag with Thread.currentThread().interrupt(). This ensures callers know the thread was interrupted.
@@ -91,9 +91,9 @@ assertThat(counter.get()).isEqualTo(tasks.size());
 
 | Key | Value |
 | --- | --- |
-| `Counter Value` | `2` |
-| `All Virtual` | `true` |
 | `Threads Created` | `2` |
+| `All Virtual` | `true` |
+| `Counter Value` | `2` |
 | `Naming Pattern` | `worker-0, worker-1, ...` |
 
 > [!NOTE]
@@ -121,8 +121,8 @@ assertThat(thread.isVirtual()).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Thread Type` | `Virtual Thread` |
 | `Counter Value` | `1` |
+| `Thread Type` | `Virtual Thread` |
 | `Thread Name` | `test-thread` |
 
 > [!NOTE]
@@ -151,8 +151,8 @@ thread.join(Duration.ofSeconds(2));
 
 | Key | Value |
 | --- | --- |
-| `Execution Pattern` | `Fire-and-Forget` |
 | `Counter Value` | `1` |
+| `Execution Pattern` | `Fire-and-Forget` |
 | `Thread Lifecycle` | `Terminates after task completes` |
 
 > [!NOTE]
@@ -176,9 +176,9 @@ assertThat(completed).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Result` | `true` |
-| `Thread Interrupted` | `No` |
 | `Timeout Pattern` | `join() + interrupt()` |
+| `Thread Interrupted` | `No` |
+| `Result` | `true` |
 | `Task Completed` | `Within timeout` |
 
 > [!NOTE]
@@ -217,10 +217,10 @@ assertThat(counter.get()).isEqualTo(requests.size());
 
 | Key | Value |
 | --- | --- |
-| `Handler Invocations` | `3` |
-| `Pool Required` | `No` |
-| `Requests Processed` | `3` |
 | `Thread Strategy` | `One virtual thread per request` |
+| `Requests Processed` | `3` |
+| `Pool Required` | `No` |
+| `Handler Invocations` | `3` |
 
 > [!NOTE]
 > Virtual threads make thread pools obsolete for I/O-bound work. Keep thread pools only for CPU-intensive tasks where parallelism is limited by CPU cores, not I/O.

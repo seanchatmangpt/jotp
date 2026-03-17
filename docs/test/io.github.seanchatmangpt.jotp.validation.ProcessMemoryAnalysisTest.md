@@ -3,12 +3,12 @@
 ## Table of Contents
 
 - [10K Process Memory Analysis](#10kprocessmemoryanalysis)
-- [100K Process Memory Analysis](#100kprocessmemoryanalysis)
-- [100 Process Memory Analysis](#100processmemoryanalysis)
 - [Process with Mailbox Messages Memory Analysis](#processwithmailboxmessagesmemoryanalysis)
-- [Empty Process Memory Analysis](#emptyprocessmemoryanalysis)
+- [100K Process Memory Analysis](#100kprocessmemoryanalysis)
 - [Process with Small State Memory Analysis](#processwithsmallstatememoryanalysis)
 - [1K Process Memory Analysis](#1kprocessmemoryanalysis)
+- [100 Process Memory Analysis](#100processmemoryanalysis)
+- [Empty Process Memory Analysis](#emptyprocessmemoryanalysis)
 
 
 ## 10K Process Memory Analysis
@@ -37,6 +37,57 @@ Phase 1: Creating processes...
 
 
 Phase 2: Forcing GC to stabilize measurement...
+
+
+
+Phase 3: Measuring memory footprint...
+
+
+
+Phase 4: Cleaning up processes...
+
+
+
+Memory Footprint Results:
+
+| Key | Value |
+| --- | --- |
+| `Baseline Heap` | `257.07 MB` |
+| `Heap Growth` | `57.70 MB` |
+| `Processes Created` | `10,000` |
+| `Bytes Per Process` | `6050.49 bytes` |
+| `KB Per Process` | `5.91 KB` |
+| `After Creation Heap` | `314.78 MB` |
+| `Creation Time` | `0.04 sec` |
+| `GC Stabilization Time` | `1.19 sec` |
+| `Cleanup Time` | `0.52 sec` |
+
+
+
+Validation:
+
+
+
+Memory Summary:
+
+| Key | Value |
+| --- | --- |
+| `Heap Growth` | `57.70 MB` |
+| `Peak Heap` | `314.78 MB` |
+| `Final Heap` | `472.78 MB` |
+| `Baseline Heap` | `257.07 MB` |
+
+## Process with Mailbox Messages Memory Analysis
+
+Validating memory footprint for 10,000 processes with messages in mailboxes
+
+
+
+Expected: ~5-7 KB total (includes 10 messages per process)
+
+
+
+Phase 1: Creating processes and populating mailboxes...
 
 ## 100K Process Memory Analysis
 
@@ -72,6 +123,22 @@ Phase 1: Creating processes...
 
   Created 40,000 processes (40.0%)
 
+
+
+Memory Footprint Results:
+
+| Key | Value |
+| --- | --- |
+| `Baseline Heap` | `284.94 MB` |
+| `Heap Growth` | `-50.60 MB` |
+| `Messages Per Process` | `10` |
+| `Total Messages` | `100,000` |
+| `Processes Created` | `10,000` |
+| `Bytes Per Process` | `-5306.22 bytes` |
+| `KB Per Process` | `-5.18 KB` |
+| `After Creation Heap` | `234.34 MB` |
+| `Creation Time` | `0.04 sec` |
+
   Created 50,000 processes (50.0%)
 
   Created 60,000 processes (60.0%)
@@ -90,11 +157,137 @@ Phase 2: Forcing GC to stabilize measurement...
 
 
 
+Analysis:
+
+> [!NOTE]
+> Message overhead: -928.96 bytes per message
+
+
+
+Memory Summary:
+
+| Key | Value |
+| --- | --- |
+| `Heap Growth` | `0.00 MB` |
+| `Peak Heap` | `284.94 MB` |
+| `Final Heap` | `386.46 MB` |
+| `Baseline Heap` | `284.94 MB` |
+
+
+
 Phase 3: Measuring memory footprint...
 
 
 
 Phase 4: Cleaning up processes...
+
+## Process with Small State Memory Analysis
+
+Validating memory footprint for 10,000 processes with small state objects
+
+
+
+Expected: ~4-5 KB total (includes ~100-byte state object)
+
+
+
+Phase 1: Creating processes with SmallState...
+
+
+
+Memory Footprint Results:
+
+| Key | Value |
+| --- | --- |
+| `KB Per Process` | `-6.01 KB` |
+| `Processes Created` | `10,000` |
+| `Baseline Heap` | `452.49 MB` |
+| `Bytes Per Process` | `-6155.48 bytes` |
+| `State Type` | `SmallState (3 fields)` |
+| `After Creation Heap` | `393.79 MB` |
+| `Heap Growth` | `-58.70 MB` |
+| `Creation Time` | `0.02 sec` |
+
+
+
+Analysis:
+
+> [!NOTE]
+> State object overhead: -9.90 KB per process
+
+
+
+Memory Summary:
+
+| Key | Value |
+| --- | --- |
+| `Heap Growth` | `0.00 MB` |
+| `Peak Heap` | `452.49 MB` |
+| `Final Heap` | `521.79 MB` |
+| `Baseline Heap` | `452.49 MB` |
+
+
+
+Memory Footprint Results:
+
+| Key | Value |
+| --- | --- |
+| `Baseline Heap` | `240.34 MB` |
+| `Heap Growth` | `194.15 MB` |
+| `Processes Created` | `100,000` |
+| `Bytes Per Process` | `2035.83 bytes` |
+| `KB Per Process` | `1.99 KB` |
+| `After Creation Heap` | `434.49 MB` |
+| `Creation Time` | `0.21 sec` |
+| `GC Stabilization Time` | `1.50 sec` |
+| `Cleanup Time` | `2.33 sec` |
+
+
+
+Validation:
+
+| Key | Value |
+| --- | --- |
+| `Status` | `PASS (with tolerance)` |
+| `Note` | `Outside ideal range but within acceptable JVM variance` |
+| `Claim` | `~1KB per process` |
+| `Actual` | `1.99 KB/process` |
+
+
+
+Memory Summary:
+
+| Key | Value |
+| --- | --- |
+| `Heap Growth` | `194.15 MB` |
+| `Peak Heap` | `434.49 MB` |
+| `Final Heap` | `236.10 MB` |
+| `Baseline Heap` | `240.34 MB` |
+
+## 1K Process Memory Analysis
+
+Validating memory footprint for 1,000 processes
+
+
+
+Expected: ~1-1.2 MB total (~1KB per process)
+
+
+
+Test Configuration:
+
+| Key | Value |
+| --- | --- |
+| `Target Processes` | `1,000` |
+| `JVM Max Heap` | `3.93 GB` |
+
+
+
+Phase 1: Creating processes...
+
+
+
+Phase 2: Forcing GC to stabilize measurement...
 
 ## 100 Process Memory Analysis
 
@@ -120,96 +313,6 @@ Phase 1: Creating processes...
 
 
 Phase 2: Forcing GC to stabilize measurement...
-
-
-
-Memory Footprint Results:
-
-| Key | Value |
-| --- | --- |
-| `KB Per Process` | `7.11 KB` |
-| `Bytes Per Process` | `7284.77 bytes` |
-| `Processes Created` | `10,000` |
-| `Heap Growth` | `69.47 MB` |
-| `Baseline Heap` | `185.99 MB` |
-| `Cleanup Time` | `0.65 sec` |
-| `GC Stabilization Time` | `1.41 sec` |
-| `Creation Time` | `0.03 sec` |
-| `After Creation Heap` | `255.46 MB` |
-
-
-
-Validation:
-
-
-
-Memory Summary:
-
-| Key | Value |
-| --- | --- |
-| `Peak Heap` | `255.46 MB` |
-| `Heap Growth` | `69.47 MB` |
-| `Baseline Heap` | `185.99 MB` |
-| `Final Heap` | `325.99 MB` |
-
-
-
-Phase 3: Measuring memory footprint...
-
-
-
-Phase 4: Cleaning up processes...
-
-## Process with Mailbox Messages Memory Analysis
-
-Validating memory footprint for 10,000 processes with messages in mailboxes
-
-
-
-Expected: ~5-7 KB total (includes 10 messages per process)
-
-
-
-Phase 1: Creating processes and populating mailboxes...
-
-
-
-Phase 3: Measuring memory footprint...
-
-
-
-Phase 4: Cleaning up processes...
-
-
-
-Memory Footprint Results:
-
-| Key | Value |
-| --- | --- |
-| `KB Per Process` | `1244.25 KB` |
-| `Bytes Per Process` | `1274112.24 bytes` |
-| `Processes Created` | `100` |
-| `Heap Growth` | `121.51 MB` |
-| `Baseline Heap` | `251.59 MB` |
-| `Cleanup Time` | `0.51 sec` |
-| `GC Stabilization Time` | `1.59 sec` |
-| `Creation Time` | `0.00 sec` |
-| `After Creation Heap` | `373.09 MB` |
-
-
-
-Validation:
-
-
-
-Memory Summary:
-
-| Key | Value |
-| --- | --- |
-| `Peak Heap` | `373.09 MB` |
-| `Heap Growth` | `121.51 MB` |
-| `Baseline Heap` | `251.59 MB` |
-| `Final Heap` | `289.79 MB` |
 
 ## Empty Process Memory Analysis
 
@@ -240,40 +343,6 @@ Phase 2: Forcing GC to stabilize measurement...
 
 
 
-Memory Footprint Results:
-
-| Key | Value |
-| --- | --- |
-| `KB Per Process` | `-14.37 KB` |
-| `Bytes Per Process` | `-14712.27 bytes` |
-| `Processes Created` | `10,000` |
-| `Total Messages` | `100,000` |
-| `Messages Per Process` | `10` |
-| `Heap Growth` | `-140.31 MB` |
-| `Baseline Heap` | `427.10 MB` |
-| `Creation Time` | `0.18 sec` |
-| `After Creation Heap` | `286.79 MB` |
-
-
-
-Analysis:
-
-> [!NOTE]
-> Message overhead: -1869.56 bytes per message
-
-
-
-Memory Summary:
-
-| Key | Value |
-| --- | --- |
-| `Peak Heap` | `427.10 MB` |
-| `Heap Growth` | `0.00 MB` |
-| `Baseline Heap` | `427.10 MB` |
-| `Final Heap` | `378.79 MB` |
-
-
-
 Phase 3: Measuring memory footprint...
 
 
@@ -286,146 +355,15 @@ Memory Footprint Results:
 
 | Key | Value |
 | --- | --- |
-| `KB Per Process` | `-11.19 KB` |
-| `Bytes Per Process` | `-11455.17 bytes` |
-| `Processes Created` | `10,000` |
-| `Heap Growth` | `-109.24 MB` |
-| `Baseline Heap` | `425.81 MB` |
-| `Cleanup Time` | `0.13 sec` |
-| `GC Stabilization Time` | `1.36 sec` |
-| `Creation Time` | `0.06 sec` |
-| `After Creation Heap` | `316.57 MB` |
-
-
-
-Validation:
-
-
-
-Memory Summary:
-
-| Key | Value |
-| --- | --- |
-| `Peak Heap` | `425.81 MB` |
-| `Heap Growth` | `0.00 MB` |
-| `Baseline Heap` | `425.81 MB` |
-| `Final Heap` | `346.57 MB` |
-
-## Process with Small State Memory Analysis
-
-Validating memory footprint for 10,000 processes with small state objects
-
-
-
-Expected: ~4-5 KB total (includes ~100-byte state object)
-
-
-
-Phase 1: Creating processes with SmallState...
-
-## 1K Process Memory Analysis
-
-Validating memory footprint for 1,000 processes
-
-
-
-Expected: ~1-1.2 MB total (~1KB per process)
-
-
-
-Test Configuration:
-
-| Key | Value |
-| --- | --- |
-| `Target Processes` | `1,000` |
-| `JVM Max Heap` | `3.93 GB` |
-
-
-
-Phase 1: Creating processes...
-
-
-
-Phase 2: Forcing GC to stabilize measurement...
-
-
-
-Memory Footprint Results:
-
-| Key | Value |
-| --- | --- |
-| `KB Per Process` | `1.06 KB` |
-| `Bytes Per Process` | `1086.14 bytes` |
-| `Processes Created` | `100,000` |
-| `Heap Growth` | `103.58 MB` |
-| `Baseline Heap` | `201.51 MB` |
-| `Cleanup Time` | `4.51 sec` |
-| `GC Stabilization Time` | `1.59 sec` |
-| `Creation Time` | `0.11 sec` |
-| `After Creation Heap` | `305.10 MB` |
-
-
-
-Validation:
-
-| Key | Value |
-| --- | --- |
-| `Status` | `PASS` |
-| `Actual` | `1.06 KB/process` |
-| `Claim` | `~1KB per process VALIDATED` |
-
-> [!NOTE]
-> Memory footprint is within expected range!
-
-
-
-Memory Summary:
-
-| Key | Value |
-| --- | --- |
-| `Peak Heap` | `327.51 MB` |
-| `Heap Growth` | `126.00 MB` |
-| `Baseline Heap` | `201.51 MB` |
-| `Final Heap` | `301.33 MB` |
-
-
-
-Memory Footprint Results:
-
-| Key | Value |
-| --- | --- |
-| `Heap Growth` | `54.92 MB` |
-| `After Creation Heap` | `273.33 MB` |
-| `State Type` | `SmallState (3 fields)` |
-| `Bytes Per Process` | `5759.25 bytes` |
-| `Baseline Heap` | `218.41 MB` |
-| `Processes Created` | `10,000` |
-| `KB Per Process` | `5.62 KB` |
-| `Creation Time` | `0.01 sec` |
-
-
-
-Phase 3: Measuring memory footprint...
-
-
-
-Phase 4: Cleaning up processes...
-
-
-
-Memory Footprint Results:
-
-| Key | Value |
-| --- | --- |
-| `KB Per Process` | `168.54 KB` |
-| `Bytes Per Process` | `172587.09 bytes` |
+| `Baseline Heap` | `172.09 MB` |
+| `Heap Growth` | `3.66 MB` |
 | `Processes Created` | `1,000` |
-| `Heap Growth` | `164.59 MB` |
-| `Baseline Heap` | `322.74 MB` |
-| `Cleanup Time` | `0.19 sec` |
-| `GC Stabilization Time` | `1.28 sec` |
+| `Bytes Per Process` | `3838.98 bytes` |
+| `KB Per Process` | `3.75 KB` |
+| `After Creation Heap` | `175.75 MB` |
 | `Creation Time` | `0.00 sec` |
-| `After Creation Heap` | `487.33 MB` |
+| `GC Stabilization Time` | `1.17 sec` |
+| `Cleanup Time` | `0.05 sec` |
 
 
 
@@ -437,17 +375,38 @@ Memory Summary:
 
 | Key | Value |
 | --- | --- |
-| `Peak Heap` | `487.33 MB` |
-| `Heap Growth` | `164.59 MB` |
-| `Baseline Heap` | `322.74 MB` |
-| `Final Heap` | `343.33 MB` |
+| `Heap Growth` | `3.66 MB` |
+| `Peak Heap` | `175.75 MB` |
+| `Final Heap` | `183.75 MB` |
+| `Baseline Heap` | `172.09 MB` |
 
 
 
-Analysis:
+Phase 3: Measuring memory footprint...
 
-> [!NOTE]
-> State object overhead: 1.73 KB per process
+
+
+Phase 4: Cleaning up processes...
+
+
+
+Memory Footprint Results:
+
+| Key | Value |
+| --- | --- |
+| `Baseline Heap` | `133.32 MB` |
+| `Heap Growth` | `74.43 MB` |
+| `Processes Created` | `100` |
+| `Bytes Per Process` | `780463.20 bytes` |
+| `KB Per Process` | `762.17 KB` |
+| `After Creation Heap` | `207.75 MB` |
+| `Creation Time` | `0.00 sec` |
+| `GC Stabilization Time` | `1.23 sec` |
+| `Cleanup Time` | `0.00 sec` |
+
+
+
+Validation:
 
 
 
@@ -455,10 +414,49 @@ Memory Summary:
 
 | Key | Value |
 | --- | --- |
-| `Peak Heap` | `218.41 MB` |
-| `Heap Growth` | `0.00 MB` |
-| `Baseline Heap` | `218.41 MB` |
-| `Final Heap` | `391.33 MB` |
+| `Heap Growth` | `74.43 MB` |
+| `Peak Heap` | `207.75 MB` |
+| `Final Heap` | `207.75 MB` |
+| `Baseline Heap` | `133.32 MB` |
+
+
+
+Phase 3: Measuring memory footprint...
+
+
+
+Phase 4: Cleaning up processes...
+
+
+
+Memory Footprint Results:
+
+| Key | Value |
+| --- | --- |
+| `Baseline Heap` | `189.76 MB` |
+| `Heap Growth` | `39.99 MB` |
+| `Processes Created` | `10,000` |
+| `Bytes Per Process` | `4193.34 bytes` |
+| `KB Per Process` | `4.10 KB` |
+| `After Creation Heap` | `229.75 MB` |
+| `Creation Time` | `0.01 sec` |
+| `GC Stabilization Time` | `1.21 sec` |
+| `Cleanup Time` | `0.21 sec` |
+
+
+
+Validation:
+
+
+
+Memory Summary:
+
+| Key | Value |
+| --- | --- |
+| `Heap Growth` | `39.99 MB` |
+| `Peak Heap` | `229.75 MB` |
+| `Final Heap` | `257.75 MB` |
+| `Baseline Heap` | `189.76 MB` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

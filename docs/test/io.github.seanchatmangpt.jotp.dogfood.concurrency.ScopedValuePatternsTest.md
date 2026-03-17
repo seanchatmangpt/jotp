@@ -29,9 +29,9 @@ assertThat(ScopedValuePatterns.TRACE_ID.isBound()).isFalse();
 
 | Key | Value |
 | --- | --- |
-| `Memory Leak Risk` | `Zero` |
-| `Cleanup` | `Automatic (finally block equivalent)` |
 | `After Lambda` | `TRACE_ID is unbound` |
+| `Cleanup` | `Automatic (finally block equivalent)` |
+| `Memory Leak Risk` | `Zero` |
 | `During Lambda` | `TRACE_ID is bound` |
 
 > [!NOTE]
@@ -52,10 +52,10 @@ String result = ScopedValuePatterns.withTrace("trace-123", task);
 
 | Key | Value |
 | --- | --- |
-| `Cleanup` | `Automatic after call` |
 | `Return Type` | `String` |
-| `Task Result` | `trace-123` |
+| `Cleanup` | `Automatic after call` |
 | `Bound Value` | `trace-123` |
+| `Task Result` | `trace-123` |
 
 > [!NOTE]
 > The Callable-based withTrace() allows tasks to return values while maintaining the scoped binding. This is perfect for request-scoped tracing, authentication, and tenant isolation.
@@ -84,11 +84,11 @@ assertThat(results).containsExactlyInAnyOrder("alice|A", "trace-xyz|B");
 
 | Key | Value |
 | --- | --- |
-| `Thread Type` | `Virtual threads` |
-| `Inheritance` | `Automatic` |
 | `Task B Result` | `trace-xyz|B` |
-| `Task A Result` | `alice|A` |
+| `Inheritance` | `Automatic` |
+| `Thread Type` | `Virtual threads` |
 | `Parent Scope` | `user=alice, trace=trace-xyz` |
+| `Task A Result` | `alice|A` |
 
 > [!NOTE]
 > This automatic inheritance makes distributed tracing and authentication context propagation trivial. No more passing context through every method signature!
@@ -110,10 +110,10 @@ if (ScopedValuePatterns.CURRENT_USER.isBound()) {
 
 | Key | Value |
 | --- | --- |
-| `Safe Check` | `isBound() returns false` |
 | `Design Philosophy` | `Fail fast, explicit context` |
-| `Unbound Access` | `Throws NoSuchElementException` |
+| `Safe Check` | `isBound() returns false` |
 | `Alternative` | `Optional wrapper or default` |
+| `Unbound Access` | `Throws NoSuchElementException` |
 
 > [!NOTE]
 > The fail-fast behavior prevents bugs where context is accidentally missing. Always use isBound() or Optional wrappers when the value might not be set.
@@ -139,9 +139,9 @@ ScopedValuePatterns.handleAsUser("alice", () -> {
 | Key | Value |
 | --- | --- |
 | `Inner Scope` | `SYSTEM (shadows outer)` |
-| `Pattern` | `Lexical scoping` |
-| `Outer Scope` | `alice` |
 | `After Inner Scope` | `alice (restored)` |
+| `Outer Scope` | `alice` |
+| `Pattern` | `Lexical scoping` |
 
 > [!NOTE]
 > This shadowing behavior is perfect for privilege escalation (admin vs user) or request context switching in multi-tenant systems.
@@ -165,9 +165,9 @@ if (ScopedValuePatterns.CURRENT_USER.isBound()) {
 
 | Key | Value |
 | --- | --- |
-| `Recommendation` | `Use Optional for explicit handling` |
-| `Check Pattern` | `isBound() returns false` |
 | `Default Pattern` | `Returns 'default' when unbound` |
+| `Check Pattern` | `isBound() returns false` |
+| `Recommendation` | `Use Optional for explicit handling` |
 | `Optional Pattern` | `Returns Optional.empty()` |
 
 > [!NOTE]
@@ -190,11 +190,11 @@ ScopedValuePatterns.withRequestContext(ctx, () -> {
 
 | Key | Value |
 | --- | --- |
-| `Tenant ID` | `tenant-1` |
-| `Trace ID` | `trace-1` |
 | `User` | `user-1` |
-| `Scope` | `All values share same lifetime` |
+| `Trace ID` | `trace-1` |
+| `Tenant ID` | `tenant-1` |
 | `Binding Pattern` | `Chained where().where().call()` |
+| `Scope` | `All values share same lifetime` |
 
 > [!NOTE]
 > The chained where() calls create a composite scope with all bindings. All values are unbound together when the scope exits, ensuring consistency.
@@ -226,10 +226,10 @@ ScopedValuePatterns.handleAsUser("alice", () -> {
 
 | Key | Value |
 | --- | --- |
-| `Scoped Binding` | `alice` |
 | `Scope` | `Lambda lifetime` |
-| `Captured Value` | `alice` |
+| `Scoped Binding` | `alice` |
 | `Cleanup` | `Automatic` |
+| `Captured Value` | `alice` |
 
 > [!NOTE]
 > ScopedValue.where(key, value).run(task) binds the value for the duration of task. After task completes (successfully or exceptionally), the binding is automatically removed.

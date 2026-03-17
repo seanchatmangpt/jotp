@@ -7,9 +7,9 @@
 - [GenServer: Custom Reply Values](#genservercustomreplyvalues)
 - [GenServer: Synchronous Request-Reply (call)](#genserversynchronousrequestreplycall)
 - [GenServer: Info Messages (Out-of-Band Notifications)](#genserverinfomessagesoutofbandnotifications)
-- [GenServer: Graceful Shutdown](#genservergracefulshutdown)
-- [GenServer: FIFO Ordering Guarantee](#genserverfifoorderingguarantee)
 - [GenServer: Complete Message Type Overview](#genservercompletemessagetypeoverview)
+- [GenServer: FIFO Ordering Guarantee](#genserverfifoorderingguarantee)
+- [GenServer: Graceful Shutdown](#genservergracefulshutdown)
 
 
 ## GenServer: Call Timeout Protection
@@ -27,8 +27,8 @@ var future = server.call(new CounterMsg.Get(), Duration.ofMillis(100));
 
 | Key | Value |
 | --- | --- |
-| `Client Timeout` | `100ms` |
 | `Server Response Time` | `2000ms` |
+| `Client Timeout` | `100ms` |
 | `Result` | `Timeout Exception` |
 
 ## GenServer: Asynchronous Cast (Fire-and-Forget)
@@ -75,8 +75,8 @@ var result = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
 
 | Key | Value |
 | --- | --- |
-| `Operations` | `Increment, Increment, Decrement` |
 | `Initial State` | `0` |
+| `Operations` | `Increment, Increment, Decrement` |
 | `Final State` | `1` |
 
 ## GenServer: Custom Reply Values
@@ -115,10 +115,10 @@ var reply = server.call(new EchoMsg.Echo("hello"), CALL_TIMEOUT).get();
 
 | Key | Value |
 | --- | --- |
-| `Type` | `String` |
-| `State Unchanged` | `true` |
-| `Reply` | `echo:hello` |
 | `Input` | `hello` |
+| `Reply` | `echo:hello` |
+| `State Unchanged` | `true` |
+| `Type` | `String` |
 
 ## GenServer: Synchronous Request-Reply (call)
 
@@ -202,117 +202,6 @@ server.info("info3");
 // infoCount.get() == 3
 ```
 
-| Key | Value |
-| --- | --- |
-| `Info Messages Sent` | `3` |
-| `Info Messages Processed` | `3` |
-
-## GenServer: Graceful Shutdown
-
-stop() gracefully shuts down the server, draining all remaining messages from the mailbox before terminating.
-
-```java
-var processedCount = new AtomicInteger(0);
-
-var handler = new GenServer.Handler<Integer, CounterMsg>() {
-    @Override
-    public GenServer.CallResult<Integer> handleCall(
-            CounterMsg request, Integer state) {
-        processedCount.incrementAndGet();
-        return switch (request) {
-            case CounterMsg.Get _ -> new GenServer.CallResult<>(state, state);
-            default -> new GenServer.CallResult<>(state, -1);
-        };
-    }
-
-    @Override
-    public Integer handleCast(CounterMsg request, Integer state) {
-        processedCount.incrementAndGet();
-        return switch (request) {
-            case CounterMsg.Increment _ -> state + 1;
-            default -> state;
-        };
-    }
-
-    @Override
-    public Integer handleInfo(Object info, Integer state) {
-        return state;
-    }
-};
-
-var server = GenServer.start(0, handler);
-
-// Queue several messages
-server.cast(new CounterMsg.Increment());
-server.cast(new CounterMsg.Increment());
-server.cast(new CounterMsg.Increment());
-
-// Stop and wait for graceful shutdown
-server.stop();
-
-// All messages should have been processed
-// processedCount.get() == 3
-```
-
-| Key | Value |
-| --- | --- |
-| `Messages Processed` | `3` |
-| `Messages Queued` | `3` |
-
-## GenServer: FIFO Ordering Guarantee
-
-GenServer processes cast messages in FIFO order. Messages sent earlier are always processed before messages sent later.
-
-```java
-var handler =
-    new GenServer.Handler<List<String>, StateMsg>() {
-        @Override
-        public GenServer.CallResult<List<String>> handleCall(
-                StateMsg request, List<String> state) {
-            return switch (request) {
-                case StateMsg.GetState _ ->
-                        new GenServer.CallResult<>(state, new ArrayList<>(state));
-                default -> new GenServer.CallResult<>(state, List.of());
-            };
-        }
-
-        @Override
-        public List<String> handleCast(StateMsg request, List<String> state) {
-            return switch (request) {
-                case StateMsg.Append append -> {
-                    var newState = new ArrayList<>(state);
-                    newState.add(append.value());
-                    yield newState;
-                }
-                case StateMsg.Clear _ -> new ArrayList<>();
-                default -> state;
-            };
-        }
-
-        @Override
-        public List<String> handleInfo(Object info, List<String> state) {
-            return state;
-        }
-    };
-
-var server = GenServer.start(new ArrayList<>(), handler);
-
-// Send multiple casts in order
-server.cast(new StateMsg.Append("first"));
-server.cast(new StateMsg.Append("second"));
-server.cast(new StateMsg.Append("third"));
-
-// Verify ordering
-var result = server.call(new StateMsg.GetState(), CALL_TIMEOUT).get();
-// result == ["first", "second", "third"]
-```
-
-| Key | Value |
-| --- | --- |
-| `Ordering` | `FIFO` |
-| `Messages Sent` | `3` |
-| `Result` | `[first, second, third]` |
-
 ## GenServer: Complete Message Type Overview
 
 GenServer supports three message types: call (sync request-reply), cast (async fire-and-forget), and info (out-of-band notifications).
@@ -372,9 +261,120 @@ server.info("timer fired");
 | Key | Value |
 | --- | --- |
 | `Cast Messages` | `2 (Increment, Increment)` |
-| `Final State` | `2` |
-| `Info Messages` | `1 (timer fired)` |
 | `Call Messages` | `1 (Get)` |
+| `Info Messages` | `1 (timer fired)` |
+| `Final State` | `2` |
+
+## GenServer: FIFO Ordering Guarantee
+
+GenServer processes cast messages in FIFO order. Messages sent earlier are always processed before messages sent later.
+
+```java
+var handler =
+    new GenServer.Handler<List<String>, StateMsg>() {
+        @Override
+        public GenServer.CallResult<List<String>> handleCall(
+                StateMsg request, List<String> state) {
+            return switch (request) {
+                case StateMsg.GetState _ ->
+                        new GenServer.CallResult<>(state, new ArrayList<>(state));
+                default -> new GenServer.CallResult<>(state, List.of());
+            };
+        }
+
+        @Override
+        public List<String> handleCast(StateMsg request, List<String> state) {
+            return switch (request) {
+                case StateMsg.Append append -> {
+                    var newState = new ArrayList<>(state);
+                    newState.add(append.value());
+                    yield newState;
+                }
+                case StateMsg.Clear _ -> new ArrayList<>();
+                default -> state;
+            };
+        }
+
+        @Override
+        public List<String> handleInfo(Object info, List<String> state) {
+            return state;
+        }
+    };
+
+var server = GenServer.start(new ArrayList<>(), handler);
+
+// Send multiple casts in order
+server.cast(new StateMsg.Append("first"));
+server.cast(new StateMsg.Append("second"));
+server.cast(new StateMsg.Append("third"));
+
+// Verify ordering
+var result = server.call(new StateMsg.GetState(), CALL_TIMEOUT).get();
+// result == ["first", "second", "third"]
+```
+
+| Key | Value |
+| --- | --- |
+| `Ordering` | `FIFO` |
+| `Result` | `[first, second, third]` |
+| `Messages Sent` | `3` |
+
+| Key | Value |
+| --- | --- |
+| `Info Messages Sent` | `3` |
+| `Info Messages Processed` | `3` |
+
+## GenServer: Graceful Shutdown
+
+stop() gracefully shuts down the server, draining all remaining messages from the mailbox before terminating.
+
+```java
+var processedCount = new AtomicInteger(0);
+
+var handler = new GenServer.Handler<Integer, CounterMsg>() {
+    @Override
+    public GenServer.CallResult<Integer> handleCall(
+            CounterMsg request, Integer state) {
+        processedCount.incrementAndGet();
+        return switch (request) {
+            case CounterMsg.Get _ -> new GenServer.CallResult<>(state, state);
+            default -> new GenServer.CallResult<>(state, -1);
+        };
+    }
+
+    @Override
+    public Integer handleCast(CounterMsg request, Integer state) {
+        processedCount.incrementAndGet();
+        return switch (request) {
+            case CounterMsg.Increment _ -> state + 1;
+            default -> state;
+        };
+    }
+
+    @Override
+    public Integer handleInfo(Object info, Integer state) {
+        return state;
+    }
+};
+
+var server = GenServer.start(0, handler);
+
+// Queue several messages
+server.cast(new CounterMsg.Increment());
+server.cast(new CounterMsg.Increment());
+server.cast(new CounterMsg.Increment());
+
+// Stop and wait for graceful shutdown
+server.stop();
+
+// All messages should have been processed
+// processedCount.get() == 3
+```
+
+| Key | Value |
+| --- | --- |
+| `Messages Processed` | `3` |
+| `Messages Queued` | `3` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

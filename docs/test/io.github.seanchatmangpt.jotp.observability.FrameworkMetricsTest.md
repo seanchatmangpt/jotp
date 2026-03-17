@@ -45,10 +45,10 @@ boolean isSubscribed = metrics.isSubscribed();
 
 | Key | Value |
 | --- | --- |
-| `Collector Type` | `MetricsCollector` |
 | `Subscribed` | `true` |
-| `Metrics Name` | `test-metrics` |
+| `Collector Type` | `MetricsCollector` |
 | `Feature Flag` | `-Djotp.observability.enabled=true` |
+| `Metrics Name` | `test-metrics` |
 
 > [!NOTE]
 > The metrics bridge is feature-gated. Production systems without the flag enabled experience zero overhead — no event bus subscription, no allocation, no metrics collection.
@@ -101,9 +101,9 @@ Map<String, Object> snapshot = collector.snapshot();
 
 | Key | Value |
 | --- | --- |
-| `Reason` | `Low signal-to-noise ratio` |
-| `Metrics Created` | `0` |
 | `Event Priority` | `P2 (Operational)` |
+| `Metrics Created` | `0` |
+| `Reason` | `Low signal-to-noise ratio` |
 | `Event Type` | `ProcessMonitorRegistered` |
 
 > [!NOTE]

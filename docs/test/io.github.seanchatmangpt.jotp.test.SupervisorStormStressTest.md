@@ -17,10 +17,10 @@ Breaking point under investigation:
 
 | Key | Value |
 | --- | --- |
-| `Final crash` | `4` |
-| `Supervisor status` | `TERMINATED` |
-| `maxRestarts` | `3` |
 | `Result` | `PASS - Off-by-one boundary correct` |
+| `maxRestarts` | `3` |
+| `Supervisor status` | `TERMINATED` |
+| `Final crash` | `4` |
 | `Crashes survived` | `3` |
 
 ---

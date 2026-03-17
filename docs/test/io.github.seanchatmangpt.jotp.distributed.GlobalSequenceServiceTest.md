@@ -13,11 +13,11 @@ The service supports high-throughput scenarios with many concurrent threads.
 
 This performance enables use in high-volume distributed systems.
 
-Generated 100000 sequences in 0.24 seconds
+Generated 100000 sequences in 0.20 seconds
 
-Throughput: 424582 sequences/second
+Throughput: 500457 sequences/second
 
-Per-thread: 21229 sequences/second
+Per-thread: 25023 sequences/second
 
 Each thread observes locally monotonic sequence generation.
 
@@ -49,9 +49,9 @@ The counter handles same-millisecond generation efficiently.
 
 100K sequences in a burst should complete quickly without blocking.
 
-Burst: 100000 sequences in 0.057 seconds
+Burst: 100000 sequences in 0.068 seconds
 
-Burst throughput: 1758303 sequences/second
+Burst throughput: 1463334 sequences/second
 
 Multiple threads can generate sequences concurrently without coordination.
 
@@ -77,65 +77,11 @@ When overflow occurs, HLC advances time by 1ms and resets counter.
 
 This is extremely rare but must be handled correctly for correctness.
 
-HLC maintains separate timestamp and counter components.
+Under normal conditions, physical time advances between calls.
 
-These can be accessed for monitoring and debugging via getCurrentHlcTimestamp().
+The HLC timestamp updates to current time and counter resets to 0.
 
-The counter component is accessible via getCurrentHlcCounter().
-
-High-water mark tracks the highest sequence known to this node.
-
-After synchronization, it reflects the cluster state.
-
-This enables conflict detection and recovery coordination.
-
-Node ID is accessible for debugging and monitoring.
-
-This helps identify which node generated a sequence.
-
-Useful in distributed tracing and log analysis.
-
-NodeDiscovery service is required for cluster coordination.
-
-Null discovery throws NullPointerException.
-
-This ensures the service can synchronize with peers.
-
-HLC sequence numbers use [timestamp:48][nodeId:16][counter:16] format.
-
-Each component can be extracted using utility methods for debugging.
-
-This format provides ~285K year range, 65K nodes, and 65K sequences/ms per node.
-
-GlobalSequenceService.create() factory creates HLC-based services.
-
-The service is initialized with current time and ready to use.
-
-Node ID must be unique across the cluster.
-
-Sequence numbers are strictly monotonically increasing.
-
-Each subsequent call returns a value greater than the previous one.
-
-This property is critical for ordering events in distributed systems.
-
-Synchronization requires a non-null peer list for safety.
-
-Passing null throws NullPointerException to fail fast.
-
-This prevents subtle bugs in distributed coordination logic.
-
-High-water mark tracks the highest sequence number generated.
-
-After generating sequences, currentHighWaterMark() returns the maximum value.
-
-This enables cross-node coordination and conflict detection.
-
-Node ID is required for unique sequence generation.
-
-Null node ID throws NullPointerException to fail fast.
-
-This prevents runtime errors in distributed coordination.
+This provides natural time-based ordering for distributed events.
 
 Node ID must be non-empty for uniqueness guarantees.
 
@@ -143,11 +89,65 @@ Empty string throws IllegalArgumentException.
 
 This prevents invalid cluster configuration.
 
-Under normal conditions, physical time advances between calls.
+Node ID is required for unique sequence generation.
 
-The HLC timestamp updates to current time and counter resets to 0.
+Null node ID throws NullPointerException to fail fast.
 
-This provides natural time-based ordering for distributed events.
+This prevents runtime errors in distributed coordination.
+
+High-water mark tracks the highest sequence number generated.
+
+After generating sequences, currentHighWaterMark() returns the maximum value.
+
+This enables cross-node coordination and conflict detection.
+
+Synchronization requires a non-null peer list for safety.
+
+Passing null throws NullPointerException to fail fast.
+
+This prevents subtle bugs in distributed coordination logic.
+
+Sequence numbers are strictly monotonically increasing.
+
+Each subsequent call returns a value greater than the previous one.
+
+This property is critical for ordering events in distributed systems.
+
+GlobalSequenceService.create() factory creates HLC-based services.
+
+The service is initialized with current time and ready to use.
+
+Node ID must be unique across the cluster.
+
+HLC sequence numbers use [timestamp:48][nodeId:16][counter:16] format.
+
+Each component can be extracted using utility methods for debugging.
+
+This format provides ~285K year range, 65K nodes, and 65K sequences/ms per node.
+
+NodeDiscovery service is required for cluster coordination.
+
+Null discovery throws NullPointerException.
+
+This ensures the service can synchronize with peers.
+
+Node ID is accessible for debugging and monitoring.
+
+This helps identify which node generated a sequence.
+
+Useful in distributed tracing and log analysis.
+
+High-water mark tracks the highest sequence known to this node.
+
+After synchronization, it reflects the cluster state.
+
+This enables conflict detection and recovery coordination.
+
+HLC maintains separate timestamp and counter components.
+
+These can be accessed for monitoring and debugging via getCurrentHlcTimestamp().
+
+The counter component is accessible via getCurrentHlcCounter().
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

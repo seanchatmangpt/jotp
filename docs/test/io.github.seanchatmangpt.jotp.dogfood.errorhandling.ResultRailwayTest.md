@@ -37,10 +37,10 @@ assertThat((Throwable) ((ResultRailway.Failure<Integer, ?>) failed).error())
 
 | Key | Value |
 | --- | --- |
-| `Exception Type` | `RuntimeException` |
-| `Failure Path` | `Exception caught and wrapped` |
-| `Success Path` | `Value wrapped in Success` |
 | `Bridge` | `Exception → Railway` |
+| `Success Path` | `Value wrapped in Success` |
+| `Failure Path` | `Exception caught and wrapped` |
+| `Exception Type` | `RuntimeException` |
 
 > [!NOTE]
 > Result.of() is perfect for wrapping legacy exception-based APIs. The exception becomes a value that can be processed with map/flatMap instead of try-catch.
@@ -67,9 +67,9 @@ assertThat(value2).isEqualTo("ok");
 
 | Key | Value |
 | --- | --- |
-| `Result Type` | `Success value type (T)` |
-| `Failure Path` | `Applies recovery function` |
 | `Success Path` | `Returns value unchanged` |
+| `Failure Path` | `Applies recovery function` |
+| `Result Type` | `Success value type (T)` |
 | `Pattern` | `Error recovery` |
 
 > [!NOTE]
@@ -104,10 +104,10 @@ assertThat(called3).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `peek()` | `Runs on success` |
 | `Use Case` | `Logging, metrics, debugging` |
-| `Return` | `Original Result (chainable)` |
+| `peek()` | `Runs on success` |
 | `peekError()` | `Runs on failure` |
+| `Return` | `Original Result (chainable)` |
 
 > [!NOTE]
 > peek() returns the original Result, enabling chaining. Use it for logging and observability without affecting the computation pipeline.
@@ -140,9 +140,9 @@ assertThat(result2).isEqualTo(-1);
 
 | Key | Value |
 | --- | --- |
-| `Return Type` | `Same for both branches (R)` |
-| `Failure Path` | `Applies error function` |
 | `Success Path` | `Applies success function` |
+| `Failure Path` | `Applies error function` |
+| `Return Type` | `Same for both branches (R)` |
 | `Pattern` | `Catamorphism` |
 
 > [!NOTE]
@@ -178,10 +178,10 @@ assertThat(failure).isInstanceOf(ResultRailway.Failure.class);
 
 | Key | Value |
 | --- | --- |
-| `Type Safety` | `Compile-time` |
 | `Pattern` | `Sealed interface` |
-| `Success Variant` | `isSuccess() = true` |
+| `Type Safety` | `Compile-time` |
 | `Failure Variant` | `isFailure() = true` |
+| `Success Variant` | `isSuccess() = true` |
 
 > [!NOTE]
 > Result<T,E> is a sealed interface with Success<T,E> and Failure<T,E> records. The compiler enforces exhaustive pattern matching, ensuring all cases are handled.
@@ -209,9 +209,9 @@ assertThat(result.isSuccess()).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Railway` | `Fail → Fail` |
-| `Success Chain` | `Continues to next operation` |
 | `Failure Chain` | `Short-circuits (skips rest)` |
+| `Success Chain` | `Continues to next operation` |
+| `Railway` | `Fail → Fail` |
 | `Pattern` | `Monad` |
 
 > [!NOTE]
@@ -239,9 +239,9 @@ assertThat(((ResultRailway.Failure<?, String>) mapped).error()).isEqualTo("err")
 
 | Key | Value |
 | --- | --- |
-| `Composition` | `Chainable` |
-| `Pattern` | `Functor` |
 | `Success.map` | `Transforms value` |
+| `Pattern` | `Functor` |
+| `Composition` | `Chainable` |
 | `Failure.map` | `Passes through unchanged` |
 
 > [!NOTE]
@@ -269,11 +269,11 @@ assertThat(result).isEqualTo("result=84");
 
 | Key | Value |
 | --- | --- |
-| `Failure Result` | `"failed: not a number"` |
-| `Failure Pipeline` | `parse fails → rest skipped` |
-| `Success Pipeline` | `strip → parse → double → format` |
-| `Pattern` | `Railway switches` |
 | `Success Result` | `"result=84"` |
+| `Pattern` | `Railway switches` |
+| `Success Pipeline` | `strip → parse → double → format` |
+| `Failure Pipeline` | `parse fails → rest skipped` |
+| `Failure Result` | `"failed: not a number"` |
 
 > [!NOTE]
 > Railway-oriented programming makes error paths explicit and type-safe. The compiler ensures all cases are handled, and the control flow is visible in the type system.

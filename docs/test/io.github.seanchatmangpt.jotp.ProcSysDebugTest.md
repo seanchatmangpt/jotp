@@ -22,14 +22,14 @@ The trace/2 function enables debug logging of all message events (In/Out) to a P
 useful for production debugging without modifying process code.
 
 
-getLog retrieves the debug event log - a bounded buffer of In (message received)
-and Out (reply sent) events. This mirrors Erlang's sys:get_log/1 for inspecting
-process activity without stopping the process.
-
-
 handleDebug is the process-internal API (equivalent to sys:handle_debug/4) that
 appends debug events to the log. Processes call this in their message handlers to
 record custom events like state transitions or timeouts.
+
+
+getLog retrieves the debug event log - a bounded buffer of In (message received)
+and Out (reply sent) events. This mirrors Erlang's sys:get_log/1 for inspecting
+process activity without stopping the process.
 
 
 ---

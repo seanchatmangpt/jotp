@@ -26,11 +26,11 @@ var windows = GathererPatterns.slidingWindow(items, 3);
 
 | Key | Value |
 | --- | --- |
-| `Overlap` | `2 elements between windows` |
-| `Moving Average` | `[20.0, 30.0, 40.0]` |
 | `Window Size` | `3` |
-| `Output` | `3 windows` |
+| `Moving Average` | `[20.0, 30.0, 40.0]` |
+| `Overlap` | `2 elements between windows` |
 | `Input` | `[1, 2, 3, 4, 5]` |
+| `Output` | `3 windows` |
 
 > [!NOTE]
 > Sliding windows are computationally expensive (O(n*k) for n elements and window size k). Use them judiciously on large datasets or consider windowed aggregations.
@@ -52,11 +52,11 @@ var deduped = items.stream()
 
 | Key | Value |
 | --- | --- |
-| `Non-Consecutive` | `Preserved (2 appears twice)` |
 | `Consecutive Duplicates` | `Removed` |
-| `Output` | `[1, 2, 3, 2, 4]` |
-| `All Same` | `[5, 5, 5, 5] → [5]` |
+| `Non-Consecutive` | `Preserved (2 appears twice)` |
 | `Input` | `[1, 1, 2, 2, 2, 3, 2, 2, 4]` |
+| `All Same` | `[5, 5, 5, 5] → [5]` |
+| `Output` | `[1, 2, 3, 2, 4]` |
 
 > [!NOTE]
 > Custom gatherers maintain internal state (the previous element) to make decisions. This enables sophisticated transformations that would require manual loops or external libraries.
@@ -76,11 +76,11 @@ var sums = GathererPatterns.runningSum(values);
 
 | Key | Value |
 | --- | --- |
-| `State` | `Accumulated across elements` |
-| `Operation` | `Running sum` |
 | `String Concat` | `[a, ab, abc]` |
-| `Output` | `[1, 3, 6, 10, 15]` |
+| `Operation` | `Running sum` |
+| `State` | `Accumulated across elements` |
 | `Input` | `[1, 2, 3, 4, 5]` |
+| `Output` | `[1, 3, 6, 10, 15]` |
 
 > [!NOTE]
 > Scan operations are perfect for cumulative calculations, running totals, and maintaining state across stream elements without manual loops.
@@ -107,10 +107,10 @@ var batches = GathererPatterns.batch(items, 3);
 
 | Key | Value |
 | --- | --- |
-| `Last Batch` | `Partial (size 1)` |
 | `Output` | `3 batches` |
-| `Batch Size` | `3` |
+| `Last Batch` | `Partial (size 1)` |
 | `Input Size` | `7 elements` |
+| `Batch Size` | `3` |
 
 > [!NOTE]
 > Batching is essential for bulk operations (database inserts, API calls) where you want to process multiple items together. The Gatherer API makes this a one-liner instead of manual iteration.
@@ -131,9 +131,9 @@ var result = GathererPatterns.batchAndDeduplicate(items, 2);
 
 | Key | Value |
 | --- | --- |
-| `Pipeline` | `stream → dedupe → batch → toList` |
-| `After Dedupe` | `[1, 2, 3, 4, 5]` |
 | `Input` | `[1, 1, 2, 2, 3, 3, 4, 4, 5, 5]` |
+| `After Dedupe` | `[1, 2, 3, 4, 5]` |
+| `Pipeline` | `stream → dedupe → batch → toList` |
 | `After Batch` | `[[1, 2], [3, 4], [5]]` |
 
 > [!NOTE]
@@ -156,10 +156,10 @@ var result = GathererPatterns.mapConcurrent(items, 2, i -> i * 2);
 | Key | Value |
 | --- | --- |
 | `Operation` | `i → i * 2` |
-| `Output` | `[2, 4, 6, 8, 10]` |
-| `Parallelism` | `2 threads` |
-| `Order` | `Preserved` |
 | `Input` | `[1, 2, 3, 4, 5]` |
+| `Order` | `Preserved` |
+| `Parallelism` | `2 threads` |
+| `Output` | `[2, 4, 6, 8, 10]` |
 
 > [!NOTE]
 > Unlike parallel streams which use common ForkJoinPool, gatherers can use custom thread pools. This prevents resource contention and enables fine-tuned parallelism.
@@ -180,9 +180,9 @@ var sum = GathererPatterns.foldToSingle(items, 0, Integer::sum);
 | Key | Value |
 | --- | --- |
 | `Integer Fold` | `1+2+3+4+5 = 15` |
-| `String Fold` | `a+b+c = abc` |
-| `Operation` | `Intermediate (can chain)` |
 | `Identity` | `0 for sum, "" for concat` |
+| `Operation` | `Intermediate (can chain)` |
+| `String Fold` | `a+b+c = abc` |
 
 > [!NOTE]
 > Fold as an intermediate operation enables complex pipelines: filter → fold → map. This was impossible with traditional Stream.reduce, which is terminal-only.

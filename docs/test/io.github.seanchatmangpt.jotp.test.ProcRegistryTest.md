@@ -5,11 +5,11 @@
 - [ProcRegistry: Unknown Name Lookup](#procregistryunknownnamelookup)
 - [ProcRegistry: Auto-Deregistration on Stop](#procregistryautoderegistrationonstop)
 - [ProcRegistry: Explicit Unregister](#procregistryexplicitunregister)
-- [ProcRegistry: Name-Based Process Registration](#procregistrynamebasedprocessregistration)
-- [ProcRegistry: Auto-Deregistration on Crash](#procregistryautoderegistrationoncrash)
-- [ProcRegistry: Duplicate Name Protection](#procregistryduplicatenameprotection)
-- [ProcRegistry: Name Reuse After Process Death](#procregistrynamereuseafterprocessdeath)
 - [ProcRegistry: List All Registered Names](#procregistrylistallregisterednames)
+- [ProcRegistry: Name Reuse After Process Death](#procregistrynamereuseafterprocessdeath)
+- [ProcRegistry: Duplicate Name Protection](#procregistryduplicatenameprotection)
+- [ProcRegistry: Auto-Deregistration on Crash](#procregistryautoderegistrationoncrash)
+- [ProcRegistry: Name-Based Process Registration](#procregistrynamebasedprocessregistration)
 
 
 ## ProcRegistry: Unknown Name Lookup
@@ -29,8 +29,8 @@ var result = ProcRegistry.whereis("no-such-process");
 | Key | Value |
 | --- | --- |
 | `Queried Name` | `no-such-process` |
-| `Safe` | `Yes (no null)` |
 | `Result` | `Optional.empty()` |
+| `Safe` | `Yes (no null)` |
 
 ## ProcRegistry: Auto-Deregistration on Stop
 
@@ -53,8 +53,8 @@ await().atMost(Duration.ofSeconds(3))
 
 | Key | Value |
 | --- | --- |
-| `Registry Action` | `Auto-deregistered` |
 | `Manual Cleanup` | `Not required` |
+| `Registry Action` | `Auto-deregistered` |
 | `Process Exit` | `Normal (stop())` |
 
 ## ProcRegistry: Explicit Unregister
@@ -92,12 +92,129 @@ stateDiagram-v2
 > [!NOTE]
 > unregister is for name management, not process control. Use stop() to terminate the process, unregister() just removes the name.
 
+## ProcRegistry: List All Registered Names
+
+registered() returns a snapshot of all currently registered names. Useful for introspection and debugging.
+
+```java
+var a = counter();
+var b = counter();
+
+ProcRegistry.register("alpha", a);
+ProcRegistry.register("beta", b);
+
+// Get all registered names
+var names = ProcRegistry.registered();
+
+// names.contains("alpha") == true
+// names.contains("beta") == true
+```
+
+> [!NOTE]
+> The returned set is a snapshot - it won't change if processes are registered later. Call registered() again for the current state.
+
 | Key | Value |
 | --- | --- |
-| `Message Processed` | `1` |
-| `Can Accept Messages` | `Yes` |
-| `Process Status` | `Still running` |
-| `Name Status` | `Removed from registry` |
+| `Registered Names` | `[concurrent-9-866, concurrent-23-866, alpha, concurrent-28-866, concurrent-43-866, concurrent-11-866, concurrent-0-867, concurrent-48-866, concurrent-16-866, concurrent-31-866, concurrent-36-866, concurrent-24-866, concurrent-29-866, concurrent-44-866, concurrent-12-866, concurrent-1-867, concurrent-49-866, concurrent-17-866, concurrent-32-866, concurrent-20-866, concurrent-6-866, concurrent-37-866, concurrent-25-866, concurrent-40-866, concurrent-45-866, concurrent-13-866, concurrent-2-867, concurrent-18-866, concurrent-33-866, concurrent-21-866, beta, concurrent-38-866, concurrent-7-866, concurrent-26-866, concurrent-41-866, concurrent-46-866, concurrent-14-866, concurrent-19-866, concurrent-34-866, concurrent-8-866, concurrent-22-866, concurrent-39-866, concurrent-27-866, concurrent-42-866, concurrent-10-866, concurrent-47-866, concurrent-15-866, concurrent-30-866, concurrent-4-866, concurrent-35-866]` |
+| `Snapshot` | `Yes (immutable view)` |
+| `Count` | `50` |
+
+## ProcRegistry: Name Reuse After Process Death
+
+Once a process dies and its name is auto-deregistered, the name becomes available for reuse. New processes can register under the same name.
+
+```java
+var first = counter();
+ProcRegistry.register("reusable", first);
+
+// First process dies
+first.stop();
+
+// Wait for auto-deregistration
+await().atMost(Duration.ofSeconds(3))
+    .until(() -> ProcRegistry.whereis("reusable").isEmpty());
+
+// Register a new process with the same name
+var second = counter();
+ProcRegistry.register("reusable", second);
+
+// Name now points to the new process
+var found = ProcRegistry.<Integer, Msg>whereis("reusable");
+// found.get() == second
+```
+
+> [!NOTE]
+> Name reuse is intentional for service restarts. A new process instance can take over the same name after the previous one dies.
+
+| Key | Value |
+| --- | --- |
+| `Second Process` | `Registered successfully` |
+| `Name Points To` | `New process instance` |
+| `First Process` | `Stopped and auto-deregistered` |
+| `Name Status` | `Available` |
+
+## ProcRegistry: Duplicate Name Protection
+
+Registering a duplicate name throws IllegalStateException. This prevents accidental name collisions and ensures name uniqueness.
+
+```java
+var a = counter();
+var b = counter();
+
+ProcRegistry.register("shared-name", a);
+
+// Second registration with same name throws
+assertThatThrownBy(() -> ProcRegistry.register("shared-name", b))
+    .isInstanceOf(IllegalStateException.class)
+    .hasMessageContaining("shared-name");
+```
+
+> [!WARNING]
+> Name conflicts indicate a configuration error. Two processes are trying to use the same name. Use unique names per process instance.
+
+| Key | Value |
+| --- | --- |
+| `Protection` | `Name uniqueness enforced` |
+| `Second Process` | `Rejected` |
+| `Exception Type` | `IllegalStateException` |
+| `First Process` | `Registered as 'x'` |
+
+## ProcRegistry: Auto-Deregistration on Crash
+
+When a registered process crashes, it's automatically removed from the registry. No manual cleanup needed.
+
+```java
+var proc = counter();
+ProcRegistry.register("crasher", proc);
+
+// Verify it's registered
+assertThat(ProcRegistry.whereis("crasher").isPresent()).isTrue();
+
+// Crash the process
+proc.tell(new Msg.Crash());
+
+// Auto-deregistered - name no longer exists
+await().atMost(Duration.ofSeconds(3))
+    .until(() -> ProcRegistry.whereis("crasher").isEmpty());
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> Registered: register(name, proc)
+    Registered --> Crashing: proc.crash()
+    Crashing --> AutoDeregister: Registry detects death
+    AutoDeregister --> [*]: Name removed
+```
+
+> [!NOTE]
+> Auto-deregistration prevents stale references. A crashed process can't be looked up - the name is immediately available for reuse.
+
+| Key | Value |
+| --- | --- |
+| `Registry Action` | `Auto-deregistered` |
+| `Initial State` | `Registered` |
+| `Process Action` | `Crashed` |
+| `Name Status` | `Available for reuse` |
 
 ## ProcRegistry: Name-Based Process Registration
 
@@ -136,133 +253,16 @@ sequenceDiagram
 
 | Key | Value |
 | --- | --- |
-| `Process Found` | `true` |
 | `Registered Name` | `my-counter` |
+| `Process Found` | `true` |
 | `Same Instance` | `true` |
 
-## ProcRegistry: Auto-Deregistration on Crash
-
-When a registered process crashes, it's automatically removed from the registry. No manual cleanup needed.
-
-```java
-var proc = counter();
-ProcRegistry.register("crasher", proc);
-
-// Verify it's registered
-assertThat(ProcRegistry.whereis("crasher").isPresent()).isTrue();
-
-// Crash the process
-proc.tell(new Msg.Crash());
-
-// Auto-deregistered - name no longer exists
-await().atMost(Duration.ofSeconds(3))
-    .until(() -> ProcRegistry.whereis("crasher").isEmpty());
-```
-
-```mermaid
-stateDiagram-v2
-    [*] --> Registered: register(name, proc)
-    Registered --> Crashing: proc.crash()
-    Crashing --> AutoDeregister: Registry detects death
-    AutoDeregister --> [*]: Name removed
-```
-
-> [!NOTE]
-> Auto-deregistration prevents stale references. A crashed process can't be looked up - the name is immediately available for reuse.
-
 | Key | Value |
 | --- | --- |
-| `Initial State` | `Registered` |
-| `Registry Action` | `Auto-deregistered` |
-| `Name Status` | `Available for reuse` |
-| `Process Action` | `Crashed` |
-
-## ProcRegistry: Duplicate Name Protection
-
-Registering a duplicate name throws IllegalStateException. This prevents accidental name collisions and ensures name uniqueness.
-
-```java
-var a = counter();
-var b = counter();
-
-ProcRegistry.register("shared-name", a);
-
-// Second registration with same name throws
-assertThatThrownBy(() -> ProcRegistry.register("shared-name", b))
-    .isInstanceOf(IllegalStateException.class)
-    .hasMessageContaining("shared-name");
-```
-
-> [!WARNING]
-> Name conflicts indicate a configuration error. Two processes are trying to use the same name. Use unique names per process instance.
-
-| Key | Value |
-| --- | --- |
-| `Exception Type` | `IllegalStateException` |
-| `Second Process` | `Rejected` |
-| `Protection` | `Name uniqueness enforced` |
-| `First Process` | `Registered as 'x'` |
-
-## ProcRegistry: Name Reuse After Process Death
-
-Once a process dies and its name is auto-deregistered, the name becomes available for reuse. New processes can register under the same name.
-
-```java
-var first = counter();
-ProcRegistry.register("reusable", first);
-
-// First process dies
-first.stop();
-
-// Wait for auto-deregistration
-await().atMost(Duration.ofSeconds(3))
-    .until(() -> ProcRegistry.whereis("reusable").isEmpty());
-
-// Register a new process with the same name
-var second = counter();
-ProcRegistry.register("reusable", second);
-
-// Name now points to the new process
-var found = ProcRegistry.<Integer, Msg>whereis("reusable");
-// found.get() == second
-```
-
-> [!NOTE]
-> Name reuse is intentional for service restarts. A new process instance can take over the same name after the previous one dies.
-
-| Key | Value |
-| --- | --- |
-| `Name Points To` | `New process instance` |
-| `Second Process` | `Registered successfully` |
-| `Name Status` | `Available` |
-| `First Process` | `Stopped and auto-deregistered` |
-
-## ProcRegistry: List All Registered Names
-
-registered() returns a snapshot of all currently registered names. Useful for introspection and debugging.
-
-```java
-var a = counter();
-var b = counter();
-
-ProcRegistry.register("alpha", a);
-ProcRegistry.register("beta", b);
-
-// Get all registered names
-var names = ProcRegistry.registered();
-
-// names.contains("alpha") == true
-// names.contains("beta") == true
-```
-
-> [!NOTE]
-> The returned set is a snapshot - it won't change if processes are registered later. Call registered() again for the current state.
-
-| Key | Value |
-| --- | --- |
-| `Snapshot` | `Yes (immutable view)` |
-| `Registered Names` | `[alpha, beta]` |
-| `Count` | `2` |
+| `Process Status` | `Still running` |
+| `Can Accept Messages` | `Yes` |
+| `Message Processed` | `1` |
+| `Name Status` | `Removed from registry` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

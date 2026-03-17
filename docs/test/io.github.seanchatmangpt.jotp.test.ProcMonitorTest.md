@@ -43,9 +43,9 @@ stateDiagram-v2
 
 | Key | Value |
 | --- | --- |
-| `Reason` | `Monitor cancelled before crash` |
-| `Callback Fired` | `No` |
 | `Target Status` | `Crashed` |
+| `Callback Fired` | `No` |
+| `Reason` | `Monitor cancelled before crash` |
 | `Monitor Status` | `Cancelled (demonitor)` |
 
 ## ProcMonitor: Multiple Independent Monitors
@@ -86,10 +86,10 @@ graph TB
 
 | Key | Value |
 | --- | --- |
-| `Monitor 1 Fired` | `true` |
-| `Target Status` | `Crashed` |
-| `Monitors Registered` | `2` |
 | `Monitor 2 Fired` | `true` |
+| `Monitors Registered` | `2` |
+| `Target Status` | `Crashed` |
+| `Monitor 1 Fired` | `true` |
 | `Independence` | `Yes` |
 
 ## ProcMonitor: Unilateral Observation
@@ -128,10 +128,10 @@ graph LR
 
 | Key | Value |
 | --- | --- |
-| `Callback Invoked` | `Yes` |
 | `Target Status` | `Crashed` |
-| `Relationship` | `Unilateral (one-way)` |
+| `Callback Invoked` | `Yes` |
 | `Watcher Status` | `Still Running` |
+| `Relationship` | `Unilateral (one-way)` |
 
 ## ProcMonitor: Normal Exit Detection
 
@@ -161,13 +161,6 @@ await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
 
 > [!NOTE]
 > This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.
-
-| Key | Value |
-| --- | --- |
-| `Target Exit` | `Normal (stop())` |
-| `Monitor Callback` | `Invoked` |
-| `Interpretation` | `Graceful shutdown` |
-| `Reason Value` | `null` |
 
 ## ProcMonitor: Abnormal Exit Detection
 
@@ -211,9 +204,16 @@ sequenceDiagram
 
 | Key | Value |
 | --- | --- |
-| `Reason Message` | `BOOM` |
 | `Monitor Callback` | `Invoked` |
+| `Target Exit` | `Normal (stop())` |
+| `Reason Value` | `null` |
+| `Interpretation` | `Graceful shutdown` |
+
+| Key | Value |
+| --- | --- |
 | `Target Status` | `Crashed` |
+| `Monitor Callback` | `Invoked` |
+| `Reason Message` | `BOOM` |
 | `Reason Type` | `RuntimeException` |
 
 ---

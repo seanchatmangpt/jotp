@@ -40,10 +40,10 @@ CounterState finalState = counterService.ask(new CounterMessage.GetCount(), time
 
 | Key | Value |
 | --- | --- |
-| `Increments` | `10 + 20 + 30` |
 | `Intermediate States` | `Monotonically increasing` |
-| `Consistency` | `Guaranteed by serialization` |
+| `Increments` | `10 + 20 + 30` |
 | `Final State` | `count = 60 (deterministic)` |
+| `Consistency` | `Guaranteed by serialization` |
 
 > [!NOTE]
 > The final state is deterministic (sum of all increments) even though intermediate states depend on message ordering. This is because each state transition is atomic — no partially applied updates.
@@ -73,10 +73,10 @@ CounterState finalState = counterService.ask(new CounterMessage.GetCount(), time
 
 | Key | Value |
 | --- | --- |
-| `Pattern` | `Mailbox queue` |
-| `Responses` | `Complete out-of-order` |
-| `Final State` | `count = 3` |
 | `Processing` | `Serialized (one at a time)` |
+| `Final State` | `count = 3` |
+| `Responses` | `Complete out-of-order` |
+| `Pattern` | `Mailbox queue` |
 | `Concurrent Requests` | `3 concurrent IncrementBy(1)` |
 
 > [!NOTE]
@@ -100,9 +100,9 @@ CounterState newState = future.join();
 
 | Key | Value |
 | --- | --- |
-| `Result` | `Success (no timeout)` |
-| `Time Required` | `<1ms` |
 | `Timeout` | `5000ms (5 seconds)` |
+| `Time Required` | `<1ms` |
+| `Result` | `Success (no timeout)` |
 | `Operation` | `IncrementBy(5)` |
 
 > [!NOTE]
@@ -165,10 +165,10 @@ assertThat(s2.count()).isEqualTo(8);
 
 | Key | Value |
 | --- | --- |
-| `s1 After s2 Created` | `Still CounterState(5) (unchanged)` |
 | `State Type` | `Record (immutable)` |
-| `s2` | `CounterState(8)` |
+| `s1 After s2 Created` | `Still CounterState(5) (unchanged)` |
 | `s1` | `CounterState(5)` |
+| `s2` | `CounterState(8)` |
 
 > [!NOTE]
 > Immutable state eliminates race conditions — no need for locks or synchronized blocks. The JVM can optimize immutable records more aggressively than mutable objects.
@@ -194,9 +194,9 @@ assertThatThrownBy(() -> new CounterState(-1))
 
 | Key | Value |
 | --- | --- |
-| `Violation` | `IllegalArgumentException` |
-| `Timing` | `Construction time` |
 | `Validation` | `Compact constructor` |
+| `Timing` | `Construction time` |
+| `Violation` | `IllegalArgumentException` |
 | `Check` | `count >= 0` |
 
 > [!NOTE]
@@ -236,9 +236,9 @@ CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
 | Key | Value |
 | --- | --- |
 | `Initial State` | `CounterState(0)` |
-| `State Change` | `None (query)` |
-| `Message` | `GetCount` |
 | `Result` | `CounterState(0)` |
+| `Message` | `GetCount` |
+| `State Change` | `None (query)` |
 
 > [!NOTE]
 > Proc<S,M> uses sealed message types and pattern matching, ensuring exhaustive handling at compile time. The state is always immutable — transitions create new state records.
@@ -262,10 +262,10 @@ CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
 | Key | Value |
 | --- | --- |
 | `Processing` | `Sequential, ordered` |
-| `Final State` | `count = 10` |
-| `Message 3` | `IncrementBy(5) → state = 10` |
-| `Message 2` | `IncrementBy(3) → state = 5` |
 | `Message 1` | `IncrementBy(2) → state = 2` |
+| `Message 2` | `IncrementBy(3) → state = 5` |
+| `Message 3` | `IncrementBy(5) → state = 10` |
+| `Final State` | `count = 10` |
 
 > [!NOTE]
 > Sequential processing eliminates race conditions. Each message sees the state left by the previous message. This is the essence of the Actor model — message passing instead of shared mutable state.
@@ -290,11 +290,11 @@ CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
 
 | Key | Value |
 | --- | --- |
-| `Result` | `CounterState(5)` |
-| `State Change` | `0 → 5` |
-| `Query` | `GetCount` |
-| `Command` | `IncrementBy(5)` |
 | `Pattern` | `Command Query Responsibility Segregation (CQRS)` |
+| `Command` | `IncrementBy(5)` |
+| `Query` | `GetCount` |
+| `State Change` | `0 → 5` |
+| `Result` | `CounterState(5)` |
 
 > [!NOTE]
 > ask() returns the new state after message processing. This enables CQRS-style operations where commands change state and queries read it. All state transitions are immutable.

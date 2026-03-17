@@ -91,10 +91,10 @@ var bulkhead = BulkheadIsolation.create(
 | Key | Value |
 | --- | --- |
 | `Pool Size` | `5 workers` |
-| `Max Capacity` | `500 messages` |
-| `Queue Depth` | `100 messages/worker` |
-| `Memory Estimate` | `~500KB (500 msgs * ~1KB)` |
 | `Rejection Policy` | `Fail-fast when exceeded` |
+| `Memory Estimate` | `~500KB (500 msgs * ~1KB)` |
+| `Queue Depth` | `100 messages/worker` |
+| `Max Capacity` | `500 messages` |
 
 | Resource Limit | Purpose | Typical Range | Exceeded Behavior |
 | --- | --- | --- | --- |
@@ -144,10 +144,10 @@ var result = bulkhead2.send(new TestMsg.Noop());
 
 | Key | Value |
 | --- | --- |
-| `Message Processing` | `Resumed normally` |
-| `First Bulkhead` | `Shut down` |
-| `Feature ID` | `Same (feature-recreate)` |
 | `State` | `Fresh (no residual)` |
+| `Feature ID` | `Same (feature-recreate)` |
+| `First Bulkhead` | `Shut down` |
+| `Message Processing` | `Resumed normally` |
 | `Second Bulkhead` | `Created successfully` |
 
 ## Bulkhead Status: FAILED State
@@ -234,10 +234,10 @@ await().until(() -> {
 
 | Key | Value |
 | --- | --- |
-| `Manual Intervention` | `Not required` |
-| `Message Loss` | `None (queue preserved)` |
-| `Other Workers` | `Continued during restart` |
 | `Crashes Detected` | `1` |
+| `Other Workers` | `Continued during restart` |
+| `Message Loss` | `None (queue preserved)` |
+| `Manual Intervention` | `Not required` |
 | `Recovery Strategy` | `ONE_FOR_ONE supervision` |
 
 | Supervision Feature | Benefit | Enterprise Value |
@@ -294,9 +294,9 @@ var efficient = BulkheadIsolation.create(
 
 | Key | Value |
 | --- | --- |
-| `Context Switch` | `Scheduler-managed, minimal overhead` |
-| `Virtual Thread Advantage` | `1000x less memory than platform threads` |
 | `Recommendation` | `Use larger pools with virtual threads` |
+| `Virtual Thread Advantage` | `1000x less memory than platform threads` |
+| `Context Switch` | `Scheduler-managed, minimal overhead` |
 | `Scalability` | `Millions of processes possible` |
 
 | Configuration | Max Throughput | Memory Usage |
@@ -337,20 +337,6 @@ for (int i = 0; i < 5; i++) {
 // Process count grows to 5
 ```
 
-| Key | Value |
-| --- | --- |
-| `Strategy` | `On-demand spawning` |
-| `Messages Sent` | `5` |
-| `Active Processes` | `1` |
-| `Pool Size Limit` | `5 workers` |
-
-| Metric | Value |
-| --- | --- |
-| Memory per Worker | ~1KB (virtual thread) |
-| Spawn Time | <1ms |
-| Max Pool Size | Configurable |
-| Context Switch | Virtual thread scheduler |
-
 ## Lifecycle: Graceful Shutdown
 
 BulkheadIsolation supports graceful shutdown:
@@ -385,10 +371,10 @@ var result = bulkhead.send(new TestMsg.Noop());
 
 | Key | Value |
 | --- | --- |
-| `Post-Shutdown Send` | `Rejected` |
 | `In-Flight Messages` | `Complete normally` |
-| `Pre-Shutdown Send` | `Success` |
+| `Post-Shutdown Send` | `Rejected` |
 | `Resource Release` | `Clean termination` |
+| `Pre-Shutdown Send` | `Success` |
 
 ## Bulkhead Status: DEGRADED State
 
@@ -423,13 +409,6 @@ for (int i = 0; i < 6; i++) {
 // Status transitions to DEGRADED
 ```
 
-| Key | Value |
-| --- | --- |
-| `Status` | `DEGRADED` |
-| `Alert Level` | `Warning: Queue depth exceeded` |
-| `Max Queue Depth` | `4` |
-| `Total Rejections` | `2` |
-
 ## Bulkhead Status: ACTIVE State
 
 Freshly created bulkheads start in ACTIVE status, indicating:
@@ -456,10 +435,10 @@ BulkheadIsolation.BulkheadStatus status = bulkhead.status();
 
 | Key | Value |
 | --- | --- |
-| `Health` | `All workers healthy` |
 | `Status` | `ACTIVE` |
-| `Total Rejections` | `0` |
+| `Health` | `All workers healthy` |
 | `Process Count` | `0` |
+| `Total Rejections` | `0` |
 
 ## Concurrency: Multiple Senders
 
@@ -509,6 +488,28 @@ for (int t = 0; t < 10; t++) {
 latch.await();
 ```
 
+| Key | Value |
+| --- | --- |
+| `Active Processes` | `1` |
+| `Messages Sent` | `5` |
+| `Strategy` | `On-demand spawning` |
+| `Pool Size Limit` | `5 workers` |
+
+| Metric | Value |
+| --- | --- |
+| Memory per Worker | ~1KB (virtual thread) |
+| Spawn Time | <1ms |
+| Max Pool Size | Configurable |
+| Context Switch | Virtual thread scheduler |
+
+| Key | Value |
+| --- | --- |
+| `Messages per Sender` | `10` |
+| `Thread Safety` | `No corruption, no lost messages` |
+| `Concurrent Senders` | `10 threads` |
+| `Total Messages` | `100` |
+| `Successful Sends` | `100` |
+
 ## BulkheadIsolation: Process-Pool-Based Feature Isolation
 
 BulkheadIsolation implements Joe Armstrong's bulkhead pattern using JOTP's supervision trees.
@@ -539,9 +540,9 @@ var result = bulkhead.send(new TestMsg.Noop());
 | Key | Value |
 | --- | --- |
 | `Feature ID` | `feature-1` |
-| `Send Result` | `Success` |
-| `Process Count` | `1` |
 | `Pool Size` | `3 workers` |
+| `Process Count` | `1` |
+| `Send Result` | `Success` |
 
 | Component | Purpose | Key Benefit |
 | --- | --- | --- |
@@ -552,11 +553,10 @@ var result = bulkhead.send(new TestMsg.Noop());
 
 | Key | Value |
 | --- | --- |
-| `Thread Safety` | `No corruption, no lost messages` |
-| `Messages per Sender` | `10` |
-| `Successful Sends` | `100` |
-| `Total Messages` | `100` |
-| `Concurrent Senders` | `10 threads` |
+| `Alert Level` | `Warning: Queue depth exceeded` |
+| `Status` | `DEGRADED` |
+| `Total Rejections` | `0` |
+| `Max Queue Depth` | `4` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

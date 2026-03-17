@@ -39,11 +39,11 @@ OpenTelemetryService service = OpenTelemetryService.create();
 
 | Key | Value |
 | --- | --- |
-| `MeterProvider` | `MeterProvider(enabled=true)` |
-| `TracerProvider` | `TracerProvider(enabled=true)` |
 | `Service Name` | `otel-jotp-service` |
-| `SDK Type` | `OpenTelemetrySdk` |
+| `TracerProvider` | `TracerProvider(enabled=true)` |
+| `MeterProvider` | `MeterProvider(enabled=true)` |
 | `Resource` | `Resource(serviceName=jotp-service)` |
+| `SDK Type` | `OpenTelemetrySdk` |
 
 > [!NOTE]
 > The placeholder pattern allows testing lifecycle and configuration without requiring the full OpenTelemetry SDK dependency. Integration is additive — no breaking changes when SDK is added.
@@ -82,11 +82,11 @@ OpenTelemetryService service = OpenTelemetryService.create(config);
 
 | Key | Value |
 | --- | --- |
-| `Configuration Type` | `OtelConfiguration` |
-| `Export Format` | `OTLP (protobuf)` |
 | `Pattern` | `Builder` |
-| `Transport` | `HTTP/2 or gRPC` |
+| `Export Format` | `OTLP (protobuf)` |
+| `Configuration Type` | `OtelConfiguration` |
 | `Immutability` | `Record (immutable)` |
+| `Transport` | `HTTP/2 or gRPC` |
 
 > [!NOTE]
 > Disable tracing (enableTracing=false) in high-throughput scenarios where span collection overhead is unacceptable. Metrics-only mode still provides visibility without performance impact.
@@ -126,12 +126,12 @@ OtelConfiguration config = OtelConfiguration.builder()
 
 | Key | Value |
 | --- | --- |
-| `Export Interval` | `30s` |
-| `Logging Enabled` | `false` |
-| `Export Timeout` | `60s` |
 | `Tracing Enabled` | `true` |
-| `Metrics Enabled` | `false` |
+| `Export Timeout` | `60s` |
+| `Logging Enabled` | `false` |
+| `Export Interval` | `30s` |
 | `Use Case` | `High-throughput tracing` |
+| `Metrics Enabled` | `false` |
 
 > [!NOTE]
 > gRPC endpoint (4317) is preferred over HTTP (4318) for high-volume scenarios due to better throughput and lower latency. Use HTTP for compatibility with older collectors.

@@ -1,14 +1,6 @@
 # io.github.seanchatmangpt.jotp.test.EventManagerScaleTest
 
 
-OTP gen_event guarantee: a crashing handler is removed but the manager continues.
-
-With 500 handlers all throwing, the manager must survive and accept new handlers.
-
-EventManager.syncNotify() with 1000 handlers demonstrates O(N) broadcast latency.
-
-Each handler is invoked sequentially in the manager's single virtual thread.
-
 EventManager serializes all operations via its Proc mailbox, preventing concurrent modification.
 
 Handler add/remove/notify operations are enqueued and executed in order.
@@ -21,7 +13,15 @@ The manager's Proc serializes all events, ensuring exact counting by a single ha
 
 Exactly 5001 events were counted (5000 from producers + 1 fence event).
 
-Broadcast to 1000 handlers completed in 2 ms (under 2s threshold).
+EventManager.syncNotify() with 1000 handlers demonstrates O(N) broadcast latency.
+
+Each handler is invoked sequentially in the manager's single virtual thread.
+
+Broadcast to 1000 handlers completed in 1 ms (under 2s threshold).
+
+OTP gen_event guarantee: a crashing handler is removed but the manager continues.
+
+With 500 handlers all throwing, the manager must survive and accept new handlers.
 
 After all 500 handlers crashed, a new handler was added and received events successfully.
 
