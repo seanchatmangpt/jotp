@@ -177,7 +177,7 @@ class PerformancePredictorIntegrationTest {
         .until(() -> predictor.getStatus().isTrained());
   }
 
-  @test
+  @Test
   @DisplayName("Anomaly feedback loop: detection → outcome → improvement")
   void testAnomalyFeedbackLoop() {
     predictor.train(Duration.ofDays(10));
