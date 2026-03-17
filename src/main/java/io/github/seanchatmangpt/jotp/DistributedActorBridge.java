@@ -215,7 +215,11 @@ public final class DistributedActorBridge {
             if (stub == null) {
                 synchronized (this) {
                     if (stub == null) {
-                        stub = new RemoteActorStub<>(remote.host(), remote.port(), timeout, codec);
+                        int atIdx = requestId.indexOf('@');
+                        String actorName = atIdx >= 0 ? requestId.substring(0, atIdx) : requestId;
+                        stub =
+                                new RemoteActorStub<>(
+                                        remote.host(), remote.port(), timeout, codec, actorName);
                     }
                 }
             }
@@ -275,12 +279,15 @@ public final class DistributedActorBridge {
         private final int port;
         private final Duration timeout;
         private final MessageCodec<M> codec;
+        private final String actorName;
 
-        RemoteActorStub(String host, int port, Duration timeout, MessageCodec<M> codec) {
+        RemoteActorStub(
+                String host, int port, Duration timeout, MessageCodec<M> codec, String actorName) {
             this.host = host;
             this.port = port;
             this.timeout = timeout;
             this.codec = codec;
+            this.actorName = actorName;
         }
 
         /** Fire-and-forget tell. */
@@ -298,17 +305,19 @@ public final class DistributedActorBridge {
                     });
         }
 
-        /** Request-reply ask. */
+        /**
+         * Request-reply ask. Returns the actor's state (not the message) to model the gRPC response
+         * carrying the updated state after message processing.
+         */
         @SuppressWarnings("unchecked")
-        CompletableFuture<M> ask(M msg) {
+        CompletableFuture<Object> ask(M msg) {
             return CompletableFuture.supplyAsync(
                     () -> {
                         try {
                             String encoded = codec.encode(msg);
                             // In a real implementation, use gRPC channel and async stub
                             // channel.newCall(method).sendMessage(encodedMsg).build().execute()
-                            String responseEncoded = simulateRemoteAsk(encoded);
-                            return codec.decode(responseEncoded);
+                            return simulateRemoteAsk(encoded);
                         } catch (Exception e) {
                             throw new RuntimeException("Failed to ask remote actor", e);
                         }
@@ -326,12 +335,34 @@ public final class DistributedActorBridge {
 
         // Simulation methods for testing without a real gRPC server
         private void simulateRemoteTell(String encodedMsg) {
-            // Simulated network call
+            // Deliver the message to the local actor if registered (cross-JVM simulation)
+            ProcRegistry.whereis(actorName)
+                    .ifPresent(
+                            proc -> {
+                                try {
+                                    @SuppressWarnings("unchecked")
+                                    M decoded = codec.decode(encodedMsg);
+                                    proc.tell(decoded);
+                                } catch (Exception ignored) {
+                                    // Best-effort delivery in simulation mode
+                                }
+                            });
         }
 
-        private String simulateRemoteAsk(String encodedMsg) {
-            // Simulated network call with response
-            return encodedMsg; // Echo for testing
+        /**
+         * Simulate a remote ask by forwarding to the locally-registered actor and returning its
+         * state. In a real gRPC implementation the response would travel over the wire; here we
+         * short-circuit via ProcRegistry to keep tests fast and deterministic.
+         */
+        @SuppressWarnings("unchecked")
+        private Object simulateRemoteAsk(String encodedMsg) throws Exception {
+            var procOpt = ProcRegistry.whereis(actorName);
+            if (procOpt.isEmpty()) {
+                throw new IllegalStateException(
+                        "Remote actor not found in simulation: " + actorName);
+            }
+            M decoded = codec.decode(encodedMsg);
+            return procOpt.get().ask(decoded).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
         private void simulateRemoteStop() {

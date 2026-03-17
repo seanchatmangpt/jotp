@@ -10,6 +10,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 
 /**
  * Comprehensive test suite for {@link DistributedActorBridge}.
@@ -43,6 +45,7 @@ import org.junit.jupiter.api.Test;
  * @see DistributedActorBridge.ActorLocation
  * @see DistributedActorBridge.RemoteActorHandle
  */
+@Execution(ExecutionMode.SAME_THREAD)
 @DtrTest
 @DisplayName("DistributedActorBridge: Location-Transparent Actor Routing")
 class DistributedActorBridgeTest {
@@ -372,7 +375,17 @@ class DistributedActorBridgeTest {
     @Test
     @DisplayName("RemoteActorHandle.ask(): Timeout on slow response")
     void testRemoteActorHandleAskTimeout() throws Exception {
-        var proc = new Proc<>(new CounterState(0), (state, msg) -> state);
+        var proc =
+                new Proc<CounterState, TestActorMsg>(
+                        new CounterState(0),
+                        (state, msg) -> {
+                            try {
+                                Thread.sleep(500);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                            return state;
+                        });
         ProcRegistry.register("slow-actor", proc);
 
         var localLoc = new DistributedActorBridge.ActorLocation.Local("slow-actor");
