@@ -144,7 +144,13 @@ public final class NodeFailoverController {
                 .start(
                         () -> {
                             for (NodeProcSpec spec : affected) {
-                                failover(spec, nodeName);
+                                try {
+                                    failover(spec, nodeName);
+                                } catch (Exception e) {
+                                    // Isolate per-proc failures so remaining procs are still
+                                    // processed.
+                                    statuses.put(spec.procName(), NodeProcStatus.FAILED);
+                                }
                             }
                         });
     }

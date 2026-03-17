@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrExtension;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
  * Comprehensive test suite for {@link BulkheadIsolation} with DTR documentation.
@@ -31,6 +33,7 @@ import org.junit.jupiter.api.Test;
  *   <li>{@code Noop} — No-op message
  * </ul>
  */
+@ExtendWith(DtrExtension.class)
 @DisplayName("BulkheadIsolation: Process-per-Feature Isolation")
 class BulkheadIsolationTest {
 

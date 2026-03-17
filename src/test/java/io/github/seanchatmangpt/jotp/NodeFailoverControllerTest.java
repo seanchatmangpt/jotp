@@ -247,10 +247,14 @@ class NodeFailoverControllerTest {
                                 controller.statusOf("existing").orElse(null)
                                         == NodeFailoverController.NodeProcStatus.RECOVERED);
 
-        // The original proc is still the registered one
-        assertThat(GlobalProcRegistry.<Integer, Integer>whereis("existing"))
-                .isPresent()
-                .hasValueSatisfying(p -> assertThat(p).isSameAs(existingProc));
+        // The original proc is still the registered one — use await() to tolerate minor timing
+        await().atMost(AWAIT)
+                .untilAsserted(
+                        () ->
+                                assertThat(GlobalProcRegistry.<Integer, Integer>whereis("existing"))
+                                        .isPresent()
+                                        .hasValueSatisfying(
+                                                p -> assertThat(p).isSameAs(existingProc)));
 
         try {
             existingProc.stop();
