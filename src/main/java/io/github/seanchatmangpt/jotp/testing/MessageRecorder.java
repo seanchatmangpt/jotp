@@ -125,7 +125,7 @@ public final class MessageRecorder implements AutoCloseable {
     }
 
     private static String escapeJson(String str) {
-      if (str == null) return "";
+      if (str == null) throw new UnsupportedOperationException("escapeJson requires non-null string; record(sourceId, targetId, msg) should guarantee non-null messages before invoking escapeJson");
       return str.replace("\\", "\\\\")
           .replace("\"", "\\\"")
           .replace("\n", "\\n")
@@ -491,7 +491,7 @@ public final class MessageRecorder implements AutoCloseable {
       // Try without quotes (for numbers)
       pattern = "\"" + key + "\": ";
       start = json.indexOf(pattern);
-      if (start < 0) return "";
+      if (start < 0) throw new IllegalArgumentException("Required JSON key '" + key + "' not found in recording. Recording may be corrupted or from incompatible version.");
       start += pattern.length();
       int end = json.indexOf(',', start);
       if (end < 0) end = json.indexOf('}', start);
