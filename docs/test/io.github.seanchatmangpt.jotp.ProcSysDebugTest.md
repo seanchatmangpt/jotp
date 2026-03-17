@@ -5,16 +5,6 @@
 - [ProcSys: OTP sys Module Equivalent](#procsysotpsysmoduleequivalent)
 
 
-handleDebug is the process-internal API (equivalent to sys:handle_debug/4) that
-appends debug events to the log. Processes call this in their message handlers to
-record custom events like state transitions or timeouts.
-
-
-getLog retrieves the debug event log - a bounded buffer of In (message received)
-and Out (reply sent) events. This mirrors Erlang's sys:get_log/1 for inspecting
-process activity without stopping the process.
-
-
 codeChange implements hot code upgrade - applying a state transformation function
 atomically between message processing. This mirrors Erlang's system_code_change/4
 for zero-downtime deployments where state schemas evolve.
@@ -30,6 +20,16 @@ where the mailbox may be flooded with messages.
 ProcSys provides JOTP's equivalent to Erlang/OTP's sys module for process introspection.
 The trace/2 function enables debug logging of all message events (In/Out) to a PrintStream,
 useful for production debugging without modifying process code.
+
+
+getLog retrieves the debug event log - a bounded buffer of In (message received)
+and Out (reply sent) events. This mirrors Erlang's sys:get_log/1 for inspecting
+process activity without stopping the process.
+
+
+handleDebug is the process-internal API (equivalent to sys:handle_debug/4) that
+appends debug events to the log. Processes call this in their message handlers to
+record custom events like state transitions or timeouts.
 
 
 ---

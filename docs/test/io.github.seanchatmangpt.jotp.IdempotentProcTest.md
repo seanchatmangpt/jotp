@@ -13,14 +13,14 @@ If a key has been seen before, the duplicate message is silently discarded.
 This implements Joe Armstrong's principle: "Design your protocols to survive retries."
 
 
-Different idempotency keys are processed independently.
-Each unique key represents a distinct operation that should be executed once.
-This enables safe retry behavior: retransmitting with the same key is harmless.
-
-
 Messages NOT implementing Idempotent are always delivered without deduplication.
 This allows mixing idempotent and non-idempotent messages in the same Proc.
 Example: Commands (idempotent) can coexist with Events (non-idempotent).
+
+
+Different idempotency keys are processed independently.
+Each unique key represents a distinct operation that should be executed once.
+This enables safe retry behavior: retransmitting with the same key is harmless.
 
 
 ---

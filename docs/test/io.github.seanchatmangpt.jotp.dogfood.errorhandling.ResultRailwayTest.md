@@ -37,9 +37,9 @@ assertThat((Throwable) ((ResultRailway.Failure<Integer, ?>) failed).error())
 
 | Key | Value |
 | --- | --- |
-| `Bridge` | `Exception → Railway` |
-| `Success Path` | `Value wrapped in Success` |
 | `Failure Path` | `Exception caught and wrapped` |
+| `Success Path` | `Value wrapped in Success` |
+| `Bridge` | `Exception → Railway` |
 | `Exception Type` | `RuntimeException` |
 
 > [!NOTE]
@@ -67,10 +67,10 @@ assertThat(value2).isEqualTo("ok");
 
 | Key | Value |
 | --- | --- |
-| `Result Type` | `Success value type (T)` |
-| `Pattern` | `Error recovery` |
-| `Success Path` | `Returns value unchanged` |
 | `Failure Path` | `Applies recovery function` |
+| `Success Path` | `Returns value unchanged` |
+| `Pattern` | `Error recovery` |
+| `Result Type` | `Success value type (T)` |
 
 > [!NOTE]
 > recover() is perfect for providing defaults: missing config → default value, API failure → cached response, validation error → sanitized input.
@@ -104,9 +104,9 @@ assertThat(called3).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `peekError()` | `Runs on failure` |
-| `Return` | `Original Result (chainable)` |
 | `Use Case` | `Logging, metrics, debugging` |
+| `Return` | `Original Result (chainable)` |
+| `peekError()` | `Runs on failure` |
 | `peek()` | `Runs on success` |
 
 > [!NOTE]
@@ -140,9 +140,9 @@ assertThat(result2).isEqualTo(-1);
 
 | Key | Value |
 | --- | --- |
-| `Pattern` | `Catamorphism` |
-| `Success Path` | `Applies success function` |
 | `Failure Path` | `Applies error function` |
+| `Success Path` | `Applies success function` |
+| `Pattern` | `Catamorphism` |
 | `Return Type` | `Same for both branches (R)` |
 
 > [!NOTE]
@@ -178,10 +178,10 @@ assertThat(failure).isInstanceOf(ResultRailway.Failure.class);
 
 | Key | Value |
 | --- | --- |
-| `Failure Variant` | `isFailure() = true` |
-| `Success Variant` | `isSuccess() = true` |
-| `Pattern` | `Sealed interface` |
 | `Type Safety` | `Compile-time` |
+| `Pattern` | `Sealed interface` |
+| `Success Variant` | `isSuccess() = true` |
+| `Failure Variant` | `isFailure() = true` |
 
 > [!NOTE]
 > Result<T,E> is a sealed interface with Success<T,E> and Failure<T,E> records. The compiler enforces exhaustive pattern matching, ensuring all cases are handled.
@@ -209,9 +209,9 @@ assertThat(result.isSuccess()).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Railway` | `Fail → Fail` |
-| `Pattern` | `Monad` |
 | `Failure Chain` | `Short-circuits (skips rest)` |
+| `Pattern` | `Monad` |
+| `Railway` | `Fail → Fail` |
 | `Success Chain` | `Continues to next operation` |
 
 > [!NOTE]
@@ -239,10 +239,10 @@ assertThat(((ResultRailway.Failure<?, String>) mapped).error()).isEqualTo("err")
 
 | Key | Value |
 | --- | --- |
-| `Failure.map` | `Passes through unchanged` |
-| `Success.map` | `Transforms value` |
-| `Pattern` | `Functor` |
 | `Composition` | `Chainable` |
+| `Pattern` | `Functor` |
+| `Success.map` | `Transforms value` |
+| `Failure.map` | `Passes through unchanged` |
 
 > [!NOTE]
 > map() is one-directional: it transforms Success but ignores Failure. For two-way transformation, use fold() or bimap() if available.
@@ -269,10 +269,10 @@ assertThat(result).isEqualTo("result=84");
 
 | Key | Value |
 | --- | --- |
-| `Failure Pipeline` | `parse fails → rest skipped` |
-| `Failure Result` | `"failed: not a number"` |
-| `Success Result` | `"result=84"` |
 | `Pattern` | `Railway switches` |
+| `Success Result` | `"result=84"` |
+| `Failure Result` | `"failed: not a number"` |
+| `Failure Pipeline` | `parse fails → rest skipped` |
 | `Success Pipeline` | `strip → parse → double → format` |
 
 > [!NOTE]

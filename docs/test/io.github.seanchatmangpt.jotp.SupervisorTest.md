@@ -5,6 +5,12 @@
 - [Supervisor: Fault-Tolerant Supervision Tree](#supervisorfaulttolerantsupervisiontree)
 
 
+Max restarts throttling prevents infinite restart loops.
+If a child crashes more than maxRestarts times within the window duration,
+the supervisor gives up and terminates itself (including all children).
+This prevents cascading failures from unstable processes.
+
+
 ## Supervisor: Fault-Tolerant Supervision Tree
 
 Supervisor implements hierarchical process supervision with configurable restart strategies.
@@ -12,20 +18,14 @@ ONE_FOR_ONE: Only the crashed child is restarted. Siblings are unaffected.
 Best for independent workers where one failure shouldn't cascade to healthy processes.
 
 
-REST_FOR_ONE: The crashed child and all children started AFTER it are restarted.
-Best for hierarchical dependencies where child-N depends on child-1 to child-N-1.
-Example: Database connection -> session -> transaction handlers (if DB dies, all dependents restart).
-
-
 ONE_FOR_ALL: When any child crashes, ALL children are restarted.
 Best for tightly coupled services where partial state is invalid.
 Example: A connection pool where all connections must share the same configuration.
 
 
-Max restarts throttling prevents infinite restart loops.
-If a child crashes more than maxRestarts times within the window duration,
-the supervisor gives up and terminates itself (including all children).
-This prevents cascading failures from unstable processes.
+REST_FOR_ONE: The crashed child and all children started AFTER it are restarted.
+Best for hierarchical dependencies where child-N depends on child-1 to child-N-1.
+Example: Database connection -> session -> transaction handlers (if DB dies, all dependents restart).
 
 
 ---

@@ -4,9 +4,9 @@
 
 - [ProcMonitor: Demonitor (Cancel Monitoring)](#procmonitordemonitorcancelmonitoring)
 - [ProcMonitor: Multiple Independent Monitors](#procmonitormultipleindependentmonitors)
+- [ProcMonitor: Abnormal Exit Detection](#procmonitorabnormalexitdetection)
 - [ProcMonitor: Unilateral Observation](#procmonitorunilateralobservation)
 - [ProcMonitor: Normal Exit Detection](#procmonitornormalexitdetection)
-- [ProcMonitor: Abnormal Exit Detection](#procmonitorabnormalexitdetection)
 
 
 ## ProcMonitor: Demonitor (Cancel Monitoring)
@@ -40,6 +40,13 @@ stateDiagram-v2
 
 > [!NOTE]
 > demonitor is useful for temporary monitoring. Monitor only during specific operations, then cancel when no longer needed.
+
+| Key | Value |
+| --- | --- |
+| `Callback Fired` | `No` |
+| `Target Status` | `Crashed` |
+| `Monitor Status` | `Cancelled (demonitor)` |
+| `Reason` | `Monitor cancelled before crash` |
 
 ## ProcMonitor: Multiple Independent Monitors
 
@@ -76,76 +83,6 @@ graph TB
 
 > [!NOTE]
 > Each monitor is independent. Canceling one monitor doesn't affect others. This enables multiple observers of the same process.
-
-## ProcMonitor: Unilateral Observation
-
-Monitors are unilateral - the monitoring side is NOT affected when the target crashes. Unlike links, crashes don't propagate through monitors.
-
-```java
-var target = counter();
-var watcher = counter();
-
-ProcMonitor.monitor(target, reason -> {
-    // Watcher still runs — tell it a Ping to confirm
-    watcher.tell(new Msg.Ping());
-});
-
-// Target crashes
-target.tell(new Msg.Crash());
-
-// Watcher is still alive and responsive
-await().atMost(Duration.ofSeconds(3))
-    .until(() -> watcher.ask(new Msg.Ping()).join() >= 1);
-```
-
-```mermaid
-graph LR
-    W[Watcher] -->|monitor| T[Target]
-    T -->|Crash| X[Exception]
-    X -->|DOWN callback| W
-    style T fill:#ff6b6b
-    style W fill:#51cf66
-    style X fill:#ffd43b
-```
-
-> [!NOTE]
-> This is key difference from links: links are bidirectional (both die), monitors are unilateral (only callback fires). Monitors are for observation, links are for coupling.
-
-## ProcMonitor: Normal Exit Detection
-
-Monitors also fire on normal exit (stop()), but with a null reason. This distinguishes graceful shutdown from crashes.
-
-```java
-var target = counter();
-var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
-var downFired = new AtomicBoolean(false);
-
-ProcMonitor.monitor(target, reason -> {
-    downReason.set(reason); // should be null for normal exit
-    downFired.set(true);
-});
-
-// Graceful shutdown
-target.stop();
-
-await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
-// downReason.get() == null (normal exit)
-```
-
-| Exit Type | Reason Value | Interpretation |
-| --- | --- | --- |
-| Normal (stop()) | null | Graceful shutdown |
-| Abnormal (crash) | Exception | Process crashed |
-
-> [!NOTE]
-> This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.
-
-| Key | Value |
-| --- | --- |
-| `Target Exit` | `Normal (stop())` |
-| `Reason Value` | `null` |
-| `Interpretation` | `Graceful shutdown` |
-| `Monitor Callback` | `Invoked` |
 
 ## ProcMonitor: Abnormal Exit Detection
 
@@ -186,6 +123,98 @@ sequenceDiagram
 
 > [!NOTE]
 > Unlike links, monitors are one-way. The monitoring side is NOT affected when the target crashes. The callback is invoked asynchronously.
+
+| Key | Value |
+| --- | --- |
+| `Monitors Registered` | `2` |
+| `Monitor 2 Fired` | `true` |
+| `Independence` | `Yes` |
+| `Monitor 1 Fired` | `true` |
+| `Target Status` | `Crashed` |
+
+## ProcMonitor: Unilateral Observation
+
+Monitors are unilateral - the monitoring side is NOT affected when the target crashes. Unlike links, crashes don't propagate through monitors.
+
+```java
+var target = counter();
+var watcher = counter();
+
+ProcMonitor.monitor(target, reason -> {
+    // Watcher still runs — tell it a Ping to confirm
+    watcher.tell(new Msg.Ping());
+});
+
+// Target crashes
+target.tell(new Msg.Crash());
+
+// Watcher is still alive and responsive
+await().atMost(Duration.ofSeconds(3))
+    .until(() -> watcher.ask(new Msg.Ping()).join() >= 1);
+```
+
+```mermaid
+graph LR
+    W[Watcher] -->|monitor| T[Target]
+    T -->|Crash| X[Exception]
+    X -->|DOWN callback| W
+    style T fill:#ff6b6b
+    style W fill:#51cf66
+    style X fill:#ffd43b
+```
+
+> [!NOTE]
+> This is key difference from links: links are bidirectional (both die), monitors are unilateral (only callback fires). Monitors are for observation, links are for coupling.
+
+| Key | Value |
+| --- | --- |
+| `Monitor Callback` | `Invoked` |
+| `Target Status` | `Crashed` |
+| `Reason Type` | `RuntimeException` |
+| `Reason Message` | `BOOM` |
+
+## ProcMonitor: Normal Exit Detection
+
+Monitors also fire on normal exit (stop()), but with a null reason. This distinguishes graceful shutdown from crashes.
+
+```java
+var target = counter();
+var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
+var downFired = new AtomicBoolean(false);
+
+ProcMonitor.monitor(target, reason -> {
+    downReason.set(reason); // should be null for normal exit
+    downFired.set(true);
+});
+
+// Graceful shutdown
+target.stop();
+
+await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
+// downReason.get() == null (normal exit)
+```
+
+| Exit Type | Reason Value | Interpretation |
+| --- | --- | --- |
+| Normal (stop()) | null | Graceful shutdown |
+| Abnormal (crash) | Exception | Process crashed |
+
+> [!NOTE]
+> This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.
+
+| Key | Value |
+| --- | --- |
+| `Callback Invoked` | `Yes` |
+| `Target Status` | `Crashed` |
+| `Relationship` | `Unilateral (one-way)` |
+| `Watcher Status` | `Still Running` |
+
+| Key | Value |
+| --- | --- |
+| `Monitor Callback` | `Invoked` |
+| `Interpretation` | `Graceful shutdown` |
+| `Reason Value` | `null` |
+| `Target Exit` | `Normal (stop())` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

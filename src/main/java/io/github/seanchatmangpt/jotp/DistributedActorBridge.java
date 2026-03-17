@@ -145,8 +145,11 @@ public final class DistributedActorBridge {
          * processing.
          */
         public void tell(M msg) {
-            if (location instanceof ActorLocation.Remote remote) {
-                ensureStub(remote).tell(msg).exceptionally(ex -> null);
+            switch (location) {
+                case ActorLocation.Local(var name) ->
+                        ProcRegistry.whereis(name).ifPresent(proc -> proc.tell(msg));
+                case ActorLocation.Remote remote ->
+                        ensureStub(remote).tell(msg).exceptionally(ex -> null);
             }
         }
 

@@ -17,10 +17,10 @@ Breaking point under investigation:
 
 | Key | Value |
 | --- | --- |
-| `Expected winners` | `1` |
-| `Winners` | `1` |
-| `Atomicity` | `VERIFIED` |
 | `Result` | `PASS - Exactly one winner` |
+| `Atomicity` | `VERIFIED` |
+| `Winners` | `1` |
+| `Expected winners` | `1` |
 | `Competitors` | `100` |
 
 ---

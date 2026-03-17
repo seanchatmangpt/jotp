@@ -45,10 +45,10 @@ boolean isSubscribed = metrics.isSubscribed();
 
 | Key | Value |
 | --- | --- |
+| `Subscribed` | `true` |
 | `Metrics Name` | `test-metrics` |
 | `Feature Flag` | `-Djotp.observability.enabled=true` |
 | `Collector Type` | `MetricsCollector` |
-| `Subscribed` | `true` |
 
 > [!NOTE]
 > The metrics bridge is feature-gated. Production systems without the flag enabled experience zero overhead — no event bus subscription, no allocation, no metrics collection.
@@ -101,10 +101,10 @@ Map<String, Object> snapshot = collector.snapshot();
 
 | Key | Value |
 | --- | --- |
-| `Event Type` | `ProcessMonitorRegistered` |
-| `Reason` | `Low signal-to-noise ratio` |
 | `Metrics Created` | `0` |
 | `Event Priority` | `P2 (Operational)` |
+| `Event Type` | `ProcessMonitorRegistered` |
+| `Reason` | `Low signal-to-noise ratio` |
 
 > [!NOTE]
 > P2 filtering prevents metric cardinality explosion. Monitor registration events can occur thousands of times per second but provide little operational value. Collecting them would drown out the important P0/P1 signals.

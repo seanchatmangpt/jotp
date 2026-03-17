@@ -75,9 +75,9 @@ var result = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
 
 | Key | Value |
 | --- | --- |
+| `Initial State` | `0` |
 | `Final State` | `1` |
 | `Operations` | `Increment, Increment, Decrement` |
-| `Initial State` | `0` |
 
 ## GenServer: Custom Reply Values
 
@@ -115,10 +115,10 @@ var reply = server.call(new EchoMsg.Echo("hello"), CALL_TIMEOUT).get();
 
 | Key | Value |
 | --- | --- |
-| `Type` | `String` |
-| `State Unchanged` | `true` |
 | `Reply` | `echo:hello` |
 | `Input` | `hello` |
+| `Type` | `String` |
+| `State Unchanged` | `true` |
 
 ## GenServer: Synchronous Request-Reply (call)
 
@@ -157,8 +157,8 @@ var reply = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
 
 | Key | Value |
 | --- | --- |
-| `Reply Received` | `42` |
 | `Initial State` | `42` |
+| `Reply Received` | `42` |
 
 ## GenServer: Info Messages (Out-of-Band Notifications)
 
@@ -309,9 +309,9 @@ var result = server.call(new StateMsg.GetState(), CALL_TIMEOUT).get();
 
 | Key | Value |
 | --- | --- |
+| `Ordering` | `FIFO` |
 | `Messages Sent` | `3` |
 | `Result` | `[first, second, third]` |
-| `Ordering` | `FIFO` |
 
 ## GenServer: Complete Message Type Overview
 

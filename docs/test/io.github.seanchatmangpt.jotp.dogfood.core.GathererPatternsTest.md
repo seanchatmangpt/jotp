@@ -6,9 +6,9 @@
 - [Custom Gatherer: Deduplication](#customgathererdeduplication)
 - [Running Scan (Prefix Sums)](#runningscanprefixsums)
 - [Gatherer API: Custom Stream Intermediate Operations](#gathererapicustomstreamintermediateoperations)
-- [Fold as Intermediate Operation](#foldasintermediateoperation)
 - [Chaining Multiple Gatherers](#chainingmultiplegatherers)
 - [Concurrent Mapping with Gatherers](#concurrentmappingwithgatherers)
+- [Fold as Intermediate Operation](#foldasintermediateoperation)
 
 
 ## Sliding Window Operations
@@ -26,11 +26,11 @@ var windows = GathererPatterns.slidingWindow(items, 3);
 
 | Key | Value |
 | --- | --- |
-| `Overlap` | `2 elements between windows` |
-| `Input` | `[1, 2, 3, 4, 5]` |
-| `Output` | `3 windows` |
-| `Window Size` | `3` |
 | `Moving Average` | `[20.0, 30.0, 40.0]` |
+| `Window Size` | `3` |
+| `Output` | `3 windows` |
+| `Input` | `[1, 2, 3, 4, 5]` |
+| `Overlap` | `2 elements between windows` |
 
 > [!NOTE]
 > Sliding windows are computationally expensive (O(n*k) for n elements and window size k). Use them judiciously on large datasets or consider windowed aggregations.
@@ -52,10 +52,10 @@ var deduped = items.stream()
 
 | Key | Value |
 | --- | --- |
-| `Input` | `[1, 1, 2, 2, 2, 3, 2, 2, 4]` |
-| `All Same` | `[5, 5, 5, 5] → [5]` |
-| `Output` | `[1, 2, 3, 2, 4]` |
 | `Consecutive Duplicates` | `Removed` |
+| `Output` | `[1, 2, 3, 2, 4]` |
+| `All Same` | `[5, 5, 5, 5] → [5]` |
+| `Input` | `[1, 1, 2, 2, 2, 3, 2, 2, 4]` |
 | `Non-Consecutive` | `Preserved (2 appears twice)` |
 
 > [!NOTE]
@@ -76,11 +76,11 @@ var sums = GathererPatterns.runningSum(values);
 
 | Key | Value |
 | --- | --- |
-| `Input` | `[1, 2, 3, 4, 5]` |
-| `Output` | `[1, 3, 6, 10, 15]` |
-| `String Concat` | `[a, ab, abc]` |
-| `Operation` | `Running sum` |
 | `State` | `Accumulated across elements` |
+| `Operation` | `Running sum` |
+| `String Concat` | `[a, ab, abc]` |
+| `Output` | `[1, 3, 6, 10, 15]` |
+| `Input` | `[1, 2, 3, 4, 5]` |
 
 > [!NOTE]
 > Scan operations are perfect for cumulative calculations, running totals, and maintaining state across stream elements without manual loops.
@@ -107,36 +107,13 @@ var batches = GathererPatterns.batch(items, 3);
 
 | Key | Value |
 | --- | --- |
-| `Input Size` | `7 elements` |
-| `Batch Size` | `3` |
-| `Output` | `3 batches` |
 | `Last Batch` | `Partial (size 1)` |
+| `Output` | `3 batches` |
+| `Batch Size` | `3` |
+| `Input Size` | `7 elements` |
 
 > [!NOTE]
 > Batching is essential for bulk operations (database inserts, API calls) where you want to process multiple items together. The Gatherer API makes this a one-liner instead of manual iteration.
-
-## Fold as Intermediate Operation
-
-Fold is traditionally a terminal operation (Stream.reduce), but Gatherer enables fold as an intermediate operation. This allows folding to be part of a larger pipeline.
-
-```java
-// Fold to single value mid-stream
-var items = List.of(1, 2, 3, 4, 5);
-var sum = GathererPatterns.foldToSingle(items, 0, Integer::sum);
-
-// Result: 15
-// Can be chained with other operations
-```
-
-| Key | Value |
-| --- | --- |
-| `Identity` | `0 for sum, "" for concat` |
-| `Operation` | `Intermediate (can chain)` |
-| `String Fold` | `a+b+c = abc` |
-| `Integer Fold` | `1+2+3+4+5 = 15` |
-
-> [!NOTE]
-> Fold as an intermediate operation enables complex pipelines: filter → fold → map. This was impossible with traditional Stream.reduce, which is terminal-only.
 
 ## Chaining Multiple Gatherers
 
@@ -154,9 +131,9 @@ var result = GathererPatterns.batchAndDeduplicate(items, 2);
 
 | Key | Value |
 | --- | --- |
-| `After Batch` | `[[1, 2], [3, 4], [5]]` |
-| `Input` | `[1, 1, 2, 2, 3, 3, 4, 4, 5, 5]` |
 | `After Dedupe` | `[1, 2, 3, 4, 5]` |
+| `Input` | `[1, 1, 2, 2, 3, 3, 4, 4, 5, 5]` |
+| `After Batch` | `[[1, 2], [3, 4], [5]]` |
 | `Pipeline` | `stream → dedupe → batch → toList` |
 
 > [!NOTE]
@@ -178,14 +155,37 @@ var result = GathererPatterns.mapConcurrent(items, 2, i -> i * 2);
 
 | Key | Value |
 | --- | --- |
-| `Input` | `[1, 2, 3, 4, 5]` |
-| `Order` | `Preserved` |
-| `Parallelism` | `2 threads` |
-| `Output` | `[2, 4, 6, 8, 10]` |
 | `Operation` | `i → i * 2` |
+| `Output` | `[2, 4, 6, 8, 10]` |
+| `Parallelism` | `2 threads` |
+| `Order` | `Preserved` |
+| `Input` | `[1, 2, 3, 4, 5]` |
 
 > [!NOTE]
 > Unlike parallel streams which use common ForkJoinPool, gatherers can use custom thread pools. This prevents resource contention and enables fine-tuned parallelism.
+
+## Fold as Intermediate Operation
+
+Fold is traditionally a terminal operation (Stream.reduce), but Gatherer enables fold as an intermediate operation. This allows folding to be part of a larger pipeline.
+
+```java
+// Fold to single value mid-stream
+var items = List.of(1, 2, 3, 4, 5);
+var sum = GathererPatterns.foldToSingle(items, 0, Integer::sum);
+
+// Result: 15
+// Can be chained with other operations
+```
+
+| Key | Value |
+| --- | --- |
+| `Integer Fold` | `1+2+3+4+5 = 15` |
+| `String Fold` | `a+b+c = abc` |
+| `Operation` | `Intermediate (can chain)` |
+| `Identity` | `0 for sum, "" for concat` |
+
+> [!NOTE]
+> Fold as an intermediate operation enables complex pipelines: filter → fold → map. This was impossible with traditional Stream.reduce, which is terminal-only.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

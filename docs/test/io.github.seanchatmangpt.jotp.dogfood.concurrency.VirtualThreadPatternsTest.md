@@ -3,12 +3,12 @@
 ## Table of Contents
 
 - [Structured Concurrency Patterns](#structuredconcurrencypatterns)
-- [Migration from Thread Pools](#migrationfromthreadpools)
 - [Handling Timeout and Interruption](#handlingtimeoutandinterruption)
+- [Migration from Thread Pools](#migrationfromthreadpools)
 - [Timeout and Cancellation in Virtual Threads](#timeoutandcancellationinvirtualthreads)
-- [Blocking Without Scaling Limits](#blockingwithoutscalinglimits)
 - [Creating Millions of Lightweight Processes](#creatingmillionsoflightweightprocesses)
 - [Java 26: Virtual Threads vs Platform Threads](#java26virtualthreadsvsplatformthreads)
+- [Blocking Without Scaling Limits](#blockingwithoutscalinglimits)
 
 
 ## Structured Concurrency Patterns
@@ -23,6 +23,36 @@ var results = VirtualThreadPatterns.processAllConcurrently(items, i -> i * 2);
 // Each item is processed in its own virtual thread
 // Results are collected when all threads complete
 assertThat(results).hasSize(5);
+```
+
+| Key | Value |
+| --- | --- |
+| `Processing Pattern` | `Concurrent, unordered` |
+| `Input Items` | `5` |
+| `Thread Type` | `Virtual (per-item)` |
+| `Results Collected` | `5` |
+
+> [!NOTE]
+> While this example uses CountDownLatch for compatibility, production code should prefer StructuredTaskScope (JEP 453) for proper structured concurrency with automatic error propagation and timeout handling.
+
+## Handling Timeout and Interruption
+
+When a virtual thread times out, interrupt it to release resources. The task should check Thread.interrupted() or handle InterruptedException cooperatively.
+
+```java
+// Task that exceeds timeout
+boolean completed = VirtualThreadPatterns.runWithTimeout(
+    () -> {
+        try {
+            Thread.sleep(Duration.ofSeconds(10));  // Longer than timeout
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();  // Restore interrupt flag
+        }
+    },
+    Duration.ofMillis(100)  // Timeout before task completes
+);
+
+assertThat(completed).isFalse();
 ```
 
 ## Migration from Thread Pools
@@ -58,40 +88,10 @@ assertThat(counter.get()).isEqualTo(requests.size());
 
 | Key | Value |
 | --- | --- |
-| `Results Collected` | `5` |
-| `Thread Type` | `Virtual (per-item)` |
-| `Input Items` | `5` |
-| `Processing Pattern` | `Concurrent, unordered` |
-
-> [!NOTE]
-> While this example uses CountDownLatch for compatibility, production code should prefer StructuredTaskScope (JEP 453) for proper structured concurrency with automatic error propagation and timeout handling.
-
-## Handling Timeout and Interruption
-
-When a virtual thread times out, interrupt it to release resources. The task should check Thread.interrupted() or handle InterruptedException cooperatively.
-
-```java
-// Task that exceeds timeout
-boolean completed = VirtualThreadPatterns.runWithTimeout(
-    () -> {
-        try {
-            Thread.sleep(Duration.ofSeconds(10));  // Longer than timeout
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();  // Restore interrupt flag
-        }
-    },
-    Duration.ofMillis(100)  // Timeout before task completes
-);
-
-assertThat(completed).isFalse();
-```
-
-| Key | Value |
-| --- | --- |
-| `Handler Invocations` | `3` |
-| `Thread Strategy` | `One virtual thread per request` |
-| `Requests Processed` | `3` |
 | `Pool Required` | `No` |
+| `Requests Processed` | `3` |
+| `Thread Strategy` | `One virtual thread per request` |
+| `Handler Invocations` | `3` |
 
 > [!NOTE]
 > Virtual threads make thread pools obsolete for I/O-bound work. Keep thread pools only for CPU-intensive tasks where parallelism is limited by CPU cores, not I/O.
@@ -114,43 +114,9 @@ assertThat(completed).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Result` | `false` |
-| `Task Response` | `Caught InterruptedException` |
-| `Task Completed` | `Exceeded timeout` |
-| `Thread Interrupted` | `Yes (after timeout)` |
-
-> [!NOTE]
-> Always handle InterruptedException properly: either propagate it or restore the interrupt flag with Thread.currentThread().interrupt(). This ensures callers know the thread was interrupted.
-
-## Blocking Without Scaling Limits
-
-With platform threads, blocking I/O wastes thread resources. A thread pool of 200 threads can only handle 200 concurrent blocking operations. Virtual threads change the equation: blocking just parks the virtual thread, releasing the carrier thread.
-
-```java
-// Create multiple virtual threads with automatic naming
-var counter = new AtomicInteger();
-List<Runnable> tasks = List.of(
-    counter::incrementAndGet,
-    counter::incrementAndGet,
-    counter::incrementAndGet  // Add more tasks as needed
-);
-
-var threads = VirtualThreadPatterns.startAll("worker-", tasks);
-
-// All threads run concurrently; join to wait for completion
-for (var thread : threads) {
-    thread.join(Duration.ofSeconds(2));
-}
-
-// All tasks executed
-assertThat(counter.get()).isEqualTo(tasks.size());
-```
-
-| Key | Value |
-| --- | --- |
-| `Result` | `true` |
-| `Task Completed` | `Within timeout` |
 | `Timeout Pattern` | `join() + interrupt()` |
+| `Task Completed` | `Within timeout` |
+| `Result` | `true` |
 | `Thread Interrupted` | `No` |
 
 > [!NOTE]
@@ -179,9 +145,9 @@ thread.join(Duration.ofSeconds(2));
 
 | Key | Value |
 | --- | --- |
-| `Execution Pattern` | `Fire-and-Forget` |
-| `Thread Lifecycle` | `Terminates after task completes` |
 | `Counter Value` | `1` |
+| `Thread Lifecycle` | `Terminates after task completes` |
+| `Execution Pattern` | `Fire-and-Forget` |
 
 > [!NOTE]
 > Fire-and-forget virtual threads are ideal for logging, metrics, and async tasks where you don't need the result. However, for structured concurrency, prefer StructuredTaskScope to ensure proper cleanup and error handling.
@@ -208,9 +174,42 @@ assertThat(thread.isVirtual()).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Counter Value` | `2` |
-| `Naming Pattern` | `worker-0, worker-1, ...` |
+| `Thread Type` | `Virtual Thread` |
+| `Counter Value` | `1` |
+| `Thread Name` | `test-thread` |
+
+> [!NOTE]
+> Use platform threads for CPU-intensive work, virtual threads for I/O-bound work. The naming pattern ('test-thread') helps with debugging and observability.
+
+## Blocking Without Scaling Limits
+
+With platform threads, blocking I/O wastes thread resources. A thread pool of 200 threads can only handle 200 concurrent blocking operations. Virtual threads change the equation: blocking just parks the virtual thread, releasing the carrier thread.
+
+```java
+// Create multiple virtual threads with automatic naming
+var counter = new AtomicInteger();
+List<Runnable> tasks = List.of(
+    counter::incrementAndGet,
+    counter::incrementAndGet,
+    counter::incrementAndGet  // Add more tasks as needed
+);
+
+var threads = VirtualThreadPatterns.startAll("worker-", tasks);
+
+// All threads run concurrently; join to wait for completion
+for (var thread : threads) {
+    thread.join(Duration.ofSeconds(2));
+}
+
+// All tasks executed
+assertThat(counter.get()).isEqualTo(tasks.size());
+```
+
+| Key | Value |
+| --- | --- |
 | `Threads Created` | `2` |
+| `Naming Pattern` | `worker-0, worker-1, ...` |
+| `Counter Value` | `2` |
 | `All Virtual` | `true` |
 
 > [!NOTE]
@@ -218,12 +217,13 @@ assertThat(thread.isVirtual()).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Thread Name` | `test-thread` |
-| `Counter Value` | `1` |
-| `Thread Type` | `Virtual Thread` |
+| `Task Completed` | `Exceeded timeout` |
+| `Task Response` | `Caught InterruptedException` |
+| `Result` | `false` |
+| `Thread Interrupted` | `Yes (after timeout)` |
 
 > [!NOTE]
-> Use platform threads for CPU-intensive work, virtual threads for I/O-bound work. The naming pattern ('test-thread') helps with debugging and observability.
+> Always handle InterruptedException properly: either propagate it or restore the interrupt flag with Thread.currentThread().interrupt(). This ensures callers know the thread was interrupted.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

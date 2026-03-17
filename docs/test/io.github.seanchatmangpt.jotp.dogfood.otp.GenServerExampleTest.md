@@ -8,6 +8,9 @@
 - [Timeout Handling in ask()](#timeouthandlinginask)
 - [Immutable State Records](#immutablestaterecords)
 - [State Validation with Compact Constructors](#statevalidationwithcompactconstructors)
+- [OTP GenServer Pattern: Stateful Processes](#otpgenserverpatternstatefulprocesses)
+- [Sequential State Transitions](#sequentialstatetransitions)
+- [Request-Response Messaging with ask()](#requestresponsemessagingwithask)
 
 
 ## State Consistency Under Concurrency
@@ -70,11 +73,11 @@ CounterState finalState = counterService.ask(new CounterMessage.GetCount(), time
 
 | Key | Value |
 | --- | --- |
+| `Responses` | `Complete out-of-order` |
+| `Final State` | `count = 3` |
 | `Processing` | `Serialized (one at a time)` |
 | `Concurrent Requests` | `3 concurrent IncrementBy(1)` |
 | `Pattern` | `Mailbox queue` |
-| `Responses` | `Complete out-of-order` |
-| `Final State` | `count = 3` |
 
 > [!NOTE]
 > The mailbox serializes concurrent requests — no locks needed. This is the Actor model's solution to concurrency: message passing instead of shared mutable state.
@@ -97,10 +100,10 @@ CounterState newState = future.join();
 
 | Key | Value |
 | --- | --- |
+| `Time Required` | `<1ms` |
 | `Timeout` | `5000ms (5 seconds)` |
 | `Operation` | `IncrementBy(5)` |
 | `Result` | `Success (no timeout)` |
-| `Time Required` | `<1ms` |
 
 > [!NOTE]
 > Always use timeouts in production, even for fast operations. This prevents indefinite hangs if the GenServer crashes or enters an infinite loop.
@@ -191,13 +194,110 @@ assertThatThrownBy(() -> new CounterState(-1))
 
 | Key | Value |
 | --- | --- |
+| `Timing` | `Construction time` |
 | `Validation` | `Compact constructor` |
 | `Check` | `count >= 0` |
 | `Violation` | `IllegalArgumentException` |
-| `Timing` | `Construction time` |
 
 > [!NOTE]
 > State validation at construction prevents invalid states from ever existing. This is fail-fast design — bugs are caught immediately rather than propagating invalid state.
+
+## OTP GenServer Pattern: Stateful Processes
+
+JOTP's Proc<S,M> implements the OTP GenServer pattern — a stateful process that handles messages and updates state immutably. Each message creates a new state instead of mutating existing state.
+
+| Concept | State | Request/Response |
+| --- | --- | --- |
+| Erlang/OTP | Immutable record | call/2 |
+| JOTP (Java 26) | Immutable record | ask() |
+| Process | Messages | Cast (fire-forget) |
+| gen_server process | Pattern matching | cast/2 |
+| Proc<S,M> | Sealed + pattern matching | tell() |
+
+```java
+// Create a GenServer-style process
+Proc<CounterState, CounterMessage> counterService = new Proc<>(
+    new CounterState(0),  // Initial state
+    (state, msg) -> switch (msg) {  // Message handler
+        case CounterMessage.IncrementBy inc ->
+            new CounterState(state.count() + inc.delta());
+        case CounterMessage.GetCount ignored ->
+            state;
+    }
+);
+
+// Query state via ask()
+CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
+    .join();
+
+// Result: count = 0
+```
+
+| Key | Value |
+| --- | --- |
+| `State Change` | `None (query)` |
+| `Message` | `GetCount` |
+| `Result` | `CounterState(0)` |
+| `Initial State` | `CounterState(0)` |
+
+> [!NOTE]
+> Proc<S,M> uses sealed message types and pattern matching, ensuring exhaustive handling at compile time. The state is always immutable — transitions create new state records.
+
+## Sequential State Transitions
+
+GenServers process messages sequentially from their mailbox. This ensures consistent state — no race conditions from concurrent state updates.
+
+```java
+// Sequential message processing
+counterService.ask(new CounterMessage.IncrementBy(2), timeout).join();  // 0 → 2
+counterService.ask(new CounterMessage.IncrementBy(3), timeout).join();  // 2 → 5
+counterService.ask(new CounterMessage.IncrementBy(5), timeout).join();  // 5 → 10
+
+CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
+    .join();
+
+// Final state: count = 10 (2 + 3 + 5)
+```
+
+| Key | Value |
+| --- | --- |
+| `Processing` | `Sequential, ordered` |
+| `Final State` | `count = 10` |
+| `Message 3` | `IncrementBy(5) → state = 10` |
+| `Message 2` | `IncrementBy(3) → state = 5` |
+| `Message 1` | `IncrementBy(2) → state = 2` |
+
+> [!NOTE]
+> Sequential processing eliminates race conditions. Each message sees the state left by the previous message. This is the essence of the Actor model — message passing instead of shared mutable state.
+
+## Request-Response Messaging with ask()
+
+The ask() method implements OTP's call/2 pattern — send a request and wait for a response. It returns CompletableFuture<State>, enabling async/await patterns.
+
+```java
+// Send command and wait for new state
+counterService.ask(new CounterMessage.IncrementBy(5), timeout)
+    .thenAccept(newState -> {
+        // newState.count() == 5
+    });
+
+// Query current state
+CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
+    .join();
+
+// Result: count = 5
+```
+
+| Key | Value |
+| --- | --- |
+| `Query` | `GetCount` |
+| `Command` | `IncrementBy(5)` |
+| `Pattern` | `Command Query Responsibility Segregation (CQRS)` |
+| `Result` | `CounterState(5)` |
+| `State Change` | `0 → 5` |
+
+> [!NOTE]
+> ask() returns the new state after message processing. This enables CQRS-style operations where commands change state and queries read it. All state transitions are immutable.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

@@ -13,11 +13,11 @@ The service supports high-throughput scenarios with many concurrent threads.
 
 This performance enables use in high-volume distributed systems.
 
-Generated 100000 sequences in 1.99 seconds
+Generated 100000 sequences in 0.17 seconds
 
-Throughput: 50175 sequences/second
+Throughput: 589085 sequences/second
 
-Per-thread: 2509 sequences/second
+Per-thread: 29454 sequences/second
 
 Each thread observes locally monotonic sequence generation.
 
@@ -49,9 +49,9 @@ The counter handles same-millisecond generation efficiently.
 
 100K sequences in a burst should complete quickly without blocking.
 
-Burst: 100000 sequences in 0.978 seconds
+Burst: 100000 sequences in 0.055 seconds
 
-Burst throughput: 102210 sequences/second
+Burst throughput: 1804559 sequences/second
 
 Multiple threads can generate sequences concurrently without coordination.
 
