@@ -450,6 +450,22 @@ public final class DistributedActorBridge {
     }
 
     /**
+     * Look up a process name on the remote server.
+     *
+     * <p>This enables remote process resolution: if a client queries for a process by name,
+     * the server can look it up in its local registry and return the location (NodeId).
+     *
+     * <p>In a production system, this would be exposed via a gRPC service method.
+     *
+     * @param processName the process name to look up
+     * @return Optional containing the NodeId if found in local registry
+     */
+    public Optional<String> lookupProcess(String processName) {
+        return ProcRegistry.whereis(processName)
+                .map(_ -> host + ":" + port);
+    }
+
+    /**
      * Resolve an actor reference (local or remote) and return a handle.
      *
      * <p>Attempts to resolve a remote reference first; falls back to local registry if not found
