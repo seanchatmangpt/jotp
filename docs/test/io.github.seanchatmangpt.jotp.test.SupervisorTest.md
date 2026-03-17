@@ -93,9 +93,9 @@ graph TD
 
 | Key | Value |
 | --- | --- |
-| `c1 State After Crash` | `0 (restarted)` |
 | `c2 State After c1 Crash` | `142 (unaffected)` |
 | `Strategy` | `ONE_FOR_ONE` |
+| `c1 State After Crash` | `0 (restarted)` |
 
 ## Supervisor: Strategy Comparison
 
@@ -170,11 +170,11 @@ graph TD
 
 | Key | Value |
 | --- | --- |
-| `c1 Before Crash` | `7` |
 | `c2 Before Crash` | `109` |
 | `c2 After Cascade` | `100` |
 | `c1 After Cascade` | `0` |
 | `Strategy` | `ONE_FOR_ALL` |
+| `c1 Before Crash` | `7` |
 
 ## Supervisor: REST_FOR_ONE Strategy
 
@@ -225,10 +225,10 @@ graph TD
 
 | Key | Value |
 | --- | --- |
-| `last (after crash)` | `1000 (restarted)` |
 | `middle (crashed)` | `100 (restarted)` |
 | `Strategy` | `REST_FOR_ONE` |
 | `first (before crash)` | `5 (unaffected)` |
+| `last (after crash)` | `1000 (restarted)` |
 
 ## Supervisor: Crash and Restart Recovery
 

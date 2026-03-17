@@ -399,11 +399,30 @@ public final class DistributedSagaCoordinator<S, E, D> {
     // ── State Management ─────────────────────────────────────────────────────
 
     /**
-     * Returns the current saga state.
+     * Returns the current business state (unwrapped from the saga envelope).
      *
-     * @return current state
+     * <p>The business state is the {@code S} type the caller supplied — e.g. {@code
+     * OrderState.Init}. This is analogous to {@code gen_statem}'s {@code StateName} concept: the
+     * saga envelope ({@link SagaState}) is internal bookkeeping; callers work with the business
+     * state directly.
+     *
+     * @return current business state
      */
-    public SagaState<S> state() {
+    public S state() {
+        return switch (currentState) {
+            case SagaState.Executing<S>(var s, _, _) -> s;
+            case SagaState.Compensating<S>(var s, _, _) -> s;
+            case SagaState.Completed<S>(var s, _) -> s;
+            case SagaState.Failed<S> ignored -> null;
+        };
+    }
+
+    /**
+     * Returns the full saga envelope state (including step index and bookkeeping).
+     *
+     * @return current {@link SagaState} envelope
+     */
+    public SagaState<S> sagaState() {
         return currentState;
     }
 
