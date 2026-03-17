@@ -267,9 +267,14 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
 
         coordinator.tell(new SagaMsg.Start(sagaId, data, future));
 
-        // Set global timeout
+        // Set global timeout with proper compensation trigger
+        final UUID finalSagaId = sagaId;
         return future.orTimeout(globalTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                .exceptionally(e -> new SagaResult.Failure("global", e));
+                .exceptionally(e -> {
+                    // Trigger compensation by sending timeout message
+                    coordinator.tell(new SagaMsg.Timeout(finalSagaId));
+                    return new SagaResult.Failure("global", e);
+                });
     }
 
     /** Get the status of a saga. */
