@@ -79,6 +79,12 @@ public final class Proc<S, M> {
      */
     final TransferQueue<CompletableFuture<Object>> sysGetState = new LinkedTransferQueue<>();
 
+    /**
+     * Sys channel: {@link ProcSys#codeChange} offers a {@link SysRequest.CodeChange} here; the loop
+     * applies the transformer and completes the future with the new state.
+     */
+    final TransferQueue<SysRequest.CodeChange> sysCodeChange = new LinkedTransferQueue<>();
+
     private final Thread thread;
     private volatile boolean stopped = false;
 
@@ -155,10 +161,21 @@ public final class Proc<S, M> {
                                     boolean crashedAbnormally = false;
                                     outer:
                                     while (!stopped || !mailbox.isEmpty()) {
-                                        // 1. Drain sys get-state requests (higher priority)
+                                        // 1. Drain sys requests (higher priority than user msgs)
                                         CompletableFuture<Object> stateQ;
                                         while ((stateQ = sysGetState.poll()) != null) {
                                             stateQ.complete(state);
+                                        }
+                                        SysRequest.CodeChange codeChangeReq;
+                                        while ((codeChangeReq = sysCodeChange.poll()) != null) {
+                                            try {
+                                                @SuppressWarnings("unchecked")
+                                                S newState = (S) codeChangeReq.fn().apply(state);
+                                                state = newState;
+                                                codeChangeReq.reply().complete(state);
+                                            } catch (RuntimeException ex) {
+                                                codeChangeReq.reply().completeExceptionally(ex);
+                                            }
                                         }
 
                                         // 2. Suspend check — block until resumed
@@ -212,11 +229,19 @@ public final class Proc<S, M> {
                                         }
                                     }
 
-                                    // Complete any pending getState requests exceptionally
+                                    // Complete any pending sys requests exceptionally
                                     CompletableFuture<Object> pending;
                                     while ((pending = sysGetState.poll()) != null) {
                                         pending.completeExceptionally(
                                                 new IllegalStateException("process terminated"));
+                                    }
+                                    SysRequest.CodeChange pendingCc;
+                                    while ((pendingCc = sysCodeChange.poll()) != null) {
+                                        pendingCc
+                                                .reply()
+                                                .completeExceptionally(
+                                                        new IllegalStateException(
+                                                                "process terminated"));
                                     }
 
                                     // Also treat interrupted-with-lastError as abnormal
@@ -445,10 +470,18 @@ public final class Proc<S, M> {
     /** Callback invoked after each state transition — for persistence hooks. */
     private volatile Consumer<S> onStateChange = null;
 
-    /** Package-private: offer a sys request to the high-priority channel. */
-    <SR> void offerSysRequest(SR request) {
-        // This is a placeholder. SysRequest handling would be implemented here.
-        // For now, we skip this to avoid compilation errors from missing SysRequest type.
+    /**
+     * Package-private: offer a sys request to the appropriate high-priority channel.
+     *
+     * <p>Routes {@link SysRequest.GetState} to {@link #sysGetState} and {@link
+     * SysRequest.CodeChange} to {@link #sysCodeChange}. Both queues are drained by the main loop
+     * before each user message, matching OTP's system-message priority protocol.
+     */
+    void offerSysRequest(SysRequest request) {
+        switch (request) {
+            case SysRequest.GetState(var reply) -> sysGetState.offer(reply);
+            case SysRequest.CodeChange cc -> sysCodeChange.offer(cc);
+        }
     }
 
     /** Package-private: set the debug observer (null to disable tracing). */

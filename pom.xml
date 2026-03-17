@@ -188,13 +188,6 @@
                         <!-- Observability tests with API incompatibility issues -->
                         <exclude>io/github/seanchatmangpt/jotp/observability/FrameworkObservabilityTest.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/PatternsIntegrationTest.java</exclude>
-                        <!-- Tests with @DtrTest annotation issues or missing DTR imports - being migrated -->
-                        <!-- DTR Tests Converted - Ready for compilation -->
-                        <!-- Core OTP Tests -->
-                        <exclude>io/github/seanchatmangpt/jotp/test/ProcSysTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/test/ProcStressTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/test/ProcAskTimeoutTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/test/DistributedActorBridgeTest.java</exclude>
                         <!-- Enterprise Tests -->
                         <exclude>io/github/seanchatmangpt/jotp/enterprise/**</exclude>
                         <!-- Message Patterns -->
