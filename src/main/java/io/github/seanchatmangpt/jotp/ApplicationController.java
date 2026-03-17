@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -394,6 +395,135 @@ public final class ApplicationController {
                 }
             }
         }
+    }
+
+    // ── Stop All ───────────────────────────────────────────────────────────────
+
+    /**
+     * Stop all running applications in reverse dependency order with a default 30-second per-app
+     * timeout.
+     *
+     * <p>Applications that declare {@link ApplicationSpec#applications() dependencies} are stopped
+     * before the applications they depend on — the reverse of start order. Unrelated applications
+     * are stopped in an unspecified order. Each application's {@link ApplicationCallback#stop} is
+     * given up to {@code 30 seconds} before the shutdown continues to the next app.
+     *
+     * <p>This is the correct JVM shutdown sequence: call from a shutdown hook to drain gracefully.
+     *
+     * <pre>{@code
+     * Runtime.getRuntime().addShutdownHook(Thread.ofVirtual().unstarted(() -> {
+     *     ApplicationController.stopAll(); // reverse-dependency order, 30s per app
+     * }));
+     * }</pre>
+     *
+     * @throws InterruptedException if the calling thread is interrupted during shutdown
+     */
+    public static void stopAll() throws InterruptedException {
+        stopAll(Duration.ofSeconds(30));
+    }
+
+    /**
+     * Stop all running applications in reverse dependency order, allowing up to {@code perAppTimeout}
+     * for each application's {@link ApplicationCallback#stop} to complete.
+     *
+     * <p>Algorithm:
+     *
+     * <ol>
+     *   <li>Snapshot the currently running applications
+     *   <li>Build a dependency graph from each spec's {@link ApplicationSpec#applications()} list
+     *   <li>Topological sort (pre-order DFS) — dependants appear before their dependencies
+     *   <li>Stop each application in that order, with a per-app timeout
+     * </ol>
+     *
+     * <p>If an application's stop callback exceeds {@code perAppTimeout}, a warning is printed and
+     * shutdown continues with the next application. Stop failures do not abort the loop.
+     *
+     * @param perAppTimeout maximum time to wait for each application's stop callback
+     * @throws InterruptedException if the calling thread is interrupted during shutdown
+     */
+    public static void stopAll(Duration perAppTimeout) throws InterruptedException {
+        Map<String, RunningEntry> snapshot = new HashMap<>(running);
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        List<String> stopOrder = topologicalStopOrder(snapshot);
+        for (String name : stopOrder) {
+            if (!running.containsKey(name)) {
+                continue; // already stopped (cascade from a previous stop)
+            }
+            Thread stopThread =
+                    Thread.ofVirtual()
+                            .start(
+                                    () -> {
+                                        try {
+                                            stop(name);
+                                        } catch (Exception e) {
+                                            System.err.println(
+                                                    "[ApplicationController.stopAll] stop("
+                                                            + name
+                                                            + ") failed: "
+                                                            + e.getMessage());
+                                        }
+                                    });
+            if (!stopThread.join(perAppTimeout)) {
+                stopThread.interrupt();
+                System.err.println(
+                        "[ApplicationController.stopAll] stop("
+                                + name
+                                + ") timed out after "
+                                + perAppTimeout);
+            }
+        }
+    }
+
+    /**
+     * Topological sort of running apps using post-order DFS (reversed), returning dependants before
+     * their dependencies. The resulting order is the correct shutdown sequence regardless of map
+     * iteration order.
+     *
+     * <p>For a dependency chain A→B→C (A depends on B, B depends on C):
+     *
+     * <ol>
+     *   <li>Post-order DFS produces [C, B, A] (leaves first)
+     *   <li>Reversed gives [A, B, C] — correct stop order (A stopped before B, B before C)
+     * </ol>
+     *
+     * @param apps snapshot of currently running applications
+     * @return app names in shutdown order (dependants first)
+     */
+    private static List<String> topologicalStopOrder(Map<String, RunningEntry> apps) {
+        List<String> postOrder = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
+        for (String name : apps.keySet()) {
+            dfsStopVisit(name, apps, visited, postOrder);
+        }
+        // Reverse post-order = correct topological stop order (dependants before dependencies)
+        Collections.reverse(postOrder);
+        return postOrder;
+    }
+
+    /**
+     * Post-order DFS: visit all dependencies recursively, then add {@code name}. Produces leaves
+     * first, roots last — the reverse of the correct stop order.
+     */
+    private static void dfsStopVisit(
+            String name,
+            Map<String, RunningEntry> apps,
+            Set<String> visited,
+            List<String> result) {
+        if (visited.contains(name)) {
+            return;
+        }
+        visited.add(name);
+        RunningEntry entry = apps.get(name);
+        if (entry != null) {
+            for (String dep : entry.spec().applications()) {
+                if (apps.containsKey(dep)) {
+                    dfsStopVisit(dep, apps, visited, result);
+                }
+            }
+        }
+        result.add(name); // post-order: add self after all dependencies
     }
 
     // ── Queries ────────────────────────────────────────────────────────────────
