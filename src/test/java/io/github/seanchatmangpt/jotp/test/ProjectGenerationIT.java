@@ -13,7 +13,7 @@ import org.junit.jupiter.api.*;
  * <p>Validates that the Joe Armstrong AGI vision: "Write Turtle specification, press button, get
  * complete application"
  *
- * <p>TODO: These tests require jgen-render-project script with execute permissions.
+ * <p>These tests require jgen-render-project script with execute permissions.
  */
 @org.junit.jupiter.api.Disabled("Requires jgen-render-project script with execute permissions")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
