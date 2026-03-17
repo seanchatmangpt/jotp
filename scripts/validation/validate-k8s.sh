@@ -131,7 +131,7 @@ for k8s_file in "${K8S_FILES[@]}"; do
         # For multi-document YAML, check each document
         doc_count=$(yq eval 'length' "$k8s_file" 2>/dev/null || echo "1")
 
-        if [ "$doc_count" -gt 1 ]; then
+        if [ "$doc_count" -gt 1 ]; then 2>/dev/null
             # Multi-document YAML
             for ((i=0; i<doc_count; i++)); do
                 api_version=$(yq eval ".[$i].apiVersion" "$k8s_file" 2>/dev/null || echo "")

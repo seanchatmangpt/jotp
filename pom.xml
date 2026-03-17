@@ -131,6 +131,7 @@
             <version>3.24.0</version>
         </dependency>
         <!-- Jackson for JSON serialization -->
+        <!-- Jackson: JSON serialization for persistence layer -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -142,16 +143,11 @@
             <artifactId>rocksdbjni</artifactId>
             <version>9.0.0</version>
         </dependency>
-        <!-- Jackson: JSON serialization for persistence layer -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.16.0</version>
-        </dependency>
+        <!-- Removed duplicate jackson-databind entry -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>2.16.0</version>
+            <version>2.17.0</version>
         </dependency>
 
     </dependencies>
