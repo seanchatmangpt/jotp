@@ -11,13 +11,13 @@ CrashRecovery.retry(1, ...) performs exactly one attempt with no retries.
 
 This is useful for isolating a single operation in a virtual thread.
 
-CrashRecovery.retry() returns Ok immediately when the supplier succeeds on the first attempt.
-
-No retries are performed when the operation succeeds.
-
 When all retry attempts are exhausted, CrashRecovery returns Err containing the final exception.
 
 This enables railway-oriented error handling without catching exceptions at the call site.
+
+CrashRecovery.retry() returns Ok immediately when the supplier succeeds on the first attempt.
+
+No retries are performed when the operation succeeds.
 
 Result is Err after 3 failed attempts — the caller decides how to handle the failure.
 

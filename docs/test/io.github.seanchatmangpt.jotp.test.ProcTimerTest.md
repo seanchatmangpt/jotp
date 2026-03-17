@@ -3,11 +3,11 @@
 ## Table of Contents
 
 - [ProcTimer: Cancel One-Shot Timer](#proctimercanceloneshottimer)
+- [ProcTimer: Repeating Interval Timer](#proctimerrepeatingintervaltimer)
+- [ProcTimer: Cancel Interval Timer](#proctimercancelintervaltimer)
 - [ProcTimer: Cancel Return Value](#proctimercancelreturnvalue)
 - [ProcTimer: Multiple Concurrent Timers](#proctimermultipleconcurrenttimers)
 - [ProcTimer: One-Shot Delayed Message Delivery](#proctimeroneshotdelayedmessagedelivery)
-- [ProcTimer: Repeating Interval Timer](#proctimerrepeatingintervaltimer)
-- [ProcTimer: Cancel Interval Timer](#proctimercancelintervaltimer)
 
 
 ## ProcTimer: Cancel One-Shot Timer
@@ -44,139 +44,6 @@ stateDiagram-v2
 
 > [!NOTE]
 > cancel() is idempotent - calling it multiple times is safe. Returns true if timer was pending, false if already fired/cancelled.
-
-| Key | Value |
-| --- | --- |
-| `Wait Duration` | `350ms (past due)` |
-| `Timer Status` | `Cancelled` |
-| `Cancel Time` | `Immediately` |
-| `Messages Delivered` | `0` |
-| `Original Delay` | `200ms` |
-
-## ProcTimer: Cancel Return Value
-
-cancel() returns true if the timer was pending (cancelled before firing), false if already fired or previously cancelled.
-
-```java
-var proc = counter();
-
-// Very long delay - guaranteed pending
-var ref = ProcTimer.sendAfter(5000, proc, new Msg.Tick());
-
-// First cancel: timer was pending
-assertThat(ref.cancel()).isTrue();
-
-// Second cancel: already cancelled
-assertThat(ref.cancel()).isFalse();
-```
-
-| Cancel Timing | Return Value | Meaning |
-| --- | --- | --- |
-| Before fire | true | Timer was pending, now cancelled |
-| After fire | false | Timer already fired |
-| Already cancelled | false | No-op, already cancelled |
-
-> [!NOTE]
-> Return value helps distinguish successful cancellation from no-ops. Useful for debugging and conditional logic.
-
-| Key | Value |
-| --- | --- |
-| `Second cancel()` | `false (already cancelled)` |
-| `Timer Status` | `Cancelled` |
-| `First cancel()` | `true (was pending)` |
-
-## ProcTimer: Multiple Concurrent Timers
-
-Multiple timers targeting the same process fire independently. Each timer maintains its own schedule and delivery.
-
-```java
-var proc = counter();
-
-// Three independent timers
-ProcTimer.sendAfter(50, proc, new Msg.Tick());
-ProcTimer.sendAfter(80, proc, new Msg.Tick());
-ProcTimer.sendAfter(110, proc, new Msg.Tick());
-
-// All three fire independently
-await().atMost(Duration.ofSeconds(3))
-    .until(() -> proc.ask(new Msg.Ping()).join() == 3);
-```
-
-```mermaid
-gantt
-    title Timer Timeline
-    dateFormat X
-    axisFormat %Lms
-
-    section Timer 1
-    Fire  : 50, 50
-
-    section Timer 2
-    Fire  : 80, 80
-
-    section Timer 3
-    Fire  : 110, 110
-```
-
-> [!NOTE]
-> Timers don't interfere with each other. Each one-shot timer delivers exactly one message. This enables complex timed behavior patterns.
-
-| Key | Value |
-| --- | --- |
-| `All Fired` | `Yes` |
-| `Timers Created` | `3` |
-| `Independence` | `Confirmed` |
-| `Total Ticks` | `3` |
-
-## ProcTimer: One-Shot Delayed Message Delivery
-
-sendAfter() delivers a single message after a specified delay. The timer fires once, then auto-cancels.
-
-```java
-var proc = counter();
-
-// Send a Tick message after 100ms
-ProcTimer.sendAfter(100, proc, new Msg.Tick());
-
-// Before delay: state still 0
-Thread.sleep(20);
-assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(0);
-
-// After delay: state incremented to 1
-await().atMost(Duration.ofSeconds(3))
-    .until(() -> proc.ask(new Msg.Ping()).join() == 1);
-
-// Stays at 1 (one-shot, not repeating)
-Thread.sleep(200);
-assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(1);
-```
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant T as Timer
-    participant P as Proc
-
-    C->>T: sendAfter(100ms, Tick)
-    Note over T: Waiting...
-    T->>P: Tick (after 100ms)
-    P->>P: state = 1
-
-    Note over T: Timer auto-cancels
-
-    style T fill:#ffd43b
-```
-
-> [!NOTE]
-> sendAfter is the primitive for delayed operations. It's used for timeouts, retries, and any 'do X later' behavior.
-
-| Key | Value |
-| --- | --- |
-| `State After` | `1` |
-| `Timer Status` | `Auto-cancelled` |
-| `State Before` | `0` |
-| `Messages Delivered` | `1 (one-shot)` |
-| `Delay` | `100ms` |
 
 ## ProcTimer: Repeating Interval Timer
 
@@ -248,18 +115,151 @@ assertThat(countLater).isLessThanOrEqualTo(countAfterCancel + 1);
 
 | Key | Value |
 | --- | --- |
-| `Messages Delivered` | `3+ (repeating)` |
+| `Messages Delivered` | `0` |
+| `Original Delay` | `200ms` |
+| `Wait Duration` | `350ms (past due)` |
 | `Timer Status` | `Cancelled` |
-| `Interval` | `50ms` |
-| `Behavior` | `Periodic until cancelled` |
+| `Cancel Time` | `Immediately` |
+
+## ProcTimer: Cancel Return Value
+
+cancel() returns true if the timer was pending (cancelled before firing), false if already fired or previously cancelled.
+
+```java
+var proc = counter();
+
+// Very long delay - guaranteed pending
+var ref = ProcTimer.sendAfter(5000, proc, new Msg.Tick());
+
+// First cancel: timer was pending
+assertThat(ref.cancel()).isTrue();
+
+// Second cancel: already cancelled
+assertThat(ref.cancel()).isFalse();
+```
+
+| Cancel Timing | Return Value | Meaning |
+| --- | --- | --- |
+| Before fire | true | Timer was pending, now cancelled |
+| After fire | false | Timer already fired |
+| Already cancelled | false | No-op, already cancelled |
+
+> [!NOTE]
+> Return value helps distinguish successful cancellation from no-ops. Useful for debugging and conditional logic.
 
 | Key | Value |
 | --- | --- |
+| `Timer Status` | `Cancelled` |
+| `First cancel()` | `true (was pending)` |
+| `Second cancel()` | `false (already cancelled)` |
+
+## ProcTimer: Multiple Concurrent Timers
+
+Multiple timers targeting the same process fire independently. Each timer maintains its own schedule and delivery.
+
+```java
+var proc = counter();
+
+// Three independent timers
+ProcTimer.sendAfter(50, proc, new Msg.Tick());
+ProcTimer.sendAfter(80, proc, new Msg.Tick());
+ProcTimer.sendAfter(110, proc, new Msg.Tick());
+
+// All three fire independently
+await().atMost(Duration.ofSeconds(3))
+    .until(() -> proc.ask(new Msg.Ping()).join() == 3);
+```
+
+```mermaid
+gantt
+    title Timer Timeline
+    dateFormat X
+    axisFormat %Lms
+
+    section Timer 1
+    Fire  : 50, 50
+
+    section Timer 2
+    Fire  : 80, 80
+
+    section Timer 3
+    Fire  : 110, 110
+```
+
+> [!NOTE]
+> Timers don't interfere with each other. Each one-shot timer delivers exactly one message. This enables complex timed behavior patterns.
+
+| Key | Value |
+| --- | --- |
+| `Timer Status` | `Cancelled` |
+| `Interval` | `50ms` |
+| `Behavior` | `Periodic until cancelled` |
+| `Messages Delivered` | `3+ (repeating)` |
+
+## ProcTimer: One-Shot Delayed Message Delivery
+
+sendAfter() delivers a single message after a specified delay. The timer fires once, then auto-cancels.
+
+```java
+var proc = counter();
+
+// Send a Tick message after 100ms
+ProcTimer.sendAfter(100, proc, new Msg.Tick());
+
+// Before delay: state still 0
+Thread.sleep(20);
+assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(0);
+
+// After delay: state incremented to 1
+await().atMost(Duration.ofSeconds(3))
+    .until(() -> proc.ask(new Msg.Ping()).join() == 1);
+
+// Stays at 1 (one-shot, not repeating)
+Thread.sleep(200);
+assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(1);
+```
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant T as Timer
+    participant P as Proc
+
+    C->>T: sendAfter(100ms, Tick)
+    Note over T: Waiting...
+    T->>P: Tick (after 100ms)
+    P->>P: state = 1
+
+    Note over T: Timer auto-cancels
+
+    style T fill:#ffd43b
+```
+
+> [!NOTE]
+> sendAfter is the primitive for delayed operations. It's used for timeouts, retries, and any 'do X later' behavior.
+
+| Key | Value |
+| --- | --- |
+| `Timers Created` | `3` |
+| `Independence` | `Confirmed` |
+| `Total Ticks` | `3` |
+| `All Fired` | `Yes` |
+
+| Key | Value |
+| --- | --- |
+| `Growth` | `≤ 1 (in-flight allowance)` |
+| `Count at Cancel` | `4` |
+| `Count After 200ms` | `4` |
 | `Interval` | `50ms` |
 | `Timer Status` | `Stopped` |
-| `Growth` | `≤ 1 (in-flight allowance)` |
-| `Count at Cancel` | `2` |
-| `Count After 200ms` | `2` |
+
+| Key | Value |
+| --- | --- |
+| `Messages Delivered` | `1 (one-shot)` |
+| `Delay` | `100ms` |
+| `State After` | `1` |
+| `Timer Status` | `Auto-cancelled` |
+| `State Before` | `0` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

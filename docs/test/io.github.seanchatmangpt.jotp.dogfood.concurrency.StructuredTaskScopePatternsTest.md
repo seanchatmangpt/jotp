@@ -3,10 +3,10 @@
 ## Table of Contents
 
 - [Scalable Structured Concurrency: runAll Pattern](#scalablestructuredconcurrencyrunallpattern)
-- [Symmetric Error Handling](#symmetricerrorhandling)
-- [Error Propagation in Structured Concurrency](#errorpropagationinstructuredconcurrency)
-- [Structured Concurrency: runBoth Pattern](#structuredconcurrencyrunbothpattern)
 - [Competitive Concurrency: raceForFirst Pattern](#competitiveconcurrencyraceforfirstpattern)
+- [Structured Concurrency: runBoth Pattern](#structuredconcurrencyrunbothpattern)
+- [Error Propagation in Structured Concurrency](#errorpropagationinstructuredconcurrency)
+- [Symmetric Error Handling](#symmetricerrorhandling)
 
 
 ## Scalable Structured Concurrency: runAll Pattern
@@ -27,31 +27,83 @@ assertThat(result.second()).isEqualTo("b");
 assertThat(result.third()).isEqualTo("c");
 ```
 
-## Symmetric Error Handling
+| Key | Value |
+| --- | --- |
+| `Task 1 Result` | `a` |
+| `Pattern` | `Extensible to N tasks` |
+| `Completion` | `All 3 tasks succeeded` |
+| `Task 2 Result` | `b` |
+| `Task 3 Result` | `c` |
 
-Error handling is symmetric — it doesn't matter which task fails. StructuredTaskScope ensures all tasks are cancelled when any failure occurs.
+> [!NOTE]
+> In production, you'd use generic StructuredTaskScope to run any number of tasks. The runAll pattern here shows a typed triple for convenience. Consider using StructuredTaskScope.join() with a list of Subtasks for N-ary concurrency.
+
+## Competitive Concurrency: raceForFirst Pattern
+
+Sometimes you want the first successful result from multiple competing strategies. The raceForFirst pattern uses ShutdownOnSuccess to return as soon as any task completes, cancelling the rest.
+
+| Scope Policy | Completion | Error Handling | Use Case | Cancellation |
+| --- | --- | --- | --- | --- |
+| ShutdownOnSuccess | Returns first success, cancels rest | Only fails if ALL tasks fail | Redundant services, race conditions | Automatic after first success |
 
 ```java
-// Second task fails, first task result is discarded
-assertThatThrownBy(() ->
-    StructuredTaskScopePatterns.runBoth(
-        () -> "hello",  // This result is lost
-        () -> {
-            throw new RuntimeException("task 2 failed");
-        }
-    )
-).isInstanceOf(Exception.class);
+// Race between slow and fast tasks
+List<Callable<String>> tasks = List.of(
+    () -> {
+        Thread.sleep(100);
+        return "slow";
+    },
+    () -> "fast"  // Wins the race
+);
+
+var result = StructuredTaskScopePatterns.raceForFirst(tasks);
+
+// First task to complete wins
+assertThat(result).isIn("fast", "slow");
 ```
 
 | Key | Value |
 | --- | --- |
-| `Second Task` | `Failed` |
-| `Overall Result` | `Exception propagated` |
-| `First Task` | `Completed (result discarded)` |
-| `Cleanup` | `All tasks cancelled` |
+| `Winning Task` | `slow` |
+| `Race Condition` | `Non-deterministic` |
+| `Losing Task` | `Cancelled` |
+| `Pattern` | `First-success wins` |
 
 > [!NOTE]
-> This 'fail-fast' behavior is crucial for resource management. When a database query fails, there's no point continuing to fetch related data — cancel everything and report the error.
+> This pattern is ideal for redundant services (multiple APIs, database replicas) where you want the fastest response. StructuredTaskScope ensures the slower tasks are cancelled to free resources.
+
+## Structured Concurrency: runBoth Pattern
+
+StructuredTaskScope ensures that concurrent tasks complete as a unit. The runBoth pattern waits for two tasks to complete successfully and returns their results as a pair. If either task fails, the entire scope fails.
+
+| Pattern | Purpose | Error Handling | Use Case |
+| --- | --- | --- | --- |
+| runBoth | Run two tasks concurrently, wait for both | Fails if either task throws | Parallel independent operations |
+
+```java
+// Old approach: manual join with potential orphaned threads
+// Future<String> f1 = executor.submit(() -> task1());
+// Future<Integer> f2 = executor.submit(() -> task2());
+// String r1 = f1.get();  // may hang if f2 fails
+// Integer r2 = f2.get();
+
+// New approach: structured concurrency with automatic cleanup
+var result = StructuredTaskScopePatterns.runBoth(() -> "hello", () -> 42);
+
+// Both tasks completed successfully
+assertThat(result.first()).isEqualTo("hello");
+assertThat(result.second()).isEqualTo(42);
+```
+
+| Key | Value |
+| --- | --- |
+| `Completion` | `Both tasks succeeded` |
+| `Second Task Result` | `42` |
+| `Resource Cleanup` | `Automatic` |
+| `First Task Result` | `hello` |
+
+> [!NOTE]
+> StructuredTaskScope ensures that if the first task fails, the second is automatically cancelled. No more orphaned threads wasting resources.
 
 ## Error Propagation in Structured Concurrency
 
@@ -81,83 +133,31 @@ try {
 > [!NOTE]
 > StructuredTaskScope.join() throws if any task failed. The exception contains all aggregated failures, making debugging easier than manual Future.get() error handling.
 
-## Structured Concurrency: runBoth Pattern
+## Symmetric Error Handling
 
-StructuredTaskScope ensures that concurrent tasks complete as a unit. The runBoth pattern waits for two tasks to complete successfully and returns their results as a pair. If either task fails, the entire scope fails.
-
-| Pattern | Purpose | Error Handling | Use Case |
-| --- | --- | --- | --- |
-| runBoth | Run two tasks concurrently, wait for both | Fails if either task throws | Parallel independent operations |
+Error handling is symmetric — it doesn't matter which task fails. StructuredTaskScope ensures all tasks are cancelled when any failure occurs.
 
 ```java
-// Old approach: manual join with potential orphaned threads
-// Future<String> f1 = executor.submit(() -> task1());
-// Future<Integer> f2 = executor.submit(() -> task2());
-// String r1 = f1.get();  // may hang if f2 fails
-// Integer r2 = f2.get();
-
-// New approach: structured concurrency with automatic cleanup
-var result = StructuredTaskScopePatterns.runBoth(() -> "hello", () -> 42);
-
-// Both tasks completed successfully
-assertThat(result.first()).isEqualTo("hello");
-assertThat(result.second()).isEqualTo(42);
-```
-
-## Competitive Concurrency: raceForFirst Pattern
-
-Sometimes you want the first successful result from multiple competing strategies. The raceForFirst pattern uses ShutdownOnSuccess to return as soon as any task completes, cancelling the rest.
-
-| Scope Policy | Completion | Error Handling | Use Case | Cancellation |
-| --- | --- | --- | --- | --- |
-| ShutdownOnSuccess | Returns first success, cancels rest | Only fails if ALL tasks fail | Redundant services, race conditions | Automatic after first success |
-
-```java
-// Race between slow and fast tasks
-List<Callable<String>> tasks = List.of(
-    () -> {
-        Thread.sleep(100);
-        return "slow";
-    },
-    () -> "fast"  // Wins the race
-);
-
-var result = StructuredTaskScopePatterns.raceForFirst(tasks);
-
-// First task to complete wins
-assertThat(result).isIn("fast", "slow");
+// Second task fails, first task result is discarded
+assertThatThrownBy(() ->
+    StructuredTaskScopePatterns.runBoth(
+        () -> "hello",  // This result is lost
+        () -> {
+            throw new RuntimeException("task 2 failed");
+        }
+    )
+).isInstanceOf(Exception.class);
 ```
 
 | Key | Value |
 | --- | --- |
-| `First Task Result` | `hello` |
-| `Completion` | `Both tasks succeeded` |
-| `Second Task Result` | `42` |
-| `Resource Cleanup` | `Automatic` |
+| `First Task` | `Completed (result discarded)` |
+| `Cleanup` | `All tasks cancelled` |
+| `Second Task` | `Failed` |
+| `Overall Result` | `Exception propagated` |
 
 > [!NOTE]
-> StructuredTaskScope ensures that if the first task fails, the second is automatically cancelled. No more orphaned threads wasting resources.
-
-| Key | Value |
-| --- | --- |
-| `Task 3 Result` | `c` |
-| `Task 1 Result` | `a` |
-| `Pattern` | `Extensible to N tasks` |
-| `Completion` | `All 3 tasks succeeded` |
-| `Task 2 Result` | `b` |
-
-> [!NOTE]
-> In production, you'd use generic StructuredTaskScope to run any number of tasks. The runAll pattern here shows a typed triple for convenience. Consider using StructuredTaskScope.join() with a list of Subtasks for N-ary concurrency.
-
-| Key | Value |
-| --- | --- |
-| `Pattern` | `First-success wins` |
-| `Winning Task` | `slow` |
-| `Race Condition` | `Non-deterministic` |
-| `Losing Task` | `Cancelled` |
-
-> [!NOTE]
-> This pattern is ideal for redundant services (multiple APIs, database replicas) where you want the fastest response. StructuredTaskScope ensures the slower tasks are cancelled to free resources.
+> This 'fail-fast' behavior is crucial for resource management. When a database query fails, there's no point continuing to fetch related data — cancel everything and report the error.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

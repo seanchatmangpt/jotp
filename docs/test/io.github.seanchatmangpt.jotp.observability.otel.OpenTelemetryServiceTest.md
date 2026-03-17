@@ -2,55 +2,51 @@
 
 ## Table of Contents
 
-- [Performance Profiling: Export Tuning](#performanceprofilingexporttuning)
-- [Metrics Export Formats: OTLP Configuration](#metricsexportformatsotlpconfiguration)
 - [OpenTelemetry Integration: Zero-Setup Observability](#opentelemetryintegrationzerosetupobservability)
+- [Metrics Export Formats: OTLP Configuration](#metricsexportformatsotlpconfiguration)
+- [Performance Profiling: Export Tuning](#performanceprofilingexporttuning)
 
 
-## Performance Profiling: Export Tuning
+## OpenTelemetry Integration: Zero-Setup Observability
 
-Export tuning is critical for performance profiling in production systems:
+OpenTelemetryService provides a zero-setup integration point for distributed tracing
+and metrics export. The factory method creates a fully configured OpenTelemetry SDK
+with sensible defaults for development and production use.
 
-- exportInterval: How often to batch and send telemetry (default: 60s)
-- exportTimeout: Maximum time to wait for export ACK (default: 30s)
-- Feature flags: Selectively enable/disable telemetry types
-
-High-throughput systems may need shorter intervals (10-30s) to avoid memory buildup
-from buffered spans/metrics. Low-traffic systems can use longer intervals (60-120s)
-to reduce export overhead.
+Current implementation is a placeholder — actual SDK integration pending.
+The architecture supports OTLP export to collectors like Grafana, Jaeger, and OTEL
+backends.
 
 
 ```java
-// High-throughput configuration: frequent exports, tracing only
-OtelConfiguration config = OtelConfiguration.builder()
-    .serviceName("builder-test")
-    .otlpEndpoint("http://collector:4317")
-    .exportInterval(Duration.ofSeconds(30))
-    .exportTimeout(Duration.ofSeconds(60))
-    .enableMetrics(false)
-    .enableTracing(true)
-    .enableLogging(false)
-    .build();
+// Zero-configuration factory method
+OpenTelemetryService service = OpenTelemetryService.create();
+
+// Auto-configured with defaults:
+// - Service name: "jotp-service"
+// - OTLP endpoint: "http://localhost:4318"
+// - Metrics: enabled
+// - Tracing: enabled
+// - Logging: disabled
 ```
 
-| Workload Type | exportInterval | enableMetrics | enableTracing |
-| --- | --- | --- | --- |
-| High-throughput | 10-30s | false | true |
-| Low-traffic | 60-120s | true | true |
-| Metrics-only | 60s | true | false |
-| Tracing-only | 30s | false | true |
+| Component | Purpose | Status |
+| --- | --- | --- |
+| SDK | OpenTelemetry SDK instance | Placeholder |
+| Resource | Service identity metadata | Configured |
+| MeterProvider | Metrics collection API | Placeholder |
+| TracerProvider | Distributed tracing API | Placeholder |
 
 | Key | Value |
 | --- | --- |
-| `Use Case` | `High-throughput tracing` |
-| `Export Interval` | `30s` |
-| `Logging Enabled` | `false` |
-| `Export Timeout` | `60s` |
-| `Tracing Enabled` | `true` |
-| `Metrics Enabled` | `false` |
+| `MeterProvider` | `MeterProvider(enabled=true)` |
+| `TracerProvider` | `TracerProvider(enabled=true)` |
+| `Service Name` | `otel-jotp-service` |
+| `SDK Type` | `OpenTelemetrySdk` |
+| `Resource` | `Resource(serviceName=jotp-service)` |
 
 > [!NOTE]
-> gRPC endpoint (4317) is preferred over HTTP (4318) for high-volume scenarios due to better throughput and lower latency. Use HTTP for compatibility with older collectors.
+> The placeholder pattern allows testing lifecycle and configuration without requiring the full OpenTelemetry SDK dependency. Integration is additive — no breaking changes when SDK is added.
 
 ## Metrics Export Formats: OTLP Configuration
 
@@ -95,46 +91,50 @@ OpenTelemetryService service = OpenTelemetryService.create(config);
 > [!NOTE]
 > Disable tracing (enableTracing=false) in high-throughput scenarios where span collection overhead is unacceptable. Metrics-only mode still provides visibility without performance impact.
 
-## OpenTelemetry Integration: Zero-Setup Observability
+## Performance Profiling: Export Tuning
 
-OpenTelemetryService provides a zero-setup integration point for distributed tracing
-and metrics export. The factory method creates a fully configured OpenTelemetry SDK
-with sensible defaults for development and production use.
+Export tuning is critical for performance profiling in production systems:
 
-Current implementation is a placeholder — actual SDK integration pending.
-The architecture supports OTLP export to collectors like Grafana, Jaeger, and OTEL
-backends.
+- exportInterval: How often to batch and send telemetry (default: 60s)
+- exportTimeout: Maximum time to wait for export ACK (default: 30s)
+- Feature flags: Selectively enable/disable telemetry types
+
+High-throughput systems may need shorter intervals (10-30s) to avoid memory buildup
+from buffered spans/metrics. Low-traffic systems can use longer intervals (60-120s)
+to reduce export overhead.
 
 
 ```java
-// Zero-configuration factory method
-OpenTelemetryService service = OpenTelemetryService.create();
-
-// Auto-configured with defaults:
-// - Service name: "jotp-service"
-// - OTLP endpoint: "http://localhost:4318"
-// - Metrics: enabled
-// - Tracing: enabled
-// - Logging: disabled
+// High-throughput configuration: frequent exports, tracing only
+OtelConfiguration config = OtelConfiguration.builder()
+    .serviceName("builder-test")
+    .otlpEndpoint("http://collector:4317")
+    .exportInterval(Duration.ofSeconds(30))
+    .exportTimeout(Duration.ofSeconds(60))
+    .enableMetrics(false)
+    .enableTracing(true)
+    .enableLogging(false)
+    .build();
 ```
 
-| Component | Purpose | Status |
-| --- | --- | --- |
-| SDK | OpenTelemetry SDK instance | Placeholder |
-| Resource | Service identity metadata | Configured |
-| MeterProvider | Metrics collection API | Placeholder |
-| TracerProvider | Distributed tracing API | Placeholder |
+| Workload Type | exportInterval | enableMetrics | enableTracing |
+| --- | --- | --- | --- |
+| High-throughput | 10-30s | false | true |
+| Low-traffic | 60-120s | true | true |
+| Metrics-only | 60s | true | false |
+| Tracing-only | 30s | false | true |
 
 | Key | Value |
 | --- | --- |
-| `Resource` | `Resource(serviceName=jotp-service)` |
-| `MeterProvider` | `MeterProvider(enabled=true)` |
-| `TracerProvider` | `TracerProvider(enabled=true)` |
-| `Service Name` | `otel-jotp-service` |
-| `SDK Type` | `OpenTelemetrySdk` |
+| `Export Interval` | `30s` |
+| `Logging Enabled` | `false` |
+| `Export Timeout` | `60s` |
+| `Tracing Enabled` | `true` |
+| `Metrics Enabled` | `false` |
+| `Use Case` | `High-throughput tracing` |
 
 > [!NOTE]
-> The placeholder pattern allows testing lifecycle and configuration without requiring the full OpenTelemetry SDK dependency. Integration is additive — no breaking changes when SDK is added.
+> gRPC endpoint (4317) is preferred over HTTP (4318) for high-volume scenarios due to better throughput and lower latency. Use HTTP for compatibility with older collectors.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

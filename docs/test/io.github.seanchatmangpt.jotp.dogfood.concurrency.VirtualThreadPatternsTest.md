@@ -4,11 +4,11 @@
 
 - [Structured Concurrency Patterns](#structuredconcurrencypatterns)
 - [Handling Timeout and Interruption](#handlingtimeoutandinterruption)
-- [Blocking Without Scaling Limits](#blockingwithoutscalinglimits)
 - [Migration from Thread Pools](#migrationfromthreadpools)
-- [Java 26: Virtual Threads vs Platform Threads](#java26virtualthreadsvsplatformthreads)
+- [Blocking Without Scaling Limits](#blockingwithoutscalinglimits)
 - [Timeout and Cancellation in Virtual Threads](#timeoutandcancellationinvirtualthreads)
 - [Creating Millions of Lightweight Processes](#creatingmillionsoflightweightprocesses)
+- [Java 26: Virtual Threads vs Platform Threads](#java26virtualthreadsvsplatformthreads)
 
 
 ## Structured Concurrency Patterns
@@ -27,10 +27,10 @@ assertThat(results).hasSize(5);
 
 | Key | Value |
 | --- | --- |
-| `Thread Type` | `Virtual (per-item)` |
-| `Results Collected` | `5` |
 | `Processing Pattern` | `Concurrent, unordered` |
 | `Input Items` | `5` |
+| `Thread Type` | `Virtual (per-item)` |
+| `Results Collected` | `5` |
 
 > [!NOTE]
 > While this example uses CountDownLatch for compatibility, production code should prefer StructuredTaskScope (JEP 453) for proper structured concurrency with automatic error propagation and timeout handling.
@@ -53,40 +53,6 @@ boolean completed = VirtualThreadPatterns.runWithTimeout(
 );
 
 assertThat(completed).isFalse();
-```
-
-| Key | Value |
-| --- | --- |
-| `Task Completed` | `Exceeded timeout` |
-| `Task Response` | `Caught InterruptedException` |
-| `Result` | `false` |
-| `Thread Interrupted` | `Yes (after timeout)` |
-
-> [!NOTE]
-> Always handle InterruptedException properly: either propagate it or restore the interrupt flag with Thread.currentThread().interrupt(). This ensures callers know the thread was interrupted.
-
-## Blocking Without Scaling Limits
-
-With platform threads, blocking I/O wastes thread resources. A thread pool of 200 threads can only handle 200 concurrent blocking operations. Virtual threads change the equation: blocking just parks the virtual thread, releasing the carrier thread.
-
-```java
-// Create multiple virtual threads with automatic naming
-var counter = new AtomicInteger();
-List<Runnable> tasks = List.of(
-    counter::incrementAndGet,
-    counter::incrementAndGet,
-    counter::incrementAndGet  // Add more tasks as needed
-);
-
-var threads = VirtualThreadPatterns.startAll("worker-", tasks);
-
-// All threads run concurrently; join to wait for completion
-for (var thread : threads) {
-    thread.join(Duration.ofSeconds(2));
-}
-
-// All tasks executed
-assertThat(counter.get()).isEqualTo(tasks.size());
 ```
 
 ## Migration from Thread Pools
@@ -122,40 +88,44 @@ assertThat(counter.get()).isEqualTo(requests.size());
 
 | Key | Value |
 | --- | --- |
-| `Threads Created` | `2` |
-| `Naming Pattern` | `worker-0, worker-1, ...` |
-| `Counter Value` | `2` |
-| `All Virtual` | `true` |
+| `Task Response` | `Caught InterruptedException` |
+| `Result` | `false` |
+| `Thread Interrupted` | `Yes (after timeout)` |
+| `Task Completed` | `Exceeded timeout` |
 
 > [!NOTE]
-> The naming prefix ('worker-') plus counter creates thread names like 'worker-0', 'worker-1', etc. This is critical for debugging and observability in production.
+> Always handle InterruptedException properly: either propagate it or restore the interrupt flag with Thread.currentThread().interrupt(). This ensures callers know the thread was interrupted.
 
-## Java 26: Virtual Threads vs Platform Threads
+## Blocking Without Scaling Limits
 
-Project Loom introduces virtual threads as lightweight, user-mode threads scheduled on carrier threads (platform threads). Unlike platform threads, virtual threads are cheap enough to create millions of them.
-
-| Characteristic | Max Count | Blocking I/O |
-| --- | --- | --- |
-| Platform Threads | ~Thousands (OS-limited) | Wastes thread resources |
-| Virtual Threads | ~Millions (JVM-managed) | Parks thread, releases carrier |
-| Cost | Creation | Use Case |
-| ~2 MB stack per thread | Thread() or Executors | CPU-intensive work |
-| ~1 KB heap per thread | Thread.ofVirtual() | I/O-bound, blocking operations |
+With platform threads, blocking I/O wastes thread resources. A thread pool of 200 threads can only handle 200 concurrent blocking operations. Virtual threads change the equation: blocking just parks the virtual thread, releasing the carrier thread.
 
 ```java
+// Create multiple virtual threads with automatic naming
 var counter = new AtomicInteger();
-var thread = VirtualThreadPatterns.startNamed("test-thread", counter::incrementAndGet);
+List<Runnable> tasks = List.of(
+    counter::incrementAndGet,
+    counter::incrementAndGet,
+    counter::incrementAndGet  // Add more tasks as needed
+);
 
-thread.join(Duration.ofSeconds(2));
-assertThat(thread.isVirtual()).isTrue();
+var threads = VirtualThreadPatterns.startAll("worker-", tasks);
+
+// All threads run concurrently; join to wait for completion
+for (var thread : threads) {
+    thread.join(Duration.ofSeconds(2));
+}
+
+// All tasks executed
+assertThat(counter.get()).isEqualTo(tasks.size());
 ```
 
 | Key | Value |
 | --- | --- |
-| `Thread Strategy` | `One virtual thread per request` |
 | `Handler Invocations` | `3` |
 | `Pool Required` | `No` |
 | `Requests Processed` | `3` |
+| `Thread Strategy` | `One virtual thread per request` |
 
 > [!NOTE]
 > Virtual threads make thread pools obsolete for I/O-bound work. Keep thread pools only for CPU-intensive tasks where parallelism is limited by CPU cores, not I/O.
@@ -175,6 +145,16 @@ boolean completed = VirtualThreadPatterns.runWithTimeout(
 
 assertThat(completed).isTrue();
 ```
+
+| Key | Value |
+| --- | --- |
+| `Result` | `true` |
+| `Thread Interrupted` | `No` |
+| `Timeout Pattern` | `join() + interrupt()` |
+| `Task Completed` | `Within timeout` |
+
+> [!NOTE]
+> For more sophisticated timeout handling, use StructuredTaskScope with ShutdownOnSuccess or ShutdownOnFailure policies. These provide better error aggregation and cancellation propagation.
 
 ## Creating Millions of Lightweight Processes
 
@@ -199,31 +179,51 @@ thread.join(Duration.ofSeconds(2));
 
 | Key | Value |
 | --- | --- |
-| `Thread Lifecycle` | `Terminates after task completes` |
 | `Execution Pattern` | `Fire-and-Forget` |
 | `Counter Value` | `1` |
+| `Thread Lifecycle` | `Terminates after task completes` |
 
 > [!NOTE]
 > Fire-and-forget virtual threads are ideal for logging, metrics, and async tasks where you don't need the result. However, for structured concurrency, prefer StructuredTaskScope to ensure proper cleanup and error handling.
 
+## Java 26: Virtual Threads vs Platform Threads
+
+Project Loom introduces virtual threads as lightweight, user-mode threads scheduled on carrier threads (platform threads). Unlike platform threads, virtual threads are cheap enough to create millions of them.
+
+| Characteristic | Max Count | Blocking I/O |
+| --- | --- | --- |
+| Platform Threads | ~Thousands (OS-limited) | Wastes thread resources |
+| Virtual Threads | ~Millions (JVM-managed) | Parks thread, releases carrier |
+| Cost | Creation | Use Case |
+| ~2 MB stack per thread | Thread() or Executors | CPU-intensive work |
+| ~1 KB heap per thread | Thread.ofVirtual() | I/O-bound, blocking operations |
+
+```java
+var counter = new AtomicInteger();
+var thread = VirtualThreadPatterns.startNamed("test-thread", counter::incrementAndGet);
+
+thread.join(Duration.ofSeconds(2));
+assertThat(thread.isVirtual()).isTrue();
+```
+
 | Key | Value |
 | --- | --- |
-| `Timeout Pattern` | `join() + interrupt()` |
-| `Task Completed` | `Within timeout` |
-| `Result` | `true` |
-| `Thread Interrupted` | `No` |
-
-> [!NOTE]
-> For more sophisticated timeout handling, use StructuredTaskScope with ShutdownOnSuccess or ShutdownOnFailure policies. These provide better error aggregation and cancellation propagation.
-
-| Key | Value |
-| --- | --- |
-| `Thread Name` | `test-thread` |
 | `Thread Type` | `Virtual Thread` |
 | `Counter Value` | `1` |
+| `Thread Name` | `test-thread` |
 
 > [!NOTE]
 > Use platform threads for CPU-intensive work, virtual threads for I/O-bound work. The naming pattern ('test-thread') helps with debugging and observability.
+
+| Key | Value |
+| --- | --- |
+| `Counter Value` | `2` |
+| `All Virtual` | `true` |
+| `Threads Created` | `2` |
+| `Naming Pattern` | `worker-0, worker-1, ...` |
+
+> [!NOTE]
+> The naming prefix ('worker-') plus counter creates thread names like 'worker-0', 'worker-1', etc. This is critical for debugging and observability in production.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

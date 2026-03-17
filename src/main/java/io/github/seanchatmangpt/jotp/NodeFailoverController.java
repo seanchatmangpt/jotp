@@ -92,6 +92,9 @@ public final class NodeFailoverController {
     /** Registered listeners, notified on each {@link FailoverEvent}. */
     private final List<Consumer<FailoverEvent>> listeners = new CopyOnWriteArrayList<>();
 
+    /** Active failover threads, tracked so {@link #stop()} can join them. */
+    private final List<Thread> activeThreads = new CopyOnWriteArrayList<>();
+
     private NodeFailoverController() {}
 
     // ── Factory ───────────────────────────────────────────────────────────────────
@@ -140,19 +143,26 @@ public final class NodeFailoverController {
         if (affected.isEmpty()) {
             return;
         }
-        Thread.ofVirtual()
-                .start(
-                        () -> {
-                            for (NodeProcSpec spec : affected) {
-                                try {
-                                    failover(spec, nodeName);
-                                } catch (Exception e) {
-                                    // Isolate per-proc failures so remaining procs are still
-                                    // processed.
-                                    statuses.put(spec.procName(), NodeProcStatus.FAILED);
-                                }
-                            }
-                        });
+        Thread failoverThread =
+                Thread.ofVirtual()
+                        .start(
+                                () -> {
+                                    try {
+                                        for (NodeProcSpec spec : affected) {
+                                            try {
+                                                failover(spec, nodeName);
+                                            } catch (Exception e) {
+                                                // Isolate per-proc failures so remaining procs are
+                                                // still processed.
+                                                statuses.put(
+                                                        spec.procName(), NodeProcStatus.FAILED);
+                                            }
+                                        }
+                                    } finally {
+                                        activeThreads.remove(Thread.currentThread());
+                                    }
+                                });
+        activeThreads.add(failoverThread);
     }
 
     /**
@@ -213,14 +223,23 @@ public final class NodeFailoverController {
     // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
     /**
-     * Stop the controller, releasing any resources.
+     * Stop the controller, waiting for any in-progress failover threads to complete.
      *
-     * <p>In this implementation there are no persistent background threads — failover work runs on
-     * per-operation virtual threads that terminate after completing. This method is provided for
-     * API completeness and future extensibility.
+     * <p>Failover work runs on per-operation virtual threads. This method joins all active threads
+     * so that callers can guarantee no background failover activity remains after {@code stop()}
+     * returns.
      */
     public void stop() {
-        // No persistent background threads to stop — virtual threads are fire-and-forget.
+        for (Thread t : activeThreads) {
+            if (t.isAlive()) {
+                try {
+                    t.join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        activeThreads.clear();
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────────

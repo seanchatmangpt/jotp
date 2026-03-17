@@ -2,49 +2,12 @@
 
 ## Table of Contents
 
-- [EventManager: Dynamic Handler Registration](#eventmanagerdynamichandlerregistration)
 - [EventManager: Handler Removal](#eventmanagerhandlerremoval)
 - [EventManager: Targeted Handler Call](#eventmanagertargetedhandlercall)
-- [EventManager: Fault Isolation](#eventmanagerfaultisolation)
 - [EventManager: Broadcast to All Handlers](#eventmanagerbroadcasttoallhandlers)
+- [EventManager: Fault Isolation](#eventmanagerfaultisolation)
+- [EventManager: Dynamic Handler Registration](#eventmanagerdynamichandlerregistration)
 
-
-## EventManager: Dynamic Handler Registration
-
-Handlers can be added at runtime. Late-bound handlers only receive events sent after registration.
-
-```mermaid
-sequenceDiagram
-    participant EM as EventManager
-    participant H1 as Early Handler
-    participant H2 as Late Handler
-
-    EM->>H1: Event 1
-    Note over H1: Received (registered)
-    Note over H2: Not registered yet
-
-    EM->>H1: Event 2
-    EM->>H2: Event 2
-    Note over H1,H2: Both received
-```
-
-```java
-var mgr = EventManager.<AppEvent>start();
-var earlyCount = new AtomicInteger(0);
-var lateCount = new AtomicInteger(0);
-
-EventManager.Handler<AppEvent> early = event -> earlyCount.incrementAndGet();
-mgr.addHandler(early);
-
-mgr.syncNotify(new AppEvent.UserLogin("bob")); // early only
-
-EventManager.Handler<AppEvent> late = event -> lateCount.incrementAndGet();
-mgr.addHandler(late);
-
-mgr.syncNotify(new AppEvent.UserLogin("carol")); // both
-
-// early: 2 events, late: 1 event
-```
 
 ## EventManager: Handler Removal
 
@@ -87,14 +50,9 @@ mgr.syncNotify(new AppEvent.UserLogin("eve")); // NOT received
 
 | Key | Value |
 | --- | --- |
-| `Handler Removed` | `true` |
 | `Events Processed` | `1` |
 | `Terminate Called` | `true` |
-
-| Key | Value |
-| --- | --- |
-| `Early Handler Count` | `2` |
-| `Late Handler Count` | `1` |
+| `Handler Removed` | `true` |
 
 ## EventManager: Targeted Handler Call
 
@@ -114,6 +72,69 @@ graph LR
 Unlike notify() which broadcasts to all handlers, call() targets a single handler. This is useful for request-response patterns.
 
 ```java
+var mgr = EventManager.<AppEvent>start();
+var h1Events = new CopyOnWriteArrayList<AppEvent>();
+var h2Events = new CopyOnWriteArrayList<AppEvent>();
+
+EventManager.Handler<AppEvent> h1 = h1Events::add;
+EventManager.Handler<AppEvent> h2 = h2Events::add;
+
+mgr.addHandler(h1);
+mgr.addHandler(h2);
+
+// call(h1, event) — only h1 should receive it
+mgr.call(h1, new AppEvent.OrderPlaced("call-only", 1.0));
+
+assertThat(h1Events).hasSize(1);
+assertThat(h2Events).isEmpty();
+```
+
+| Key | Value |
+| --- | --- |
+| `Handler 1 Events` | `1` |
+| `Handler 2 Events` | `0` |
+
+## EventManager: Broadcast to All Handlers
+
+EventManager implements OTP gen_event semantics. notify() broadcasts events to all registered handlers.
+
+```mermaid
+graph LR
+    E[Event] --> EM[EventManager]
+    EM --> H1[Handler 1]
+    EM --> H2[Handler 2]
+    EM --> Hn[Handler N]
+    style H1 fill:#90EE90
+    style H2 fill:#90EE90
+    style Hn fill:#90EE90
+```
+
+When syncNotify() is called, the event is delivered to ALL registered handlers. Each handler processes independently.
+
+```java
+var mgr = EventManager.<AppEvent>start();
+var counter1 = new AtomicInteger(0);
+var counter2 = new AtomicInteger(0);
+
+EventManager.Handler<AppEvent> h1 = event -> counter1.incrementAndGet();
+EventManager.Handler<AppEvent> h2 = event -> counter2.incrementAndGet();
+
+mgr.addHandler(h1);
+mgr.addHandler(h2);
+
+mgr.syncNotify(new AppEvent.UserLogin("alice"));
+mgr.syncNotify(new AppEvent.OrderPlaced("order-1", 99.99));
+
+// Both handlers received both events
+assertThat(counter1.get()).isEqualTo(2);
+assertThat(counter2.get()).isEqualTo(2);
+```
+
+| Key | Value |
+| --- | --- |
+| `Handler 1 Invocations` | `2` |
+| `Handler 2 Invocations` | `2` |
+| `Events Broadcast` | `2` |
 
 ## EventManager: Fault Isolation
 
@@ -169,72 +190,51 @@ assertThat(survivorCount.get()).isEqualTo(2);
 
 | Key | Value |
 | --- | --- |
-| `Crasher Terminated` | `true` |
 | `Survivor Invocations` | `2` |
 | `Manager Status` | `ALIVE` |
+| `Crasher Terminated` | `true` |
 
-## EventManager: Broadcast to All Handlers
+## EventManager: Dynamic Handler Registration
 
-EventManager implements OTP gen_event semantics. notify() broadcasts events to all registered handlers.
+Handlers can be added at runtime. Late-bound handlers only receive events sent after registration.
 
 ```mermaid
-graph LR
-    E[Event] --> EM[EventManager]
-    EM --> H1[Handler 1]
-    EM --> H2[Handler 2]
-    EM --> Hn[Handler N]
-    style H1 fill:#90EE90
-    style H2 fill:#90EE90
-    style Hn fill:#90EE90
-```
+sequenceDiagram
+    participant EM as EventManager
+    participant H1 as Early Handler
+    participant H2 as Late Handler
 
-When syncNotify() is called, the event is delivered to ALL registered handlers. Each handler processes independently.
+    EM->>H1: Event 1
+    Note over H1: Received (registered)
+    Note over H2: Not registered yet
+
+    EM->>H1: Event 2
+    EM->>H2: Event 2
+    Note over H1,H2: Both received
+```
 
 ```java
 var mgr = EventManager.<AppEvent>start();
-var counter1 = new AtomicInteger(0);
-var counter2 = new AtomicInteger(0);
+var earlyCount = new AtomicInteger(0);
+var lateCount = new AtomicInteger(0);
 
-EventManager.Handler<AppEvent> h1 = event -> counter1.incrementAndGet();
-EventManager.Handler<AppEvent> h2 = event -> counter2.incrementAndGet();
+EventManager.Handler<AppEvent> early = event -> earlyCount.incrementAndGet();
+mgr.addHandler(early);
 
-mgr.addHandler(h1);
-mgr.addHandler(h2);
+mgr.syncNotify(new AppEvent.UserLogin("bob")); // early only
 
-mgr.syncNotify(new AppEvent.UserLogin("alice"));
-mgr.syncNotify(new AppEvent.OrderPlaced("order-1", 99.99));
+EventManager.Handler<AppEvent> late = event -> lateCount.incrementAndGet();
+mgr.addHandler(late);
 
-// Both handlers received both events
-assertThat(counter1.get()).isEqualTo(2);
-assertThat(counter2.get()).isEqualTo(2);
+mgr.syncNotify(new AppEvent.UserLogin("carol")); // both
+
+// early: 2 events, late: 1 event
 ```
 
 | Key | Value |
 | --- | --- |
-| `Handler 1 Invocations` | `2` |
-| `Handler 2 Invocations` | `2` |
-| `Events Broadcast` | `2` |
-var mgr = EventManager.<AppEvent>start();
-var h1Events = new CopyOnWriteArrayList<AppEvent>();
-var h2Events = new CopyOnWriteArrayList<AppEvent>();
-
-EventManager.Handler<AppEvent> h1 = h1Events::add;
-EventManager.Handler<AppEvent> h2 = h2Events::add;
-
-mgr.addHandler(h1);
-mgr.addHandler(h2);
-
-// call(h1, event) — only h1 should receive it
-mgr.call(h1, new AppEvent.OrderPlaced("call-only", 1.0));
-
-assertThat(h1Events).hasSize(1);
-assertThat(h2Events).isEmpty();
-```
-
-| Key | Value |
-| --- | --- |
-| `Handler 1 Events` | `1` |
-| `Handler 2 Events` | `0` |
+| `Early Handler Count` | `2` |
+| `Late Handler Count` | `1` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

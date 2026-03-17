@@ -3,10 +3,10 @@
 ## Table of Contents
 
 - [ProcMonitor: Demonitor (Cancel Monitoring)](#procmonitordemonitorcancelmonitoring)
-- [ProcMonitor: Abnormal Exit Detection](#procmonitorabnormalexitdetection)
 - [ProcMonitor: Multiple Independent Monitors](#procmonitormultipleindependentmonitors)
-- [ProcMonitor: Normal Exit Detection](#procmonitornormalexitdetection)
+- [ProcMonitor: Abnormal Exit Detection](#procmonitorabnormalexitdetection)
 - [ProcMonitor: Unilateral Observation](#procmonitorunilateralobservation)
+- [ProcMonitor: Normal Exit Detection](#procmonitornormalexitdetection)
 
 
 ## ProcMonitor: Demonitor (Cancel Monitoring)
@@ -40,6 +40,49 @@ stateDiagram-v2
 
 > [!NOTE]
 > demonitor is useful for temporary monitoring. Monitor only during specific operations, then cancel when no longer needed.
+
+| Key | Value |
+| --- | --- |
+| `Reason` | `Monitor cancelled before crash` |
+| `Callback Fired` | `No` |
+| `Target Status` | `Crashed` |
+| `Monitor Status` | `Cancelled (demonitor)` |
+
+## ProcMonitor: Multiple Independent Monitors
+
+Multiple processes can monitor the same target. All monitors fire independently when the target exits.
+
+```java
+var target = counter();
+var fired1 = new AtomicBoolean(false);
+var fired2 = new AtomicBoolean(false);
+
+// Two independent monitors
+ProcMonitor.monitor(target, _ -> fired1.set(true));
+ProcMonitor.monitor(target, _ -> fired2.set(true));
+
+// Target crashes - both callbacks fire
+target.tell(new Msg.Crash());
+
+await().atMost(Duration.ofSeconds(3))
+    .until(() -> fired1.get() && fired2.get());
+```
+
+```mermaid
+graph TB
+    T[Target] --> M1[Monitor 1]
+    T --> M2[Monitor 2]
+    T -->|Crash| X[Exception]
+    X -->|DOWN| M1
+    X -->|DOWN| M2
+
+    style T fill:#ff6b6b
+    style M1 fill:#51cf66
+    style M2 fill:#51cf66
+```
+
+> [!NOTE]
+> Each monitor is independent. Canceling one monitor doesn't affect others. This enables multiple observers of the same process.
 
 ## ProcMonitor: Abnormal Exit Detection
 
@@ -83,90 +126,11 @@ sequenceDiagram
 
 | Key | Value |
 | --- | --- |
-| `Target Status` | `Crashed` |
-| `Monitor Status` | `Cancelled (demonitor)` |
-| `Reason` | `Monitor cancelled before crash` |
-| `Callback Fired` | `No` |
-
-## ProcMonitor: Multiple Independent Monitors
-
-Multiple processes can monitor the same target. All monitors fire independently when the target exits.
-
-```java
-var target = counter();
-var fired1 = new AtomicBoolean(false);
-var fired2 = new AtomicBoolean(false);
-
-// Two independent monitors
-ProcMonitor.monitor(target, _ -> fired1.set(true));
-ProcMonitor.monitor(target, _ -> fired2.set(true));
-
-// Target crashes - both callbacks fire
-target.tell(new Msg.Crash());
-
-await().atMost(Duration.ofSeconds(3))
-    .until(() -> fired1.get() && fired2.get());
-```
-
-```mermaid
-graph TB
-    T[Target] --> M1[Monitor 1]
-    T --> M2[Monitor 2]
-    T -->|Crash| X[Exception]
-    X -->|DOWN| M1
-    X -->|DOWN| M2
-
-    style T fill:#ff6b6b
-    style M1 fill:#51cf66
-    style M2 fill:#51cf66
-```
-
-> [!NOTE]
-> Each monitor is independent. Canceling one monitor doesn't affect others. This enables multiple observers of the same process.
-
-| Key | Value |
-| --- | --- |
-| `Target Status` | `Crashed` |
-| `Reason Type` | `RuntimeException` |
-| `Reason Message` | `BOOM` |
-| `Monitor Callback` | `Invoked` |
-
-## ProcMonitor: Normal Exit Detection
-
-Monitors also fire on normal exit (stop()), but with a null reason. This distinguishes graceful shutdown from crashes.
-
-```java
-var target = counter();
-var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
-var downFired = new AtomicBoolean(false);
-
-ProcMonitor.monitor(target, reason -> {
-    downReason.set(reason); // should be null for normal exit
-    downFired.set(true);
-});
-
-// Graceful shutdown
-target.stop();
-
-await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
-// downReason.get() == null (normal exit)
-```
-
-| Exit Type | Reason Value | Interpretation |
-| --- | --- | --- |
-| Normal (stop()) | null | Graceful shutdown |
-| Abnormal (crash) | Exception | Process crashed |
-
-> [!NOTE]
-> This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.
-
-| Key | Value |
-| --- | --- |
-| `Independence` | `Yes` |
 | `Monitor 1 Fired` | `true` |
 | `Target Status` | `Crashed` |
 | `Monitors Registered` | `2` |
 | `Monitor 2 Fired` | `true` |
+| `Independence` | `Yes` |
 
 ## ProcMonitor: Unilateral Observation
 
@@ -204,17 +168,53 @@ graph LR
 
 | Key | Value |
 | --- | --- |
-| `Interpretation` | `Graceful shutdown` |
-| `Reason Value` | `null` |
-| `Target Exit` | `Normal (stop())` |
+| `Reason Type` | `RuntimeException` |
+| `Reason Message` | `BOOM` |
 | `Monitor Callback` | `Invoked` |
+| `Target Status` | `Crashed` |
+
+## ProcMonitor: Normal Exit Detection
+
+Monitors also fire on normal exit (stop()), but with a null reason. This distinguishes graceful shutdown from crashes.
+
+```java
+var target = counter();
+var downReason = new AtomicReference<Throwable>(new RuntimeException("sentinel"));
+var downFired = new AtomicBoolean(false);
+
+ProcMonitor.monitor(target, reason -> {
+    downReason.set(reason); // should be null for normal exit
+    downFired.set(true);
+});
+
+// Graceful shutdown
+target.stop();
+
+await().atMost(Duration.ofSeconds(3)).untilTrue(downFired);
+// downReason.get() == null (normal exit)
+```
+
+| Exit Type | Reason Value | Interpretation |
+| --- | --- | --- |
+| Normal (stop()) | null | Graceful shutdown |
+| Abnormal (crash) | Exception | Process crashed |
+
+> [!NOTE]
+> This null vs non-null distinction lets monitoring code handle graceful shutdown differently from crashes. You might log shutdown but trigger alerts for crashes.
 
 | Key | Value |
 | --- | --- |
-| `Target Status` | `Crashed` |
-| `Relationship` | `Unilateral (one-way)` |
 | `Watcher Status` | `Still Running` |
 | `Callback Invoked` | `Yes` |
+| `Target Status` | `Crashed` |
+| `Relationship` | `Unilateral (one-way)` |
+
+| Key | Value |
+| --- | --- |
+| `Reason Value` | `null` |
+| `Target Exit` | `Normal (stop())` |
+| `Monitor Callback` | `Invoked` |
+| `Interpretation` | `Graceful shutdown` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.*;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,11 @@ class NodeFailoverControllerTest {
         ApplicationController.reset();
         GlobalProcRegistry.reset();
         controller = NodeFailoverController.create();
+    }
+
+    @AfterEach
+    void tearDown() {
+        controller.stop();
     }
 
     // ── registerSpec ─────────────────────────────────────────────────────────────
