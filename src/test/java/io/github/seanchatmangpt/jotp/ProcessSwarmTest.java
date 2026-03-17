@@ -218,7 +218,7 @@ class ProcessSwarmTest {
     void autoScaleUpTriggersWhenQueueDepthExceedsThreshold() {
         // Use a handler that introduces a short delay to keep queues deep
         swarm =
-                ProcessSwarm.builder(
+                ProcessSwarm.<CounterState, CounterMsg>builder(
                                 CounterState::initial,
                                 (state, msg) -> {
                                     try {
