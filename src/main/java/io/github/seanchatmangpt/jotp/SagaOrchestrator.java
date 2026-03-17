@@ -384,7 +384,7 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                 .exceptionally(
                         error -> {
                             coordinator.tell(new SagaMsg.StepFailed(sagaId, step.name(), error));
-                            return null;
+                            throw new UnsupportedOperationException("not implemented: saga error recovery");
                         });
     }
 

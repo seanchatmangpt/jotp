@@ -23,6 +23,7 @@ class InMemoryProcessDiscoveryTest {
 
   @BeforeEach
   void setup() {
+    ApplicationController.reset();
     discovery = new InMemoryProcessDiscovery();
     node1 = new NodeId("node1", "localhost", 9001);
     node2 = new NodeId("node2", "localhost", 9002);

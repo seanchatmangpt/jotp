@@ -28,6 +28,7 @@ class DurableStateTest {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         snapshotFile = tempDir.resolve("test-snapshot.json");
     }
 

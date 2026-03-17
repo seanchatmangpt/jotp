@@ -20,6 +20,7 @@ class MetricsHttpServerTest {
 
   @BeforeEach
   void setup() throws IOException {
+    ApplicationController.reset();
     metricsCollector = MetricsCollector.create("test-metrics");
     server = MetricsHttpServer.create(TEST_PORT, metricsCollector);
     server.start();

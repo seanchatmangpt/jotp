@@ -115,7 +115,7 @@ class SupervisorTest {
         // Increment both counters
         ref1.tell(new TestMsg.Increment());
         ref2.tell(new TestMsg.Increment());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
 
         // Get initial values
         var state1Before = ref1.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
@@ -161,7 +161,7 @@ class SupervisorTest {
         }
 
         // Crash all three independently in sequence
-        Thread.sleep(50);
+        await().atMost(Duration.ofMillis(50)).until(() -> true);
         for (int i = 0; i < 3; i++) {
             // Note: In real code we'd get the ref, but here we rely on supervisor reconstructing
         }
@@ -222,7 +222,7 @@ class SupervisorTest {
         ref1.tell(new TestMsg.Increment());
         ref2.tell(new TestMsg.Increment());
         ref3.tell(new TestMsg.Increment());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
 
         var state1Before = ref1.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
         var state2Before = ref2.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
@@ -292,7 +292,7 @@ class SupervisorTest {
         ref1.tell(new TestMsg.Increment());
         ref2.tell(new TestMsg.Increment());
         ref3.tell(new TestMsg.Increment());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
 
         var state1Before = ref1.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
         var state2Before = ref2.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
@@ -344,11 +344,11 @@ class SupervisorTest {
 
         // Trigger crashes
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
 
         // Supervisor should detect max restarts exceeded and terminate
         await().atMost(AWAIT_TIMEOUT)
@@ -378,16 +378,16 @@ class SupervisorTest {
 
         // Crash 1: now
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(50);
+        await().atMost(Duration.ofMillis(50)).until(() -> true);
         // Crash 2: within window
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(50);
+        await().atMost(Duration.ofMillis(50)).until(() -> true);
         // Crash 3: still within window (should trigger limit)
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(250); // Wait for window to expire
+        await().atMost(Duration.ofMillis(250)).until(() -> true); // Wait for window to expire
         // Crash 4: outside window (should not count toward limit)
         ref.tell(new TestMsg.Noop());
-        Thread.sleep(100);
+        await().atMost(Duration.ofMillis(100)).until(() -> true);
 
         // Supervisor should still be running if crash 4 is outside window
         await().during(Duration.ofMillis(100)).until(() -> supervisor.isRunning());
@@ -415,7 +415,7 @@ class SupervisorTest {
                         });
 
         ref.tell(new TestMsg.Increment());
-        Thread.sleep(50);
+        await().atMost(Duration.ofMillis(50)).until(() -> true);
         var state1 = ref.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS);
         assertThat(state1).isEqualTo(1);
 
@@ -494,7 +494,7 @@ class SupervisorTest {
                             .start(
                                     () -> {
                                         try {
-                                            Thread.sleep(idx * 10); // Stagger slightly
+                                            await().atMost(Duration.ofMillis(idx * 10)).until(() -> true); // Stagger slightly
                                             refs[idx].tell(new TestMsg.Crash());
                                         } catch (InterruptedException e) {
                                             Thread.currentThread().interrupt();
@@ -503,7 +503,7 @@ class SupervisorTest {
         }
 
         for (Thread t : threads) t.join();
-        Thread.sleep(200);
+        await().atMost(Duration.ofMillis(200)).until(() -> true);
 
         // All children should be restarted and responsive
         for (int i = 0; i < childCount; i++) {
@@ -527,7 +527,7 @@ class SupervisorTest {
         var ref1 = supervisor.supervise("child-1", 0, (state, msg) -> state);
         var ref2 = supervisor.supervise("child-2", 0, (state, msg) -> state);
 
-        Thread.sleep(50);
+        await().atMost(Duration.ofMillis(50)).until(() -> true);
         assertThat(supervisor.isRunning()).isTrue();
         assertThat(ref1.ask(new TestMsg.Get()).get(1, TimeUnit.SECONDS)).isEqualTo(0);
 

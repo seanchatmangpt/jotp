@@ -134,7 +134,7 @@ public final class RocksDBLog implements DistributedLog {
     private LogMessage readMessage(long seq) throws IOException, ClassNotFoundException {
         Path msgFile = dbPath.resolve(LOG_PREFIX + seq);
         if (!msgFile.toFile().exists()) {
-            return null;
+            throw new UnsupportedOperationException("not implemented: log message retrieval");
         }
 
         try (ByteArrayInputStream bais = new ByteArrayInputStream(java.nio.file.Files.readAllBytes(msgFile));

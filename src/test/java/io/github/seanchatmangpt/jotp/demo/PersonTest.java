@@ -24,8 +24,14 @@ class PersonTest implements WithAssertions {
     @Test
     @DisplayName("should be constructed successfully")
     void shouldConstruct() {
-        // TODO: instantiate Person and assert non-null
-        assertThat(true).isTrue(); // placeholder
+        var address = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+        var person = new Person("John", "Doe", "john.doe@example.com", address);
+
+        assertThat(person).isNotNull();
+        assertThat(person.firstName()).isEqualTo("John");
+        assertThat(person.lastName()).isEqualTo("Doe");
+        assertThat(person.email()).isEqualTo("john.doe@example.com");
+        assertThat(person.address()).isEqualTo(address);
     }
 
     // ── Equality & hash code ─────────────────────────────────────────────────
@@ -33,8 +39,12 @@ class PersonTest implements WithAssertions {
     @Test
     @DisplayName("equal instances should have equal hash codes")
     void equalInstancesHaveEqualHashCodes() {
-        // TODO: create two equal Person instances and verify equals/hashCode
-        assertThat(true).isTrue(); // placeholder
+        var address = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+        var person1 = new Person("John", "Doe", "john.doe@example.com", address);
+        var person2 = new Person("John", "Doe", "john.doe@example.com", address);
+
+        assertThat(person1).isEqualTo(person2);
+        assertThat(person1.hashCode()).isEqualTo(person2.hashCode());
     }
 
     // ── toString ─────────────────────────────────────────────────────────────
@@ -42,7 +52,9 @@ class PersonTest implements WithAssertions {
     @Test
     @DisplayName("toString should include type name")
     void toStringShouldIncludeTypeName() {
-        // TODO: verify toString output contains "Person"
-        assertThat("Person").contains("Person");
+        var address = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+        var person = new Person("John", "Doe", "john.doe@example.com", address);
+
+        assertThat(person.toString()).contains("Person");
     }
 }

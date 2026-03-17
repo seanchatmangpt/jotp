@@ -21,6 +21,7 @@ class ProcRefRemoteResolutionTest {
 
   @BeforeEach
   void setup() {
+    ApplicationController.reset();
     ProcRegistry.reset();
     discovery = new InMemoryProcessDiscovery();
     currentNode = new NodeId("local", "localhost", 8080);

@@ -281,11 +281,10 @@ class FailoverMigrationControllerTest {
     failureDetector.recordHeartbeat(node1Id, false);
 
     // Wait a bit to ensure no re-migration happens
-    try {
-      Thread.sleep(500);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
+    await()
+        .atMost(Duration.ofMillis(500))
+        .pollDelay(Duration.ofMillis(100))
+        .until(() -> true);
 
     // Verify history didn't grow significantly (no re-migration)
     int historyCountAfterSecondFailure = controller.migrationHistory().size();
@@ -366,11 +365,10 @@ class FailoverMigrationControllerTest {
     int historyBefore = controller.migrationHistory().size();
 
     // Wait a bit
-    try {
-      Thread.sleep(500);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
+    await()
+        .atMost(Duration.ofMillis(500))
+        .pollDelay(Duration.ofMillis(100))
+        .until(() -> true);
 
     int historyAfter = controller.migrationHistory().size();
 
@@ -390,11 +388,10 @@ class FailoverMigrationControllerTest {
     failureDetector.recordHeartbeat(node1Id, false);
 
     // Give migration time to start
-    try {
-      Thread.sleep(100);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
+    await()
+        .atMost(Duration.ofMillis(100))
+        .pollDelay(Duration.ofMillis(50))
+        .until(() -> true);
 
     // Now shutdown — should wait for pending migrations
     controller.stopMonitoring();

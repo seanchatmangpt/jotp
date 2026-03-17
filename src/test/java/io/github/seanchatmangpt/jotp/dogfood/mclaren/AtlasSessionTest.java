@@ -2,8 +2,10 @@ package io.github.seanchatmangpt.jotp.dogfood.mclaren;
 
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.StateMachine;
+import java.time.Duration;
 import java.util.List;
 import org.assertj.core.api.WithAssertions;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,13 +75,14 @@ class AtlasSessionTest implements WithAssertions {
 
         // AddLap before Configure is ignored (keepState)
         session.send(new SqlRaceSessionEvent.AddLap(SqlRaceLap.outLap(0L)));
-        // Give the virtual thread time to process
-        try {
-            Thread.sleep(50);
-        } catch (InterruptedException ignored) {
-        }
-
-        assertThat(session.state()).isInstanceOf(SqlRaceSessionState.Initializing.class);
+        // Wait for virtual thread to process the ignored message, verify it stays Initializing
+        Awaitility.await()
+                .atMost(Duration.ofMillis(500))
+                .pollInterval(Duration.ofMillis(10))
+                .untilAsserted(
+                        () ->
+                                assertThat(session.state())
+                                        .isInstanceOf(SqlRaceSessionState.Initializing.class));
     }
 
     // ── Live: AddLap ──────────────────────────────────────────────────────────
@@ -145,13 +148,14 @@ class AtlasSessionTest implements WithAssertions {
     void sessionSavedTransitionsToClosing() {
         session = configureLiveSession("test");
         session.send(new SqlRaceSessionEvent.SessionSaved());
-        // Sync
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException ignored) {
-        }
-
-        assertThat(session.state()).isInstanceOf(SqlRaceSessionState.Closing.class);
+        // Wait for virtual thread to process the SessionSaved event
+        Awaitility.await()
+                .atMost(Duration.ofMillis(500))
+                .pollInterval(Duration.ofMillis(10))
+                .untilAsserted(
+                        () ->
+                                assertThat(session.state())
+                                        .isInstanceOf(SqlRaceSessionState.Closing.class));
     }
 
     // ── Closing → Closed ──────────────────────────────────────────────────────
@@ -172,16 +176,20 @@ class AtlasSessionTest implements WithAssertions {
     void closedStateStopsTheMachine() {
         session = configureLiveSession("test");
         session.send(new SqlRaceSessionEvent.SessionSaved());
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException ignored) {
-        }
+        // Wait for virtual thread to process the SessionSaved event
+        Awaitility.await()
+                .atMost(Duration.ofMillis(500))
+                .pollInterval(Duration.ofMillis(10))
+                .untilAsserted(
+                        () ->
+                                assertThat(session.state())
+                                        .isInstanceOf(SqlRaceSessionState.Closing.class));
         session.send(new SqlRaceSessionEvent.Close());
 
         // Machine stops on Closed → stop("session closed")
         // Use Awaitility for reliable async assertion
-        org.awaitility.Awaitility.await()
-                .atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
                 .untilAsserted(() -> assertThat(session.isRunning()).isFalse());
     }
 
@@ -191,12 +199,11 @@ class AtlasSessionTest implements WithAssertions {
     void closeFromLiveStopsMachineImmediately() {
         session = configureLiveSession("test");
         session.send(new SqlRaceSessionEvent.Close());
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException ignored) {
-        }
-
-        assertThat(session.isRunning()).isFalse();
+        // Wait for virtual thread to process the Close event and stop the machine
+        Awaitility.await()
+                .atMost(Duration.ofMillis(500))
+                .pollInterval(Duration.ofMillis(10))
+                .untilAsserted(() -> assertThat(session.isRunning()).isFalse());
     }
 
     // ── Summary ───────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ class JvmShutdownManagerTest {
 
     @BeforeEach
     void setUp() {
+        ApplicationController.reset();
         shutdownManager = JvmShutdownManager.getInstance();
         shutdownManager.clearCallbacks();
     }

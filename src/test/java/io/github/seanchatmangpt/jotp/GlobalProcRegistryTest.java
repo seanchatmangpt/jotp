@@ -24,6 +24,7 @@ class GlobalProcRegistryTest {
 
   @BeforeEach
   void setup() {
+    ApplicationController.reset();
     ProcRegistry.reset();
     discovery = new InMemoryProcessDiscovery();
     currentNode = new NodeId("local-node", "localhost", 8080);

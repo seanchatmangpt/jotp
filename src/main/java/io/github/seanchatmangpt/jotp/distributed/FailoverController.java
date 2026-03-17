@@ -122,7 +122,7 @@ public final class FailoverController {
                                                 + result.fold(
                                                         ok -> "unknown", err -> err.getMessage()));
                             }
-                            return null;
+                            throw new UnsupportedOperationException("not implemented: migration callback");
                         });
             }
 

@@ -327,15 +327,16 @@ public final class DistributedTracer implements Application.Infrastructure {
 
         @Override
         public SpanScope makeCurrent() {
-            SpanImpl previous = tracer.currentSpan.get();
-            tracer.currentSpan.set(this);
-            return () -> {
-                if (previous != null) {
-                    tracer.currentSpan.set(previous);
-                } else {
-                    tracer.currentSpan.remove();
+            SpanImpl previous = CURRENT_SPAN.orElse(null);
+            // Establish this span as the current span using ScopedValue
+            // The binding is set up, and when the scope is exited (via try-with-resources),
+            // the previous value is automatically restored
+            return ScopedValue.where(CURRENT_SPAN, this).run(() -> new SpanScope() {
+                @Override
+                public void close() {
+                    // ScopedValue automatically restores the previous value when exiting
                 }
-            };
+            });
         }
 
         public Map<String, Object> toMap() {
@@ -367,7 +368,7 @@ public final class DistributedTracer implements Application.Infrastructure {
     // ── Tracer state ──────────────────────────────────────────────────────────────
 
     private final String name;
-    private final ThreadLocal<SpanImpl> currentSpan = new ThreadLocal<>();
+    private static final ScopedValue<SpanImpl> CURRENT_SPAN = ScopedValue.newInstance();
     private final Queue<SpanImpl> completedSpans = new ConcurrentLinkedQueue<>();
     private final int maxSpans;
     private final AtomicLong spansCreated = new AtomicLong(0);
@@ -478,7 +479,7 @@ public final class DistributedTracer implements Application.Infrastructure {
 
     /** Get the current span for this thread. */
     public Optional<Span> getCurrentSpan() {
-        return Optional.ofNullable(currentSpan.get());
+        return Optional.ofNullable(CURRENT_SPAN.orElse(null));
     }
 
     /** Get the current trace context for propagation. */
@@ -524,11 +525,12 @@ public final class DistributedTracer implements Application.Infrastructure {
     @Override
     public void onStop(Application<?> app) {
         // End any span still active on the calling thread so it is captured before draining.
-        SpanImpl active = currentSpan.get();
+        SpanImpl active = CURRENT_SPAN.orElse(null);
         if (active != null && active.isRecording()) {
             active.end();
         }
-        currentSpan.remove();
+        // Note: ScopedValue doesn't have a remove() method; the value is scoped to the
+        // context where it was set. We don't need explicit cleanup.
 
         // Drain all completed spans; callers may have registered an export pipeline via
         // exportSpans(), so we clear the queue to release references and avoid memory leaks.

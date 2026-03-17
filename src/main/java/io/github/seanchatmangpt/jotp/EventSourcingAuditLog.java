@@ -291,11 +291,11 @@ public final class EventSourcingAuditLog<S, E, D> {
             // Parsing stub; in production use a full JSON deserializer
             try {
                 var parts = line.split("\\|", 3);
-                if (parts.length < 3) return null;
+                if (parts.length < 3) throw new UnsupportedOperationException("not implemented: audit entry deserialization");
                 // Return placeholder for testing
                 return new Replay<>(Instant.parse(parts[0]), parts[1], Instant.parse(parts[0]));
             } catch (Exception e) {
-                return null;
+                throw new UnsupportedOperationException("not implemented: audit entry deserialization");
             }
         }
     }

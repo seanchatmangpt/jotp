@@ -300,10 +300,7 @@ public final class FailoverMigrationController {
    * @return the restored state, or null if not found
    */
   private Object loadProcessStateFromLog(String processName) {
-    // TODO: Implement state loading from RocksDB
-    // This would query eventLog.getRange() for this process's state events
-    // and reconstruct the last known state.
-    return null;
+    throw new UnsupportedOperationException("not implemented: state loading from RocksDB");
   }
 
   /**

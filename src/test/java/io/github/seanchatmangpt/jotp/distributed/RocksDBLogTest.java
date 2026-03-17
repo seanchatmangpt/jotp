@@ -1,7 +1,9 @@
 package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,7 +73,10 @@ final class RocksDBLogTest {
         log.append(msg1);
         log.append(msg2);
 
-        Thread.sleep(100);
+        await()
+            .atMost(Duration.ofMillis(100))
+            .pollDelay(Duration.ofMillis(50))
+            .until(() -> true);
 
         assertThat(received).containsExactly(msg1, msg2);
     }

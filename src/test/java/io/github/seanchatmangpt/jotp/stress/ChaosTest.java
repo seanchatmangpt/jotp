@@ -1,6 +1,7 @@
 package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
@@ -452,7 +453,10 @@ class ChaosTest {
                 long startMs = System.currentTimeMillis();
                 while (System.currentTimeMillis() - startMs < profileDurationMs
                         && !shouldStop.get()) {
-                    Thread.sleep(100);
+                    await()
+                        .atMost(Duration.ofMillis(100))
+                        .pollDelay(Duration.ofMillis(50))
+                        .until(() -> true);
                 }
 
                 shouldStop.set(true);

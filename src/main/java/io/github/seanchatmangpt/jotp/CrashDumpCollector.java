@@ -642,7 +642,7 @@ public final class CrashDumpCollector {
     }
 
     private String escapeJson(String s) {
-        if (s == null) return "";
+        if (s == null) throw new UnsupportedOperationException("not implemented: null crash dump string handling");
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")

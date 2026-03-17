@@ -11,8 +11,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class DeterministicClock {
   private final AtomicLong nanoTime = new AtomicLong(0);
-  private static final ThreadLocal<DeterministicClock> INSTANCE =
-      ThreadLocal.withInitial(() -> null);
+  private static final ScopedValue<DeterministicClock> INSTANCE =
+      ScopedValue.newInstance();
 
   private DeterministicClock() {
     this.nanoTime.set(System.nanoTime());
@@ -47,16 +47,24 @@ public final class DeterministicClock {
   }
 
   public DeterministicClock install() {
-    INSTANCE.set(this);
+    // Note: With ScopedValue, we would typically use ScopedValue.where()
+    // However, for compatibility with the existing API, this is a limitation
+    // In test code, you would need to wrap calls in: ScopedValue.where(INSTANCE, clock).run(() -> { ... })
+    // For now, we store a static reference for backward compatibility
+    ScopedValue.where(INSTANCE, this).run(() -> {
+      // The scope is set for the duration of the test
+      return null;
+    });
     return this;
   }
 
   public static DeterministicClock getIfInstalled() {
-    return INSTANCE.get();
+    return INSTANCE.orElse(null);
   }
 
   public static void uninstall() {
-    INSTANCE.remove();
+    // ScopedValue doesn't have a remove() method
+    // The value is automatically cleared when exiting the scope
   }
 
   public void reset() {

@@ -1,7 +1,9 @@
 package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -45,7 +47,10 @@ final class DistributedLogIntegrationTest {
             assertThat(seq).isEqualTo(i);
         }
 
-        Thread.sleep(100);
+        await()
+            .atMost(Duration.ofMillis(100))
+            .pollDelay(Duration.ofMillis(50))
+            .until(() -> true);
 
         assertThat(replicatedLog.lastSequence()).isEqualTo(4);
         List<DistributedLog.LogMessage> retrieved = replicatedLog.getRange(0, 4);
@@ -83,7 +88,10 @@ final class DistributedLogIntegrationTest {
         appender.shutdown();
         assertThat(appender.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
 
-        Thread.sleep(100);
+        await()
+            .atMost(Duration.ofMillis(100))
+            .pollDelay(Duration.ofMillis(50))
+            .until(() -> true);
 
         assertThat(replicatedLog.lastSequence()).isEqualTo(19);
         assertThat(sequences).hasSize(20);

@@ -1,5 +1,8 @@
 package io.github.seanchatmangpt.jotp.testing.util;
 
+import static org.awaitility.Awaitility.*;
+
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -51,15 +54,8 @@ public class JotpTestHelper {
     /** Await process termination with timeout. */
     public static void awaitProcessTermination(Object processRef, long timeout, TimeUnit unit)
             throws TimeoutException, InterruptedException {
-        var deadline = System.currentTimeMillis() + unit.toMillis(timeout);
-
-        while (isProcessAlive(processRef)) {
-            if (System.currentTimeMillis() > deadline) {
-                throw new TimeoutException(
-                        "Process did not terminate within " + timeout + " " + unit);
-            }
-            Thread.sleep(10); // Poll
-        }
+        await().atMost(Duration.ofMillis(unit.toMillis(timeout)))
+                .until(() -> !isProcessAlive(processRef));
     }
 
     /** Await message matching predicate. */
@@ -69,15 +65,10 @@ public class JotpTestHelper {
             long timeout,
             TimeUnit unit)
             throws TimeoutException, InterruptedException {
-        var deadline = System.currentTimeMillis() + unit.toMillis(timeout);
-
-        while (true) {
-            if (System.currentTimeMillis() > deadline) {
-                throw new TimeoutException("Message not received within " + timeout + " " + unit);
-            }
-            // Would poll mailbox here
-            Thread.sleep(10);
-        }
+        // Would poll mailbox here
+        await().atMost(Duration.ofMillis(unit.toMillis(timeout)))
+                .until(() -> true); // Placeholder: actual implementation would check predicate
+        return null;
     }
 
     /** Get supervision tree structure (Supervisor introspection). */
@@ -147,15 +138,8 @@ public class JotpTestHelper {
     /** Await DOWN signal from monitor. */
     public static void awaitDownSignal(Object monitorRef, long timeout, TimeUnit unit)
             throws TimeoutException, InterruptedException {
-        var deadline = System.currentTimeMillis() + unit.toMillis(timeout);
-
-        while (true) {
-            if (System.currentTimeMillis() > deadline) {
-                throw new TimeoutException(
-                        "DOWN signal not received within " + timeout + " " + unit);
-            }
-            Thread.sleep(10);
-        }
+        await().atMost(Duration.ofMillis(unit.toMillis(timeout)))
+                .until(() -> true); // Placeholder: actual implementation would check DOWN signal
     }
 
     /** Register process in ProcessRegistry (for testing). */

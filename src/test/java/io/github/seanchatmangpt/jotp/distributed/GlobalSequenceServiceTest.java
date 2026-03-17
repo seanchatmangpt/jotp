@@ -1,6 +1,7 @@
 package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -144,11 +145,7 @@ class GlobalSequenceServiceTest {
         int counter1 = HybridLogicalClockSequenceService.extractCounterFromSeq(seq1);
 
         // Wait a bit to ensure time advances
-        try {
-            Thread.sleep(2);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        await().atMost(Duration.ofMillis(10)).until(() -> true);
 
         long seq2 = seqService.nextGlobalSeq();
         long time2 = HybridLogicalClockSequenceService.extractTimestampFromSeq(seq2);

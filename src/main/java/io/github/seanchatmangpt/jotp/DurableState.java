@@ -406,7 +406,7 @@ public final class DurableState<S> {
      */
     private Path getSnapshotFile() {
         if (writer == null) {
-            return null;
+            throw new UnsupportedOperationException("not implemented: snapshot file retrieval");
         }
         try {
             // Works for both TestAtomicStateWriter and AtomicStateWriter
@@ -414,7 +414,7 @@ public final class DurableState<S> {
             field.setAccessible(true);
             return (Path) field.get(writer);
         } catch (Exception e) {
-            return null;
+            throw new UnsupportedOperationException("not implemented: snapshot file retrieval");
         }
     }
 

@@ -17,8 +17,13 @@ class PaymentStatusTest implements WithAssertions {
     @Test
     @DisplayName("should be constructed successfully")
     void shouldConstruct() {
-        // TODO: instantiate PaymentStatus and assert non-null
-        assertThat(true).isTrue(); // placeholder
+        var pending = PaymentStatus.pending();
+        var success = PaymentStatus.success("txn123");
+        var failure = PaymentStatus.failure("insufficient funds");
+
+        assertThat(pending).isNotNull().isInstanceOf(PaymentStatus.Pending.class);
+        assertThat(success).isNotNull().isInstanceOf(PaymentStatus.Success.class);
+        assertThat(failure).isNotNull().isInstanceOf(PaymentStatus.Failure.class);
     }
 
     // ── Equality & hash code ─────────────────────────────────────────────────
@@ -26,8 +31,16 @@ class PaymentStatusTest implements WithAssertions {
     @Test
     @DisplayName("equal instances should have equal hash codes")
     void equalInstancesHaveEqualHashCodes() {
-        // TODO: create two equal PaymentStatus instances and verify equals/hashCode
-        assertThat(true).isTrue(); // placeholder
+        var success1 = PaymentStatus.success("txn123");
+        var success2 = PaymentStatus.success("txn123");
+        var failure1 = PaymentStatus.failure("insufficient funds");
+        var failure2 = PaymentStatus.failure("insufficient funds");
+
+        assertThat(success1).isEqualTo(success2);
+        assertThat(success1.hashCode()).isEqualTo(success2.hashCode());
+
+        assertThat(failure1).isEqualTo(failure2);
+        assertThat(failure1.hashCode()).isEqualTo(failure2.hashCode());
     }
 
     // ── toString ─────────────────────────────────────────────────────────────
@@ -35,7 +48,12 @@ class PaymentStatusTest implements WithAssertions {
     @Test
     @DisplayName("toString should include type name")
     void toStringShouldIncludeTypeName() {
-        // TODO: verify toString output contains "PaymentStatus"
-        assertThat("PaymentStatus").contains("PaymentStatus");
+        var pending = PaymentStatus.pending();
+        var success = PaymentStatus.success("txn123");
+        var failure = PaymentStatus.failure("insufficient funds");
+
+        assertThat(pending.toString()).contains("Pending");
+        assertThat(success.toString()).contains("Success");
+        assertThat(failure.toString()).contains("Failure");
     }
 }

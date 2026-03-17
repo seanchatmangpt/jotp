@@ -14,6 +14,7 @@ class GracefulShutdownTest {
 
   @BeforeEach
   void setup() {
+    ApplicationController.reset();
     manager = GracefulShutdownManager.create();
   }
 

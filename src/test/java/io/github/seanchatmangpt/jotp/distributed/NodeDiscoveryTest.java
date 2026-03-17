@@ -1,6 +1,7 @@
 package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
 import java.util.List;
@@ -228,11 +229,10 @@ class NodeDiscoveryTest {
         var before = backend.getNode("node1").get().lastHeartbeat();
 
         // Wait a bit to ensure timestamp difference
-        try {
-            Thread.sleep(10);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        await()
+            .atMost(Duration.ofMillis(20))
+            .pollDelay(Duration.ofMillis(5))
+            .until(() -> true);
 
         nodeDiscovery.sendHeartbeat();
 

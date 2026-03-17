@@ -1,7 +1,10 @@
 package io.github.seanchatmangpt.jotp.testing;
 
+import static org.awaitility.Awaitility.*;
+
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.testing.util.CorrelationIdTracker;
+import java.time.Duration;
 import java.util.Set;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -267,7 +270,8 @@ class CorrelationIdTrackerTest implements WithAssertions {
         @DisplayName("latency between first and last step is non-negative")
         void latencyBetweenStepsNonNegative() throws InterruptedException {
             tracker.recordStep("id-1", "start");
-            Thread.sleep(5); // small delay so timestamps differ
+            await().atMost(Duration.ofMillis(100))
+                    .until(() -> true); // small delay so timestamps differ
             tracker.recordStep("id-1", "end");
 
             assertThat(tracker.getChainLatencyMillis("id-1")).isGreaterThanOrEqualTo(0);

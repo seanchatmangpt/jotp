@@ -268,7 +268,10 @@ class DistributedNodeTest {
         assertThat(cb1.stopped.get()).isTrue();
 
         // Coordinated stop should be instant — shortened wait
-        Thread.sleep(500);
+        await()
+            .atMost(Duration.ofMillis(500))
+            .pollDelay(Duration.ofMillis(100))
+            .until(() -> true);
 
         // No standby node should have started after coordinated stop
         assertFalse(cb2.hasStarted(), "node2 should not start after coordinated stop");

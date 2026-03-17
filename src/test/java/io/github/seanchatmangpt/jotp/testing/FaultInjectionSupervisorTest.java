@@ -1,6 +1,7 @@
 package io.github.seanchatmangpt.jotp.testing;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.*;
 
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
@@ -44,9 +45,9 @@ class FaultInjectionSupervisorTest {
 
     assertThat(faultInjector.shouldInjectFault("worker-1")).isFalse();
 
-    Thread.sleep(150);
+    await().atMost(Duration.ofMillis(250))
+            .until(() -> faultInjector.shouldInjectFault("worker-1"));
 
-    assertThat(faultInjector.shouldInjectFault("worker-1")).isTrue();
     assertThat(faultInjector.wasCrashed("worker-1")).isTrue();
   }
 
@@ -99,8 +100,8 @@ class FaultInjectionSupervisorTest {
     faultInjector.crashAfter("worker-1", delay);
 
     assertThat(faultInjector.shouldInjectFault("worker-1")).isFalse();
-    Thread.sleep(delay.toMillis() + 50);
-    assertThat(faultInjector.shouldInjectFault("worker-1")).isTrue();
+    await().atMost(Duration.ofMillis(delay.toMillis() + 100))
+            .until(() -> faultInjector.shouldInjectFault("worker-1"));
   }
 
   @Test

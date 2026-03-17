@@ -128,7 +128,7 @@ public final class ReplicatedLog implements DistributedLog {
                 .exceptionally(
                         ex -> {
                             future.completeExceptionally(ex);
-                            return null;
+                            throw new UnsupportedOperationException("not implemented: replication error recovery");
                         });
     }
 

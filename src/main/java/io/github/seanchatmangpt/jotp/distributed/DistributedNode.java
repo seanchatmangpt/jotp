@@ -497,7 +497,7 @@ public final class DistributedNode {
             writer.println(command);
             return reader.readLine();
         } catch (IOException e) {
-            return null;
+            throw new UnsupportedOperationException("not implemented: distributed command execution");
         }
     }
 }

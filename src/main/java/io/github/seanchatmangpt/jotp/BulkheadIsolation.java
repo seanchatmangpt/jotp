@@ -261,7 +261,7 @@ public final class BulkheadIsolation<F, M> {
         }
 
         if (workers.isEmpty()) {
-            return null;
+            throw new UnsupportedOperationException("not implemented: worker allocation");
         }
 
         // Load-balance: find worker with smallest queue

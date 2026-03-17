@@ -24,8 +24,13 @@ class AddressTest implements WithAssertions {
     @Test
     @DisplayName("should be constructed successfully")
     void shouldConstruct() {
-        // TODO: instantiate Address and assert non-null
-        assertThat(true).isTrue(); // placeholder
+        var address = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+        assertThat(address).isNotNull();
+        assertThat(address.street()).isEqualTo("123 Main St");
+        assertThat(address.city()).isEqualTo("Springfield");
+        assertThat(address.state()).isEqualTo("IL");
+        assertThat(address.postalCode()).isEqualTo("62701");
+        assertThat(address.country()).isEqualTo("USA");
     }
 
     // ── Equality & hash code ─────────────────────────────────────────────────
@@ -33,8 +38,11 @@ class AddressTest implements WithAssertions {
     @Test
     @DisplayName("equal instances should have equal hash codes")
     void equalInstancesHaveEqualHashCodes() {
-        // TODO: create two equal Address instances and verify equals/hashCode
-        assertThat(true).isTrue(); // placeholder
+        var address1 = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+        var address2 = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+
+        assertThat(address1).isEqualTo(address2);
+        assertThat(address1.hashCode()).isEqualTo(address2.hashCode());
     }
 
     // ── toString ─────────────────────────────────────────────────────────────
@@ -42,7 +50,7 @@ class AddressTest implements WithAssertions {
     @Test
     @DisplayName("toString should include type name")
     void toStringShouldIncludeTypeName() {
-        // TODO: verify toString output contains "Address"
-        assertThat("Address").contains("Address");
+        var address = new Address("123 Main St", "Springfield", "IL", "62701", "USA");
+        assertThat(address.toString()).contains("Address");
     }
 }

@@ -1,8 +1,11 @@
 package io.github.seanchatmangpt.jotp.testing.base;
 
+import static org.awaitility.Awaitility.*;
+
 import io.github.seanchatmangpt.jotp.testing.extensions.TimeoutExtension;
 import io.github.seanchatmangpt.jotp.testing.util.PerformanceTestHelper;
 import java.lang.reflect.ParameterizedType;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,23 +74,18 @@ public abstract class AsyncPatternTestBase<P> extends PatternTestBase<P> {
     /** Assert condition is true within timeout (polling). */
     protected void assertEventually(Predicate<Boolean> condition, long timeoutMillis)
             throws InterruptedException {
-        var deadline = System.currentTimeMillis() + timeoutMillis;
-
-        while (true) {
-            try {
-                if (condition.test(true)) {
-                    return;
-                }
-            } catch (Exception e) {
-                // Continue polling
-            }
-
-            if (System.currentTimeMillis() > deadline) {
-                throw new AssertionError("Condition not satisfied within " + timeoutMillis + " ms");
-            }
-
-            Thread.sleep(10); // Poll
-        }
+        await().atMost(Duration.ofMillis(timeoutMillis))
+                .untilAsserted(() -> {
+                    try {
+                        if (!condition.test(true)) {
+                            throw new AssertionError("Condition not satisfied");
+                        }
+                    } catch (AssertionError e) {
+                        throw e;
+                    } catch (Exception e) {
+                        throw new AssertionError("Condition check failed", e);
+                    }
+                });
     }
 
     /** Assert condition is true within test timeout. */
