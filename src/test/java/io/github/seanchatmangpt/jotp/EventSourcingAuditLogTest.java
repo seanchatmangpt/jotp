@@ -409,6 +409,9 @@ class EventSourcingAuditLogTest implements WithAssertions {
                 case EventSourcingAuditLog.Replay<?, ?, ?> r -> {
                     // Not used in this test
                 }
+                case EventSourcingAuditLog.SnapshotEntry<?, ?> se -> {
+                    // Not used in this test
+                }
             }
         }
 

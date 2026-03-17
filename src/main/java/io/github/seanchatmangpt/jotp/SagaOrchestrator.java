@@ -553,13 +553,17 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
         }
 
         // Complete the pending future with compensated result
+        // If no steps were completed, return Failure instead of Compensated
         if (pendingFuture != null) {
-            String failedStep =
-                    ctx.completedSteps().isEmpty()
-                            ? "unknown"
-                            : ctx.completedSteps().getLast();
-            pendingFuture.complete(
-                    new SagaResult.Compensated(failedStep, originalError, successfullyCompensated));
+            if (ctx.completedSteps().isEmpty()) {
+                // No steps completed, so nothing to compensate - return Failure
+                pendingFuture.complete(new SagaResult.Failure("unknown", originalError));
+            } else {
+                // Steps completed and compensation attempted
+                String failedStep = ctx.completedSteps().getLast();
+                pendingFuture.complete(
+                        new SagaResult.Compensated(failedStep, originalError, successfullyCompensated));
+            }
         }
     }
 
