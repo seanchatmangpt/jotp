@@ -93,6 +93,9 @@ class SagaErrorRecoveryTest {
         assertThat(attemptCount.get()).isEqualTo(3);
 
         // Verify exponential backoff: delays should increase
+        assertThat(callTimes[0]).isNotNull().as("First attempt time should be recorded");
+        assertThat(callTimes[1]).isNotNull().as("Second attempt time should be recorded");
+        assertThat(callTimes[2]).isNotNull().as("Third attempt time should be recorded");
         long delay1 = callTimes[1].get() - callTimes[0].get();
         long delay2 = callTimes[2].get() - callTimes[1].get();
         assertThat(delay2).isGreaterThanOrEqualTo(delay1);
