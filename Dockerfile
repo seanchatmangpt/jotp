@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for JOTP Java 26 Project
 # Stage 1: Build
-FROM eclipse-temurin:26-jdk-alpine AS builder
+FROM --platform=linux/amd64 local/jotp-java26-base AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -24,7 +24,7 @@ RUN chmod +x mvnw
 RUN ./mvnw clean package -DskipTests -B -q
 
 # Stage 2: Runtime
-FROM eclipse-temurin:26-jre-alpine
+FROM --platform=linux/amd64 local/jotp-java26-base AS runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -62,7 +62,7 @@ ENTRYPOINT ["java", \
     "/app/jotp.jar"]
 
 # Stage 3: Test (separate stage for running tests)
-FROM builder AS test
+FROM --platform=linux/amd64 local/jotp-java26-base AS test
 
 # Set working directory
 WORKDIR /build
@@ -74,7 +74,7 @@ COPY --from=builder /build/target/*.jar /build/
 RUN ./mvnw test -B
 
 # Stage 4: Development (with debugging support)
-FROM eclipse-temurin:26-jdk-alpine AS development
+FROM --platform=linux/amd64 local/jotp-java26-base AS development
 
 # Install development tools
 RUN apk add --no-cache \
