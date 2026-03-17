@@ -642,7 +642,7 @@ public final class CrashDumpCollector {
     }
 
     private String escapeJson(String s) {
-        if (s == null) return "";
+        if (s == null) throw new IllegalArgumentException("escapeJson: input must not be null");
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
