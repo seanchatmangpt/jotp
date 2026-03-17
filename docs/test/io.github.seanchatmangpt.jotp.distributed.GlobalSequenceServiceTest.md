@@ -1,65 +1,81 @@
 # io.github.seanchatmangpt.jotp.distributed.GlobalSequenceServiceTest
 
 
-GlobalSequenceService.create() factory creates HLC-based services.
-
-The service is initialized with current time and ready to use.
-
-Node ID must be unique across the cluster.
-
-Sequence numbers are strictly monotonically increasing.
-
-Each subsequent call returns a value greater than the previous one.
-
-This property is critical for ordering events in distributed systems.
-
-NodeDiscovery service is required for cluster coordination.
-
-Null discovery throws NullPointerException.
-
 GlobalSequenceService generates globally unique sequence numbers.
-
-This ensures the service can synchronize with peers.
 
 Each call to nextGlobalSeq() returns a monotonically increasing value.
 
 The HLC algorithm combines physical time, node ID, and logical counter to guarantee uniqueness.
 
-High-water mark tracks the highest sequence known to this node.
+The service supports high-throughput scenarios with many concurrent threads.
 
-After synchronization, it reflects the cluster state.
+100K+ sequences per second is achievable with virtual threads.
 
-This enables conflict detection and recovery coordination.
+This performance enables use in high-volume distributed systems.
 
-Node ID is accessible for debugging and monitoring.
+Generated 100000 sequences in 1.99 seconds
 
-This helps identify which node generated a sequence.
+Throughput: 50175 sequences/second
 
-Useful in distributed tracing and log analysis.
+Per-thread: 2509 sequences/second
 
-Node ID is required for unique sequence generation.
+Each thread observes locally monotonic sequence generation.
 
-Null node ID throws NullPointerException to fail fast.
+Global monotonicity is maintained across all threads via CAS.
 
-This prevents runtime errors in distributed coordination.
+This property is critical for distributed ordering consistency.
 
-Synchronization requires a non-null peer list for safety.
+When multiple sequences are generated in the same millisecond, the counter increments.
 
-Passing null throws NullPointerException to fail fast.
+This supports high-throughput scenarios with 65K sequences per ms per node.
 
-This prevents subtle bugs in distributed coordination logic.
+The timestamp remains constant while the counter provides uniqueness.
 
-HLC sequence numbers use [timestamp:48][nodeId:16][counter:16] format.
+Synchronization with an empty peer list is valid for single-node clusters.
 
-Each component can be extracted using utility methods for debugging.
+The service ensures its HLC is at least at current physical time.
 
-This format provides ~285K year range, 65K nodes, and 65K sequences/ms per node.
+This provides a safe baseline for sequence generation.
 
-HLC maintains separate timestamp and counter components.
+Monotonicity is maintained over long sequences of generation.
 
-These can be accessed for monitoring and debugging via getCurrentHlcTimestamp().
+This test verifies the invariant holds across 10K sequences.
 
-The counter component is accessible via getCurrentHlcCounter().
+No sequence should ever be less than or equal to a previous one.
+
+Burst scenarios generate many sequences in rapid succession.
+
+The counter handles same-millisecond generation efficiently.
+
+100K sequences in a burst should complete quickly without blocking.
+
+Burst: 100000 sequences in 0.978 seconds
+
+Burst throughput: 102210 sequences/second
+
+Multiple threads can generate sequences concurrently without coordination.
+
+The HLC algorithm uses CAS loops to ensure thread safety.
+
+All generated sequences are unique despite concurrent access.
+
+Each node has a unique node ID hash in its sequence numbers.
+
+This ensures global uniqueness even with clock drift.
+
+The 16-bit node ID field supports up to 65,536 nodes.
+
+Synchronization ensures this node's HLC is aware of cluster state.
+
+On startup, nodes sync to prevent sequence collisions after restart.
+
+The HLC is advanced to at least current physical time.
+
+The 16-bit counter overflows after 65,536 sequences per millisecond.
+
+When overflow occurs, HLC advances time by 1ms and resets counter.
+
+This is extremely rare but must be handled correctly for correctness.
 
 Under normal conditions, physical time advances between calls.
 
@@ -73,80 +89,65 @@ Empty string throws IllegalArgumentException.
 
 This prevents invalid cluster configuration.
 
-Each node has a unique node ID hash in its sequence numbers.
+Node ID is required for unique sequence generation.
 
-This ensures global uniqueness even with clock drift.
+Null node ID throws NullPointerException to fail fast.
 
-The 16-bit node ID field supports up to 65,536 nodes.
-
-The 16-bit counter overflows after 65,536 sequences per millisecond.
-
-When overflow occurs, HLC advances time by 1ms and resets counter.
-
-Synchronization ensures this node's HLC is aware of cluster state.
-
-This is extremely rare but must be handled correctly for correctness.
-
-On startup, nodes sync to prevent sequence collisions after restart.
+This prevents runtime errors in distributed coordination.
 
 High-water mark tracks the highest sequence number generated.
 
 After generating sequences, currentHighWaterMark() returns the maximum value.
 
-
 This enables cross-node coordination and conflict detection.
 
-Monotonicity is maintained over long sequences of generation.
+Synchronization requires a non-null peer list for safety.
 
-This test verifies the invariant holds across 10K sequences.
+Passing null throws NullPointerException to fail fast.
 
-No sequence should ever be less than or equal to a previous one.
+This prevents subtle bugs in distributed coordination logic.
 
-Synchronization with an empty peer list is valid for single-node clusters.
+Sequence numbers are strictly monotonically increasing.
 
-The service ensures its HLC is at least at current physical time.
+Each subsequent call returns a value greater than the previous one.
 
-This provides a safe baseline for sequence generation.
+This property is critical for ordering events in distributed systems.
 
-When multiple sequences are generated in the same millisecond, the counter increments.
+GlobalSequenceService.create() factory creates HLC-based services.
 
-This supports high-throughput scenarios with 65K sequences per ms per node.
+The service is initialized with current time and ready to use.
 
-The timestamp remains constant while the counter provides uniqueness.
+Node ID must be unique across the cluster.
 
-Multiple threads can generate sequences concurrently without coordination.
+HLC sequence numbers use [timestamp:48][nodeId:16][counter:16] format.
 
-The HLC algorithm uses CAS loops to ensure thread safety.
+Each component can be extracted using utility methods for debugging.
 
-All generated sequences are unique despite concurrent access.
+This format provides ~285K year range, 65K nodes, and 65K sequences/ms per node.
 
-Burst scenarios generate many sequences in rapid succession.
+NodeDiscovery service is required for cluster coordination.
 
-The counter handles same-millisecond generation efficiently.
+Null discovery throws NullPointerException.
 
-100K sequences in a burst should complete quickly without blocking.
+This ensures the service can synchronize with peers.
 
-Each thread observes locally monotonic sequence generation.
+Node ID is accessible for debugging and monitoring.
 
-Global monotonicity is maintained across all threads via CAS.
+This helps identify which node generated a sequence.
 
-This property is critical for distributed ordering consistency.
+Useful in distributed tracing and log analysis.
 
-The service supports high-throughput scenarios with many concurrent threads.
+High-water mark tracks the highest sequence known to this node.
 
-100K+ sequences per second is achievable with virtual threads.
+After synchronization, it reflects the cluster state.
 
-This performance enables use in high-volume distributed systems.
+This enables conflict detection and recovery coordination.
 
-Burst: 100000 sequences in 0.023 seconds
+HLC maintains separate timestamp and counter components.
 
-Burst throughput: 4269543 sequences/second
+These can be accessed for monitoring and debugging via getCurrentHlcTimestamp().
 
-Generated 100000 sequences in 0.11 seconds
-
-Throughput: 916620 sequences/second
-
-Per-thread: 45831 sequences/second
+The counter component is accessible via getCurrentHlcCounter().
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

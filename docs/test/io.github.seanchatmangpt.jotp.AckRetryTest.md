@@ -12,14 +12,14 @@ It provides automatic retry with configurable timeout and max attempts.
 When the first attempt succeeds, the result is returned immediately without additional retries.
 
 
-sendWithBackoff adds exponential backoff between retries to avoid thundering herd problems.
-After each failure, the system waits before retrying, giving the target time to recover.
-This is crucial for avoiding cascading failures in distributed systems.
-
-
 When an attempt fails (timeout or exception), AckRetry automatically retries.
 Each retry is a fresh attempt with the same message.
 This pattern is essential for distributed systems where transient failures are common.
+
+
+sendWithBackoff adds exponential backoff between retries to avoid thundering herd problems.
+After each failure, the system waits before retrying, giving the target time to recover.
+This is crucial for avoiding cascading failures in distributed systems.
 
 
 ---

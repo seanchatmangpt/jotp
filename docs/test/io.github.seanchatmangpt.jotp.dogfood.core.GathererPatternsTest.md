@@ -6,8 +6,8 @@
 - [Custom Gatherer: Deduplication](#customgathererdeduplication)
 - [Running Scan (Prefix Sums)](#runningscanprefixsums)
 - [Gatherer API: Custom Stream Intermediate Operations](#gathererapicustomstreamintermediateoperations)
-- [Chaining Multiple Gatherers](#chainingmultiplegatherers)
 - [Fold as Intermediate Operation](#foldasintermediateoperation)
+- [Chaining Multiple Gatherers](#chainingmultiplegatherers)
 - [Concurrent Mapping with Gatherers](#concurrentmappingwithgatherers)
 
 
@@ -115,20 +115,6 @@ var batches = GathererPatterns.batch(items, 3);
 > [!NOTE]
 > Batching is essential for bulk operations (database inserts, API calls) where you want to process multiple items together. The Gatherer API makes this a one-liner instead of manual iteration.
 
-## Chaining Multiple Gatherers
-
-Gatherers can be chained like any stream operation. Each gatherer transforms the stream, passing results to the next. This enables complex pipelines.
-
-```java
-// Chain gatherers: dedupe → batch
-var items = List.of(1, 1, 2, 2, 3, 3, 4, 4, 5, 5);
-var result = GathererPatterns.batchAndDeduplicate(items, 2);
-
-// Step 1: Dedupe → [1, 2, 3, 4, 5]
-// Step 2: Batch → [[1, 2], [3, 4], [5]]
-// Result: [[1, 2], [3, 4], [5]]
-```
-
 ## Fold as Intermediate Operation
 
 Fold is traditionally a terminal operation (Stream.reduce), but Gatherer enables fold as an intermediate operation. This allows folding to be part of a larger pipeline.
@@ -151,6 +137,20 @@ var sum = GathererPatterns.foldToSingle(items, 0, Integer::sum);
 
 > [!NOTE]
 > Fold as an intermediate operation enables complex pipelines: filter → fold → map. This was impossible with traditional Stream.reduce, which is terminal-only.
+
+## Chaining Multiple Gatherers
+
+Gatherers can be chained like any stream operation. Each gatherer transforms the stream, passing results to the next. This enables complex pipelines.
+
+```java
+// Chain gatherers: dedupe → batch
+var items = List.of(1, 1, 2, 2, 3, 3, 4, 4, 5, 5);
+var result = GathererPatterns.batchAndDeduplicate(items, 2);
+
+// Step 1: Dedupe → [1, 2, 3, 4, 5]
+// Step 2: Batch → [[1, 2], [3, 4], [5]]
+// Result: [[1, 2], [3, 4], [5]]
+```
 
 | Key | Value |
 | --- | --- |

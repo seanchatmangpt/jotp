@@ -4,12 +4,12 @@
 
 - [GenServer: Call Timeout Protection](#genservercalltimeoutprotection)
 - [GenServer: Asynchronous Cast (Fire-and-Forget)](#genserverasynchronouscastfireandforget)
+- [GenServer: Complete Message Type Overview](#genservercompletemessagetypeoverview)
+- [GenServer: FIFO Ordering Guarantee](#genserverfifoorderingguarantee)
 - [GenServer: Custom Reply Values](#genservercustomreplyvalues)
 - [GenServer: Synchronous Request-Reply (call)](#genserversynchronousrequestreplycall)
 - [GenServer: Info Messages (Out-of-Band Notifications)](#genserverinfomessagesoutofbandnotifications)
 - [GenServer: Graceful Shutdown](#genservergracefulshutdown)
-- [GenServer: FIFO Ordering Guarantee](#genserverfifoorderingguarantee)
-- [GenServer: Complete Message Type Overview](#genservercompletemessagetypeoverview)
 
 
 ## GenServer: Call Timeout Protection
@@ -73,11 +73,122 @@ var result = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
 // result == 1 (0 + 1 + 1 - 1 = 1)
 ```
 
+## GenServer: Complete Message Type Overview
+
+GenServer supports three message types: call (sync request-reply), cast (async fire-and-forget), and info (out-of-band notifications).
+
+| Message Type | Method | Blocking | Reply | Use Case |
+| --- | --- | --- | --- | --- |
+| Call | call() | Yes (with timeout) | Yes | Request-response pattern |
+| Cast | cast() | No | No | Fire-and-forget updates |
+| Info | info() | No | No | Timers, monitors, external events |
+
+```java
+// Counter server demonstrating all three message types
+var handler = new GenServer.Handler<Integer, CounterMsg>() {
+    @Override
+    public GenServer.CallResult<Integer> handleCall(
+            CounterMsg request, Integer state) {
+        // Synchronous: returns (nextState, reply)
+        return switch (request) {
+            case CounterMsg.Get _ -> new GenServer.CallResult<>(state, state);
+            default -> new GenServer.CallResult<>(state, -1);
+        };
+    }
+
+    @Override
+    public Integer handleCast(CounterMsg request, Integer state) {
+        // Asynchronous: returns nextState only
+        return switch (request) {
+            case CounterMsg.Increment _ -> state + 1;
+            case CounterMsg.Decrement _ -> state - 1;
+            case CounterMsg.Reset _ -> 0;
+            default -> state;
+        };
+    }
+
+    @Override
+    public Integer handleInfo(Object info, Integer state) {
+        // Out-of-band: returns nextState only
+        // Log, monitor, or handle external notifications
+        return state;
+    }
+};
+
+var server = GenServer.start(0, handler);
+
+// Cast: async fire-and-forget
+server.cast(new CounterMsg.Increment());
+server.cast(new CounterMsg.Increment());
+
+// Call: sync request-reply
+var count = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
+// count == 2
+
+// Info: out-of-band notification
+server.info("timer fired");
+```
+
 | Key | Value |
 | --- | --- |
 | `Operations` | `Increment, Increment, Decrement` |
 | `Final State` | `1` |
 | `Initial State` | `0` |
+
+| Key | Value |
+| --- | --- |
+| `Cast Messages` | `2 (Increment, Increment)` |
+| `Call Messages` | `1 (Get)` |
+| `Info Messages` | `1 (timer fired)` |
+| `Final State` | `2` |
+
+## GenServer: FIFO Ordering Guarantee
+
+GenServer processes cast messages in FIFO order. Messages sent earlier are always processed before messages sent later.
+
+```java
+var handler =
+    new GenServer.Handler<List<String>, StateMsg>() {
+        @Override
+        public GenServer.CallResult<List<String>> handleCall(
+                StateMsg request, List<String> state) {
+            return switch (request) {
+                case StateMsg.GetState _ ->
+                        new GenServer.CallResult<>(state, new ArrayList<>(state));
+                default -> new GenServer.CallResult<>(state, List.of());
+            };
+        }
+
+        @Override
+        public List<String> handleCast(StateMsg request, List<String> state) {
+            return switch (request) {
+                case StateMsg.Append append -> {
+                    var newState = new ArrayList<>(state);
+                    newState.add(append.value());
+                    yield newState;
+                }
+                case StateMsg.Clear _ -> new ArrayList<>();
+                default -> state;
+            };
+        }
+
+        @Override
+        public List<String> handleInfo(Object info, List<String> state) {
+            return state;
+        }
+    };
+
+var server = GenServer.start(new ArrayList<>(), handler);
+
+// Send multiple casts in order
+server.cast(new StateMsg.Append("first"));
+server.cast(new StateMsg.Append("second"));
+server.cast(new StateMsg.Append("third"));
+
+// Verify ordering
+var result = server.call(new StateMsg.GetState(), CALL_TIMEOUT).get();
+// result == ["first", "second", "third"]
+```
 
 ## GenServer: Custom Reply Values
 
@@ -112,6 +223,12 @@ var server = GenServer.start("initial", handler);
 var reply = server.call(new EchoMsg.Echo("hello"), CALL_TIMEOUT).get();
 // reply == "echo:hello"
 ```
+
+| Key | Value |
+| --- | --- |
+| `Result` | `[first, second, third]` |
+| `Messages Sent` | `3` |
+| `Ordering` | `FIFO` |
 
 | Key | Value |
 | --- | --- |
@@ -258,123 +375,6 @@ server.stop();
 | --- | --- |
 | `Messages Queued` | `3` |
 | `Messages Processed` | `3` |
-
-## GenServer: FIFO Ordering Guarantee
-
-GenServer processes cast messages in FIFO order. Messages sent earlier are always processed before messages sent later.
-
-```java
-var handler =
-    new GenServer.Handler<List<String>, StateMsg>() {
-        @Override
-        public GenServer.CallResult<List<String>> handleCall(
-                StateMsg request, List<String> state) {
-            return switch (request) {
-                case StateMsg.GetState _ ->
-                        new GenServer.CallResult<>(state, new ArrayList<>(state));
-                default -> new GenServer.CallResult<>(state, List.of());
-            };
-        }
-
-        @Override
-        public List<String> handleCast(StateMsg request, List<String> state) {
-            return switch (request) {
-                case StateMsg.Append append -> {
-                    var newState = new ArrayList<>(state);
-                    newState.add(append.value());
-                    yield newState;
-                }
-                case StateMsg.Clear _ -> new ArrayList<>();
-                default -> state;
-            };
-        }
-
-        @Override
-        public List<String> handleInfo(Object info, List<String> state) {
-            return state;
-        }
-    };
-
-var server = GenServer.start(new ArrayList<>(), handler);
-
-// Send multiple casts in order
-server.cast(new StateMsg.Append("first"));
-server.cast(new StateMsg.Append("second"));
-server.cast(new StateMsg.Append("third"));
-
-// Verify ordering
-var result = server.call(new StateMsg.GetState(), CALL_TIMEOUT).get();
-// result == ["first", "second", "third"]
-```
-
-| Key | Value |
-| --- | --- |
-| `Result` | `[first, second, third]` |
-| `Messages Sent` | `3` |
-| `Ordering` | `FIFO` |
-
-## GenServer: Complete Message Type Overview
-
-GenServer supports three message types: call (sync request-reply), cast (async fire-and-forget), and info (out-of-band notifications).
-
-| Message Type | Method | Blocking | Reply | Use Case |
-| --- | --- | --- | --- | --- |
-| Call | call() | Yes (with timeout) | Yes | Request-response pattern |
-| Cast | cast() | No | No | Fire-and-forget updates |
-| Info | info() | No | No | Timers, monitors, external events |
-
-```java
-// Counter server demonstrating all three message types
-var handler = new GenServer.Handler<Integer, CounterMsg>() {
-    @Override
-    public GenServer.CallResult<Integer> handleCall(
-            CounterMsg request, Integer state) {
-        // Synchronous: returns (nextState, reply)
-        return switch (request) {
-            case CounterMsg.Get _ -> new GenServer.CallResult<>(state, state);
-            default -> new GenServer.CallResult<>(state, -1);
-        };
-    }
-
-    @Override
-    public Integer handleCast(CounterMsg request, Integer state) {
-        // Asynchronous: returns nextState only
-        return switch (request) {
-            case CounterMsg.Increment _ -> state + 1;
-            case CounterMsg.Decrement _ -> state - 1;
-            case CounterMsg.Reset _ -> 0;
-            default -> state;
-        };
-    }
-
-    @Override
-    public Integer handleInfo(Object info, Integer state) {
-        // Out-of-band: returns nextState only
-        // Log, monitor, or handle external notifications
-        return state;
-    }
-};
-
-var server = GenServer.start(0, handler);
-
-// Cast: async fire-and-forget
-server.cast(new CounterMsg.Increment());
-server.cast(new CounterMsg.Increment());
-
-// Call: sync request-reply
-var count = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
-// count == 2
-
-// Info: out-of-band notification
-server.info("timer fired");
-```
-
-| Key | Value |
-| --- | --- |
-| `Cast Messages` | `2 (Increment, Increment)` |
-| `Call Messages` | `1 (Get)` |
-| `Info Messages` | `1 (timer fired)` |
-| `Final State` | `2` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*
