@@ -130,7 +130,7 @@ public class IntelligentCircuitBreakerExample {
   static void exampleAdaptiveBackoff() {
     System.out.println("\n=== Example 3: Adaptive Exponential Backoff ===\n");
 
-    var breaker =
+    IntelligentCircuitBreaker<String, String, Exception> breaker =
         IntelligentCircuitBreaker.create(
             "db-service",
             5,
