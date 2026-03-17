@@ -179,9 +179,13 @@ public class IntelligentCircuitBreakerExample {
     System.out.println("Recording failure and successful recovery:");
     Exception ex = new SocketTimeoutException("Redis timeout");
 
-    breaker.execute("get-cache-123", request -> {
-      throw ex;
-    });
+    try {
+      breaker.execute("get-cache-123", request -> {
+        throw ex;
+      });
+    } catch (Exception ignored) {
+      // Expected
+    }
 
     // Record retry success
     breaker.recordRetrySuccess(ex);
@@ -267,13 +271,13 @@ public class IntelligentCircuitBreakerExample {
 
   // ── Helper Exceptions ──────────────────────────────────────────────────
 
-  static class SocketTimeoutException extends Exception {
+  static class SocketTimeoutException extends RuntimeException {
     SocketTimeoutException(String msg) {
       super(msg);
     }
   }
 
-  static class BadRequestException extends Exception {
+  static class BadRequestException extends RuntimeException {
     BadRequestException(String msg) {
       super(msg);
     }

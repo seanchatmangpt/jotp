@@ -161,14 +161,11 @@ public final class RepairDecisionTree {
       SelfHealer.Diagnosis diagnosis) {
     return switch (diagnosis) {
       case SelfHealer.Diagnosis.CascadingFailure cascading ->
-          if (cascading.isRepairable()) {
-            // Drain and restart the root cause
-            new SelfHealer.Repair.DrainAndRestart(
-                "proc-root", Duration.ofSeconds(5));
-          } else {
-            // Non-repairable; failover to standby
-            new SelfHealer.Repair.Failover("crashed-service", "standby-supervisor");
-          }
+          cascading.isRepairable()
+              ? new SelfHealer.Repair.DrainAndRestart(
+                  "proc-root", Duration.ofSeconds(5))
+              : new SelfHealer.Repair.Failover(
+                  "crashed-service", "standby-supervisor");
       default ->
           new SelfHealer.Repair.RestartNode(
               "node-cascade", Duration.ofSeconds(10));
