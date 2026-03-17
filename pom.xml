@@ -150,6 +150,20 @@
             <version>2.17.0</version>
         </dependency>
 
+        <!-- Redis client for distributed caching and registry -->
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+
+        <!-- PostgreSQL JDBC driver for distributed persistence -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.1</version>
+        </dependency>
+
     </dependencies>
     <build>
         <plugins>
