@@ -154,8 +154,6 @@
                         <!-- dogfood/messaging examples that reference unimplemented messaging.system classes -->
                         <exclude>io/github/seanchatmangpt/jotp/dogfood/messaging/DeadLetterChannelExample.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/dogfood/messaging/MessageExpirationExample.java</exclude>
-                        <!-- Distributed classes with pre-existing generic type issues awaiting fix -->
-                        <exclude>io/github/seanchatmangpt/jotp/NodeFailoverController.java</exclude>
                     </excludes>
                     <testExcludes>
                         <!-- Messaging tests reference unimplemented classes in io.github.seanchatmangpt.jotp.messaging -->
@@ -174,7 +172,6 @@
                         <exclude>io/github/seanchatmangpt/jotp/observability/FrameworkObservabilityTest.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/PatternsIntegrationTest.java</exclude>
                         <!-- Tests with @DtrTest annotation issues or missing DTR imports - being migrated -->
-                        <!-- TODO: Fix DTR annotations and remove exclusions -->
                         <!-- DTR Tests Converted - Ready for compilation -->
                         <!-- Core OTP Tests -->
                         <exclude>io/github/seanchatmangpt/jotp/test/ProcSysTest.java</exclude>
@@ -196,8 +193,8 @@
                         <!-- Additional Tests -->
                         <exclude>io/github/seanchatmangpt/jotp/EventSourcingAuditLogTest.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/pool/**</exclude>
-                        <!-- Tests for excluded distributed classes -->
-                        <exclude>io/github/seanchatmangpt/jotp/NodeFailoverControllerTest.java</exclude>
+                        <!-- Benchmark tests with unresolved observability dependencies -->
+                        <exclude>io/github/seanchatmangpt/jotp/benchmark/**</exclude>
                         <!-- Test base classes that reference excluded testing utilities -->
                         <exclude>io/github/seanchatmangpt/jotp/testing/base/**</exclude>
                     </testExcludes>
