@@ -3,14 +3,11 @@
 ## Table of Contents
 
 - [State Consistency Under Concurrency](#stateconsistencyunderconcurrency)
-- [Request-Response Messaging with ask()](#requestresponsemessagingwithask)
-- [Sequential State Transitions](#sequentialstatetransitions)
-- [OTP GenServer Pattern: Stateful Processes](#otpgenserverpatternstatefulprocesses)
-- [Immutable State Records](#immutablestaterecords)
-- [State Validation with Compact Constructors](#statevalidationwithcompactconstructors)
+- [Concurrent Requests with Serialized Processing](#concurrentrequestswithserializedprocessing)
 - [Normal Completion with Timeout](#normalcompletionwithtimeout)
 - [Timeout Handling in ask()](#timeouthandlinginask)
-- [Concurrent Requests with Serialized Processing](#concurrentrequestswithserializedprocessing)
+- [Immutable State Records](#immutablestaterecords)
+- [State Validation with Compact Constructors](#statevalidationwithcompactconstructors)
 
 
 ## State Consistency Under Concurrency
@@ -38,164 +35,49 @@ CounterState finalState = counterService.ask(new CounterMessage.GetCount(), time
 // Result: count = 60 (10 + 20 + 30)
 ```
 
-## Request-Response Messaging with ask()
+| Key | Value |
+| --- | --- |
+| `Intermediate States` | `Monotonically increasing` |
+| `Consistency` | `Guaranteed by serialization` |
+| `Final State` | `count = 60 (deterministic)` |
+| `Increments` | `10 + 20 + 30` |
 
-The ask() method implements OTP's call/2 pattern — send a request and wait for a response. It returns CompletableFuture<State>, enabling async/await patterns.
+> [!NOTE]
+> The final state is deterministic (sum of all increments) even though intermediate states depend on message ordering. This is because each state transition is atomic — no partially applied updates.
+
+## Concurrent Requests with Serialized Processing
+
+Multiple callers can send concurrent ask() requests. The GenServer processes them one at a time (serial execution) but responses return as soon as each message is handled.
 
 ```java
-// Send command and wait for new state
-counterService.ask(new CounterMessage.IncrementBy(5), timeout)
-    .thenAccept(newState -> {
-        // newState.count() == 5
-    });
+// Fire three concurrent asks
+CompletableFuture<CounterState> async1 =
+    counterService.ask(new CounterMessage.IncrementBy(1), timeout);
+CompletableFuture<CounterState> async2 =
+    counterService.ask(new CounterMessage.IncrementBy(1), timeout);
+CompletableFuture<CounterState> async3 =
+    counterService.ask(new CounterMessage.IncrementBy(1), timeout);
 
-// Query current state
-CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
+// Wait for all to complete
+CompletableFuture.allOf(async1, async2, async3).join();
+
+// Verify final state
+CounterState finalState = counterService.ask(new CounterMessage.GetCount(), timeout)
     .join();
 
-// Result: count = 5
+// Result: count = 3 (1 + 1 + 1)
 ```
 
 | Key | Value |
 | --- | --- |
-| `Result` | `CounterState(5)` |
-| `Pattern` | `Command Query Responsibility Segregation (CQRS)` |
-| `Command` | `IncrementBy(5)` |
-| `Query` | `GetCount` |
-| `State Change` | `0 → 5` |
+| `Processing` | `Serialized (one at a time)` |
+| `Concurrent Requests` | `3 concurrent IncrementBy(1)` |
+| `Pattern` | `Mailbox queue` |
+| `Responses` | `Complete out-of-order` |
+| `Final State` | `count = 3` |
 
 > [!NOTE]
-> ask() returns the new state after message processing. This enables CQRS-style operations where commands change state and queries read it. All state transitions are immutable.
-
-## Sequential State Transitions
-
-GenServers process messages sequentially from their mailbox. This ensures consistent state — no race conditions from concurrent state updates.
-
-```java
-// Sequential message processing
-counterService.ask(new CounterMessage.IncrementBy(2), timeout).join();  // 0 → 2
-counterService.ask(new CounterMessage.IncrementBy(3), timeout).join();  // 2 → 5
-counterService.ask(new CounterMessage.IncrementBy(5), timeout).join();  // 5 → 10
-
-CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
-    .join();
-
-// Final state: count = 10 (2 + 3 + 5)
-```
-
-| Key | Value |
-| --- | --- |
-| `Message 1` | `IncrementBy(2) → state = 2` |
-| `Message 2` | `IncrementBy(3) → state = 5` |
-| `Message 3` | `IncrementBy(5) → state = 10` |
-| `Final State` | `count = 10` |
-| `Processing` | `Sequential, ordered` |
-
-> [!NOTE]
-> Sequential processing eliminates race conditions. Each message sees the state left by the previous message. This is the essence of the Actor model — message passing instead of shared mutable state.
-
-## OTP GenServer Pattern: Stateful Processes
-
-JOTP's Proc<S,M> implements the OTP GenServer pattern — a stateful process that handles messages and updates state immutably. Each message creates a new state instead of mutating existing state.
-
-| Concept | State | Request/Response |
-| --- | --- | --- |
-| Erlang/OTP | Immutable record | call/2 |
-| JOTP (Java 26) | Immutable record | ask() |
-| Process | Messages | Cast (fire-forget) |
-| gen_server process | Pattern matching | cast/2 |
-| Proc<S,M> | Sealed + pattern matching | tell() |
-
-```java
-// Create a GenServer-style process
-Proc<CounterState, CounterMessage> counterService = new Proc<>(
-    new CounterState(0),  // Initial state
-    (state, msg) -> switch (msg) {  // Message handler
-        case CounterMessage.IncrementBy inc ->
-            new CounterState(state.count() + inc.delta());
-        case CounterMessage.GetCount ignored ->
-            state;
-    }
-);
-
-// Query state via ask()
-CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
-    .join();
-
-// Result: count = 0
-```
-
-| Key | Value |
-| --- | --- |
-| `Initial State` | `CounterState(0)` |
-| `Result` | `CounterState(0)` |
-| `Message` | `GetCount` |
-| `State Change` | `None (query)` |
-
-> [!NOTE]
-> Proc<S,M> uses sealed message types and pattern matching, ensuring exhaustive handling at compile time. The state is always immutable — transitions create new state records.
-
-## Immutable State Records
-
-GenServer state is always immutable — a record. Each state transition creates a new state record instead of mutating the existing one.
-
-```java
-// Record-based state (immutable)
-public record CounterState(int count) {
-    public CounterState {
-        if (count < 0) {
-            throw new IllegalArgumentException("count must be non-negative");
-        }
-    }
-}
-
-// Each message creates new state
-CounterState s1 = counterService.ask(new IncrementBy(5), timeout).join();
-CounterState s2 = counterService.ask(new IncrementBy(3), timeout).join();
-
-// s1 is unchanged (record is immutable)
-assertThat(s1.count()).isEqualTo(5);
-assertThat(s2.count()).isEqualTo(8);
-```
-
-| Key | Value |
-| --- | --- |
-| `s1 After s2 Created` | `Still CounterState(5) (unchanged)` |
-| `s1` | `CounterState(5)` |
-| `s2` | `CounterState(8)` |
-| `State Type` | `Record (immutable)` |
-
-> [!NOTE]
-> Immutable state eliminates race conditions — no need for locks or synchronized blocks. The JVM can optimize immutable records more aggressively than mutable objects.
-
-## State Validation with Compact Constructors
-
-Records support compact constructors for validation. The CounterState record validates that count is non-negative at construction time.
-
-```java
-// Record with validation
-public record CounterState(int count) {
-    public CounterState {
-        if (count < 0) {
-            throw new IllegalArgumentException("count must be non-negative");
-        }
-    }
-}
-
-// Invalid state throws exception
-assertThatThrownBy(() -> new CounterState(-1))
-    .isInstanceOf(IllegalArgumentException.class);
-```
-
-| Key | Value |
-| --- | --- |
-| `Violation` | `IllegalArgumentException` |
-| `Check` | `count >= 0` |
-| `Validation` | `Compact constructor` |
-| `Timing` | `Construction time` |
-
-> [!NOTE]
-> State validation at construction prevents invalid states from ever existing. This is fail-fast design — bugs are caught immediately rather than propagating invalid state.
+> The mailbox serializes concurrent requests — no locks needed. This is the Actor model's solution to concurrency: message passing instead of shared mutable state.
 
 ## Normal Completion with Timeout
 
@@ -215,9 +97,9 @@ CounterState newState = future.join();
 
 | Key | Value |
 | --- | --- |
-| `Result` | `Success (no timeout)` |
-| `Operation` | `IncrementBy(5)` |
 | `Timeout` | `5000ms (5 seconds)` |
+| `Operation` | `IncrementBy(5)` |
+| `Result` | `Success (no timeout)` |
 | `Time Required` | `<1ms` |
 
 > [!NOTE]
@@ -255,49 +137,67 @@ assertThatExceptionOfType(TimeoutException.class)
     .isThrownBy(future::join);
 ```
 
-## Concurrent Requests with Serialized Processing
+## Immutable State Records
 
-Multiple callers can send concurrent ask() requests. The GenServer processes them one at a time (serial execution) but responses return as soon as each message is handled.
+GenServer state is always immutable — a record. Each state transition creates a new state record instead of mutating the existing one.
 
 ```java
-// Fire three concurrent asks
-CompletableFuture<CounterState> async1 =
-    counterService.ask(new CounterMessage.IncrementBy(1), timeout);
-CompletableFuture<CounterState> async2 =
-    counterService.ask(new CounterMessage.IncrementBy(1), timeout);
-CompletableFuture<CounterState> async3 =
-    counterService.ask(new CounterMessage.IncrementBy(1), timeout);
+// Record-based state (immutable)
+public record CounterState(int count) {
+    public CounterState {
+        if (count < 0) {
+            throw new IllegalArgumentException("count must be non-negative");
+        }
+    }
+}
 
-// Wait for all to complete
-CompletableFuture.allOf(async1, async2, async3).join();
+// Each message creates new state
+CounterState s1 = counterService.ask(new IncrementBy(5), timeout).join();
+CounterState s2 = counterService.ask(new IncrementBy(3), timeout).join();
 
-// Verify final state
-CounterState finalState = counterService.ask(new CounterMessage.GetCount(), timeout)
-    .join();
-
-// Result: count = 3 (1 + 1 + 1)
+// s1 is unchanged (record is immutable)
+assertThat(s1.count()).isEqualTo(5);
+assertThat(s2.count()).isEqualTo(8);
 ```
 
 | Key | Value |
 | --- | --- |
-| `Concurrent Requests` | `3 concurrent IncrementBy(1)` |
-| `Processing` | `Serialized (one at a time)` |
-| `Final State` | `count = 3` |
-| `Responses` | `Complete out-of-order` |
-| `Pattern` | `Mailbox queue` |
+| `State Type` | `Record (immutable)` |
+| `s2` | `CounterState(8)` |
+| `s1` | `CounterState(5)` |
+| `s1 After s2 Created` | `Still CounterState(5) (unchanged)` |
 
 > [!NOTE]
-> The mailbox serializes concurrent requests — no locks needed. This is the Actor model's solution to concurrency: message passing instead of shared mutable state.
+> Immutable state eliminates race conditions — no need for locks or synchronized blocks. The JVM can optimize immutable records more aggressively than mutable objects.
+
+## State Validation with Compact Constructors
+
+Records support compact constructors for validation. The CounterState record validates that count is non-negative at construction time.
+
+```java
+// Record with validation
+public record CounterState(int count) {
+    public CounterState {
+        if (count < 0) {
+            throw new IllegalArgumentException("count must be non-negative");
+        }
+    }
+}
+
+// Invalid state throws exception
+assertThatThrownBy(() -> new CounterState(-1))
+    .isInstanceOf(IllegalArgumentException.class);
+```
 
 | Key | Value |
 | --- | --- |
-| `Final State` | `count = 60 (deterministic)` |
-| `Consistency` | `Guaranteed by serialization` |
-| `Intermediate States` | `Monotonically increasing` |
-| `Increments` | `10 + 20 + 30` |
+| `Validation` | `Compact constructor` |
+| `Check` | `count >= 0` |
+| `Violation` | `IllegalArgumentException` |
+| `Timing` | `Construction time` |
 
 > [!NOTE]
-> The final state is deterministic (sum of all increments) even though intermediate states depend on message ordering. This is because each state transition is atomic — no partially applied updates.
+> State validation at construction prevents invalid states from ever existing. This is fail-fast design — bugs are caught immediately rather than propagating invalid state.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

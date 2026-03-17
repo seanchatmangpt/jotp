@@ -45,9 +45,9 @@ boolean isSubscribed = metrics.isSubscribed();
 
 | Key | Value |
 | --- | --- |
-| `Collector Type` | `MetricsCollector` |
-| `Feature Flag` | `-Djotp.observability.enabled=true` |
 | `Metrics Name` | `test-metrics` |
+| `Feature Flag` | `-Djotp.observability.enabled=true` |
+| `Collector Type` | `MetricsCollector` |
 | `Subscribed` | `true` |
 
 > [!NOTE]
@@ -102,9 +102,9 @@ Map<String, Object> snapshot = collector.snapshot();
 | Key | Value |
 | --- | --- |
 | `Event Type` | `ProcessMonitorRegistered` |
-| `Event Priority` | `P2 (Operational)` |
-| `Metrics Created` | `0` |
 | `Reason` | `Low signal-to-noise ratio` |
+| `Metrics Created` | `0` |
+| `Event Priority` | `P2 (Operational)` |
 
 > [!NOTE]
 > P2 filtering prevents metric cardinality explosion. Monitor registration events can occur thousands of times per second but provide little operational value. Collecting them would drown out the important P0/P1 signals.
