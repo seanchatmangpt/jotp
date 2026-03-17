@@ -302,16 +302,16 @@ class AdaptiveCircuitBreakerTest {
 
     static Stream<Arguments> thresholdBoundaries() {
         // (alpha, failures, successes, expectOpen)
-        // With alpha=0.5, errorRateThreshold=0.5:
-        //   ewma after N failures from 0: F1=0.5, F2=0.75, ...
-        //   ewma after 1S then 1F: S=0 → F=0.5 (exactly threshold, not > threshold)
-        //   After 2nd failure in a row from 0: 0.75 > 0.5 → open
+        // Config used in the test: errorRateThreshold=0.8, predictiveThreshold=0.6, alpha=0.5
+        //   After 1 failure from 0: ewma=0.5 — below predictiveThreshold(0.6) → CLOSED
+        //   After 2 failures from 0: ewma=0.75 > predictiveThreshold(0.6) AND trend>0 → OPEN
+        //   After 5 successes only: ewma=0 → CLOSED
         return Stream.of(
-                // 2 consecutive failures from start → open (ewma=0.75 > 0.5)
+                // 2 consecutive failures → predictive open (ewma=0.75 > predictiveThreshold=0.6)
                 Arguments.of(0.5, 2, 0, true),
-                // 1 failure only → ewma=0.5, NOT > threshold → closed
+                // 1 failure only → ewma=0.5 < 0.6 → neither threshold crossed → CLOSED
                 Arguments.of(0.5, 1, 0, false),
-                // 5 successes → ewma=0 → closed
+                // 5 successes → ewma=0 → CLOSED
                 Arguments.of(0.5, 0, 5, false));
     }
 
@@ -319,11 +319,15 @@ class AdaptiveCircuitBreakerTest {
     @MethodSource("thresholdBoundaries")
     void thresholdBoundaryBehavior(double alpha, int failures, int successes, boolean expectOpen)
             throws Exception {
+        // errorRateThreshold=0.8 and predictiveThreshold=0.6 so that:
+        //   1 failure  → ewma=0.5 < 0.6 → neither threshold crossed → CLOSED
+        //   2 failures → ewma=0.75 > 0.6 with rising trend → predictive open
+        //   5 successes → ewma=0 → CLOSED
         Config cfg =
                 Config.builder()
                         .ewmaAlpha(alpha)
-                        .errorRateThreshold(0.5)
-                        .predictiveThreshold(0.4) // set below errorRateThreshold
+                        .errorRateThreshold(0.8)
+                        .predictiveThreshold(0.6)
                         .openDuration(FAST_OPEN)
                         .halfOpenProbes(1)
                         .latencyThreshold(Duration.ofSeconds(10)) // disable latency trigger
