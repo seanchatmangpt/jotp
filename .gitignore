@@ -134,3 +134,4 @@ guard-system/target/
 Cargo.lock
 # Claude Code personal overrides (not shared with team)
 .claude/settings.local.json
+.claude/worktrees/
