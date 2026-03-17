@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrExtension;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -14,6 +15,7 @@ import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
  * Comprehensive test suite for {@link GenServer}.
@@ -44,6 +46,7 @@ import org.junit.jupiter.api.Test;
  * @see GenServer.Handler
  * @see Proc
  */
+@ExtendWith(DtrExtension.class)
 @DisplayName("GenServer: OTP-style Request-Reply Server")
 class GenServerTest implements WithAssertions {
 
