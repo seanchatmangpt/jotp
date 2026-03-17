@@ -87,7 +87,7 @@ Add to your `pom.xml`:
 <dependency>
     <groupId>io.github.seanchatmangpt</groupId>
     <artifactId>jotp</artifactId>
-    <version>1.0</version>
+    <version>2026.1.0</version>
 </dependency>
 ```
 

@@ -4,28 +4,37 @@ This document defines the versioning scheme, compatibility guarantees, and relea
 
 ---
 
-## Semantic Versioning
+## Calendar Versioning (CalVer)
 
-JOTP follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html):
+JOTP uses [Calendar Versioning](https://calver.org/) with the format:
 
-**Format**: `MAJOR.MINOR.PATCH`
+**Format**: `YYYY.MINOR.PATCH`
 
-- **MAJOR**: Incompatible API changes
-- **MINOR**: Backwards-compatible functionality additions
-- **PATCH**: Backwards-compatible bug fixes
+- **YYYY**: Full year of release (e.g., `2026`)
+- **MINOR**: Feature increment within the year (starting at `1`, incrementing per feature release)
+- **PATCH**: Bug-fix increment for a given MINOR (starting at `0`)
 
-**Pre-release identifiers**: `-alpha.1`, `-beta.1`, `-rc.1`
-
-**Build metadata**: `+sha.abc1234`
+This matches the versioning scheme used by the sibling project [DTR](https://github.com/seanchatmangpt/dtr) (`2026.4.1`).
 
 ### Examples
 
 ```
-1.0.0      - Initial stable release
-1.1.0      - New features, backwards compatible
-1.1.1      - Bug fix, backwards compatible
-2.0.0      - Breaking changes
-2.0.0-rc.1 - Release candidate for 2.0.0
+2026.1.0   - First release of 2026
+2026.1.1   - Bug fix for 2026.1.0
+2026.2.0   - Second feature release of 2026
+2026.2.1   - Bug fix for 2026.2.0
+2027.1.0   - First release of 2027
+```
+
+### Pre-release identifiers
+
+Append to the base version:
+
+```
+2026.1.0-alpha.1   - Early development
+2026.1.0-beta.1    - Feature complete, testing phase
+2026.1.0-rc.1      - Release candidate
+2026.1.0           - Final release
 ```
 
 ---
@@ -80,8 +89,8 @@ These changes are **NOT** considered breaking:
    - Issue warning in documentation
 
 2. **Grace Period**
-   - Minimum: **one minor version** (e.g., deprecate in 1.0, remove in 2.0)
-   - Recommended: **one major version** (e.g., deprecate in 1.0, remove in 3.0)
+   - Minimum: **one MINOR version** (e.g., deprecate in 2026.1.0, remove in 2026.3.0)
+   - Recommended: **one calendar year** (e.g., deprecate in 2026.x.y, remove in 2027.x.y)
    - Exception: Security issues may remove immediately
 
 3. **Removal**
@@ -96,10 +105,10 @@ These changes are **NOT** considered breaking:
  * Sends a message without timeout.
  *
  * @deprecated Use {@link #send(Message, Duration)} with explicit timeout instead.
- *             This method will be removed in version 2.0.0.
+ *             This method will be removed in version 2027.1.0.
  * @see #send(Message, Duration)
  */
-@Deprecated(since = "1.5.0", forRemoval = true)
+@Deprecated(since = "2026.1.0", forRemoval = true)
 public void sendWithoutTimeout(Message message) {
   send(message, Duration.ofSeconds(30));
 }
@@ -119,7 +128,7 @@ Every deprecation MUST include:
 
 ### Compatibility Scope
 
-JOTP guarantees backward compatibility for:
+JOTP guarantees backward compatibility within a MINOR series (e.g., `2026.1.x`):
 
 1. **Public API**
    - All classes in `io.github.seanchatmangpt.jotp` package
@@ -134,8 +143,8 @@ JOTP guarantees backward compatibility for:
    - Error handling behavior
 
 3. **Serialization**
-   - `ProcRef` serialization format (within major version)
-   - Event message serialization (within major version)
+   - `ProcRef` serialization format (within MINOR series)
+   - Event message serialization (within MINOR series)
 
 ### Exclusions
 
@@ -151,7 +160,7 @@ NO compatibility guarantees for:
 Every release MUST validate:
 ```bash
 # Test against previous version's behavior
-mvnd verify -Dcompatibility=X.Y.Z
+mvnd verify -Dcompatibility=2026.1.0
 
 # Runs tests that verify:
 # - Old code still compiles
@@ -165,17 +174,9 @@ mvnd verify -Dcompatibility=X.Y.Z
 
 ### Schedule
 
-- **Major Releases**: Every 6-12 months (significant new features)
-- **Minor Releases**: Every 2-3 months (new features, improvements)
-- **Patch Releases**: As needed (bug fixes, security issues)
-
-### Time-Based Releases
-
-Target release schedule:
-- **Q1 (January-March)**: Major release (odd years: 1.0.0, 3.0.0)
-- **Q2 (April-June)**: Minor releases
-- **Q3 (July-September)**: Major release (even years: 2.0.0, 4.0.0)
-- **Q4 (October-December)**: Minor releases
+- **MINOR releases**: Every 2-4 months (new features, improvements)
+- **PATCH releases**: As needed (bug fixes, security issues)
+- **Year boundary** (e.g., `2026.x.y` → `2027.1.0`): January, aligned with new Java LTS or major platform changes
 
 ### Exception Process
 
@@ -208,12 +209,12 @@ Unscheduled releases for:
 
 ### Stable Releases
 
-**Current Stable (X.Y.Z)**: Recommended for production
+**Current Stable**: Recommended for production
 - Fully tested
 - Complete documentation
 - Migration guides available
 
-**Previous Stable (X.Y-1.Z)**: Supported for 6 months
+**Previous MINOR**: Supported for 6 months after next MINOR release
 - Security patches only
 - No new features
 
@@ -223,11 +224,24 @@ Unscheduled releases for:
 
 ### Support Matrix
 
-| Version | Status        | Support Until | Updates          |
-|---------|---------------|---------------|------------------|
-| 2.x.x   | Current       | 2026-12-31    | All              |
-| 1.5.x   | Previous      | 2026-06-30    | Security only    |
-| 1.4.x   | EOL           | 2025-12-31    | None             |
+| Version    | Status   | Support Until | Updates       |
+|------------|----------|---------------|---------------|
+| 2026.1.x   | Current  | 2026-12-31    | All           |
+| (previous) | N/A      | N/A           | N/A           |
+
+---
+
+## Maven Central Coordinates
+
+```xml
+<dependency>
+    <groupId>io.github.seanchatmangpt</groupId>
+    <artifactId>jotp</artifactId>
+    <version>2026.1.0</version>
+</dependency>
+```
+
+Releases are published to [Maven Central](https://central.sonatype.com/artifact/io.github.seanchatmangpt/jotp) via the Sonatype Central Portal.
 
 ---
 
@@ -237,7 +251,7 @@ Unscheduled releases for:
 
 - **Minimum Java Version**: Java 26 (with preview features)
 - **Tested Versions**: Latest Java 26 release
-- **Java Upgrade Policy**: May bump minimum version in major releases only
+- **Java Upgrade Policy**: May bump minimum version in new-year releases only
 
 ### Runtime Dependencies
 
@@ -261,87 +275,31 @@ Minimum versions:
 ## Branching Strategy
 
 ### Main Branch
-- Always targets next minor/major version
+- Always targets next MINOR version
 - Named `main`
 - Merges from feature branches
 
-### Release Branches
-- Created for each release: `release/X.Y.Z`
-- Stabilization only (no new features)
-- Merged back to main after release
+### Release Tags
+- CalVer tags: `v2026.1.0`, `v2026.2.0`, etc.
+- Trigger the GitHub Actions release pipeline
 
-### LTS Branches
-- Long-term support branches: `lts/X.Y.x`
-- For major versions only
-- Security patches only
-
-### Hotfix Branches
-- Created from release tags: `hotfix/X.Y.Z+1`
-- Merge to main and release branch
+### Patch Branches
+- Created for hotfixes: `release/2026.1.x`
+- Security patches and critical bug fixes only
 
 ---
 
-## Release Naming
-
-### Version Number Assignment
-
-**Major Version Decision Factors**:
-- Breaking changes to core API
-- Removal of deprecated APIs
-- Significant architectural changes
-- Java version bump
-
-**Minor Version Decision Factors**:
-- New features (backward compatible)
-- Significant improvements
-- New modules or components
-- Major documentation updates
-
-**Patch Version Decision Factors**:
-- Bug fixes
-- Security fixes
-- Documentation corrections
-- Build improvements
-
-### Pre-Release Versioning
-
-```
-1.0.0-alpha.1    - First alpha
-1.0.0-alpha.2    - Second alpha
-1.0.0-beta.1     - First beta
-1.0.0-beta.2     - Second beta
-1.0.0-rc.1       - First release candidate
-1.0.0-rc.2       - Second release candidate
-1.0.0            - Final release
-```
-
----
-
-## Compliance & Validation
-
-### Pre-Release Validation Checklist
+## Pre-Release Validation Checklist
 
 Every release MUST validate:
-- [ ] Semantic versioning compliance
-- [ ] No breaking changes in minor/patch
-- [ ] All breaking changes documented
-- [ ] Migration guides created
+- [ ] CalVer version correct (YYYY matches release year)
+- [ ] No breaking changes in PATCH releases
+- [ ] All breaking changes documented in MINOR releases
+- [ ] Migration guides created for breaking changes
 - [ ] Compatibility tests pass
 - [ ] Deprecation policy followed
 - [ ] Support matrix updated
-
-### Automated Checks
-
-```bash
-# Verify version compliance
-mvnd verify -Dversion-compliance
-
-# Checks for:
-# - Undocumented breaking changes
-# - API additions without version update
-# - Deprecation without timeline
-# - Compatibility issues
-```
+- [ ] Maven Central publishing verified
 
 ---
 
@@ -354,6 +312,6 @@ mvnd verify -Dversion-compliance
 
 ---
 
-**Last Updated**: 2025-01-15
-**Version**: 1.0.0
+**Last Updated**: 2026-03-17
+**Version**: 2026.1.0
 **Maintained By**: Project Lead

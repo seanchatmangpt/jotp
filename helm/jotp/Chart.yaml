@@ -2,8 +2,8 @@ apiVersion: v2
 name: jotp
 description: Production-ready Java 26 framework implementing all 15 OTP (Erlang/OTP) primitives with virtual threads, supervision trees, and fault tolerance
 type: application
-version: 0.1.0
-appVersion: "1.0.0"
+version: 2026.1.0
+appVersion: "2026.1.0"
 keywords:
   - otp
   - concurrency
