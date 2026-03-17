@@ -166,7 +166,7 @@ public class IntelligentCircuitBreakerExample {
   static void exampleRecoveryPrediction() {
     System.out.println("\n=== Example 4: Recovery Prediction ===\n");
 
-    var breaker =
+    IntelligentCircuitBreaker<String, String, Exception> breaker =
         IntelligentCircuitBreaker.create(
             "cache-service",
             5,
@@ -197,7 +197,7 @@ public class IntelligentCircuitBreakerExample {
 
     // View detailed statistics
     System.out.println("\nDetailed failure statistics:");
-    var stats = breaker.getFailureStats(SocketTimeoutException.class);
+    Optional<String> stats = breaker.getFailureStats(SocketTimeoutException.class);
     if (stats.isPresent()) {
       System.out.println(stats.get());
     }

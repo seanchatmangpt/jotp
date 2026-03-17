@@ -279,7 +279,7 @@ public final class AGISupervisor {
 
     BiFunction<State, Msg, State> handler = AGISupervisor::handleMessage;
     Proc<State, Msg> proc = Proc.spawn(initialState, handler);
-    ProcRef<State, Msg> ref = ProcRef.of(proc);
+    ProcRef<State, Msg> ref = new ProcRef<>(proc);
 
     EventManager<Decision> eventBus = new EventManager<>();
 
@@ -321,7 +321,7 @@ public final class AGISupervisor {
       Map<String, Object> context) {
     var rec =
         new Msg.Recommendation(subsystemId, action, confidence, costImpact, riskScore, context, Instant.now());
-    supervisorRef.send(rec);
+    supervisorRef.tell(rec);
   }
 
   /**
@@ -337,7 +337,7 @@ public final class AGISupervisor {
   public Decision requestDecision(String decisionContext, Duration responseTimeout)
       throws TimeoutException {
     CompletableFuture<Decision> future = new CompletableFuture<>();
-    supervisorRef.send(new Msg.DecisionRequest(decisionContext, responseTimeout, future));
+    supervisorRef.tell(new Msg.DecisionRequest(decisionContext, responseTimeout, future));
     try {
       return future.get(responseTimeout.toMillis() * 2, TimeUnit.MILLISECONDS);
     } catch (InterruptedException | ExecutionException e) {
@@ -355,7 +355,7 @@ public final class AGISupervisor {
    */
   public void reportOutcome(
       String decisionId, boolean successful, String feedback, Map<String, Object> metrics) {
-    supervisorRef.send(new Msg.OutcomeReport(decisionId, successful, feedback, metrics));
+    supervisorRef.tell(new Msg.OutcomeReport(decisionId, successful, feedback, metrics));
   }
 
   /**
@@ -368,7 +368,7 @@ public final class AGISupervisor {
    */
   public ExplanationTrace explainDecision(String decisionId) throws TimeoutException {
     CompletableFuture<ExplanationTrace> future = new CompletableFuture<>();
-    supervisorRef.send(new Msg.ExplainabilityQuery(decisionId, future));
+    supervisorRef.tell(new Msg.ExplainabilityQuery(decisionId, future));
     try {
       return future.get(2, TimeUnit.SECONDS);
     } catch (InterruptedException | ExecutionException e) {
@@ -382,15 +382,14 @@ public final class AGISupervisor {
    * @return map of subsystem ID to its profile (reputation, success rate, etc.)
    */
   public Map<String, SubsystemProfile> getReputations() throws TimeoutException {
-    var stateRef = new CompletableFuture<Map<String, SubsystemProfile>>();
-    supervisorRef.send((state) -> {
-      if (state instanceof State.Running running) {
-        stateRef.complete(new LinkedHashMap<>(running.reputations));
-      }
-      return state;
-    });
     try {
-      return stateRef.get(2, TimeUnit.SECONDS);
+      CompletableFuture<State> stateFuture =
+          supervisorRef.ask(new Msg.ResetReputations(List.of(), new CompletableFuture<>()));
+      State state = stateFuture.get(2, TimeUnit.SECONDS);
+      if (state instanceof State.Running running) {
+        return new LinkedHashMap<>(running.reputations());
+      }
+      throw new TimeoutException("Supervisor not running");
     } catch (InterruptedException | ExecutionException e) {
       throw new TimeoutException("Could not retrieve reputations: " + e.getMessage());
     }
@@ -412,7 +411,7 @@ public final class AGISupervisor {
    */
   public void stop() throws TimeoutException {
     CompletableFuture<Void> future = new CompletableFuture<>();
-    supervisorRef.send(new Msg.Stop(future));
+    supervisorRef.tell(new Msg.Stop(future));
     try {
       future.get(5, TimeUnit.SECONDS);
     } catch (InterruptedException | ExecutionException e) {
@@ -730,7 +729,7 @@ public final class AGISupervisor {
   private void startConsensusTicker() {
     ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
     executor.scheduleAtFixedRate(
-        () -> supervisorRef.send(new Msg.ConsensusTick()),
+        () -> supervisorRef.tell(new Msg.ConsensusTick()),
         CONSENSUS_TICK_INTERVAL_MS,
         CONSENSUS_TICK_INTERVAL_MS,
         TimeUnit.MILLISECONDS);
