@@ -1,0 +1,25 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jotp-pdb
+  namespace: default
+  labels:
+    app: jotp
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: jotp
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jotp-pdb-max-unavailable
+  namespace: default
+  labels:
+    app: jotp
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: jotp

@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) endpoint patterns define how applications connect to
  * messaging channels, including consumer and producer patterns.
  */
+@DtrTest
 @DisplayName("Endpoint Patterns")
 class EndpointPatternsTest implements WithAssertions {
 

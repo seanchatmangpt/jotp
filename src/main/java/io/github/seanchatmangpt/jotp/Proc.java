@@ -1,6 +1,8 @@
 package io.github.seanchatmangpt.jotp;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -184,6 +186,10 @@ public final class Proc<S, M> {
                                             S next = handler.apply(state, env.msg());
                                             state = next;
                                             messagesOut.increment();
+                                            // Invoke state change callback if registered
+                                            if (onStateChange != null) {
+                                                onStateChange.accept(state);
+                                            }
                                             if (env.reply() != null) {
                                                 env.reply().complete(state);
                                             }
@@ -391,8 +397,53 @@ public final class Proc<S, M> {
         return mailbox.size();
     }
 
+    /** Package-private: check if process is suspended — used by {@link CrashDumpCollector}. */
+    boolean isSuspended() {
+        return suspended;
+    }
+
+    /**
+     * Package-private: sample pending messages for crash dump.
+     *
+     * <p>Returns a snapshot of messages currently in the mailbox. Messages are drained temporarily
+     * and re-queued to avoid losing them.
+     *
+     * @param maxMessages maximum number of messages to sample
+     * @return list of message snapshots (message class name and toString representation)
+     */
+    List<MessageSnapshot> samplePendingMessages(int maxMessages) {
+        List<MessageSnapshot> snapshots = new ArrayList<>();
+        List<Envelope<M>> drainBuffer = new ArrayList<>();
+
+        // Drain up to maxMessages from mailbox
+        Envelope<M> env;
+        while (snapshots.size() < maxMessages && (env = mailbox.poll()) != null) {
+            drainBuffer.add(env);
+            if (env.msg() != null) {
+                snapshots.add(
+                        new MessageSnapshot(
+                                env.msg().getClass().getName(),
+                                env.msg().toString(),
+                                Instant.now()));
+            }
+        }
+
+        // Re-queue all drained messages
+        for (Envelope<M> e : drainBuffer) {
+            mailbox.add(e);
+        }
+
+        return snapshots;
+    }
+
+    /** Snapshot of a pending message for crash dump. */
+    record MessageSnapshot(String messageClass, String messageString, Instant enqueuedAt) {}
+
     /** Debug observer for trace operations — can be null. */
     private volatile DebugObserver<S, M> debugObserver = null;
+
+    /** Callback invoked after each state transition — for persistence hooks. */
+    private volatile Consumer<S> onStateChange = null;
 
     /** Package-private: offer a sys request to the high-priority channel. */
     <SR> void offerSysRequest(SR request) {
@@ -408,5 +459,47 @@ public final class Proc<S, M> {
     /** Package-private: get the current debug observer (null if none). */
     DebugObserver<S, M> getDebugObserver() {
         return debugObserver;
+    }
+
+    /**
+     * Set a callback to be invoked after each state transition.
+     *
+     * <p>This is the primary hook for persistence integrations. The callback receives the new state
+     * after each message is processed, enabling automatic state persistence without modifying the
+     * handler function.
+     *
+     * <p><strong>Usage with DurableState:</strong>
+     *
+     * <pre>{@code
+     * DurableState<MyState> durable = DurableState.builder()
+     *     .entityId("my-process")
+     *     .initialState(new MyState())
+     *     .build();
+     *
+     * Proc<MyState, MyMessage> proc = Proc.spawn(new MyState(), handler);
+     * proc.setOnStateChange(state -> {
+     *     durable.save(state);
+     * });
+     * }</pre>
+     *
+     * <p><strong>Thread Safety:</strong> The callback is invoked on the process's virtual thread,
+     * so it should be thread-safe if it accesses shared resources.
+     *
+     * <p><strong>Error Handling:</strong> Exceptions thrown by the callback will crash the process
+     * (fire crash callbacks). Ensure the callback handles errors appropriately.
+     *
+     * @param callback the callback to invoke after state changes, or null to disable
+     */
+    public void setOnStateChange(Consumer<S> callback) {
+        this.onStateChange = callback;
+    }
+
+    /**
+     * Get the current state change callback.
+     *
+     * @return the current callback, or null if none is set
+     */
+    public Consumer<S> getOnStateChange() {
+        return onStateChange;
     }
 }

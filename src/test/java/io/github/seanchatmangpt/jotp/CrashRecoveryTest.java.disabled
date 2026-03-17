@@ -1,0 +1,324 @@
+package io.github.seanchatmangpt.jotp;
+
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Tests for {@link CrashRecovery}.
+ *
+ * <p>Verifies Joe Armstrong's "let it crash" philosophy with virtual thread isolation and retry
+ * logic.
+ */
+@DisplayName("CrashRecovery Tests")
+class CrashRecoveryTest {
+
+    @BeforeEach
+    void setUp() {
+        // Reset any test state
+        assertThat(ApplicationController).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should succeed on first attempt")
+    void retry_succeedsOnFirstAttempt() {
+        var result = CrashRecovery.retry(3, () -> "success");
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get()).isEqualTo("success");
+    }
+
+    @Test
+    @DisplayName("Should retry on failure and eventually succeed")
+    void retry_retriesOnFailureAndSucceeds() {
+        var attempts = new AtomicInteger(0);
+
+        var result =
+                CrashRecovery.retry(
+                        5,
+                        () -> {
+                            int attempt = attempts.incrementAndGet();
+                            if (attempt < 3) {
+                                throw new RuntimeException("Attempt " + attempt + " failed");
+                            }
+                            return "success";
+                        });
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get()).isEqualTo("success");
+        assertThat(attempts.get()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Should fail after all attempts exhausted")
+    void retry_failsWhenAllAttemptsExhausted() {
+        var attempts = new AtomicInteger(0);
+
+        var result =
+                CrashRecovery.retry(
+                        3,
+                        () -> {
+                            attempts.incrementAndGet();
+                            throw new RuntimeException("Always fails");
+                        });
+
+        assertThat(result.isFailure()).isTrue();
+        assertThat(attempts.get()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Should return last exception on failure")
+    void retry_returnsLastException() {
+        var result =
+                CrashRecovery.retry(
+                        2,
+                        () -> {
+                            throw new IllegalStateException("Test exception");
+                        });
+
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.getError()).isInstanceOf(IllegalStateException.class);
+        assertThat(result.getError()).hasMessage("Test exception");
+    }
+
+    @Test
+    @DisplayName("Should handle single attempt")
+    void retry_handlesSingleAttempt() {
+        var result = CrashRecovery.retry(1, () -> "single-attempt");
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get()).isEqualTo("single-attempt");
+    }
+
+    @Test
+    @DisplayName("Should throw on zero attempts")
+    void retry_throwsOnZeroAttempts() {
+        assertThatThrownBy(() -> CrashRecovery.retry(0, () -> "test"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxAttempts must be >= 1");
+    }
+
+    @Test
+    @DisplayName("Should throw on negative attempts")
+    void retry_throwsOnNegativeAttempts() {
+        assertThatThrownBy(() -> CrashRecovery.retry(-1, () -> "test"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxAttempts must be >= 1");
+    }
+
+    @Test
+    @DisplayName("Should throw on null supplier")
+    void retry_throwsOnNullSupplier() {
+        assertThatThrownBy(() -> CrashRecovery.retry(3, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("Should isolate attempts in virtual threads")
+    void retry_isolatesAttemptsInVirtualThreads() {
+        var threadNames = new java.util.concurrent.ConcurrentLinkedQueue<String>();
+
+        var result =
+                CrashRecovery.retry(
+                        3,
+                        () -> {
+                            threadNames.add(Thread.currentThread().getName());
+                            throw new RuntimeException("Fail");
+                        });
+
+        assertThat(result.isFailure()).isTrue();
+        assertThat(threadNames).isNotEmpty();
+        // Virtual threads typically have names starting with ""
+        // or have specific naming patterns
+    }
+
+    @Test
+    @DisplayName("Should handle exceptions that wrap other exceptions")
+    void retry_handlesWrappedExceptions() {
+        var cause = new NullPointerException("Underlying cause");
+
+        var result =
+                CrashRecovery.retry(
+                        2,
+                        () -> {
+                            throw new RuntimeException("Wrapper", cause);
+                        });
+
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.getError()).isInstanceOf(RuntimeException.class);
+        assertThat(result.getError().getCause()).isEqualTo(cause);
+    }
+
+    @Test
+    @DisplayName("Should not share state between attempts")
+    void retry_doesNotShareStateBetweenAttempts() {
+        var attemptCounters = new java.util.concurrent.ConcurrentLinkedQueue<Integer>();
+
+        var result =
+                CrashRecovery.retry(
+                        3,
+                        () -> {
+                            // Each attempt gets a fresh counter
+                            int counter = 0;
+                            counter++;
+                            attemptCounters.add(counter);
+                            throw new RuntimeException("Attempt failed");
+                        });
+
+        assertThat(result.isFailure()).isTrue();
+        // Each attempt should have counter = 1, not incremented
+        assertThat(attemptCounters).containsExactly(1, 1, 1);
+    }
+
+    @Test
+    @DisplayName("Should handle different exception types")
+    void retry_handlesDifferentExceptionTypes() {
+        // Test with checked exception equivalent (RuntimeException)
+        var result1 =
+                CrashRecovery.retry(
+                        2,
+                        () -> {
+                            throw new IllegalArgumentException("Illegal");
+                        });
+
+        assertThat(result1.isFailure()).isTrue();
+        assertThat(result1.getError()).isInstanceOf(IllegalArgumentException.class);
+
+        // Test with different exception
+        var result2 =
+                CrashRecovery.retry(
+                        2,
+                        () -> {
+                            throw new UnsupportedOperationException("Unsupported");
+                        });
+
+        assertThat(result2.isFailure()).isTrue();
+        assertThat(result2.getError()).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("Should recover from intermittent failures")
+    void retry_recoversFromIntermittentFailures() {
+        var attempt = new AtomicInteger(0);
+
+        var result =
+                CrashRecovery.retry(
+                        10,
+                        () -> {
+                            int a = attempt.incrementAndGet();
+                            if (a % 3 == 0) {
+                                return "success";
+                            }
+                            throw new RuntimeException("Fail on attempt " + a);
+                        });
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get()).isEqualTo("success");
+        assertThat(attempt.get()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Should handle complex return types")
+    void retry_handlesComplexReturnTypes() {
+        record DataPoint(int x, int y, String label) {}
+
+        var result = CrashRecovery.retry(2, () -> new DataPoint(42, 100, "test"));
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get().x()).isEqualTo(42);
+        assertThat(result.get().y()).isEqualTo(100);
+        assertThat(result.get().label()).isEqualTo("test");
+    }
+
+    @Test
+    @DisplayName("Should handle null return values")
+    void retry_handlesNullReturnValues() {
+        var result = CrashRecovery.retry(2, () -> null);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get()).isNull();
+    }
+
+    @Test
+    @DisplayName("Should handle suppliers that return different types")
+    void retry_handlesPolymorphicReturns() {
+        Object result1 = CrashRecovery.retry(2, () -> "string");
+        Object result2 = CrashRecovery.retry(2, () -> 42);
+        Object result3 = CrashRecovery.retry(2, () -> 3.14);
+
+        assertThat(result1).isEqualTo("string");
+        assertThat(result2).isEqualTo(42);
+        assertThat(result3).isEqualTo(3.14);
+    }
+
+    @Test
+    @DisplayName("Should maintain Joe Armstrong's principle")
+    void retry_letItCrashPrinciple() {
+        // Joe Armstrong: "Processes share nothing" - each attempt is isolated
+        var sharedState = new AtomicInteger(0);
+
+        var result =
+                CrashRecovery.retry(
+                        5,
+                        () -> {
+                            // Even though we access shared state, each attempt runs in isolation
+                            // If one crashes, the next starts fresh
+                            int value = sharedState.incrementAndGet();
+                            if (value < 3) {
+                                throw new RuntimeException("Crash " + value);
+                            }
+                            return "Recovered at " + value;
+                        });
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.get()).isEqualTo("Recovered at 3");
+    }
+
+    @Test
+    @DisplayName("Should work with Result type")
+    void retry_returnsResultType() {
+        Result<String, Exception> result = CrashRecovery.retry(1, () -> "success");
+
+        switch (result) {
+            case Result.Success(var value) -> assertThat(value).isEqualTo("success");
+            case Result.Failure(var error) -> fail("Should not fail");
+        }
+    }
+
+    @Test
+    @DisplayName("Should handle runtime exceptions properly")
+    void retry_handlesRuntimeExceptions() {
+        var result =
+                CrashRecovery.retry(
+                        2,
+                        () -> {
+                            throw new ArithmeticException("/ by zero");
+                        });
+
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.getError()).isInstanceOf(ArithmeticException.class);
+    }
+
+    @Test
+    @DisplayName("Should support many retry attempts")
+    void retry_supportsManyAttempts() {
+        var attempts = new AtomicInteger(0);
+
+        var result =
+                CrashRecovery.retry(
+                        100,
+                        () -> {
+                            int a = attempts.incrementAndGet();
+                            if (a < 50) {
+                                throw new RuntimeException("Fail " + a);
+                            }
+                            return "Success after " + a + " attempts";
+                        });
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(attempts.get()).isEqualTo(50);
+    }
+}

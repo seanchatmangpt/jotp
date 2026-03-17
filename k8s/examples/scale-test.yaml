@@ -1,0 +1,9 @@
+# Example: Scale JOTP cluster to 5 nodes for testing
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jotp
+  namespace: default
+spec:
+  replicas: 5
+  # ... rest of StatefulSet configuration

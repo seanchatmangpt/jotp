@@ -1,0 +1,185 @@
+version: '3.8'
+
+services:
+  # Distributed Counter - Node 1
+  counter-node1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: jotp:latest
+    container_name: jotp-counter-node1
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedCounterExample", "node1", "8081"]
+    ports:
+      - "8081:8081"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Distributed Counter - Node 2
+  counter-node2:
+    image: jotp:latest
+    container_name: jotp-counter-node2
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedCounterExample", "node2", "8082"]
+    ports:
+      - "8082:8082"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - counter-node1
+
+  # Distributed Counter - Node 3
+  counter-node3:
+    image: jotp:latest
+    container_name: jotp-counter-node3
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedCounterExample", "node3", "8083"]
+    ports:
+      - "8083:8083"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - counter-node2
+
+  # Distributed Pub/Sub - Node 1
+  pubsub-node1:
+    image: jotp:latest
+    container_name: jotp-pubsub-node1
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedPubSubExample", "node1", "9091"]
+    ports:
+      - "9091:9091"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+
+  # Distributed Pub/Sub - Node 2
+  pubsub-node2:
+    image: jotp:latest
+    container_name: jotp-pubsub-node2
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedPubSubExample", "node2", "9092"]
+    ports:
+      - "9092:9092"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - pubsub-node1
+
+  # Distributed Pub/Sub - Node 3
+  pubsub-node3:
+    image: jotp:latest
+    container_name: jotp-pubsub-node3
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedPubSubExample", "node3", "9093"]
+    ports:
+      - "9093:9093"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - pubsub-node2
+
+  # Distributed Saga - Coordinator
+  saga-coordinator:
+    image: jotp:latest
+    container_name: jotp-saga-coordinator
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedSagaExample", "coordinator", "7071"]
+    ports:
+      - "7071:7071"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+
+  # Distributed Saga - Service 1
+  saga-service1:
+    image: jotp:latest
+    container_name: jotp-saga-service1
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedSagaExample", "service", "7072"]
+    ports:
+      - "7072:7072"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - saga-coordinator
+
+  # Distributed Saga - Service 2
+  saga-service2:
+    image: jotp:latest
+    container_name: jotp-saga-service2
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedSagaExample", "service", "7073"]
+    ports:
+      - "7073:7073"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - saga-coordinator
+
+  # Distributed Cache - Node 1
+  cache-node1:
+    image: jotp:latest
+    container_name: jotp-cache-node1
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedCacheExample", "node1", "6081", "2"]
+    ports:
+      - "6081:6081"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "6081"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Distributed Cache - Node 2
+  cache-node2:
+    image: jotp:latest
+    container_name: jotp-cache-node2
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedCacheExample", "node2", "6082", "2"]
+    ports:
+      - "6082:6082"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - cache-node1
+
+  # Distributed Cache - Node 3
+  cache-node3:
+    image: jotp:latest
+    container_name: jotp-cache-node3
+    command: ["java", "-XX:+UseZGC", "-Xms512m", "-Xmx1g", "io.github.seanchatmangpt.jotp.examples.DistributedCacheExample", "node3", "6083", "2"]
+    ports:
+      - "6083:6083"
+    networks:
+      - jotp-distributed
+    environment:
+      - JAVA_OPTS=-XX:+UseZGC -Xms512m -Xmx1g
+    depends_on:
+      - cache-node2
+
+networks:
+  jotp-distributed:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  jotp-data:

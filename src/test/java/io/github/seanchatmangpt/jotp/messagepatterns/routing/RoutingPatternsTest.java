@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messagepatterns.routing;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) routing patterns enable messages to be dynamically
  * routed to different destinations based on content, conditions, or runtime configuration.
  */
+@DtrTest
 @DisplayName("Routing Patterns")
 class RoutingPatternsTest implements WithAssertions {
 

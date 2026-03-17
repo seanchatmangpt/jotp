@@ -35,4 +35,14 @@ public record NodeId(String name, String host, int port) {
     public String wire() {
         return name + ":" + host + ":" + port;
     }
+
+    /**
+     * Create a NodeId from a simple name (for testing or single-node scenarios).
+     *
+     * @param name the node name
+     * @return a NodeId with default host and port
+     */
+    public static NodeId of(String name) {
+        return new NodeId(name, "localhost", 0);
+    }
 }

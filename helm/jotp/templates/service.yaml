@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jotp.fullname" . }}
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.serviceMesh.enabled }}
+    {{- toYaml .Values.serviceMesh.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  clusterIP: {{ .Values.service.clusterIP }}
+  ports:
+  - port: {{ .Values.service.ports.http }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: {{ .Values.service.ports.cluster }}
+    targetPort: cluster
+    protocol: TCP
+    name: cluster
+  - port: {{ .Values.service.ports.management }}
+    targetPort: management
+    protocol: TCP
+    name: management
+  selector:
+    {{- include "jotp.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jotp.fullname" . }}-headless
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: {{ .Values.service.ports.cluster }}
+    targetPort: cluster
+    protocol: TCP
+    name: cluster
+  selector:
+    {{- include "jotp.selectorLabels" . | nindent 4 }}
+---
+{{- if .Values.monitoring.jmxExporter.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jotp.fullname" . }}-jmx
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.monitoring.jmxExporter.port }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: {{ .Values.monitoring.jmxExporter.port }}
+    targetPort: jmx-exporter
+    protocol: TCP
+    name: jmx-exporter
+  selector:
+    {{- include "jotp.selectorLabels" . | nindent 4 }}
+{{- end }}

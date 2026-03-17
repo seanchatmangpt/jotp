@@ -1,0 +1,286 @@
+version: '3.8'
+
+# JOTP Multi-Node Cluster Configuration
+# This file defines a 3-node JOTP cluster with peer-to-peer networking
+# and distributed process coordination.
+#
+# Quick Start:
+#   docker-compose -f docker-compose-jotp-cluster.yml up -d
+#
+# Scale the cluster:
+#   docker-compose -f docker-compose-jotp-cluster.yml up -d --scale jotp-node=5
+#
+# View cluster status:
+#   docker-compose -f docker-compose-jotp-cluster.yml logs -f jotp-node-1
+
+services:
+  # Node 1 - Primary coordinator node
+  jotp-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        - VERSION=${VERSION:-latest}
+    image: jotp:${VERSION:-latest}
+    container_name: jotp-node-1
+    hostname: jotp-node-1
+    ports:
+      - "8081:8080"    # HTTP API
+      - "50051:50051"  # gRPC inter-node communication
+      - "9091:9090"    # Metrics endpoint
+    environment:
+      # Node identification
+      - JOTP_NODE_NAME=jotp-node-1
+      - JOTP_NODE_ID=node-1@jotp-cluster
+      - JOTP_CLUSTER_MODE=distributed
+
+      # Peer discovery configuration
+      - JOTP_PEER_SEEDS=jotp-node-2:50051,jotp-node-3:50051
+      - JOTP_DISCOVERY_MODE=static
+
+      # Cluster coordination
+      - JOTP_LEADER_ELECTION_ENABLED=true
+      - JOTP_LEADER_ELECTION_TIMEOUT=30s
+      - JOTP_HEARTBEAT_INTERVAL=5s
+      - JOTP_PEER_FAILURE_DETECTION=30s
+
+      # JVM settings for cluster node
+      - JAVA_OPTS=-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XshowSettings:vm -XX:+UnlockExperimentalVMOptions -XX:+UseZGC
+
+      # Application configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JOTP_MAILBOX_SIZE=10000
+      - JOTP_PROCESS_REGISTRY=distributed
+
+      # Observability
+      - JOTP_METRICS_ENABLED=true
+      - JOTP_TRACING_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=jotp-node-1
+    volumes:
+      - jotp-state-1:/app/state
+      - jotp-logs-1:/app/logs
+    networks:
+      - jotp-cluster-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # Node 2 - Secondary coordinator node
+  jotp-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        - VERSION=${VERSION:-latest}
+    image: jotp:${VERSION:-latest}
+    container_name: jotp-node-2
+    hostname: jotp-node-2
+    ports:
+      - "8082:8080"    # HTTP API
+      - "50052:50051"  # gRPC inter-node communication
+      - "9092:9090"    # Metrics endpoint
+    environment:
+      # Node identification
+      - JOTP_NODE_NAME=jotp-node-2
+      - JOTP_NODE_ID=node-2@jotp-cluster
+      - JOTP_CLUSTER_MODE=distributed
+
+      # Peer discovery configuration
+      - JOTP_PEER_SEEDS=jotp-node-1:50051,jotp-node-3:50051
+      - JOTP_DISCOVERY_MODE=static
+
+      # Cluster coordination
+      - JOTP_LEADER_ELECTION_ENABLED=true
+      - JOTP_LEADER_ELECTION_TIMEOUT=30s
+      - JOTP_HEARTBEAT_INTERVAL=5s
+      - JOTP_PEER_FAILURE_DETECTION=30s
+
+      # JVM settings for cluster node
+      - JAVA_OPTS=-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XshowSettings:vm -XX:+UnlockExperimentalVMOptions -XX:+UseZGC
+
+      # Application configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JOTP_MAILBOX_SIZE=10000
+      - JOTP_PROCESS_REGISTRY=distributed
+
+      # Observability
+      - JOTP_METRICS_ENABLED=true
+      - JOTP_TRACING_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=jotp-node-2
+    volumes:
+      - jotp-state-2:/app/state
+      - jotp-logs-2:/app/logs
+    networks:
+      - jotp-cluster-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # Node 3 - Tertiary coordinator node
+  jotp-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        - VERSION:${VERSION:-latest}
+    image: jotp:${VERSION:-latest}
+    container_name: jotp-node-3
+    hostname: jotp-node-3
+    ports:
+      - "8083:8080"    # HTTP API
+      - "50053:50051"  # gRPC inter-node communication
+      - "9093:9090"    # Metrics endpoint
+    environment:
+      # Node identification
+      - JOTP_NODE_NAME=jotp-node-3
+      - JOTP_NODE_ID=node-3@jotp-cluster
+      - JOTP_CLUSTER_MODE=distributed
+
+      # Peer discovery configuration
+      - JOTP_PEER_SEEDS=jotp-node-1:50051,jotp-node-2:50051
+      - JOTP_DISCOVERY_MODE=static
+
+      # Cluster coordination
+      - JOTP_LEADER_ELECTION_ENABLED=true
+      - JOTP_LEADER_ELECTION_TIMEOUT=30s
+      - JOTP_HEARTBEAT_INTERVAL=5s
+      - JOTP_PEER_FAILURE_DETECTION=30s
+
+      # JVM settings for cluster node
+      - JAVA_OPTS=-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XshowSettings:vm -XX:+UnlockExperimentalVMOptions -XX:+UseZGC
+
+      # Application configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JOTP_MAILBOX_SIZE=10000
+      - JOTP_PROCESS_REGISTRY=distributed
+
+      # Observability
+      - JOTP_METRICS_ENABLED=true
+      - JOTP_TRACING_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=jotp-node-3
+    volumes:
+      - jotp-state-3:/app/state
+      - jotp-logs-3:/app/logs
+    networks:
+      - jotp-cluster-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # PostgreSQL - Distributed state and saga persistence
+  postgres:
+    image: postgres:16-alpine
+    container_name: jotp-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-jotp_cluster}
+      - POSTGRES_USER=${POSTGRES_USER:-jotp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-jotp_cluster_secret}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-cluster-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - jotp-cluster-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jotp -d jotp_cluster"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis - Distributed caching and session state
+  redis:
+    image: redis:7-alpine
+    container_name: jotp-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-cluster-data:/data
+    networks:
+      - jotp-cluster-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  jotp-cluster-network:
+    driver: bridge
+    name: jotp-cluster-network
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres-cluster-data:
+    name: jotp-postgres-cluster-data
+  redis-cluster-data:
+    name: jotp-redis-cluster-data
+  jotp-state-1:
+    name: jotp-state-1
+  jotp-state-2:
+    name: jotp-state-2
+  jotp-state-3:
+    name: jotp-state-3
+  jotp-logs-1:
+    name: jotp-logs-1
+  jotp-logs-2:
+    name: jotp-logs-2
+  jotp-logs-3:
+    name: jotp-logs-3

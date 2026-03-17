@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.distributed;
 
+import io.github.seanchatmangpt.jotp.JvmShutdownManager;
 import java.io.*;
 import java.net.*;
 import java.time.Duration;
@@ -114,6 +115,13 @@ public final class DistributedNode {
         this.serverSocket = new ServerSocket(port);
         this.self = new NodeId(name, host, serverSocket.getLocalPort());
         Thread.ofVirtual().name("node-" + name + "-accept").start(this::acceptLoop);
+
+        // Register shutdown hook for graceful cleanup
+        JvmShutdownManager.getInstance()
+                .registerCallback(
+                        JvmShutdownManager.Priority.BEST_EFFORT_SAVE,
+                        this::shutdown,
+                        Duration.ofSeconds(2));
     }
 
     /**

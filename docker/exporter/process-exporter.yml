@@ -1,0 +1,33 @@
+# Process Exporter Configuration for JOTP
+process_names:
+  - name: jotp
+    cmdline:
+      - 'jotp.*jar'
+
+  - name: postgres
+    cmdline:
+      - postgres
+
+  - name: redis
+    cmdline:
+      - redis-server
+
+  - name: nats
+    cmdline:
+      - nats-server
+
+  - name: kafka
+    cmdline:
+      - kafka
+
+  - name: grafana
+    cmdline:
+      - grafana
+
+  - name: prometheus
+    cmdline:
+      - prometheus
+
+  - name: jaeger
+    cmdline:
+      - jaeger
