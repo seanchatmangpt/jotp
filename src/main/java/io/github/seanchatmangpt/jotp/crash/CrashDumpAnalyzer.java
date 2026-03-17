@@ -397,9 +397,8 @@ public final class CrashDumpAnalyzer {
      */
     private List<ProcRef<?, ?>> identifyProcessesToRestart(
             CrashDump dump, ConsistencyReport consistency) {
-        // For now, return empty list - in real implementation, would create ProcRefs
-        // This requires integration with ProcRegistry to get actual ProcRef instances
-        return List.of();
+        throw new UnsupportedOperationException(
+                "not implemented: ProcRegistry integration required to create ProcRef instances from dump");
     }
 
     /** Identify messages that need to be replayed. */
