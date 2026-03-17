@@ -194,8 +194,6 @@
                         <!-- Additional Tests -->
                         <exclude>io/github/seanchatmangpt/jotp/EventSourcingAuditLogTest.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/pool/**</exclude>
-                        <!-- Pipeline test has pre-existing compilation issues -->
-                        <exclude>io/github/seanchatmangpt/jotp/PipelineTest.java</exclude>
                     </testExcludes>
                 </configuration>
             </plugin>
