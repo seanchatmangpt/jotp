@@ -50,9 +50,9 @@ mgr.syncNotify(new AppEvent.UserLogin("eve")); // NOT received
 
 | Key | Value |
 | --- | --- |
+| `Events Processed` | `1` |
 | `Terminate Called` | `true` |
 | `Handler Removed` | `true` |
-| `Events Processed` | `1` |
 
 ## EventManager: Targeted Handler Call
 
@@ -91,8 +91,8 @@ assertThat(h2Events).isEmpty();
 
 | Key | Value |
 | --- | --- |
-| `Handler 2 Events` | `0` |
 | `Handler 1 Events` | `1` |
+| `Handler 2 Events` | `0` |
 
 ## EventManager: Broadcast to All Handlers
 
@@ -132,9 +132,9 @@ assertThat(counter2.get()).isEqualTo(2);
 
 | Key | Value |
 | --- | --- |
-| `Events Broadcast` | `2` |
 | `Handler 1 Invocations` | `2` |
 | `Handler 2 Invocations` | `2` |
+| `Events Broadcast` | `2` |
 
 ## EventManager: Fault Isolation
 
@@ -190,9 +190,9 @@ assertThat(survivorCount.get()).isEqualTo(2);
 
 | Key | Value |
 | --- | --- |
+| `Survivor Invocations` | `2` |
 | `Manager Status` | `ALIVE` |
 | `Crasher Terminated` | `true` |
-| `Survivor Invocations` | `2` |
 
 ## EventManager: Dynamic Handler Registration
 

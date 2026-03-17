@@ -47,10 +47,10 @@ graph LR
 
 | Key | Value |
 | --- | --- |
+| `Propagation` | `Transitive (A→B→C)` |
 | `Trigger` | `A crashes` |
 | `Final State` | `All processes dead` |
 | `Chain Topology` | `A → B → C` |
-| `Propagation` | `Transitive (A→B→C)` |
 
 ## ProcLink: Symmetric Crash Propagation
 
@@ -80,9 +80,9 @@ graph LR
 
 | Key | Value |
 | --- | --- |
+| `Propagation` | `Symmetric` |
 | `Process A Status` | `Interrupted` |
 | `Process B Status` | `Crashed` |
-| `Propagation` | `Symmetric` |
 
 ## ProcLink: Bidirectional spawnLink
 
@@ -113,10 +113,10 @@ graph LR
 
 | Key | Value |
 | --- | --- |
+| `Propagation` | `Child → Parent` |
 | `Link Direction` | `Bidirectional` |
 | `Parent Status` | `Interrupted` |
 | `Child Status` | `Crashed` |
-| `Propagation` | `Child → Parent` |
 
 ## ProcLink: Normal Exit Does NOT Propagate
 
@@ -156,10 +156,10 @@ stateDiagram-v2
 
 | Key | Value |
 | --- | --- |
+| `Propagation` | `None` |
 | `Process B Status` | `Still Running` |
 | `B State After Message` | `1` |
 | `Process A Exit` | `Normal (stop())` |
-| `Propagation` | `None` |
 
 ## ProcLink: Atomic spawnLink Operation
 

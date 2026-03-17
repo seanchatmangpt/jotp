@@ -26,11 +26,11 @@ var windows = GathererPatterns.slidingWindow(items, 3);
 
 | Key | Value |
 | --- | --- |
+| `Overlap` | `2 elements between windows` |
 | `Moving Average` | `[20.0, 30.0, 40.0]` |
 | `Window Size` | `3` |
 | `Output` | `3 windows` |
 | `Input` | `[1, 2, 3, 4, 5]` |
-| `Overlap` | `2 elements between windows` |
 
 > [!NOTE]
 > Sliding windows are computationally expensive (O(n*k) for n elements and window size k). Use them judiciously on large datasets or consider windowed aggregations.
@@ -52,11 +52,11 @@ var deduped = items.stream()
 
 | Key | Value |
 | --- | --- |
+| `Non-Consecutive` | `Preserved (2 appears twice)` |
 | `Consecutive Duplicates` | `Removed` |
 | `Output` | `[1, 2, 3, 2, 4]` |
 | `All Same` | `[5, 5, 5, 5] → [5]` |
 | `Input` | `[1, 1, 2, 2, 2, 3, 2, 2, 4]` |
-| `Non-Consecutive` | `Preserved (2 appears twice)` |
 
 > [!NOTE]
 > Custom gatherers maintain internal state (the previous element) to make decisions. This enables sophisticated transformations that would require manual loops or external libraries.
@@ -131,10 +131,10 @@ var result = GathererPatterns.batchAndDeduplicate(items, 2);
 
 | Key | Value |
 | --- | --- |
+| `Pipeline` | `stream → dedupe → batch → toList` |
 | `After Dedupe` | `[1, 2, 3, 4, 5]` |
 | `Input` | `[1, 1, 2, 2, 3, 3, 4, 4, 5, 5]` |
 | `After Batch` | `[[1, 2], [3, 4], [5]]` |
-| `Pipeline` | `stream → dedupe → batch → toList` |
 
 > [!NOTE]
 > Gatherer chaining is composable and type-safe. Each gatherer is independent and can be reused in different pipelines. This is the essence of functional programming principles applied to streams.

@@ -29,11 +29,11 @@ assertThat(result.third()).isEqualTo("c");
 
 | Key | Value |
 | --- | --- |
+| `Task 1 Result` | `a` |
 | `Pattern` | `Extensible to N tasks` |
 | `Completion` | `All 3 tasks succeeded` |
 | `Task 2 Result` | `b` |
 | `Task 3 Result` | `c` |
-| `Task 1 Result` | `a` |
 
 > [!NOTE]
 > In production, you'd use generic StructuredTaskScope to run any number of tasks. The runAll pattern here shows a typed triple for convenience. Consider using StructuredTaskScope.join() with a list of Subtasks for N-ary concurrency.
@@ -64,10 +64,10 @@ assertThat(result).isIn("fast", "slow");
 
 | Key | Value |
 | --- | --- |
-| `Losing Task` | `Cancelled` |
-| `Pattern` | `First-success wins` |
 | `Winning Task` | `slow` |
 | `Race Condition` | `Non-deterministic` |
+| `Losing Task` | `Cancelled` |
+| `Pattern` | `First-success wins` |
 
 > [!NOTE]
 > This pattern is ideal for redundant services (multiple APIs, database replicas) where you want the fastest response. StructuredTaskScope ensures the slower tasks are cancelled to free resources.
@@ -97,10 +97,10 @@ assertThat(result.second()).isEqualTo(42);
 
 | Key | Value |
 | --- | --- |
-| `Resource Cleanup` | `Automatic` |
-| `First Task Result` | `hello` |
 | `Completion` | `Both tasks succeeded` |
 | `Second Task Result` | `42` |
+| `Resource Cleanup` | `Automatic` |
+| `First Task Result` | `hello` |
 
 > [!NOTE]
 > StructuredTaskScope ensures that if the first task fails, the second is automatically cancelled. No more orphaned threads wasting resources.
@@ -125,10 +125,10 @@ try {
 
 | Key | Value |
 | --- | --- |
-| `Task 2 Status` | `Cancelled` |
-| `Resource Cleanup` | `Automatic` |
 | `Exception Type` | `StructuredTaskScope$FailedException` |
 | `Error Propagation` | `Immediate` |
+| `Task 2 Status` | `Cancelled` |
+| `Resource Cleanup` | `Automatic` |
 
 > [!NOTE]
 > StructuredTaskScope.join() throws if any task failed. The exception contains all aggregated failures, making debugging easier than manual Future.get() error handling.
@@ -151,10 +151,10 @@ assertThatThrownBy(() ->
 
 | Key | Value |
 | --- | --- |
-| `Second Task` | `Failed` |
-| `Overall Result` | `Exception propagated` |
 | `First Task` | `Completed (result discarded)` |
 | `Cleanup` | `All tasks cancelled` |
+| `Second Task` | `Failed` |
+| `Overall Result` | `Exception propagated` |
 
 > [!NOTE]
 > This 'fail-fast' behavior is crucial for resource management. When a database query fails, there's no point continuing to fetch related data — cancel everything and report the error.

@@ -40,10 +40,10 @@ CounterState finalState = counterService.ask(new CounterMessage.GetCount(), time
 
 | Key | Value |
 | --- | --- |
+| `Increments` | `10 + 20 + 30` |
 | `Intermediate States` | `Monotonically increasing` |
 | `Consistency` | `Guaranteed by serialization` |
 | `Final State` | `count = 60 (deterministic)` |
-| `Increments` | `10 + 20 + 30` |
 
 > [!NOTE]
 > The final state is deterministic (sum of all increments) even though intermediate states depend on message ordering. This is because each state transition is atomic — no partially applied updates.
@@ -73,11 +73,11 @@ CounterState finalState = counterService.ask(new CounterMessage.GetCount(), time
 
 | Key | Value |
 | --- | --- |
+| `Pattern` | `Mailbox queue` |
 | `Responses` | `Complete out-of-order` |
 | `Final State` | `count = 3` |
 | `Processing` | `Serialized (one at a time)` |
 | `Concurrent Requests` | `3 concurrent IncrementBy(1)` |
-| `Pattern` | `Mailbox queue` |
 
 > [!NOTE]
 > The mailbox serializes concurrent requests — no locks needed. This is the Actor model's solution to concurrency: message passing instead of shared mutable state.
@@ -100,10 +100,10 @@ CounterState newState = future.join();
 
 | Key | Value |
 | --- | --- |
+| `Result` | `Success (no timeout)` |
 | `Time Required` | `<1ms` |
 | `Timeout` | `5000ms (5 seconds)` |
 | `Operation` | `IncrementBy(5)` |
-| `Result` | `Success (no timeout)` |
 
 > [!NOTE]
 > Always use timeouts in production, even for fast operations. This prevents indefinite hangs if the GenServer crashes or enters an infinite loop.
@@ -165,10 +165,10 @@ assertThat(s2.count()).isEqualTo(8);
 
 | Key | Value |
 | --- | --- |
+| `s1 After s2 Created` | `Still CounterState(5) (unchanged)` |
 | `State Type` | `Record (immutable)` |
 | `s2` | `CounterState(8)` |
 | `s1` | `CounterState(5)` |
-| `s1 After s2 Created` | `Still CounterState(5) (unchanged)` |
 
 > [!NOTE]
 > Immutable state eliminates race conditions — no need for locks or synchronized blocks. The JVM can optimize immutable records more aggressively than mutable objects.
@@ -194,10 +194,10 @@ assertThatThrownBy(() -> new CounterState(-1))
 
 | Key | Value |
 | --- | --- |
+| `Violation` | `IllegalArgumentException` |
 | `Timing` | `Construction time` |
 | `Validation` | `Compact constructor` |
 | `Check` | `count >= 0` |
-| `Violation` | `IllegalArgumentException` |
 
 > [!NOTE]
 > State validation at construction prevents invalid states from ever existing. This is fail-fast design — bugs are caught immediately rather than propagating invalid state.
@@ -235,10 +235,10 @@ CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
 
 | Key | Value |
 | --- | --- |
+| `Initial State` | `CounterState(0)` |
 | `State Change` | `None (query)` |
 | `Message` | `GetCount` |
 | `Result` | `CounterState(0)` |
-| `Initial State` | `CounterState(0)` |
 
 > [!NOTE]
 > Proc<S,M> uses sealed message types and pattern matching, ensuring exhaustive handling at compile time. The state is always immutable — transitions create new state records.
@@ -290,11 +290,11 @@ CounterState result = counterService.ask(new CounterMessage.GetCount(), timeout)
 
 | Key | Value |
 | --- | --- |
+| `Result` | `CounterState(5)` |
+| `State Change` | `0 → 5` |
 | `Query` | `GetCount` |
 | `Command` | `IncrementBy(5)` |
 | `Pattern` | `Command Query Responsibility Segregation (CQRS)` |
-| `Result` | `CounterState(5)` |
-| `State Change` | `0 → 5` |
 
 > [!NOTE]
 > ask() returns the new state after message processing. This enables CQRS-style operations where commands change state and queries read it. All state transitions are immutable.

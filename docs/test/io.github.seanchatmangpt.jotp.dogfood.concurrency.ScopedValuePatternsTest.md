@@ -29,10 +29,10 @@ assertThat(ScopedValuePatterns.TRACE_ID.isBound()).isFalse();
 
 | Key | Value |
 | --- | --- |
-| `After Lambda` | `TRACE_ID is unbound` |
-| `During Lambda` | `TRACE_ID is bound` |
 | `Memory Leak Risk` | `Zero` |
 | `Cleanup` | `Automatic (finally block equivalent)` |
+| `After Lambda` | `TRACE_ID is unbound` |
+| `During Lambda` | `TRACE_ID is bound` |
 
 > [!NOTE]
 > This automatic cleanup is a huge improvement over ThreadLocal, where manual remove() calls are often forgotten, causing memory leaks in thread pools.
@@ -52,10 +52,10 @@ String result = ScopedValuePatterns.withTrace("trace-123", task);
 
 | Key | Value |
 | --- | --- |
+| `Cleanup` | `Automatic after call` |
 | `Return Type` | `String` |
 | `Task Result` | `trace-123` |
 | `Bound Value` | `trace-123` |
-| `Cleanup` | `Automatic after call` |
 
 > [!NOTE]
 > The Callable-based withTrace() allows tasks to return values while maintaining the scoped binding. This is perfect for request-scoped tracing, authentication, and tenant isolation.
@@ -110,10 +110,10 @@ if (ScopedValuePatterns.CURRENT_USER.isBound()) {
 
 | Key | Value |
 | --- | --- |
+| `Safe Check` | `isBound() returns false` |
 | `Design Philosophy` | `Fail fast, explicit context` |
 | `Unbound Access` | `Throws NoSuchElementException` |
 | `Alternative` | `Optional wrapper or default` |
-| `Safe Check` | `isBound() returns false` |
 
 > [!NOTE]
 > The fail-fast behavior prevents bugs where context is accidentally missing. Always use isBound() or Optional wrappers when the value might not be set.
@@ -190,11 +190,11 @@ ScopedValuePatterns.withRequestContext(ctx, () -> {
 
 | Key | Value |
 | --- | --- |
-| `Scope` | `All values share same lifetime` |
-| `Binding Pattern` | `Chained where().where().call()` |
 | `Tenant ID` | `tenant-1` |
 | `Trace ID` | `trace-1` |
 | `User` | `user-1` |
+| `Scope` | `All values share same lifetime` |
+| `Binding Pattern` | `Chained where().where().call()` |
 
 > [!NOTE]
 > The chained where() calls create a composite scope with all bindings. All values are unbound together when the scope exits, ensuring consistency.
@@ -226,10 +226,10 @@ ScopedValuePatterns.handleAsUser("alice", () -> {
 
 | Key | Value |
 | --- | --- |
-| `Captured Value` | `alice` |
-| `Cleanup` | `Automatic` |
 | `Scoped Binding` | `alice` |
 | `Scope` | `Lambda lifetime` |
+| `Captured Value` | `alice` |
+| `Cleanup` | `Automatic` |
 
 > [!NOTE]
 > ScopedValue.where(key, value).run(task) binds the value for the duration of task. After task completes (successfully or exceptionally), the binding is automatically removed.

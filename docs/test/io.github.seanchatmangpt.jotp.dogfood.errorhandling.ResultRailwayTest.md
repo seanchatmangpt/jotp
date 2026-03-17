@@ -37,10 +37,10 @@ assertThat((Throwable) ((ResultRailway.Failure<Integer, ?>) failed).error())
 
 | Key | Value |
 | --- | --- |
+| `Exception Type` | `RuntimeException` |
 | `Failure Path` | `Exception caught and wrapped` |
 | `Success Path` | `Value wrapped in Success` |
 | `Bridge` | `Exception → Railway` |
-| `Exception Type` | `RuntimeException` |
 
 > [!NOTE]
 > Result.of() is perfect for wrapping legacy exception-based APIs. The exception becomes a value that can be processed with map/flatMap instead of try-catch.
@@ -67,10 +67,10 @@ assertThat(value2).isEqualTo("ok");
 
 | Key | Value |
 | --- | --- |
+| `Result Type` | `Success value type (T)` |
 | `Failure Path` | `Applies recovery function` |
 | `Success Path` | `Returns value unchanged` |
 | `Pattern` | `Error recovery` |
-| `Result Type` | `Success value type (T)` |
 
 > [!NOTE]
 > recover() is perfect for providing defaults: missing config → default value, API failure → cached response, validation error → sanitized input.
@@ -104,10 +104,10 @@ assertThat(called3).isTrue();
 
 | Key | Value |
 | --- | --- |
+| `peek()` | `Runs on success` |
 | `Use Case` | `Logging, metrics, debugging` |
 | `Return` | `Original Result (chainable)` |
 | `peekError()` | `Runs on failure` |
-| `peek()` | `Runs on success` |
 
 > [!NOTE]
 > peek() returns the original Result, enabling chaining. Use it for logging and observability without affecting the computation pipeline.
@@ -140,10 +140,10 @@ assertThat(result2).isEqualTo(-1);
 
 | Key | Value |
 | --- | --- |
+| `Return Type` | `Same for both branches (R)` |
 | `Failure Path` | `Applies error function` |
 | `Success Path` | `Applies success function` |
 | `Pattern` | `Catamorphism` |
-| `Return Type` | `Same for both branches (R)` |
 
 > [!NOTE]
 > fold() is the most flexible way to extract values from Result. Unlike orElse(), it handles both success and failure cases explicitly.
@@ -209,10 +209,10 @@ assertThat(result.isSuccess()).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Failure Chain` | `Short-circuits (skips rest)` |
-| `Pattern` | `Monad` |
 | `Railway` | `Fail → Fail` |
 | `Success Chain` | `Continues to next operation` |
+| `Failure Chain` | `Short-circuits (skips rest)` |
+| `Pattern` | `Monad` |
 
 > [!NOTE]
 > flatMap() enables railway-oriented programming where operations are chained like track switches. If any operation fails, the rest of the chain is skipped.
@@ -269,11 +269,11 @@ assertThat(result).isEqualTo("result=84");
 
 | Key | Value |
 | --- | --- |
-| `Pattern` | `Railway switches` |
-| `Success Result` | `"result=84"` |
 | `Failure Result` | `"failed: not a number"` |
 | `Failure Pipeline` | `parse fails → rest skipped` |
 | `Success Pipeline` | `strip → parse → double → format` |
+| `Pattern` | `Railway switches` |
+| `Success Result` | `"result=84"` |
 
 > [!NOTE]
 > Railway-oriented programming makes error paths explicit and type-safe. The compiler ensures all cases are handled, and the control flow is visible in the type system.

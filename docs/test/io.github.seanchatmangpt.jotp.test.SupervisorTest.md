@@ -54,10 +54,10 @@ sequenceDiagram
 
 | Key | Value |
 | --- | --- |
+| `Fatal Error` | `crash 2` |
 | `Actual Crashes` | `3` |
 | `Supervisor Status` | `TERMINATED` |
 | `Max Restarts` | `2` |
-| `Fatal Error` | `crash 2` |
 
 ## Supervisor: ONE_FOR_ONE Strategy
 
@@ -93,9 +93,9 @@ graph TD
 
 | Key | Value |
 | --- | --- |
+| `c1 State After Crash` | `0 (restarted)` |
 | `Strategy` | `ONE_FOR_ONE` |
 | `c2 State After c1 Crash` | `142 (unaffected)` |
-| `c1 State After Crash` | `0 (restarted)` |
 
 ## Supervisor: Strategy Comparison
 
@@ -170,11 +170,11 @@ graph TD
 
 | Key | Value |
 | --- | --- |
-| `c1 After Cascade` | `0` |
-| `c2 After Cascade` | `100` |
 | `c2 Before Crash` | `109` |
 | `c1 Before Crash` | `7` |
 | `Strategy` | `ONE_FOR_ALL` |
+| `c1 After Cascade` | `0` |
+| `c2 After Cascade` | `100` |
 
 ## Supervisor: REST_FOR_ONE Strategy
 
@@ -225,10 +225,10 @@ graph TD
 
 | Key | Value |
 | --- | --- |
-| `Strategy` | `REST_FOR_ONE` |
-| `middle (crashed)` | `100 (restarted)` |
 | `last (after crash)` | `1000 (restarted)` |
 | `first (before crash)` | `5 (unaffected)` |
+| `Strategy` | `REST_FOR_ONE` |
+| `middle (crashed)` | `100 (restarted)` |
 
 ## Supervisor: Crash and Restart Recovery
 

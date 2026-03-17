@@ -10,16 +10,16 @@ This mirrors Erlang/OTP's application controller where each phase has well-defin
 and exit conditions.
 
 
+Graceful shutdown ensures services are stopped in the correct order, allowing
+cleanup operations to complete before the application fully terminates. Shutdown
+hooks run after all services have been stopped.
+
+
 ## Application: OTP Application Lifecycle
 
 Applications in JOTP mirror Erlang/OTP's application behavior - they are the top-level
 containers for supervision trees and services. Each application follows a strict lifecycle:
 INIT (initialization hooks) -> START (services spawn) -> RUNNING (normal operation).
-
-
-Graceful shutdown ensures services are stopped in the correct order, allowing
-cleanup operations to complete before the application fully terminates. Shutdown
-hooks run after all services have been stopped.
 
 
 Applications integrate with the Supervisor pattern to create fault-tolerant process trees.
