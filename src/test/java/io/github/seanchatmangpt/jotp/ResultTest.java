@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrExtension;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
  * Unit tests for {@link Result} — verifies Javadoc documentation matches actual behavior.
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
  * <p>Tests the sealed Result interface for railway-oriented programming, matching the Erlang/OTP
  * pattern: {ok, Value} | {error, Reason}.
  */
+@ExtendWith(DtrExtension.class)
 @DisplayName("Result<T,E> railway-oriented programming")
 class ResultTest implements WithAssertions {
 
