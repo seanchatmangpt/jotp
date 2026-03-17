@@ -1,0 +1,162 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jotp
+  namespace: default
+  labels:
+    app: jotp
+    component: distributed-node
+spec:
+  serviceName: jotp-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp
+  template:
+    metadata:
+      labels:
+        app: jotp
+        component: distributed-node
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: jotp
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+      - name: wait-for-peers
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for peer nodes..."
+          for i in $(seq 1 30); do
+            READY=$(nslookup jotp-0.jotp-headless.default.svc.cluster.local 2>/dev/null | grep -c "Address:")
+            if [ "$READY" -ge 2 ]; then
+              echo "Peer nodes ready"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "Timeout waiting for peers"
+          exit 1
+      containers:
+      - name: jotp
+        image: jotp:1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: monitoring
+          containerPort: 9090
+          protocol: TCP
+        - name: admin
+          containerPort: 9091
+          protocol: TCP
+        env:
+        - name: JAVA_OPTS
+          valueFrom:
+            configMapKeyRef:
+              name: jotp-config
+              key: java-opts
+        - name: JOTP_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: JOTP_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: JOTP_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: JOTP_PEER_DISCOVERY
+          value: "dns"
+        - name: JOTP_PEER_SERVICE
+          value: "jotp-headless.default.svc.cluster.local"
+        - name: JOTP_CLUSTER_SIZE
+          value: "3"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests:
+            memory: "6Gi"
+            cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+        volumeMounts:
+        - name: jotp-data
+          mountPath: /app/data
+        - name: jotp-logs
+          mountPath: /app/logs
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: admin
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: admin
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health/startup
+            port: admin
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 18
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                echo "Initiating graceful shutdown..."
+                # Give load balancer time to remove pod
+                sleep 15
+                # Shutdown JOTP node gracefully
+                curl -X POST http://localhost:9091/actuator/shutdown || true
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: jotp-logs
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: jotp-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 10Gi
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0

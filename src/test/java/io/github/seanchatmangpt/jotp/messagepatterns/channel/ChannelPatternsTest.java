@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messagepatterns.channel;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) channel patterns define how messages are transported
  * between endpoints, including point-to-point, publish-subscribe, and datatype channels.
  */
+@DtrTest
 @DisplayName("Channel Patterns")
 class ChannelPatternsTest implements WithAssertions {
 

@@ -1,0 +1,197 @@
+# JOTP Alert Rules
+groups:
+  - name: jotp_cluster_alerts
+    interval: 30s
+    rules:
+      # Cluster Health
+      - alert: JOTPNodeDown
+        expr: up{job="jotp-cluster"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: jotp
+        annotations:
+          summary: "JOTP node {{ $labels.instance }} is down"
+          description: "JOTP node {{ $labels.instance }} has been down for more than 1 minute"
+
+      - alert: JOTPClusterPartition
+        expr: count(up{job="jotp-cluster"} == 0) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: jotp
+        annotations:
+          summary: "JOTP cluster network partition detected"
+          description: "{{ $value }} JOTP nodes are unreachable, possible network partition"
+
+      # Process Health
+      - alert: JOTPProcessCrashRate
+        expr: rate(jotp_process_crashes_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High process crash rate on {{ $labels.instance }}"
+          description: "Process crash rate is {{ $value }} crashes/sec over the last 5 minutes"
+
+      - alert: JOTPProcessRegistryOverflow
+        expr: jotp_process_registry_size / jotp_process_registry_capacity > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "Process registry nearly full on {{ $labels.instance }}"
+          description: "Process registry is {{ $value | humanizePercentage }} full"
+
+      # Memory & Performance
+      - alert: JOTPHeapMemoryHigh
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High heap memory usage on {{ $labels.instance }}"
+          description: "Heap memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: JOTPGCFrequency
+        expr: rate(jvm_gc_pause_seconds_sum[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High GC frequency on {{ $labels.instance }}"
+          description: "GC pause rate is {{ $value }} seconds/sec over the last 5 minutes"
+
+      - alert: JOTPVirtualThreadExhaustion
+        expr: jotp_virtual_thread_active_count / jotp_virtual_thread_max_count > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          service: jotp
+        annotations:
+          summary: "Virtual thread pool exhaustion on {{ $labels.instance }}"
+          description: "Virtual thread usage is {{ $value | humanizePercentage }}"
+
+      # Mailbox & Throughput
+      - alert: JOTPMessageQueueBacklog
+        expr: jotp_mailbox_size / jotp_mailbox_capacity > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "Message queue backlog on {{ $labels.instance }}"
+          description: "Mailbox is {{ $value | humanizePercentage }} full"
+
+      - alert: JOTPMessageProcessingLatency
+        expr: histogram_quantile(0.99, rate(jotp_message_processing_duration_seconds_bucket[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High message processing latency on {{ $labels.instance }}"
+          description: "P99 message latency is {{ $value }} seconds"
+
+      # Leader Election & Coordination
+      - alert: JOTPLeaderElectionTimeout
+        expr: rate(jotp_leader_election_timeouts_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: jotp
+        annotations:
+          summary: "Leader election failures on {{ $labels.instance }}"
+          description: "Leader election timeout rate is {{ $value }} elections/sec"
+
+      - alert: JOTPHeartbeatFailure
+        expr: rate(jotp_heartbeat_failures_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High heartbeat failure rate on {{ $labels.instance }}"
+          description: "Heartbeat failure rate is {{ $value }} failures/sec"
+
+      # Database & Caching
+      - alert: JOTPPostgresConnectionPoolExhaustion
+        expr: jotp_postgres_connections_active / jotp_postgres_connections_max > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "PostgreSQL connection pool nearly full on {{ $labels.instance }}"
+          description: "Connection pool is {{ $value | humanizePercentage }} used"
+
+      - alert: JOTPRedisConnectionFailure
+        expr: rate(jotp_redis_connection_failures_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High Redis connection failure rate on {{ $labels.instance }}"
+          description: "Redis connection failure rate is {{ $value }} failures/sec"
+
+      # Supervision Tree
+      - alert: JOTPSupervisorRestartThreshold
+        expr: rate(jotp_supervisor_restarts_total[10m]) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High supervisor restart rate on {{ $labels.instance }}"
+          description: "Supervisor restart rate is {{ $value }} restarts/sec over 10 minutes"
+
+      - alert: JOTPProcessRestartStorm
+        expr: rate(jotp_process_restarts_total[1m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          service: jotp
+        annotations:
+          summary: "Process restart storm on {{ $labels.instance }}"
+          description: "Process restart rate is {{ $value }} restarts/sec"
+
+  - name: jotp_performance_alerts
+    interval: 1m
+    rules:
+      # Throughput
+      - alert: JOTPThroughputDrop
+        expr: rate(jotp_messages_processed_total[5m]) < 1000
+        for: 10m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "Low throughput on {{ $labels.instance }}"
+          description: "Message processing rate is {{ $value }} msgs/sec"
+
+      # Resource Usage
+      - alert: JOTPHighCPUUsage
+        expr: rate(process_cpu_seconds_total{job="jotp-cluster"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      # Disk Space
+      - alert: JOTPDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: jotp
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Available disk space is {{ $value | humanizePercentage }}"

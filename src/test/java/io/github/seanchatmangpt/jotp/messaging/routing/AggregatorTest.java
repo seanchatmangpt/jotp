@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 import static org.assertj.core.api.Assertions.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.*;
 import java.util.*;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.*;
  *   <li>Metadata validation
  * </ul>
  */
+@DtrTest
 @DisplayName("Aggregator Pattern (EIP)")
 class AggregatorTest {
 

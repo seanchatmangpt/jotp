@@ -1,0 +1,65 @@
+@startuml c4-jotp-03g-components-persistence
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title JOTP - Persistence Container Components (Crash Recovery)
+
+Container_Boundary(persistenceContainer, "Persistence Container") {
+
+    Component(rocksdb, "RocksDBBackend", "Storage Engine", "RocksDB embedded database\nColumn families: state, events, ack\nWrite-Ahead Log (WAL)\nLZ4 compression")
+
+    Component(atomicWriter, "AtomicStateWriter<S>", "Batch Writer", "writeAtomic(key, state, seq)\nreadWithAck(key)\ngetLastProcessed(key)\nisDuplicate(key, seq)")
+
+    Component(eventLog, "EventSourcingAuditLog<S,E,D>", "Audit Log", "Append-only event store\nStateChange entries\nSnapshotEntry support\nAsync fire-and-forget logging")
+
+    Component(sequencedState, "SequencedState", "Interface", "lastProcessedSeq()\nTracks processed messages\nEnables idempotent replay")
+
+    Component(sequencedMsg, "SequencedMessage", "Interface", "sequenceNumber()\nMonotonic message ID\nDuplicate detection")
+
+    Component(codec, "SnapshotCodec<S>", "Serializer", "encode(state)\ndecode(bytes)\nJSON/Binary formats")
+
+    Component(backend, "PersistenceBackend", "Interface", "save(key, snapshot)\nload(key)\ndelete(key)\nexists(key)")
+
+    ComponentDb(columnFamily, "Column Families", "RocksDB CF", "state_cf: serialized state\nevents_cf: event log\nack_cf: sequence numbers")
+
+}
+
+Rel(rocksdb, columnFamily, "stores in")
+Rel(atomicWriter, rocksdb, "delegates to")
+Rel(atomicWriter, codec, "uses")
+Rel(atomicWriter, sequencedState, "verifies")
+
+Rel(eventLog, backend, "persists via")
+Rel(eventLog, sequencedState, "snapshots")
+
+Rel(sequencedMsg, sequencedState, "compares seq")
+Rel(backend, rocksdb, "implemented by")
+
+Rel(rocksdb, atomicWriter, "provides writeAtomic()")
+
+note on link rocksdb
+  Critical for crash safety:
+  WriteBatch + sync=true
+  ensures atomicity
+end note
+
+note on link atomicWriter
+  Solves the dual-write problem:
+  State + ACK written together
+  Either both or neither
+end note
+
+note on link sequencedMsg
+  Idempotent handler pattern:
+  if (msg.seq <= state.lastSeq)
+    return state; // skip duplicate
+end note
+
+note on link eventLog
+  CQRS event sourcing
+  Full state reconstruction
+  Temporal queries
+end note
+
+SHOW_LEGEND()
+
+@enduml

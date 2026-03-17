@@ -1,0 +1,82 @@
+# Promtail Configuration for JOTP
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+client:
+  url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # JOTP Application Logs
+  - job_name: jotp-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: jotp-application
+          environment: production
+          cluster: jotp-cluster
+
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: time
+            level: level
+            message: message
+            thread: thread
+            logger: logger
+            traceId: traceId
+            spanId: spanId
+
+      - labels:
+          level:
+          thread:
+          logger:
+
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # Docker Container Logs
+  - job_name: docker-logs
+    docker:
+      host: unix:///var/run/docker.sock
+      refresh_interval: 5s
+      filters:
+        - name: name
+          values: ["jotp-.*"]
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container_name'
+
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
+
+  # System Logs
+  - job_name: system-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          host: ${HOSTNAME}
+
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<host>\S+)\s+(?P<process>\S+):\s+(?P<message>.*)$'
+
+      - labels:
+          host:
+          process:
+
+      - timestamp:
+          source: timestamp
+          format: "Jan 02 15:04:05"
+
+      - output:
+          source: message

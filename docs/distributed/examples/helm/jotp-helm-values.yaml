@@ -1,0 +1,229 @@
+# Helm values override for JOTP with Istio mesh injection
+# Usage: helm install jotp ./jotp-chart -f istio-mesh-values.yaml
+
+# Global settings
+global:
+  imagePullSecrets: []
+  # - name: registry-creds
+
+# JOTP application configuration
+jotp:
+  image:
+    repository: jotp/telemetry-service
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 3
+
+  # Java runtime options
+  javaOpts: "-XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC"
+
+  # OpenTelemetry configuration
+  otel:
+    enabled: true
+    exporter:
+      endpoint: "http://jaeger-collector.istio-system:4317"
+    traces:
+      sampler: "traceidratio"
+      samplerArg: "0.1"
+
+  # JOTP-specific settings
+  config:
+    supervision:
+      strategy: "ONE_FOR_ONE"
+      intensity: 5
+      period: "60s"
+    processes:
+      maxProcesses: 10000
+      queueDepth: 1000
+    metrics:
+      enabled: true
+      scrapeInterval: "15s"
+    tracing:
+      enabled: true
+      sampling: 0.1
+
+  # Resource limits (accounting for Istio sidecar)
+  resources:
+    requests:
+      memory: "512Mi"    # JOTP: 400Mi + Istio: 112Mi
+      cpu: "500m"        # JOTP: 400m + Istio: 100m
+    limits:
+      memory: "2Gi"      # JOTP: 1.5Gi + Istio: 512Mi
+      cpu: "2000m"       # JOTP: 1800m + Istio: 200m
+
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    ports:
+      http: 8080
+      grpc: 9090
+
+  # Pod annotations
+  podAnnotations:
+    sidecar.istio.io/inject: "true"
+    sidecar.istio.io/proxyCPU: "200m"
+    sidecar.istio.io/proxyMemory: "256Mi"
+    sidecar.istio.io/proxyCPULimit: "500m"
+    sidecar.istio.io/proxyMemoryLimit: "512Mi"
+
+# Istio configuration
+istio:
+  enabled: true
+
+  # VirtualService for routing
+  virtualService:
+    enabled: true
+    hosts:
+    - jotp-telemetry
+    gateways: []
+    http:
+    - match:
+      - headers:
+          content-type:
+            regex: "application/grpc.*"
+      route:
+      - destination:
+          host: jotp-telemetry
+          subset: v1
+        weight: 100
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: "5xx,reset,connect-failure,refused-stream"
+    - route:
+      - destination:
+          host: jotp-telemetry
+          subset: v1
+        weight: 100
+      timeout: 10s
+
+  # DestinationRule for load balancing
+  destinationRule:
+    enabled: true
+    host: jotp-telemetry
+    trafficPolicy:
+      loadBalancer:
+        simple: LEAST_CONN
+      connectionPool:
+        tcp:
+          maxConnections: 100
+          connectTimeout: 30ms
+          tcpKeepalive:
+            time: 7200s
+            interval: 75s
+        http:
+          http2MaxRequests: 1000
+          http2InitialWindowSize: 65536
+          idleTimeout: 300s
+          h2UpgradePolicy: UPGRADE
+      outlierDetection:
+        consecutiveGatewayErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50
+        minHealthPercent: 40
+    subsets:
+    - name: v1
+      labels:
+        version: v1
+
+  # PeerAuthentication for mTLS
+  peerAuthentication:
+    enabled: true
+    mtls:
+      mode: STRICT
+
+  # AuthorizationPolicy for security
+  authorizationPolicy:
+    enabled: true
+    action: ALLOW
+    rules:
+    - from:
+      - source:
+          namespaces: ["istio-system"]
+      to:
+      - operation:
+          paths: ["/health/ready", "/health/live", "/metrics"]
+    - from:
+      - source:
+          namespaces: ["jotp-system"]
+      to:
+      - operation:
+          ports: ["8080", "9090"]
+
+# ServiceMonitor for Prometheus
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 15s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
+
+# ConfigMap for application config
+configMap:
+  enabled: true
+
+# Secrets
+secrets: {}
+  # databaseUrl: "postgresql://jotp-db:5432/telemetry"
+  # encryptionKey: "your-encryption-key-here"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Ingress
+ingress:
+  enabled: false
+  # className: nginx
+  # annotations: {}
+  # hosts:
+  # - host: jotp.example.com
+  #   paths:
+  #   - path: /
+  #     pathType: Prefix
+  # tls:
+  # - hosts:
+  #   - jotp.example.com
+  #   secretName: jotp-tls

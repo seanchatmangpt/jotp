@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 import static org.assertj.core.api.Assertions.*;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.*;
 import org.junit.jupiter.api.*;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.*;
  *   <li>Error conditions (null inputs, invalid splitters)
  * </ul>
  */
+@DtrTest
 @DisplayName("Splitter Pattern (EIP)")
 class SplitterTest {
 

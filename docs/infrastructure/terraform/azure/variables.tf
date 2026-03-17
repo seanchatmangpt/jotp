@@ -2,27 +2,23 @@
 
 variable "subscription_id" {
   type        = string
-  default     = env("ARM_SUBSCRIPTION_ID")
-  description = "Azure subscription ID"
+  description = "Azure subscription ID (from ARM_SUBSCRIPTION_ID env var)"
 }
 
 variable "client_id" {
   type        = string
-  default     = env("ARM_CLIENT_ID")
-  description = "Azure service principal client ID"
+  description = "Azure service principal client ID (from ARM_CLIENT_ID env var)"
 }
 
 variable "client_secret" {
   type        = string
-  default     = env("ARM_CLIENT_SECRET")
-  description = "Azure service principal client secret"
+  description = "Azure service principal client secret (from ARM_CLIENT_SECRET env var)"
   sensitive   = true
 }
 
 variable "tenant_id" {
   type        = string
-  default     = env("ARM_TENANT_ID")
-  description = "Azure tenant ID"
+  description = "Azure tenant ID (from ARM_TENANT_ID env var)"
 }
 
 variable "location" {

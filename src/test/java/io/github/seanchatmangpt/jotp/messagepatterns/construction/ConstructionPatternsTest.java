@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messagepatterns.construction;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) construction patterns define how messages are created,
  * structured, and documented for reliable communication.
  */
+@DtrTest
 @DisplayName("Message Construction Patterns")
 class ConstructionPatternsTest implements WithAssertions {
 

@@ -1,0 +1,232 @@
+# Complete Linkerd example deployment for JOTP telemetry service
+# Demonstrates production-ready JOTP deployment with Linkerd
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jotp-system
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+  labels:
+    app: jotp-telemetry
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+  template:
+    metadata:
+      labels:
+        app: jotp-telemetry
+      annotations:
+        linkerd.io/inject: enabled
+        config.linkerd.io/proxy-throw-resource-overload: "true"
+        config.linkerd.io/proxy-memory-limit: "512Mi"
+        config.linkerd.io/proxy-cpu-limit: "500m"
+    spec:
+      containers:
+      - name: jotp
+        image: jotp/telemetry-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC"
+        - name: LINKERD_PROXY_LOG
+          value: "warn"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+        volumeMounts:
+        - name: jotp-config
+          mountPath: /config
+          readOnly: true
+      volumes:
+      - name: jotp-config
+        configMap:
+          name: jotp-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+spec:
+  type: ClusterIP
+  selector:
+    app: jotp-telemetry
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jotp-config
+  namespace: jotp-system
+data:
+  application.yaml: |
+    jotp:
+      supervision:
+        strategy: ONE_FOR_ONE
+        intensity: 5
+        period: 60s
+      processes:
+        max-processes: 10000
+        queue-depth: 1000
+      metrics:
+        enabled: true
+        scrape-interval: 15s
+---
+# Service Profile for JOTP telemetry
+apiVersion: linkerd.io/v1alpha2
+kind: ServiceProfile
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+spec:
+  routes:
+  - name: ProcessTelemetry
+    condition:
+      method: POST
+      pathRegex: "/api/v1/telemetry/process"
+    timeout: 30s
+    isRetryable: true
+    retries:
+      limit: 3
+      initialInterval: 100ms
+      maxInterval: 1s
+
+  - name: StreamTelemetry
+    condition:
+      method: POST
+      pathRegex: "/api/v1/telemetry/stream"
+    timeout: 5m
+    isRetryable: false
+
+  - name: GetProcessStatus
+    condition:
+      method: GET
+      pathRegex: "/api/v1/process/status/.*"
+    timeout: 5s
+    isRetryable: true
+
+  - name: HealthCheck
+    condition:
+      method: GET
+      pathRegex: "/health/.*"
+    timeout: 2s
+    isRetryable: true
+
+  - name: Metrics
+    condition:
+      method: GET
+      pathRegex: "/metrics"
+    timeout: 5s
+    isRetryable: true
+
+  responseClasses:
+  - class: Success
+    status:
+    - 200
+    - 201
+    - 204
+  - class: RetryableError
+    status:
+    - 408
+    - 503
+    - 504
+  - class: FatalError
+    status:
+    - 400
+    - 404
+---
+# Server authorization policy
+apiVersion: policy.linkerd.io/v1beta1
+kind: ServerAuthorization
+metadata:
+  name: jotp-telemetry-authz
+  namespace: jotp-system
+spec:
+  server:
+    name: jotp-telemetry
+  clientAuthentication:
+    mTLS:
+      unauthenticated: false
+      cacheEnabled: true
+      identities:
+      - "cluster.local/ns/jotp-system/sa/jotp-telemetry"
+  # Allow health checks from all sources
+  rules:
+  - clientAuthentication:
+      mTLS:
+        unauthenticated: true
+    name: Health checks
+---
+# ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s

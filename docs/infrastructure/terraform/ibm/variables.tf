@@ -2,8 +2,7 @@
 
 variable "ibmcloud_api_key" {
   type        = string
-  default     = env("IBMCLOUD_API_KEY")
-  description = "IBM Cloud API key"
+  description = "IBM Cloud API key (from IBMCLOUD_API_KEY env var)"
   sensitive   = true
 }
 

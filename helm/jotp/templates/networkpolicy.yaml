@@ -1,0 +1,72 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "jotp.fullname" . }}
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "jotp.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow connections from other JOTP pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "jotp.name" . }}
+    ports:
+    - protocol: TCP
+      port: {{ .Values.service.ports.cluster }}
+  # Allow connections from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: {{ .Values.service.ports.management }}
+    {{- if .Values.monitoring.jmxExporter.enabled }}
+    - protocol: TCP
+      port: {{ .Values.monitoring.jmxExporter.port }}
+    {{- end }}
+  # Allow ingress from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: {{ .Values.service.ports.http }}
+  egress:
+  # Allow connections to other JOTP pods
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "jotp.name" . }}
+    ports:
+    - protocol: TCP
+      port: {{ .Values.service.ports.cluster }}
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow outbound to any destination (required for peer discovery)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: {{ .Values.service.ports.cluster }}
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+{{- end }}

@@ -28,10 +28,6 @@ provider "google" {
 resource "google_compute_network" "main" {
   name                    = "${var.app_name}-vpc"
   auto_create_subnetworks = false
-
-  labels = {
-    environment = var.environment
-  }
 }
 
 # Subnet

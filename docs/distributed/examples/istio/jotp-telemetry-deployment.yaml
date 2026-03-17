@@ -1,0 +1,259 @@
+# Complete Istio example deployment for JOTP telemetry service
+# This file demonstrates a production-ready JOTP deployment with Istio
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jotp-system
+  labels:
+    istio-injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+  labels:
+    app: jotp-telemetry
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+  template:
+    metadata:
+      labels:
+        app: jotp-telemetry
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+        sidecar.istio.io/proxyCPU: "200m"
+        sidecar.istio.io/proxyMemory: "256Mi"
+        sidecar.istio.io/proxyCPULimit: "500m"
+        sidecar.istio.io/proxyMemoryLimit: "512Mi"
+    spec:
+      containers:
+      - name: jotp
+        image: jotp/telemetry-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC -Dotel.service.name=jotp-telemetry"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger-collector.istio-system:4317"
+        - name: OTEL_TRACES_SAMPLER
+          value: "traceidratio"
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: "0.1"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+        volumeMounts:
+        - name: jotp-config
+          mountPath: /config
+          readOnly: true
+      volumes:
+      - name: jotp-config
+        configMap:
+          name: jotp-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+  labels:
+    app: jotp-telemetry
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: jotp-telemetry
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jotp-config
+  namespace: jotp-system
+data:
+  application.yaml: |
+    jotp:
+      supervision:
+        strategy: ONE_FOR_ONE
+        intensity: 5
+        period: 60s
+      processes:
+        max-processes: 10000
+        queue-depth: 1000
+      metrics:
+        enabled: true
+        scrape-interval: 15s
+      tracing:
+        enabled: true
+        sampling: 0.1
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+spec:
+  hosts:
+  - jotp-telemetry
+  http:
+  - match:
+    - headers:
+        content-type:
+          regex: "application/grpc.*"
+    route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1
+      weight: 100
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+  - route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1
+      weight: 100
+    timeout: 10s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+spec:
+  host: jotp-telemetry
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30ms
+        tcpKeepalive:
+          time: 7200s
+          interval: 75s
+      http:
+        http2MaxRequests: 1000
+        http2InitialWindowSize: 65536
+        idleTimeout: 300s
+        h2UpgradePolicy: UPGRADE
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 40
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: jotp-strict-mtls
+  namespace: jotp-system
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: jotp-telemetry-policy
+  namespace: jotp-system
+spec:
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        namespaces: ["istio-system"]
+    to:
+    - operation:
+        paths: ["/health/ready", "/health/live", "/metrics"]
+  - from:
+    - source:
+        namespaces: ["jotp-system"]
+    to:
+    - operation:
+        ports: ["8080", "9090"]
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: jotp-telemetry
+  namespace: jotp-system
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+    scheme: http

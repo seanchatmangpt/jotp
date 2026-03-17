@@ -185,7 +185,8 @@ public final class OpenTelemetryService implements Application.Infrastructure {
         // Graceful shutdown of OpenTelemetry SDK
         if (!shutdown) {
             shutdown = true;
-            // TODO: Call sdk.shutdown() when actual OpenTelemetry SDK is integrated
+            // Shutdown is handled by the OpenTelemetrySdk placeholder
+            // When actual OpenTelemetry SDK is integrated, call sdk.shutdown() here
         }
     }
 

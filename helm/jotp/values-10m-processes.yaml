@@ -1,0 +1,38 @@
+# Configuration optimized for 10 million concurrent processes
+# Use this with: helm install jotp ./helm/jotp -f values-10m-processes.yaml
+
+replicaCount: 5
+
+resources:
+  requests:
+    cpu: "8"
+    memory: "48Gi"
+  limits:
+    cpu: "16"
+    memory: "64Gi"
+
+jvm:
+  xmx: "32G"
+  xms: "32G"
+  gc: "ZGC"
+  gcOptions: "-XX:+UseZGC -XX:+DisableExplicitGC -XX:ConcGCThreads=4 -XX:ParallelGCThreads=8 -XX:ZAllocationSpikeTolerance=5"
+  extraOpts: "-XX:+AlwaysPreTouch -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCApplicationStoppedTime -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/logs/heapdump.hprof"
+
+jotp:
+  maxProcesses: 10000000  # 10M processes
+  mailbox:
+    capacity: 10000
+    fair: true
+  supervision:
+    strategy: "ONE_FOR_ONE"
+    maxRestarts: 5
+    maxSeconds: 60
+
+# Persistent volume for heap dumps
+volumes:
+  - name: logs
+    emptyDir: {}
+
+volumeMounts:
+  - name: logs
+    mountPath: /logs
