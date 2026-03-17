@@ -8,6 +8,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 /**
  * Central coordinator for JOTP applications — the {@code application} module in Java.
@@ -761,5 +763,286 @@ public final class ApplicationController {
         envOverrides.clear();
         persistenceBackend = null;
         startupTime = Instant.now();
+    }
+
+    // ── Instance-based controller (lifecycle orchestrator) ──────────────────
+
+    /** Global registry of named controller instances. */
+    private static final ConcurrentHashMap<String, ApplicationController> instances =
+            new ConcurrentHashMap<>();
+
+    private final String instanceName;
+    private final List<String> registeredApps = new CopyOnWriteArrayList<>();
+    private volatile boolean instanceRunning = false;
+
+    /**
+     * Create a new instance-based ApplicationController.
+     *
+     * <p>This constructor enables stateful, instance-level management of multiple applications.
+     * Useful for testing and multi-tenant scenarios.
+     *
+     * @param name the controller instance name
+     */
+    public ApplicationController(String name) {
+        this.instanceName = Objects.requireNonNull(name, "name must not be null");
+    }
+
+    /**
+     * Register an application with this controller (instance method).
+     *
+     * <p>The application must be loaded before starting (via {@link #startAll()}).
+     *
+     * @param appName the application name to register
+     * @return this controller for method chaining
+     */
+    public ApplicationController register(String appName) {
+        Objects.requireNonNull(appName, "appName must not be null");
+        if (!registeredApps.contains(appName)) {
+            registeredApps.add(appName);
+        }
+        return this;
+    }
+
+    /**
+     * Register a list of applications with this controller.
+     *
+     * @param appNames the application names to register
+     * @return this controller for method chaining
+     */
+    public ApplicationController registerAll(List<String> appNames) {
+        Objects.requireNonNull(appNames, "appNames must not be null");
+        for (String appName : appNames) {
+            register(appName);
+        }
+        return this;
+    }
+
+    /**
+     * Get the dependency order for startup (topologically sorted).
+     *
+     * <p>Uses Kahn's algorithm to compute a topological sort based on {@link
+     * ApplicationSpec#applications() application dependencies}.
+     *
+     * @return a list of application names in startup order
+     * @throws IllegalStateException if there is a circular dependency
+     */
+    public List<String> dependencyOrder() {
+        Map<String, Integer> inDegree = new HashMap<>();
+        Map<String, List<String>> graph = new HashMap<>();
+
+        // Initialize
+        for (String appName : registeredApps) {
+            inDegree.put(appName, 0);
+            graph.put(appName, new ArrayList<>());
+        }
+
+        // Build dependency graph
+        for (String appName : registeredApps) {
+            ApplicationSpec spec = resolveSpec(appName);
+            if (spec != null) {
+                for (String dep : spec.applications()) {
+                    if (registeredApps.contains(dep)) {
+                        graph.get(dep).add(appName); // dep must start before appName
+                        inDegree.put(appName, inDegree.get(appName) + 1);
+                    }
+                }
+            }
+        }
+
+        // Kahn's algorithm: topological sort
+        Queue<String> queue = new LinkedList<>();
+        for (String appName : registeredApps) {
+            if (inDegree.get(appName) == 0) {
+                queue.offer(appName);
+            }
+        }
+
+        List<String> result = new ArrayList<>();
+        while (!queue.isEmpty()) {
+            String appName = queue.poll();
+            result.add(appName);
+            for (String dependent : graph.get(appName)) {
+                inDegree.put(dependent, inDegree.get(dependent) - 1);
+                if (inDegree.get(dependent) == 0) {
+                    queue.offer(dependent);
+                }
+            }
+        }
+
+        if (result.size() != registeredApps.size()) {
+            throw new IllegalStateException("Circular dependency detected in application graph");
+        }
+
+        return result;
+    }
+
+    /**
+     * Start all registered applications in dependency order.
+     *
+     * <p>Applications are started in the order determined by {@link #dependencyOrder()}.
+     *
+     * @throws Exception if any application fails to start
+     */
+    public synchronized void startAll() throws Exception {
+        if (instanceRunning) {
+            return; // Already running
+        }
+
+        List<String> order = dependencyOrder();
+        for (String appName : order) {
+            try {
+                ApplicationController.start(appName);
+            } catch (Exception e) {
+                // Attempt to stop any already-started apps
+                for (int i = registeredApps.indexOf(appName) - 1; i >= 0; i--) {
+                    try {
+                        ApplicationController.stop(registeredApps.get(i));
+                    } catch (Exception ignored) {
+                    }
+                }
+                throw new RuntimeException(
+                        "Failed to start application '" + appName + "': " + e.getMessage(), e);
+            }
+        }
+        instanceRunning = true;
+    }
+
+    /**
+     * Stop all running applications in reverse dependency order with default 30-second timeout.
+     *
+     * @throws Exception if any application fails to stop
+     */
+    public synchronized void stopAll() throws Exception {
+        stopAll(java.time.Duration.ofSeconds(30));
+    }
+
+    /**
+     * Stop all running applications in reverse dependency order with a custom timeout.
+     *
+     * <p>Each application is given up to {@code timeout} to shut down gracefully. Applications
+     * are stopped in reverse order of their dependency order to ensure dependencies remain active
+     * until dependents are stopped.
+     *
+     * @param timeout the maximum time to wait for all applications to stop
+     * @throws Exception if any application fails to stop
+     */
+    public synchronized void stopAll(java.time.Duration timeout) throws Exception {
+        if (!instanceRunning) {
+            return; // Not running
+        }
+
+        List<String> order = dependencyOrder();
+        Collections.reverse(order); // Stop in reverse order
+
+        long timeoutMs = timeout.toMillis();
+        long startTime = System.currentTimeMillis();
+
+        for (String appName : order) {
+            long elapsed = System.currentTimeMillis() - startTime;
+            long remaining = timeoutMs - elapsed;
+
+            if (remaining <= 0) {
+                throw new RuntimeException(
+                        "Timeout exceeded while stopping applications. Application '"
+                                + appName
+                                + "' did not stop within timeout.");
+            }
+
+            try {
+                ApplicationController.stop(appName);
+            } catch (Exception ignored) {
+                // Best-effort: continue stopping other apps
+            }
+        }
+
+        instanceRunning = false;
+    }
+
+    /**
+     * Get the health status of this controller (aggregated from all registered apps).
+     *
+     * <p>Returns {@code ApplicationHealth.UP} if all apps are running, {@code DEGRADED} if some
+     * are running, and {@code DOWN} if none are running.
+     *
+     * @return the aggregated health status
+     */
+    public ApplicationHealth health() {
+        if (registeredApps.isEmpty()) {
+            return ApplicationHealth.DOWN;
+        }
+
+        int runningCount = 0;
+        for (String appName : registeredApps) {
+            if (running.containsKey(appName)) {
+                runningCount++;
+            }
+        }
+
+        if (runningCount == registeredApps.size()) {
+            return ApplicationHealth.UP;
+        } else if (runningCount > 0) {
+            return ApplicationHealth.DEGRADED;
+        } else {
+            return ApplicationHealth.DOWN;
+        }
+    }
+
+    /**
+     * Get the status of a specific registered application.
+     *
+     * @param appName the application name
+     * @return the application status
+     */
+    public ApplicationStatus statusOf(String appName) {
+        RunningEntry entry = running.get(appName);
+        ApplicationHealth health = entry != null ? ApplicationHealth.UP : ApplicationHealth.DOWN;
+        return new ApplicationStatus(
+                appName, health, entry != null ? java.time.Instant.now() : null, null, 0L, 0L, "");
+    }
+
+    /**
+     * Get the status of all registered applications.
+     *
+     * @return a list of application statuses
+     */
+    public List<ApplicationStatus> allStatuses() {
+        return registeredApps.stream().map(this::statusOf).toList();
+    }
+
+    /**
+     * Check if this controller instance is running.
+     *
+     * @return {@code true} if all applications are running, {@code false} otherwise
+     */
+    public boolean isRunning() {
+        return instanceRunning;
+    }
+
+    /**
+     * Get the list of registered application names.
+     *
+     * @return a list of application names
+     */
+    public List<String> applicationNames() {
+        return new ArrayList<>(registeredApps);
+    }
+
+    /**
+     * Get or create a named controller instance.
+     *
+     * @param name the instance name
+     * @return the controller instance
+     */
+    public static ApplicationController instance(String name) {
+        return instances.computeIfAbsent(name, ApplicationController::new);
+    }
+
+    /**
+     * Get the default controller instance.
+     *
+     * @return the default controller instance
+     */
+    public static ApplicationController defaultInstance() {
+        return instance("default");
     }
 }

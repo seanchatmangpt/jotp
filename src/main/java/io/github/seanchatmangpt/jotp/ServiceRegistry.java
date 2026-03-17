@@ -139,6 +139,9 @@ public final class ServiceRegistry {
             new ConcurrentHashMap<>();
     private static final List<ServiceLifecycleListener> LISTENERS = new ArrayList<>();
 
+    /** Optional global registry for distributed process discovery. */
+    private static volatile GlobalProcRegistry globalRegistry = null;
+
     /** Lifecycle listener for service registration events. */
     public interface ServiceLifecycleListener {
         default void onRegistered(ServiceInfo info) {}
@@ -351,6 +354,55 @@ public final class ServiceRegistry {
         TAG_INDEX.clear();
         synchronized (LISTENERS) {
             LISTENERS.clear();
+        }
+    }
+
+    // ── Global registry integration ──────────────────────────────────────────────
+
+    /**
+     * Set the global process registry for distributed discovery.
+     *
+     * <p>When set, service registrations will be automatically synced to the global registry.
+     *
+     * @param registry the global registry instance
+     */
+    public static void setGlobalRegistry(GlobalProcRegistry registry) {
+        globalRegistry = registry;
+    }
+
+    /**
+     * Get the global process registry (if configured).
+     *
+     * @return Optional containing the global registry
+     */
+    public static Optional<GlobalProcRegistry> getGlobalRegistry() {
+        return Optional.ofNullable(globalRegistry);
+    }
+
+    /**
+     * Register a service globally (if global registry is configured).
+     *
+     * <p>This is a convenience method combining local ServiceRegistry registration
+     * with global registry sync. The service is registered in both places.
+     *
+     * @param name service name
+     * @param procRef process reference
+     * @param metadata service metadata
+     * @param nodeId current node ID (required for global registration)
+     */
+    public static void registerGlobal(
+            String name, ProcRef<?, ?> procRef, ServiceMetadata metadata, io.github.seanchatmangpt.jotp.distributed.NodeId nodeId) {
+        // Register locally first
+        Proc<?, ?> proc = procRef.proc();
+        register(name, proc, metadata);
+
+        // Register globally if registry is configured
+        if (globalRegistry != null) {
+            try {
+                globalRegistry.register(name, procRef, nodeId);
+            } catch (Exception e) {
+                System.err.println("Failed to register " + name + " globally: " + e);
+            }
         }
     }
 }

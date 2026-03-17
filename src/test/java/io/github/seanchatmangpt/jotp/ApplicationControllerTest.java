@@ -877,4 +877,294 @@ class ApplicationControllerTest implements WithAssertions {
                     .contains("Loaded only");
         }
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Instance-based controller — Lifecycle orchestrator
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Instance-based controller — dependency ordering and lifecycle")
+    class InstanceController {
+
+        @Test
+        @DisplayName("Create a named controller instance")
+        void createNamedInstance() {
+            var controller = new ApplicationController("test-system");
+            assertThat(controller).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Register applications with a controller")
+        void registerApplications() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            // Create minimal specs for testing
+            var dbSpec = ApplicationSpec.builder("database").description("DB").build();
+            var cacheSpec =
+                    ApplicationSpec.builder("cache")
+                            .description("Cache")
+                            .applications("database")
+                            .build();
+            var apiSpec =
+                    ApplicationSpec.builder("api")
+                            .description("API")
+                            .applications("database", "cache")
+                            .build();
+
+            // Load specs
+            ApplicationController.load(dbSpec);
+            ApplicationController.load(cacheSpec);
+            ApplicationController.load(apiSpec);
+
+            // Register with controller
+            controller.register("database").register("cache").register("api");
+
+            assertThat(controller.applicationNames()).containsExactly("database", "cache", "api");
+        }
+
+        @Test
+        @DisplayName("Compute dependency order using topological sort")
+        void dependencyOrder() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            // Create specs with dependencies
+            var dbSpec = ApplicationSpec.builder("database").description("DB").build();
+            var cacheSpec =
+                    ApplicationSpec.builder("cache")
+                            .description("Cache")
+                            .applications("database")
+                            .build();
+            var apiSpec =
+                    ApplicationSpec.builder("api")
+                            .description("API")
+                            .applications("database", "cache")
+                            .build();
+
+            ApplicationController.load(dbSpec);
+            ApplicationController.load(cacheSpec);
+            ApplicationController.load(apiSpec);
+
+            controller.register("api").register("cache").register("database");
+
+            var order = controller.dependencyOrder();
+
+            // Order should be: database (no deps), cache (depends on db), api (depends on db
+            // and cache)
+            assertThat(order).containsExactly("database", "cache", "api");
+        }
+
+        @Test
+        @DisplayName("Detect circular dependencies in application graph")
+        void circularDependencyDetection() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            // Create circular dependency: a -> b -> c -> a
+            var specA = ApplicationSpec.builder("app-a").applications("app-c").build();
+            var specB = ApplicationSpec.builder("app-b").applications("app-a").build();
+            var specC = ApplicationSpec.builder("app-c").applications("app-b").build();
+
+            ApplicationController.load(specA);
+            ApplicationController.load(specB);
+            ApplicationController.load(specC);
+
+            controller.register("app-a").register("app-b").register("app-c");
+
+            var thrown =
+                    catchThrowableOfType(
+                            () -> controller.dependencyOrder(), IllegalStateException.class);
+
+            assertThat(thrown.getMessage()).contains("Circular dependency");
+        }
+
+        @Test
+        @DisplayName("Start all applications in dependency order")
+        void startAllInOrder() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            var startOrder = new AtomicReference<StringBuilder>(new StringBuilder());
+
+            // Create specs with callbacks that track order
+            var dbCallback =
+                    (ApplicationCallback<String>)
+                            (type, args) -> {
+                                startOrder.get().append("db,");
+                                return "db-state";
+                            };
+
+            var cacheCallback =
+                    (ApplicationCallback<String>)
+                            (type, args) -> {
+                                startOrder.get().append("cache,");
+                                return "cache-state";
+                            };
+
+            var apiCallback =
+                    (ApplicationCallback<String>)
+                            (type, args) -> {
+                                startOrder.get().append("api,");
+                                return "api-state";
+                            };
+
+            var dbSpec = ApplicationSpec.builder("database").mod(dbCallback).build();
+            var cacheSpec =
+                    ApplicationSpec.builder("cache")
+                            .mod(cacheCallback)
+                            .applications("database")
+                            .build();
+            var apiSpec =
+                    ApplicationSpec.builder("api")
+                            .mod(apiCallback)
+                            .applications("database", "cache")
+                            .build();
+
+            ApplicationController.load(dbSpec);
+            ApplicationController.load(cacheSpec);
+            ApplicationController.load(apiSpec);
+
+            controller.register("api").register("cache").register("database");
+
+            // Start all — should start in: database, cache, api order
+            controller.startAll();
+
+            assertThat(startOrder.get().toString()).isEqualTo("db,cache,api,");
+            assertThat(controller.isRunning()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Stop all applications in reverse dependency order")
+        void stopAllInReverseOrder() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            var stopOrder = new AtomicReference<StringBuilder>(new StringBuilder());
+
+            var dbCallback =
+                    (ApplicationCallback<String>)
+                            (type, args) -> {
+                                return "db-state";
+                            };
+
+            var cacheCallback =
+                    (ApplicationCallback<String>)
+                            (type, args) -> {
+                                return "cache-state";
+                            };
+
+            var apiCallback =
+                    (ApplicationCallback<String>)
+                            (type, args) -> {
+                                return "api-state";
+                            };
+
+            var dbSpec = ApplicationSpec.builder("database").mod(dbCallback).build();
+            var cacheSpec =
+                    ApplicationSpec.builder("cache")
+                            .mod(cacheCallback)
+                            .applications("database")
+                            .build();
+            var apiSpec =
+                    ApplicationSpec.builder("api")
+                            .mod(apiCallback)
+                            .applications("database", "cache")
+                            .build();
+
+            ApplicationController.load(dbSpec);
+            ApplicationController.load(cacheSpec);
+            ApplicationController.load(apiSpec);
+
+            controller.register("api").register("cache").register("database");
+            controller.startAll();
+
+            // Stop with custom timeout
+            controller.stopAll(Duration.ofSeconds(10));
+
+            assertThat(controller.isRunning()).isFalse();
+        }
+
+        @Test
+        @DisplayName("Health status reflects running applications")
+        void healthStatus() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            var spec = ApplicationSpec.builder("test-app").build();
+            ApplicationController.load(spec);
+            controller.register("test-app");
+
+            assertThat(controller.health()).isEqualTo(ApplicationHealth.DOWN);
+
+            ApplicationController.start("test-app");
+
+            assertThat(controller.health()).isEqualTo(ApplicationHealth.UP);
+
+            ApplicationController.stop("test-app");
+
+            assertThat(controller.health()).isEqualTo(ApplicationHealth.DOWN);
+        }
+
+        @Test
+        @DisplayName("Status of individual applications")
+        void applicationStatus() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            var spec = ApplicationSpec.builder("test-app").build();
+            ApplicationController.load(spec);
+            controller.register("test-app");
+
+            ApplicationController.start("test-app");
+
+            var status = controller.statusOf("test-app");
+            assertThat(status.name()).isEqualTo("test-app");
+            assertThat(status.health()).isEqualTo(ApplicationHealth.UP);
+        }
+
+        @Test
+        @DisplayName("All statuses lists status of all registered applications")
+        void allStatuses() throws Exception {
+            ApplicationController.reset();
+            var controller = new ApplicationController("test-system");
+
+            var spec1 = ApplicationSpec.builder("app1").build();
+            var spec2 = ApplicationSpec.builder("app2").build();
+
+            ApplicationController.load(spec1);
+            ApplicationController.load(spec2);
+
+            controller.register("app1").register("app2");
+
+            ApplicationController.start("app1");
+
+            var statuses = controller.allStatuses();
+            assertThat(statuses).hasSize(2);
+            assertThat(statuses.get(0).health()).isEqualTo(ApplicationHealth.UP);
+            assertThat(statuses.get(1).health()).isEqualTo(ApplicationHealth.DOWN);
+        }
+
+        @Test
+        @DisplayName("Get or create named instance")
+        void namedInstance() {
+            ApplicationController.reset();
+
+            var instance1 = ApplicationController.instance("system1");
+            var instance2 = ApplicationController.instance("system1");
+
+            assertThat(instance1).isSameAs(instance2);
+        }
+
+        @Test
+        @DisplayName("Get default instance")
+        void defaultInstance() {
+            ApplicationController.reset();
+
+            var def1 = ApplicationController.defaultInstance();
+            var def2 = ApplicationController.defaultInstance();
+
+            assertThat(def1).isSameAs(def2);
+        }
+    }
 }
