@@ -21,8 +21,8 @@ import java.util.function.Supplier;
  * <p>Auto-scaling runs on a background virtual thread:
  *
  * <ul>
- *   <li>Scale up: if ANY replica queue depth &gt; {@code scaleUpQueueDepth} AND {@code
- *       replicaCount < maxSize}, spawn a new replica.
+ *   <li>Scale up: if ANY replica queue depth &gt; {@code scaleUpQueueDepth} AND {@code replicaCount
+ *       < maxSize}, spawn a new replica.
  *   <li>Scale down: if ALL replicas have been idle for {@code scaleDownIdleTime} AND {@code
  *       replicaCount > minSize}, shut down one replica.
  * </ul>
@@ -79,12 +79,15 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
 
         Replica(int id) {
             this.id = id;
-            this.proc = Proc.spawn(config.initialState().get(), (state, msg) -> {
-                S next = config.handler().apply(state, msg);
-                processed.incrementAndGet();
-                lastActive = Instant.now();
-                return next;
-            });
+            this.proc =
+                    Proc.spawn(
+                            config.initialState().get(),
+                            (state, msg) -> {
+                                S next = config.handler().apply(state, msg);
+                                processed.incrementAndGet();
+                                lastActive = Instant.now();
+                                return next;
+                            });
         }
 
         int queueDepth() {
@@ -97,7 +100,8 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
         }
 
         ReplicaStats toStats() {
-            return new ReplicaStats(id, queueDepth(), processed.get(), isIdle(config.scaleDownIdleTime()));
+            return new ReplicaStats(
+                    id, queueDepth(), processed.get(), isIdle(config.scaleDownIdleTime()));
         }
 
         void stop() {
@@ -128,7 +132,8 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
         }
 
         // Background auto-scaling thread
-        this.scalingThread = Thread.ofVirtual().name("process-swarm-scaler").start(this::scalingLoop);
+        this.scalingThread =
+                Thread.ofVirtual().name("process-swarm-scaler").start(this::scalingLoop);
     }
 
     // ── Factory ───────────────────────────────────────────────────────────────
