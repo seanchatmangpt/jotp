@@ -1,7 +1,7 @@
 package io.github.seanchatmangpt.jotp.dogfood.messaging;
 
 import io.github.seanchatmangpt.jotp.*;
-import io.github.seanchatmangpt.jotp.messaging.system.DeadLetterChannel;
+import io.github.seanchatmangpt.jotp.messaging.channels.DeadLetterChannel;
 import java.time.Duration;
 
 /**
@@ -39,9 +39,9 @@ public final class DeadLetterChannelExample {
         System.out.println("=== Dead Letter Channel Example: Poison Pill Recovery ===\n");
 
         // Create dead letter channel for failed orders
-        var dlc = DeadLetterChannel.<OrderMsg>create();
+        var dlc = new DeadLetterChannel<OrderMsg>();
 
-        // Create supervisor for order processing
+        // Create a process that handles orders, routing failures to the dead letter channel
         var supervisor =
                 new Supervisor(
                         "order-supervisor",
@@ -49,49 +49,41 @@ public final class DeadLetterChannelExample {
                         5,
                         Duration.ofSeconds(60));
 
-        // Process orders with automatic crash recovery
         var orderHandler =
-                supervisor.supervise(
-                        "order-handler",
-                        dlc,
-                        dlc.withCrashHandler(
-                                msg -> {
-                                    switch (msg) {
-                                        case OrderMsg.Order order -> {
-                                            // Validate and process
-                                            if (order.amount() < 0) {
-                                                throw new IllegalArgumentException(
-                                                        "Negative amount: " + order.amount());
-                                            }
-                                            System.out.println(
-                                                    "✓ Order processed: "
-                                                            + order.orderId()
-                                                            + " for $"
-                                                            + order.amount());
-                                        }
-                                        case OrderMsg.PoisonPill pill -> {
-                                            // This is our poison pill — throw to trigger DLC
-                                            throw new IllegalStateException(
-                                                    "Poison pill: intentional crash for recovery demo");
-                                        }
-                                    }
-                                }));
+                new Proc<>(
+                        0,
+                        (Integer state, OrderMsg msg) -> {
+                            return switch (msg) {
+                                case OrderMsg.Order order -> {
+                                    System.out.println(
+                                            "✓ Order processed: "
+                                                    + order.orderId()
+                                                    + " for $"
+                                                    + order.amount());
+                                    yield state + 1;
+                                }
+                                case OrderMsg.PoisonPill pill -> {
+                                    dlc.send(pill, "poison pill — unprocessable message");
+                                    System.out.println(
+                                            "→ Poison pill routed to dead letter channel");
+                                    yield state;
+                                }
+                            };
+                        });
 
         // Send valid orders
         orderHandler.tell(new OrderMsg.Order("ORD-001", 99.99));
         orderHandler.tell(new OrderMsg.Order("ORD-002", 149.50));
 
-        // Send poison pill
-        System.out.println("\n→ Sending poison pill to trigger dead letter routing...");
+        // Send poison pill — goes to dead letter channel instead of crashing
+        System.out.println("\n→ Sending poison pill...");
         orderHandler.tell(new OrderMsg.PoisonPill());
 
-        // Give the supervisor time to process
-        Thread.sleep(500);
-
-        // Send more valid orders
+        // Send more valid orders after the poison pill
         orderHandler.tell(new OrderMsg.Order("ORD-003", 49.99));
 
-        Thread.sleep(500);
+        // Allow processing to complete
+        Thread.sleep(300);
 
         // Inspect dead letters
         System.out.println("\n=== Dead Letter Channel Inspection ===");
@@ -102,8 +94,8 @@ public final class DeadLetterChannelExample {
             System.out.println("Dead letters captured: " + deadLetters.size());
             for (var dl : deadLetters) {
                 System.out.println("  Message: " + dl.message());
-                System.out.println("  Reason: " + dl.reason());
-                System.out.println("  Arrived: " + dl.arrivedAt());
+                System.out.println("  Reason:  " + dl.reason());
+                System.out.println("  Time:    " + dl.timestamp());
                 System.out.println();
             }
         }

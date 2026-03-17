@@ -1,0 +1,223 @@
+{{- if .Values.statefulSet.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "jotp.fullname" . }}
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.serviceMesh.enabled }}
+    {{- toYaml .Values.serviceMesh.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  serviceName: {{ include "jotp.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "jotp.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: {{ .Values.statefulSet.partition | default 0 }}
+  podManagementPolicy: {{ .Values.statefulSet.podManagementPolicy | default "Parallel" }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "jotp.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "jotp.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.ports.http }}
+          protocol: TCP
+        - name: cluster
+          containerPort: {{ .Values.service.ports.cluster }}
+          protocol: TCP
+        - name: management
+          containerPort: {{ .Values.service.ports.management }}
+          protocol: TCP
+        {{- if .Values.monitoring.jmxExporter.enabled }}
+        - name: jmx-exporter
+          containerPort: {{ .Values.monitoring.jmxExporter.port }}
+          protocol: TCP
+        {{- end }}
+
+        env:
+        - name: JAVA_OPTS
+          value: >-
+            -Xms{{ .Values.jvm.xms }}
+            -Xmx{{ .Values.jvm.xmx }}
+            -XX:+Use{{ .Values.jvm.gc }}
+            {{ .Values.jvm.gcOptions }}
+            {{ .Values.jvm.extraOpts }}
+            {{- if .Values.jvm.enablePreview }}
+            --enable-preview
+            {{- end }}
+        - name: JOTP_NODE_NAME
+          value: {{ .Values.jotp.nodeName }}-$(POD_NAME)
+        - name: JOTP_COOKIE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "jotp.fullname" . }}-secret
+              key: cookie
+        - name: JOTP_DISTRIBUTED_ENABLED
+          value: {{ .Values.jotp.distributed | quote }}
+        - name: JOTP_PEER_DISCOVERY_ENABLED
+          value: {{ .Values.jotp.peerDiscovery.enabled | quote }}
+        - name: JOTP_PEER_DISCOVERY_SERVICE
+          value: {{ .Values.jotp.peerDiscovery.serviceName }}
+        - name: JOTP_PEER_DISCOVERY_PORT
+          value: {{ .Values.jotp.peerDiscovery.port | quote }}
+        - name: JOTP_MAX_PROCESSES
+          value: {{ .Values.jotp.maxProcesses | quote }}
+        - name: JOTP_MAILBOX_CAPACITY
+          value: {{ .Values.jotp.mailbox.capacity | quote }}
+        - name: JOTP_MAILBOX_FAIR
+          value: {{ .Values.jotp.mailbox.fair | quote }}
+        - name: JOTP_SUPERVISION_STRATEGY
+          value: {{ .Values.jotp.supervision.strategy }}
+        - name: JOTP_MAX_RESTARTS
+          value: {{ .Values.jotp.supervision.maxRestarts | quote }}
+        - name: JOTP_MAX_SECONDS
+          value: {{ .Values.jotp.supervision.maxSeconds | quote }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        {{- with .Values.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+        {{- if .Values.healthChecks.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.healthChecks.liveness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.healthChecks.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthChecks.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthChecks.liveness.timeoutSeconds }}
+          successThreshold: {{ .Values.healthChecks.liveness.successThreshold }}
+          failureThreshold: {{ .Values.healthChecks.liveness.failureThreshold }}
+        {{- end }}
+
+        {{- if .Values.healthChecks.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.healthChecks.readiness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.healthChecks.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthChecks.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthChecks.readiness.timeoutSeconds }}
+          successThreshold: {{ .Values.healthChecks.readiness.successThreshold }}
+          failureThreshold: {{ .Values.healthChecks.readiness.failureThreshold }}
+        {{- end }}
+
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        {{- with .Values.volumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      {{- if .Values.monitoring.jmxExporter.enabled }}
+      - name: jmx-exporter
+        image: bitnami/jmx-exporter:latest
+        args:
+        - "9091"
+        - "/etc/jmx-exporter/jmx-exporter-config.yaml"
+        ports:
+        - name: jmx-exporter
+          containerPort: {{ .Values.monitoring.jmxExporter.port }}
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.monitoring.jmxExporter.resources | nindent 10 }}
+        volumeMounts:
+        - name: jmx-exporter-config
+          mountPath: /etc/jmx-exporter
+      {{- end }}
+
+      volumes:
+      {{- if .Values.monitoring.jmxExporter.enabled }}
+      - name: jmx-exporter-config
+        configMap:
+          name: {{ include "jotp.fullname" . }}-jmx-config
+      {{- end }}
+      {{- with .Values.volumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+
+  {{- if .Values.statefulSet.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      {{- with .Values.statefulSet.persistence.accessModes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- if .Values.statefulSet.persistence.storageClass }}
+      storageClassName: {{ .Values.statefulSet.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.statefulSet.persistence.size | default "10Gi" }}
+  {{- end }}
+{{- end }}

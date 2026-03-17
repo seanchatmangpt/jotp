@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.io.IOException;
 import java.time.Duration;
@@ -33,7 +31,6 @@ import org.junit.jupiter.api.Test;
  * @see DistributedAppSpec
  * @see StartMode
  */
-@DtrTest
 @DisplayName("DistributedNode — OTP distributed application semantics")
 class DistributedNodeTest {
 
@@ -108,9 +105,7 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Application starts on highest-priority node only")
-    void startOnHighestPriorityNode(DtrContext ctx) {
-        ctx.say("OTP distributed application: Application starts on highest-priority node only.");
-        ctx.say("Node priority is defined by the order in DistributedAppSpec.distribution().");
+    void startOnHighestPriorityNode() {
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
         TrackingCallbacks cb2 = new TrackingCallbacks();
@@ -135,10 +130,8 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Failover to node2 when node1 goes down")
-    void failoverWhenPrimaryGoesDown(DtrContext ctx) {
-        ctx.say(
+    void failoverWhenPrimaryGoesDown() {
                 "Failover pattern: When primary node crashes, next priority node takes over with StartMode.Failover.");
-        ctx.say("The failover node receives the crashed node's ID via StartMode.Failover.from().");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
         TrackingCallbacks cb2 = new TrackingCallbacks();
@@ -169,10 +162,8 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Takeover by node1 when it rejoins after node2 ran the app")
-    void takeoverWhenHigherPriorityReturns(DtrContext ctx) throws IOException {
-        ctx.say(
+    void takeoverWhenHigherPriorityReturns() throws IOException {
                 "Takeover pattern: When higher-priority node rejoins, it takes over from current node.");
-        ctx.say(
                 "The current node receives onStop() and the rejoining node starts with StartMode.Takeover.");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();
@@ -286,10 +277,8 @@ class DistributedNodeTest {
 
     @Test
     @DisplayName("Cascading failover: node3 takes over after both node1 and node2 go down")
-    void cascadingFailover(DtrContext ctx) {
-        ctx.say(
+    void cascadingFailover() {
                 "Cascading failover: Application survives multiple node failures by cascading through priority list.");
-        ctx.say(
                 "Each failover passes the previous node's ID, maintaining the failure chain history.");
         DistributedAppSpec spec = immediateSpec();
         TrackingCallbacks cb1 = new TrackingCallbacks();

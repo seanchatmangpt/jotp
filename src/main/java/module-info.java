@@ -97,6 +97,13 @@ module io.github.seanchatmangpt.jotp {
     requires java.management;
     requires jdk.management;
     requires jdk.unsupported;
+    requires static rocksdbjni; // Optional for persistent registry backend
+    requires com.fasterxml.jackson.databind;
+    requires com.fasterxml.jackson.datatype.jsr310;
+
+    // Distributed
+    exports io.github.seanchatmangpt.jotp.distributed;
+    exports io.github.seanchatmangpt.jotp.persistence;
 
     // Local exports
     exports io.github.seanchatmangpt.jotp;

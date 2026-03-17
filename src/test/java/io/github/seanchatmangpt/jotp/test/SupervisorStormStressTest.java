@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp.test;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
@@ -48,7 +46,6 @@ import org.junit.jupiter.api.Timeout;
  * Supervisor restart window boundaries. Run with DTR to see off-by-one validation and cascade
  * behavior.
  */
-@DtrTest
 @Timeout(30)
 class SupervisorStormStressTest implements WithAssertions {
 
@@ -94,15 +91,8 @@ class SupervisorStormStressTest implements WithAssertions {
      * would kill the supervisor at crash 3 (if the count starts at 1 instead of 0).
      */
     @Test
-    void restartBoundary_exactlyMaxRestartsAllowed_oneMoreKillsSupervisor(DtrContext ctx)
+    void restartBoundary_exactlyMaxRestartsAllowed_oneMoreKillsSupervisor()
             throws Exception {
-        ctx.say("Supervisor restart boundary test: off-by-one detection");
-        ctx.say("Tests the exact boundary of maxRestarts enforcement.");
-        ctx.say("");
-        ctx.say("Breaking point under investigation:");
-        ctx.say("- Crashes 1-3 within window: child restarted (within budget)");
-        ctx.say("- Crash 4 within window: supervisor terminates (over budget)");
-        ctx.say("- Off-by-one bugs would allow crash 4 to restart or kill at crash 3");
         int maxRestarts = 3;
         var supervisor =
                 new Supervisor("test-sv", Strategy.ONE_FOR_ONE, maxRestarts, Duration.ofSeconds(2));
@@ -126,7 +116,6 @@ class SupervisorStormStressTest implements WithAssertions {
                 .as("supervisor must have terminated after exceeding maxRestarts")
                 .isFalse();
 
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "maxRestarts", String.valueOf(maxRestarts),
                         "Crashes survived", String.valueOf(maxRestarts),

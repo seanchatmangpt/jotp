@@ -1,10 +1,12 @@
 package io.github.seanchatmangpt.jotp.dogfood.otp;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.ApplicationInfo;
 import io.github.seanchatmangpt.jotp.RunType;
 import io.github.seanchatmangpt.jotp.StartType;
+import io.github.seanchatmangpt.jotp.StartType.Failover;
+import io.github.seanchatmangpt.jotp.StartType.Normal;
+import io.github.seanchatmangpt.jotp.StartType.Takeover;
 import java.util.List;
 import java.util.Optional;
 import org.assertj.core.api.WithAssertions;
@@ -23,11 +25,10 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * <p>Each test starts with a clean {@link ApplicationController} state via {@code reset()} so that
  * the global static registry does not leak between tests.
  */
-@DtrTest
 @DisplayName("ApplicationController: OTP application lifecycle")
 @Execution(ExecutionMode.SAME_THREAD)
 class ApplicationExampleTest implements WithAssertions {
-
+    @DisplayName("ApplicationController: OTP application lifecycle")
     @BeforeEach
     void cleanRegistry() {
         // Armstrong: "Start fresh every time — state from a previous run is
@@ -248,8 +249,7 @@ class ApplicationExampleTest implements WithAssertions {
     void takeoverStartTypeIsHandled() throws Exception {
         ApplicationController.load(ApplicationExample.buildSpec());
         // Simulate distributed takeover from node2@remotehost
-        ApplicationController.start(
-                "ch-hub", RunType.PERMANENT, new StartType.Takeover("node2@remotehost"));
+        ApplicationController.start("ch-hub", RunType.PERMANENT, new Takeover("node2@remotehost"));
 
         // Application started successfully — callback's switch handled Takeover variant
         assertThat(ApplicationController.whichApplications()).hasSize(1);
@@ -260,8 +260,7 @@ class ApplicationExampleTest implements WithAssertions {
     void failoverStartTypeIsHandled() throws Exception {
         ApplicationController.load(ApplicationExample.buildSpec());
         // Simulate failover from a crashed primary node
-        ApplicationController.start(
-                "ch-hub", RunType.PERMANENT, new StartType.Failover("primary@crashed"));
+        ApplicationController.start("ch-hub", RunType.PERMANENT, new Failover("primary@crashed"));
 
         assertThat(ApplicationController.whichApplications()).hasSize(1);
     }
@@ -271,17 +270,13 @@ class ApplicationExampleTest implements WithAssertions {
     void sealedSwitchOnStartTypeIsExhaustive() {
         // This test verifies that the exhaustive switch compiles without a default branch.
         // Java 26 sealed types guarantee no unhandled variant can reach runtime.
-        StartType[] types = {
-            new StartType.Normal(),
-            new StartType.Takeover("n1@host"),
-            new StartType.Failover("n2@host")
-        };
+        StartType[] types = {new Normal(), new Takeover("n1@host"), new Failover("n2@host")};
         for (StartType st : types) {
             String label =
                     switch (st) {
-                        case StartType.Normal() -> "normal";
-                        case StartType.Takeover(var n) -> "takeover:" + n;
-                        case StartType.Failover(var n) -> "failover:" + n;
+                        case Normal() -> "normal";
+                        case Takeover(var n) -> "takeover:" + n;
+                        case Failover(var n) -> "failover:" + n;
                     };
             assertThat(label).isNotNull();
         }

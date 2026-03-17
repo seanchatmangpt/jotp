@@ -1,0 +1,269 @@
+version: '3.8'
+
+# JOTP Supporting Services
+# Message brokers, databases, and caching for JOTP clusters
+#
+# Quick Start:
+#   docker-compose -f docker-compose-jotp-services.yml up -d
+#
+# Services included:
+#   - PostgreSQL (State persistence, Saga coordination)
+#   - Redis (Distributed caching, Session state)
+#   - NATS (Messaging backbone)
+#   - Kafka (Event streaming)
+
+services:
+  # PostgreSQL - Primary state and saga persistence
+  postgres:
+    image: postgres:16-alpine
+    container_name: jotp-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-jotp}
+      - POSTGRES_USER=${POSTGRES_USER:-jotp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-jotp_secret}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C
+      - POSTGRES_MULTIPLE_DATABASES=jotp_saga,jotp_events,jotp_state
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+      - ./docker/postgres/conf:/etc/postgresql.conf.d
+    networks:
+      - jotp-services-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jotp -d jotp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis - Distributed caching and coordination
+  redis:
+    image: redis:7-alpine
+    container_name: jotp-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - jotp-services-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis Sentinel - High availability monitoring
+  redis-sentinel:
+    image: redis:7-alpine
+    container_name: jotp-redis-sentinel
+    command: redis-sentinel /etc/redis/sentinel.conf
+    ports:
+      - "26379:26379"
+    volumes:
+      - ./docker/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+    networks:
+      - jotp-services-network
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # NATS - Lightweight messaging system
+  nats:
+    image: nats:2.10-alpine
+    container_name: jotp-nats
+    command:
+      - "-js"  # Enable JetStream (streaming)
+      - "--store_dir=/data"
+      - "--max_payload=4MB"
+      - "--cluster_name=jotp-cluster"
+    ports:
+      - "4222:4222"   # Client connections
+      - "6222:6222"   # Cluster connections
+      - "8222:8222"   # Monitoring
+      - "7777:7777"   # Leaf node connections
+    volumes:
+      - nats-data:/data
+    networks:
+      - jotp-services-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/varz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # NATS Streaming Server (optional)
+  nats-streaming:
+    image: nats-streaming:0.25-alpine
+    container_name: jotp-nats-streaming
+    command:
+      - "-p"
+      - "4222"
+      - "-m"
+      - "8222"
+      - "-st"
+      - "FILE"
+      - "-sd"
+      - "/data"
+      - "-cluster_id"
+      - "jotp-streaming"
+    ports:
+      - "4223:4222"
+      - "8223:8222"
+    volumes:
+      - nats-streaming-data:/data
+    networks:
+      - jotp-services-network
+    restart: unless-stopped
+
+  # Kafka - Event streaming platform
+  kafka-zookeeper:
+    image: bitnami/zookeeper:3.8
+    container_name: jotp-kafka-zookeeper
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/bitnami/zookeeper
+    networks:
+      - jotp-services-network
+    restart: unless-stopped
+
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: jotp-kafka
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=kafka-zookeeper:2181
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,EXTERNAL://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_LOG_RETENTION_HOURS=168
+      - KAFKA_CFG_LOG_SEGMENT_BYTES=1073741824
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    volumes:
+      - kafka-data:/bitnami/kafka
+    networks:
+      - jotp-services-network
+    depends_on:
+      - kafka-zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Kafka UI - Management interface
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: jotp-kafka-ui
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=jotp-cluster
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=kafka-zookeeper:2181
+    ports:
+      - "8090:8080"
+    networks:
+      - jotp-services-network
+    depends_on:
+      - kafka
+    restart: unless-stopped
+
+  # RabbitMQ - Alternative message broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: jotp-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-jotp}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-jotp_secret}
+      - RABBITMQ_DEFAULT_VHOST=/jotp
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+      - "25672:25672" # Cluster communication
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - jotp-services-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # MongoDB - Document store for event sourcing
+  mongodb:
+    image: mongo:7
+    container_name: jotp-mongodb
+    environment:
+      - MONGO_INITDB_DATABASE=jotp_events
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:-jotp}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-jotp_secret}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - ./docker/mongodb/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - jotp-services-network
+    restart: unless-stopped
+
+  # Elasticsearch - Log and event storage
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: jotp-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - jotp-services-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  jotp-services-network:
+    driver: bridge
+    name: jotp-services-network
+
+volumes:
+  postgres-data:
+    name: jotp-postgres-data
+  redis-data:
+    name: jotp-redis-data
+  nats-data:
+    name: jotp-nats-data
+  nats-streaming-data:
+    name: jotp-nats-streaming-data
+  zookeeper-data:
+    name: jotp-zookeeper-data
+  kafka-data:
+    name: jotp-kafka-data
+  rabbitmq-data:
+    name: jotp-rabbitmq-data
+  mongodb-data:
+    name: jotp-mongodb-data
+  elasticsearch-data:
+    name: jotp-elasticsearch-data

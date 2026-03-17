@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,7 +34,6 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * @see RunType
  * @see StartType
  */
-@DtrTest
 @DisplayName("ApplicationController — OTP application: module equivalence")
 @Execution(ExecutionMode.SAME_THREAD)
 class ApplicationControllerTest implements WithAssertions {
@@ -112,9 +109,7 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("load() registers the spec in loadedApplications() without starting")
-        void loadMakesSpecAvailable(DtrContext ctx) {
-            ctx.sayNextSection("ApplicationController: OTP application: Module");
-            ctx.say(
+        void loadMakesSpecAvailable() {
                     """
                     The ApplicationController is JOTP's equivalent to Erlang/OTP's application module.
                     It manages application lifecycle: load (register spec) -> start (spawn processes) ->
@@ -179,8 +174,7 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("start(spec) invokes the callback and registers in whichApplications()")
-        void startInvokesCallbackAndRegisters(DtrContext ctx) throws Exception {
-            ctx.say(
+        void startInvokesCallbackAndRegisters() throws Exception {
                     """
                     Starting an application invokes its callback's start() method and registers it
                     in whichApplications() - the list of currently running applications. This is
@@ -374,8 +368,7 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("StartType.Normal() is passed to the callback on an ordinary start")
-        void normalStartTypeDelivered(DtrContext ctx) throws Exception {
-            ctx.say(
+        void normalStartTypeDelivered() throws Exception {
                     """
                     StartTypes mirror Erlang/OTP's distributed application semantics:
                     - Normal: regular startup
@@ -472,8 +465,7 @@ class ApplicationControllerTest implements WithAssertions {
         @Test
         @DisplayName(
                 "PERMANENT app termination cascades — BEAM runtime equivalent of node shutdown")
-        void permanentStopCascadesToAll(DtrContext ctx) throws Exception {
-            ctx.say(
+        void permanentStopCascadesToAll() throws Exception {
                     """
                     RunType.PERMANENT apps are critical infrastructure. When a permanent app terminates,
                     ALL running apps are stopped - this is equivalent to BEAM's node shutdown behavior.
@@ -549,8 +541,7 @@ class ApplicationControllerTest implements WithAssertions {
 
         @Test
         @DisplayName("getEnv() returns value from spec's env map — OTP application:get_env/2")
-        void getEnvReturnsSpecValue(DtrContext ctx) throws Exception {
-            ctx.say(
+        void getEnvReturnsSpecValue() throws Exception {
                     """
                     Application environment provides per-app configuration via getEnv/setEnv/unsetEnv,
                     mirroring Erlang's application:get_env/2,3 and application:set_env/3. Environment

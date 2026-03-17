@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.messagepatterns.endpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -34,11 +33,8 @@ class EndpointPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("distributes work across workers")
-        void distributesWork(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Competing Consumer");
-            ctx.say(
+        void distributesWork() throws InterruptedException {
                     "Multiple consumers compete for messages on the same channel, enabling parallel processing and load distribution.");
-            ctx.sayCode(
                     """
                     var pool = new CompetingConsumer<String>(3, msg -> {
                         processed.incrementAndGet();
@@ -49,7 +45,6 @@ class EndpointPatternsTest implements WithAssertions {
                     }
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Channel] -->|Message 1| B[Worker 1]
@@ -57,7 +52,6 @@ class EndpointPatternsTest implements WithAssertions {
                         A -->|Message 3| D[Worker 3]
                         A -->|Message N| E[Worker N]
                     """);
-            ctx.sayNote(
                     "Use for horizontal scaling. Add more workers to increase throughput. Each message is processed by exactly one worker.");
 
             var latch = new CountDownLatch(10);
@@ -88,11 +82,8 @@ class EndpointPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("routes messages to matching consumers")
-        void selectiveRouting(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Selective Consumer");
-            ctx.say(
+        void selectiveRouting() throws InterruptedException {
                     "Routes messages to different handlers based on type or content, enabling specialized processing within a single consumer.");
-            ctx.sayCode(
                     """
                     var consumer = SelectiveConsumer.<Object>builder()
                         .accept(msg -> msg instanceof String, stringHandler)
@@ -101,7 +92,6 @@ class EndpointPatternsTest implements WithAssertions {
                         .build();
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B{Selective Consumer}
@@ -109,7 +99,6 @@ class EndpointPatternsTest implements WithAssertions {
                         B -->|Integer| D[Int Handler]
                         B -->|Other| E[Reject Handler]
                     """);
-            ctx.sayNote(
                     "Use when a single consumer needs to handle different message types with specialized logic, reducing the number of channels needed.");
 
             var strings = new CopyOnWriteArrayList<Object>();
@@ -159,11 +148,8 @@ class EndpointPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("processes each message only once")
-        void deduplicates(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Idempotent Receiver");
-            ctx.say(
+        void deduplicates() throws InterruptedException {
                     "Ensures that duplicate messages are not processed multiple times by tracking message IDs and ignoring duplicates.");
-            ctx.sayCode(
                     """
                     var receiver = new IdempotentReceiver<Transaction, String>(
                         Transaction::txId,
@@ -172,7 +158,6 @@ class EndpointPatternsTest implements WithAssertions {
                     receiver.send(new Transaction("tx-1", 100.0)); // duplicate
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B{Seen Before?}
@@ -180,7 +165,6 @@ class EndpointPatternsTest implements WithAssertions {
                         B -->|No| D[Process]
                         D --> E[Track ID]
                     """);
-            ctx.sayNote(
                     "Critical for at-least-once delivery semantics where duplicates may occur due to retries or network issues.");
 
             var latch = new CountDownLatch(2);

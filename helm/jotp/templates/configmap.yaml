@@ -1,0 +1,86 @@
+{{- if .Values.configMap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jotp.fullname" . }}
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+data:
+  application.yaml: |
+    server:
+      port: {{ .Values.service.ports.http }}
+      management:
+        port: {{ .Values.service.ports.management }}
+        metrics:
+          export:
+            prometheus:
+              enabled: {{ .Values.monitoring.enabled }}
+        endpoints:
+          web:
+            exposure:
+              include: "health,info,metrics,prometheus"
+          base-path: /actuator
+
+    logging:
+      level:
+        root: {{ .Values.logging.level }}
+      format:
+        type: {{ .Values.logging.format }}
+
+    jotp:
+      node:
+        name: ${JOTP_NODE_NAME}
+        cookie: ${JOTP_COOKIE}
+        distributed: ${JOTP_DISTRIBUTED_ENABLED}
+        peer-discovery:
+          enabled: ${JOTP_PEER_DISCOVERY_ENABLED}
+          service: ${JOTP_PEER_DISCOVERY_SERVICE}
+          port: ${JOTP_PEER_DISCOVERY_PORT}
+
+      processes:
+        max: ${JOTP_MAX_PROCESSES}
+        mailbox:
+          capacity: ${JOTP_MAILBOX_CAPACITY}
+          fair: ${JOTP_MAILBOX_FAIR}
+
+      supervision:
+        strategy: ${JOTP_SUPERVISION_STRATEGY}
+        max-restarts: ${JOTP_MAX_RESTARTS}
+        max-seconds: ${JOTP_MAX_SECONDS}
+
+  {{- with .Values.configMap.data }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.monitoring.jmxExporter.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jotp.fullname" . }}-jmx-config
+  labels:
+    {{- include "jotp.labels" . | nindent 4 }}
+data:
+  jmx-exporter-config.yaml: |
+    rules:
+    - pattern: 'java.lang<type=Memory><>(HeapMemoryUsage|NonHeapMemoryUsage)'
+      name: jvm_memory_bytes_$2
+      labels:
+        area: $1
+    - pattern: 'java.lang<type=GarbageCollector,name=(.*)><>CollectionCount'
+      name: jvm_gc_collection_count_total
+      labels:
+        gc: $1
+    - pattern: 'java.lang<type=GarbageCollector,name=(.*)><>CollectionTime'
+      name: jvm_gc_collection_time_seconds_total
+      labels:
+        gc: $1
+    - pattern: 'java.lang<type=Threading><>(DaemonThreadCount|PeakThreadCount|ThreadCount)'
+      name: jvm_threads_$2
+    - pattern: 'io.github.seanchatmangpt.jotp<type=Proc>(\w+)'
+      name: jotp_proc_$1
+    - pattern: 'io.github.seanchatmangpt.jotp<type=Supervisor>(\w+)'
+      name: jotp_supervisor_$1
+    - pattern: 'io.github.seanchatmangpt.jotp<type=Mailbox>(\w+)'
+      name: jotp_mailbox_$1
+{{- end }}

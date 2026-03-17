@@ -1,5 +1,7 @@
 package io.github.seanchatmangpt.jotp.stress;
 
+import static org.assertj.core.api.Assertions.*;
+
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,10 +14,12 @@ import org.junit.jupiter.api.Test;
  * frontier) - Resource consumption (CPU, memory, threads) - Operational complexity - Cost of
  * ownership - Risk & failure modes
  *
- * <p>Produces executive summary for architecture selection decision.
+ * <p><strong>DTR Documentation:</strong> This test class provides living documentation of JOTP's
+ * competitive positioning. Run with DTR to see architecture tradeoff analysis.
  */
 @DisplayName("JOTP vs Industry Alternatives - Architectural Comparison")
 class ArchitecturalComparisonTest {
+
 
     @BeforeEach
     void setUp() {
@@ -33,6 +37,7 @@ class ArchitecturalComparisonTest {
     @Test
     @DisplayName("Comparative Analysis: JOTP vs Akka vs Vert.x vs Loom vs ThreadPool")
     void compareArchitectures() {
+                "Analysis dimensions: throughput, latency, resource consumption, cost, complexity.");
         ArchitecturalTradeoffAnalysis analysis =
                 new ArchitecturalTradeoffAnalysis("Message Processing - 100K TPS Requirement");
 
@@ -129,15 +134,9 @@ class ArchitecturalComparisonTest {
 
         // ── EXECUTE ANALYSIS ───────────────────────────────────────────────
 
-        System.out.println("\n" + "=".repeat(80));
-        System.out.println(analysis.executiveSummary());
-        System.out.println("=".repeat(80));
 
         // ── SCENARIO ANALYSIS ──────────────────────────────────────────────
 
-        System.out.println("\n" + "=".repeat(80));
-        System.out.println("SCENARIO-BASED RECOMMENDATIONS");
-        System.out.println("=".repeat(80));
 
         // Scenario 1: Ultra-low latency financial trading
         System.out.println("\nScenario 1: Financial Trading (p99 <5ms required, $any cost)");

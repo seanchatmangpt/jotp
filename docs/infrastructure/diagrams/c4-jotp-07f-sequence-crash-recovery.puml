@@ -1,0 +1,115 @@
+@startuml c4-jotp-07f-sequence-crash-recovery
+title JOTP - Crash Recovery Sequence Diagram
+
+participant "Process\nHandler" as Handler
+participant "Supervisor" as Supervisor
+participant "RocksDBBackend" as RocksDB
+participant "AtomicStateWriter" as Writer
+participant "EventSourcingAuditLog" as AuditLog
+participant "SequencedState" as State
+
+== Normal Operation ==
+
+Handler ->> Handler: handle(state, msg)
+note over Handler
+  Pure function:
+  state + message -> newState
+end note
+
+Handler ->> Writer: writeAtomic(key, newState, seqNum)
+activate Writer
+
+Writer ->> Writer: codec.encode(newState)
+Writer ->> RocksDB: WriteBatch {state, ack}
+activate RocksDB
+
+note over RocksDB
+  CRITICAL: sync=true
+  WAL ensures atomicity
+  Either both or neither
+end note
+
+RocksDB -->> Writer: success
+deactivate RocksDB
+
+Writer -->> Handler: committed
+deactivate Writer
+
+Handler ->> State: newState with lastProcessedSeq = seqNum
+
+== JVM Crash ==
+
+participant "JVM Crash!" as Crash #red
+
+Handler -x Crash: SIGKILL / power loss
+note over Crash
+  Process dies mid-flight
+  Mailbox may have unprocessed messages
+end note
+
+== Recovery (<1ms detection) ==
+
+Supervisor ->> Supervisor: detect crash via ExitSignal
+note over Supervisor
+  Linked process exit
+  Triggers restart procedure
+end note
+
+Supervisor ->> Writer: readWithAck(key)
+activate Writer
+
+Writer ->> RocksDB: load(key) + getAckSequence(key)
+activate RocksDB
+RocksDB -->> Writer: stateBytes, ackSeq
+deactivate RocksDB
+
+Writer ->> Writer: verify state.seq == ackSeq
+
+alt Consistency OK
+    Writer -->> Supervisor: Optional.of(recoveredState)
+else Mismatch (partial write)
+    Writer -->> Supervisor: Optional.empty()
+    note over Writer
+      State/ACK mismatch detected
+      Use ACK as source of truth
+      Rebuild from events
+    end note
+end if
+
+deactivate Writer
+
+Supervisor ->> AuditLog: replayHistory(entityId)
+activate AuditLog
+AuditLog -->> Supervisor: List<AuditEntry>
+deactivate AuditLog
+
+note over Supervisor
+  Filter: entries where
+  entry.seq > lastAckSeq
+end note
+
+loop For each unprocessed message (seq > last_acked)
+    Supervisor ->> Handler: handle(recoveredState, msg)
+    activate Handler
+
+    Handler ->> Handler: idempotent check
+    note over Handler
+      if (msg.seq <= state.lastSeq)
+        return state; // skip duplicate
+    end note
+
+    Handler ->> Writer: writeAtomic(key, newState, msg.seq)
+    Handler -->> Supervisor: updatedState
+
+    deactivate Handler
+end
+
+Supervisor ->> Supervisor: spawn new process with recoveredState
+note over Supervisor
+  Process resumes from
+  last committed state
+  No messages lost
+  No duplicates processed
+end note
+
+@enduml

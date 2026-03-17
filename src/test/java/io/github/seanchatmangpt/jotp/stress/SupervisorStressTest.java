@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import io.github.seanchatmangpt.jotp.Supervisor.Strategy;
@@ -29,11 +26,9 @@ import org.junit.jupiter.api.Test;
  * supervisor behavior under stress. Run with DTR to see restart strategy performance
  * characteristics.
  */
-@DtrTest
 @DisplayName("Supervisor Restart & Child Management Stress Tests")
 class SupervisorStressTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -48,19 +43,13 @@ class SupervisorStressTest {
     @Test
     @DisplayName("ONE_FOR_ONE restart: single child crash (10 children)")
     void testOneForOneRestart() throws Exception {
-        ctx.sayNextSection("Stress Test: ONE_FOR_ONE Restart Strategy");
-        ctx.say("ONE_FOR_ONE restart strategy isolates failures to individual children.");
-        ctx.say(
                 "When one child crashes, only that child is restarted - siblings continue processing.");
-        ctx.say("");
-        ctx.say(
                 "This strategy is ideal for independent workers where failure isolation is critical.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 10, Duration.ofSeconds(60));
         List<AtomicInteger> restartCounts = new ArrayList<>();
 
         try {
-            ctx.sayCode(
                     """
                     // ONE_FOR_ONE strategy
                     Supervisor supervisor = new Supervisor(
@@ -71,11 +60,6 @@ class SupervisorStressTest {
                     """,
                     "java");
 
-            ctx.say("Test configuration:");
-            ctx.say("- 10 supervised children");
-            ctx.say("- Single child crash triggered");
-            ctx.say("- Load: 100 messages/sec for 5 seconds");
-            ctx.say("- Measure: isolation, restart latency, sibling impact");
 
             // Supervise 10 children
             for (int i = 0; i < 10; i++) {
@@ -110,7 +94,6 @@ class SupervisorStressTest {
                 assertThat(count.get()).isGreaterThan(0);
             }
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Status"},
                         {"Strategy", "ONE_FOR_ONE", "Isolated restarts"},
@@ -121,7 +104,6 @@ class SupervisorStressTest {
                         {"Messages processed", String.valueOf(metrics.getOperationCount()), "Total"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Strategy", "ONE_FOR_ONE",
                             "Children", "10",
@@ -130,7 +112,6 @@ class SupervisorStressTest {
                             "Sibling impact", "None",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "ONE_FOR_ONE provides perfect isolation - failures don't cascade to siblings.");
 
         } finally {
@@ -147,11 +128,6 @@ class SupervisorStressTest {
     @Test
     @DisplayName("ONE_FOR_ALL restart: single crash restarts all 50 children")
     void testOneForAllRestart() throws Exception {
-        ctx.sayNextSection("Stress Test: ONE_FOR_ALL Restart Strategy");
-        ctx.say("ONE_FOR_ALL restart strategy restarts all children when any one crashes.");
-        ctx.say("This ensures consistent state but has higher recovery overhead.");
-        ctx.say("");
-        ctx.say("Use this strategy when children share state or dependencies.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ALL, 10, Duration.ofSeconds(60));
         AtomicInteger totalRestarts = new AtomicInteger();
@@ -160,11 +136,6 @@ class SupervisorStressTest {
         try {
             int childCount = 50;
 
-            ctx.say("Test configuration:");
-            ctx.say("- 50 supervised children");
-            ctx.say("- Single crash triggers all restarts");
-            ctx.say("- Load: 1000 messages/sec for 5 seconds");
-            ctx.say("- Measure: restart throughput, state consistency");
 
             // Supervise 50 children
             for (int i = 0; i < childCount; i++) {
@@ -195,7 +166,6 @@ class SupervisorStressTest {
             // Verify all children were restarted in lockstep
             assertThat(metrics.getOperationCount()).isGreaterThan(1000);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Status"},
                         {"Strategy", "ONE_FOR_ALL", "Cascade restarts"},
@@ -206,7 +176,6 @@ class SupervisorStressTest {
                         {"Messages processed", String.valueOf(metrics.getOperationCount()), "Total"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Strategy", "ONE_FOR_ALL",
                             "Children", "50",
@@ -214,7 +183,6 @@ class SupervisorStressTest {
                             "State consistency", "Guaranteed",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "ONE_FOR_ALL ensures consistency but has higher recovery overhead due to cascading restarts.");
 
         } finally {
@@ -231,9 +199,6 @@ class SupervisorStressTest {
     @Test
     @DisplayName("REST_FOR_ONE restart: crash at position 3 (10 children total)")
     void testRestForOneRestart() throws Exception {
-        ctx.sayNextSection("Stress Test: REST_FOR_ONE Restart Strategy");
-        ctx.say("REST_FOR_ONE restart strategy restarts crashed child and all after it.");
-        ctx.say("Children before the crash are unaffected - useful for ordered processing.");
 
         Supervisor supervisor = new Supervisor(Strategy.REST_FOR_ONE, 10, Duration.ofSeconds(60));
         List<AtomicInteger> activityCounts = new ArrayList<>();
@@ -241,11 +206,6 @@ class SupervisorStressTest {
         try {
             int childCount = 10;
 
-            ctx.say("Test configuration:");
-            ctx.say("- 10 supervised children (ordered 0-9)");
-            ctx.say("- Child 3 crashes");
-            ctx.say("- Children 3-9 restart, 0-2 unaffected");
-            ctx.say("- Load: 500 messages/sec for 3 seconds");
 
             // Supervise 10 children, track activity
             for (int i = 0; i < childCount; i++) {
@@ -274,7 +234,6 @@ class SupervisorStressTest {
             // Verify message processing (REST_FOR_ONE maintains order)
             assertThat(metrics.getOperationCount()).isGreaterThan(500);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Description"},
                         {"Strategy", "REST_FOR_ONE", "Ordered restarts"},
@@ -285,7 +244,6 @@ class SupervisorStressTest {
                         {"Messages processed", String.valueOf(metrics.getOperationCount()), "Total"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Strategy", "REST_FOR_ONE",
                             "Children", "10",
@@ -294,7 +252,6 @@ class SupervisorStressTest {
                             "Unaffected", "0-2",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "REST_FOR_ONE provides partial restart for ordered processing pipelines - only downstream children restart.");
 
         } finally {
@@ -311,20 +268,12 @@ class SupervisorStressTest {
     @Test
     @DisplayName("Child spawn storm (rapidly register 1000 children)")
     void testChildSpawnStorm() throws Exception {
-        ctx.sayNextSection("Stress Test: Child Spawn Storm");
-        ctx.say("Child spawn testing measures supervisor registration overhead.");
-        ctx.say("Validates that the supervisor can handle dynamic child addition.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 100, Duration.ofSeconds(60));
 
         try {
             AtomicInteger childCounter = new AtomicInteger(0);
 
-            ctx.say("Test configuration:");
-            ctx.say("- Dynamic child registration under load");
-            ctx.say("- Target: 200 children spawned");
-            ctx.say("- Load: 200 operations/sec for 5 seconds");
-            ctx.say("- Measure: spawn latency, throughput");
 
             LoadProfile profile = new LoadProfile.ConstantLoad(200L, Duration.ofSeconds(5));
             MetricsCollector metrics =
@@ -340,7 +289,6 @@ class SupervisorStressTest {
             // Verify spawn throughput
             assertThat(metrics.getOperationCount()).isGreaterThan(200);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Target"},
                         {"Children spawned", String.valueOf(metrics.getOperationCount()), "> 200"},
@@ -363,7 +311,6 @@ class SupervisorStressTest {
                         {"Registration overhead", "<1ms per child", "Verified"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Children spawned", String.valueOf(metrics.getOperationCount()),
                             "Spawn latency p99",
@@ -372,7 +319,6 @@ class SupervisorStressTest {
                             "Registration overhead", "<1ms per child",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Supervisor handles dynamic child registration efficiently with minimal overhead per child.");
 
         } finally {

@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcLink;
 import java.time.Duration;
@@ -32,11 +29,9 @@ import org.junit.jupiter.api.Timeout;
  *   <li>Link chains propagate transitively (A→B→C all die when A crashes)
  * </ol>
  */
-@DtrTest
 @Timeout(10)
 class ProcLinkTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     /** A process that counts increments and crashes on "BOOM". */
     sealed interface Msg permits Msg.Inc, Msg.Boom, Msg.Ping {
@@ -59,10 +54,7 @@ class ProcLinkTest implements WithAssertions {
 
     @Test
     void link_crashA_interruptsB() throws Exception {
-        ctx.sayNextSection("ProcLink: Bidirectional Crash Propagation");
-        ctx.say(
                 "ProcLink creates a bidirectional crash relationship between two processes. When either process crashes abnormally, the linked partner is interrupted.");
-        ctx.sayCode(
                 """
             var a = new Proc<>(0, ProcLinkTest::handle);
             var b = new Proc<>(0, ProcLinkTest::handle);
@@ -75,7 +67,6 @@ class ProcLinkTest implements WithAssertions {
             await().atMost(Duration.ofSeconds(2)).until(() -> !b.thread().isAlive());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph LR
                 A[Process A] <-->|ProcLink.link| B[Process B]
@@ -85,7 +76,6 @@ class ProcLinkTest implements WithAssertions {
                 style B fill:#ff6b6b
                 style C fill:#ffd43b
             """);
-        ctx.sayNote(
                 "Links are bidirectional: A crash kills B, and B crash kills A. This is fundamental to OTP's 'let it crash' philosophy - failures cascade to supervisors.");
 
         var a = new Proc<>(0, ProcLinkTest::handle);
@@ -96,7 +86,6 @@ class ProcLinkTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(2)).until(() -> !b.thread().isAlive());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Process A Status",
                         "Crashed",
@@ -110,10 +99,7 @@ class ProcLinkTest implements WithAssertions {
 
     @Test
     void link_crashB_interruptsA() throws Exception {
-        ctx.sayNextSection("ProcLink: Symmetric Crash Propagation");
-        ctx.say(
                 "Links are symmetric - crash propagation works in both directions. B crashing interrupts A just as A crashing interrupts B.");
-        ctx.sayCode(
                 """
             var a = new Proc<>(0, ProcLinkTest::handle);
             var b = new Proc<>(0, ProcLinkTest::handle);
@@ -126,7 +112,6 @@ class ProcLinkTest implements WithAssertions {
             await().atMost(Duration.ofSeconds(2)).until(() -> !a.thread().isAlive());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph LR
                 A[Process A] <-->|ProcLink.link| B[Process B]
@@ -145,7 +130,6 @@ class ProcLinkTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(2)).until(() -> !a.thread().isAlive());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Process B Status",
                         "Crashed",
@@ -159,10 +143,7 @@ class ProcLinkTest implements WithAssertions {
 
     @Test
     void link_normalStopA_doesNotAffectB() throws Exception {
-        ctx.sayNextSection("ProcLink: Normal Exit Does NOT Propagate");
-        ctx.say(
                 "Graceful shutdown (stop()) does NOT propagate through links. Only abnormal exits (crashes) trigger linked process interruption.");
-        ctx.sayCode(
                 """
             var a = new Proc<>(0, ProcLinkTest::handle);
             var b = new Proc<>(0, ProcLinkTest::handle);
@@ -180,7 +161,6 @@ class ProcLinkTest implements WithAssertions {
             // state == 1
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Linked: ProcLink.link(a, b)
@@ -192,7 +172,6 @@ class ProcLinkTest implements WithAssertions {
                     Only crashes propagate
                 end note
             """);
-        ctx.sayNote(
                 "This distinction is critical for graceful shutdown. You can stop a process without killing its linked partners. Only crashes (exceptions) cascade.");
 
         var a = new Proc<>(0, ProcLinkTest::handle);
@@ -208,7 +187,6 @@ class ProcLinkTest implements WithAssertions {
         var state = b.ask(new Msg.Ping()).get();
         assertThat(state).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Process A Exit",
                         "Normal (stop())",
@@ -225,10 +203,7 @@ class ProcLinkTest implements WithAssertions {
 
     @Test
     void spawnLink_parentCrash_killsChild() throws Exception {
-        ctx.sayNextSection("ProcLink: Atomic spawnLink Operation");
-        ctx.say(
                 "spawnLink() atomically creates and links a child process. There's no window between spawn and link where crashes could be missed.");
-        ctx.sayCode(
                 """
             var parent = new Proc<>(0, ProcLinkTest::handle);
             var child = ProcLink.spawnLink(parent, 0, ProcLinkTest::handle);
@@ -239,7 +214,6 @@ class ProcLinkTest implements WithAssertions {
             await().atMost(Duration.ofSeconds(2)).until(() -> !child.thread().isAlive());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant P as Parent
@@ -256,7 +230,6 @@ class ProcLinkTest implements WithAssertions {
                 P--xC: Interrupt via link
                 Note over C: Child dies
             """);
-        ctx.sayNote(
                 "spawnLink is equivalent to Erlang's spawn_link. It guarantees the child is linked from creation, eliminating race conditions in supervision trees.");
 
         var parent = new Proc<>(0, ProcLinkTest::handle);
@@ -266,7 +239,6 @@ class ProcLinkTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(2)).until(() -> !child.thread().isAlive());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Operation",
                         "spawnLink (atomic)",
@@ -282,10 +254,7 @@ class ProcLinkTest implements WithAssertions {
 
     @Test
     void spawnLink_childCrash_killsParent() throws Exception {
-        ctx.sayNextSection("ProcLink: Bidirectional spawnLink");
-        ctx.say(
                 "spawnLink creates a bidirectional link. Child crashes kill the parent just as parent crashes kill the child.");
-        ctx.sayCode(
                 """
             var parent = new Proc<>(0, ProcLinkTest::handle);
             var child = ProcLink.spawnLink(parent, 0, ProcLinkTest::handle);
@@ -296,7 +265,6 @@ class ProcLinkTest implements WithAssertions {
             await().atMost(Duration.ofSeconds(2)).until(() -> !parent.thread().isAlive());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph LR
                 P[Parent] <-->|spawnLink| C[Child]
@@ -306,7 +274,6 @@ class ProcLinkTest implements WithAssertions {
                 style C fill:#ff6b6b
                 style X fill:#ffd43b
             """);
-        ctx.sayWarning(
                 "In supervision trees, you typically use ProcLink.link() not spawnLink. spawnLink is for parent-child pairs where either should kill the other. Supervisors use monitor/monitor relationships instead.");
 
         var parent = new Proc<>(0, ProcLinkTest::handle);
@@ -316,7 +283,6 @@ class ProcLinkTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(2)).until(() -> !parent.thread().isAlive());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Link Direction",
                         "Bidirectional",
@@ -332,10 +298,7 @@ class ProcLinkTest implements WithAssertions {
 
     @Test
     void linkChain_oneCrashPropagatesTransitively() throws Exception {
-        ctx.sayNextSection("ProcLink: Transitive Crash Propagation");
-        ctx.say(
                 "Links form chains. When A links to B, and B links to C, a crash in A propagates through the entire chain: A crashes → B interrupted → C interrupted.");
-        ctx.sayCode(
                 """
             var a = new Proc<>(0, ProcLinkTest::handle);
             var b = new Proc<>(0, ProcLinkTest::handle);
@@ -351,7 +314,6 @@ class ProcLinkTest implements WithAssertions {
                 !a.thread().isAlive() && !b.thread().isAlive() && !c.thread().isAlive());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             graph LR
                 A[A] <-->|link| B[B]
@@ -364,7 +326,6 @@ class ProcLinkTest implements WithAssertions {
                 style C fill:#ff6b6b
                 style X fill:#ffd43b
             """);
-        ctx.sayNote(
                 "Transitive propagation is why supervisors must be careful with link topology. A crash can cascade through an entire supervision tree. This is intentional - it allows failure to be contained at appropriate boundaries.");
 
         var a = new Proc<>(0, ProcLinkTest::handle);
@@ -382,7 +343,6 @@ class ProcLinkTest implements WithAssertions {
                                         && !b.thread().isAlive()
                                         && !c.thread().isAlive());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Chain Topology",
                         "A → B → C",

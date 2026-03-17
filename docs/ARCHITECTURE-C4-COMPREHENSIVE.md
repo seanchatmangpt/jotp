@@ -214,6 +214,6 @@ All diagrams are in `docs/diagrams/` and use PlantUML C4 notation.
 ---
 
 **Last Updated:** 2026-03-11
-**Framework:** JOTP v1.0 (io.github.seanchatmangpt.jotp)
+**Framework:** JOTP 2026.1.0 (io.github.seanchatmangpt.jotp)
 **Java Version:** Java 26 with preview features enabled
 **Status:** Production-ready, fully documented

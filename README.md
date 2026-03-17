@@ -63,6 +63,12 @@ You get 10M+ concurrent processes, automatic crash recovery, supervision trees, 
 | `ProcLib` | `proc_lib` | Startup handshake (init_ack pattern) |
 | `ExitSignal` | EXIT signal | Exit signal trapping and handling |
 
+**Distributed Systems & Crash Survival:**
+- **JVM Crash Survival** — Atomic state persistence with RocksDB, idempotent recovery
+- **Distributed Processes** — Cluster-wide process registry, leader election, failover
+- **Process Migration** — Automatic process relocation on node failure
+- **Node Discovery** — Health monitoring, membership management
+
 **Production-Ready Framework:**
 - Java 26 with preview features (`--enable-preview`)
 - JPMS module: `io.github.seanchatmangpt.jotp`
@@ -81,7 +87,7 @@ Add to your `pom.xml`:
 <dependency>
     <groupId>io.github.seanchatmangpt</groupId>
     <artifactId>jotp</artifactId>
-    <version>1.0</version>
+    <version>2026.1.0</version>
 </dependency>
 ```
 
@@ -134,6 +140,47 @@ supervisor.shutdown();
 }
 // No try-catch. No recovery logic. The supervisor handles restarts.
 ```
+
+**Distributed Cluster with Crash Survival:**
+
+```java
+// 1. Create distributed nodes
+var node1 = new DistributedNode("cp1", "localhost", 0, NodeConfig.defaults());
+var node2 = new DistributedNode("cp2", "localhost", 0, NodeConfig.defaults());
+
+// 2. Configure persistence for crash recovery
+PersistenceBackend backend = new RocksDBBackend(Path.of("/var/lib/jotp"));
+
+// 3. Configure distributed application
+var spec = new DistributedAppSpec("myapp",
+    List.of(List.of(node1.nodeId()), List.of(node2.nodeId())),
+    Duration.ZERO
+);
+
+node1.register(spec, new ApplicationCallbacks() {
+    public void onStart(StartMode mode) {
+        System.out.println("Starting as " + mode);
+        // Start processes with persistence
+    }
+    public void onStop() {
+        System.out.println("Stopping");
+    }
+});
+
+node2.register(spec, sameCallbacks);
+
+// 4. Start application (only highest-priority node runs)
+node1.start("myapp");  // onStart(Normal)
+node2.start("myapp");  // Becomes standby
+
+// If node1 fails, node2 automatically takes over
+```
+
+**Documentation:**
+- [JVM Crash Survival](docs/jvm-crash-survival.md) — Atomic writes and idempotent recovery
+- [Distributed Patterns](docs/distributed-patterns.md) — Node discovery, failover, process migration
+- [Persistence Backends](docs/persistence-backends.md) — Backend comparison and configuration
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Enterprise architecture and patterns
 
 ---
 

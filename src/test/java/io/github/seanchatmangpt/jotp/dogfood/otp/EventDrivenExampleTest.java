@@ -3,7 +3,6 @@ package io.github.seanchatmangpt.jotp.dogfood.otp;
 import static java.time.Instant.now;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
 import java.time.Duration;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.Test;
  *   <li>syncNotify blocks until handlers complete
  * </ul>
  */
-@DtrTest
 @DisplayName("EventManager: pub-sub with handler isolation")
 class EventDrivenExampleTest implements WithAssertions {
 

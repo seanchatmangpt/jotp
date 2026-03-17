@@ -1,0 +1,62 @@
+# Production overlay with increased resources and replicas
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base manifests
+resources:
+  - ../../
+
+# Production replicas
+replicas:
+  - name: jotp
+    count: 5
+
+# Production resource patches
+patches:
+  # Increase memory for production
+  - patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "8Gi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "12Gi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "4000m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "8000m"
+    target:
+      kind: StatefulSet
+      name: jotp
+
+  # Add pod annotations for production
+  - patch: |-
+    - op: add
+      path: /spec/template/metadata/annotations
+      value:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    target:
+      kind: StatefulSet
+      name: jotp
+
+# Production ConfigMap overrides
+configMapGenerator:
+  - name: jotp-config
+    behavior: merge
+    literals:
+      - JAVA_OPTS=--enable-preview -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -Xms8g -Xmx8g -XX:SoftMaxHeapSize=10g
+      - JOTP_CLUSTER_SIZE=5
+      - LOGGING_LEVEL_ROOT=WARN
+      - LOGGING_LEVEL_JOTP=INFO
+
+# Production namespace
+namespace: production
+
+# Production labels
+commonLabels:
+  environment: production
+  tier: backend

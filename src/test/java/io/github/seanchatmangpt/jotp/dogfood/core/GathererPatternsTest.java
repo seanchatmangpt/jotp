@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.core;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +19,8 @@ import org.junit.jupiter.api.Test;
  * Fold as intermediate operation - Concurrent mapping - Custom deduplication - Gatherer chaining
  */
 @DisplayName("GathererPatterns - Java 26 Gatherer API")
-@DtrTest
 class GathererPatternsTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -35,13 +30,10 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("batch creates fixed-sized batches")
     void batch_createsFixedSizedBatches() {
-        ctx.sayNextSection("Gatherer API: Custom Stream Intermediate Operations");
-        ctx.say(
                 "Java 26 introduces the Gatherer API, enabling custom stream intermediate operations."
                         + " Unlike collectors (terminal operations), gatherers transform streams mid-pipeline,"
                         + " enabling batching, windowing, and other complex transformations.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Aspect", "Intermediate (middle)", "Final result"},
                     {"Collector", "Operations", "Per-element state"},
@@ -50,7 +42,6 @@ class GathererPatternsTest implements WithAssertions {
                     {"Terminal (end)", "State", "batch, window, scan"}
                 });
 
-        ctx.sayCode(
                 """
             // Batch elements into fixed-size groups
             var items = List.of(1, 2, 3, 4, 5, 6, 7);
@@ -66,7 +57,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(batches).containsExactly(List.of(1, 2, 3), List.of(4, 5, 6), List.of(7));
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input Size",
                         "7 elements",
@@ -77,7 +67,6 @@ class GathererPatternsTest implements WithAssertions {
                         "Last Batch",
                         "Partial (size 1)"));
 
-        ctx.sayNote(
                 "Batching is essential for bulk operations (database inserts, API calls) where you"
                         + " want to process multiple items together. The Gatherer API makes this a"
                         + " one-liner instead of manual iteration.");
@@ -86,12 +75,9 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("slidingWindow creates overlapping windows")
     void slidingWindow_createsOverlappingWindows() {
-        ctx.sayNextSection("Sliding Window Operations");
-        ctx.say(
                 "Sliding windows create overlapping sequences, useful for moving averages, time-series"
                         + " analysis, and pattern detection. Each window slides by one element.");
 
-        ctx.sayCode(
                 """
             // Create sliding windows of size 3
             var items = List.of(1, 2, 3, 4, 5);
@@ -112,7 +98,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(averages).containsExactly(20.0, 30.0, 40.0);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input",
                         "[1, 2, 3, 4, 5]",
@@ -125,7 +110,6 @@ class GathererPatternsTest implements WithAssertions {
                         "Moving Average",
                         "[20.0, 30.0, 40.0]"));
 
-        ctx.sayNote(
                 "Sliding windows are computationally expensive (O(n*k) for n elements and window size"
                         + " k). Use them judiciously on large datasets or consider windowed aggregations.");
     }
@@ -133,13 +117,10 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("runningSum calculates prefix sums")
     void runningSum_calculatesCorrectly() {
-        ctx.sayNextSection("Running Scan (Prefix Sums)");
-        ctx.say(
                 "Scan operations (also called prefix sums) maintain running state across elements."
                         + " Unlike reduce which returns a single value, scan returns an intermediate value"
                         + " for each input element.");
 
-        ctx.sayCode(
                 """
             // Calculate running sum
             var values = List.of(1, 2, 3, 4, 5);
@@ -160,7 +141,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(result).containsExactly("a", "ab", "abc");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input",
                         "[1, 2, 3, 4, 5]",
@@ -173,7 +153,6 @@ class GathererPatternsTest implements WithAssertions {
                         "String Concat",
                         "[a, ab, abc]"));
 
-        ctx.sayNote(
                 "Scan operations are perfect for cumulative calculations, running totals, and"
                         + " maintaining state across stream elements without manual loops.");
     }
@@ -181,13 +160,10 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("foldToSingle sums all elements")
     void foldToSingle_sumsAllElements() {
-        ctx.sayNextSection("Fold as Intermediate Operation");
-        ctx.say(
                 "Fold is traditionally a terminal operation (Stream.reduce), but Gatherer enables fold"
                         + " as an intermediate operation. This allows folding to be part of a larger"
                         + " pipeline.");
 
-        ctx.sayCode(
                 """
             // Fold to single value mid-stream
             var items = List.of(1, 2, 3, 4, 5);
@@ -208,7 +184,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(concat).isEqualTo("abc");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Integer Fold",
                         "1+2+3+4+5 = 15",
@@ -219,7 +194,6 @@ class GathererPatternsTest implements WithAssertions {
                         "Operation",
                         "Intermediate (can chain)"));
 
-        ctx.sayNote(
                 "Fold as an intermediate operation enables complex pipelines: filter → fold → map."
                         + " This was impossible with traditional Stream.reduce, which is terminal-only.");
     }
@@ -227,13 +201,10 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("mapConcurrent maps with parallelism")
     void mapConcurrent_mapsAllElements() {
-        ctx.sayNextSection("Concurrent Mapping with Gatherers");
-        ctx.say(
                 "Gatherers can introduce parallelism mid-stream. The mapConcurrent gatherer processes"
                         + " elements with a fixed thread pool, combining the simplicity of streams with"
                         + " the performance of parallel execution.");
 
-        ctx.sayCode(
                 """
             // Map with controlled parallelism
             var items = List.of(1, 2, 3, 4, 5);
@@ -255,7 +226,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(upper).containsExactly("A", "B", "C", "D");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input",
                         "[1, 2, 3, 4, 5]",
@@ -268,7 +238,6 @@ class GathererPatternsTest implements WithAssertions {
                         "Order",
                         "Preserved"));
 
-        ctx.sayNote(
                 "Unlike parallel streams which use common ForkJoinPool, gatherers can use custom"
                         + " thread pools. This prevents resource contention and enables fine-tuned"
                         + " parallelism.");
@@ -277,12 +246,9 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("deduplicateConsecutive removes duplicates")
     void deduplicateConsecutive_removesConsecutiveDuplicates() {
-        ctx.sayNextSection("Custom Gatherer: Deduplication");
-        ctx.say(
                 "Gatherers can implement arbitrary stateful transformations. Here's a custom gatherer"
                         + " that removes consecutive duplicates while preserving non-consecutive ones.");
 
-        ctx.sayCode(
                 """
             // Custom gatherer: deduplicate consecutive elements
             var items = List.of(1, 1, 2, 2, 2, 3, 2, 2, 4);
@@ -306,7 +272,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(dedupedSame).containsExactly(5);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input",
                         "[1, 1, 2, 2, 2, 3, 2, 2, 4]",
@@ -319,7 +284,6 @@ class GathererPatternsTest implements WithAssertions {
                         "All Same",
                         "[5, 5, 5, 5] → [5]"));
 
-        ctx.sayNote(
                 "Custom gatherers maintain internal state (the previous element) to make decisions."
                         + " This enables sophisticated transformations that would require manual loops or"
                         + " external libraries.");
@@ -328,12 +292,9 @@ class GathererPatternsTest implements WithAssertions {
     @Test
     @DisplayName("batchAndDeduplicate chains gatherers")
     void batchAndDeduplicate_chainsGatherers() {
-        ctx.sayNextSection("Chaining Multiple Gatherers");
-        ctx.say(
                 "Gatherers can be chained like any stream operation. Each gatherer transforms the"
                         + " stream, passing results to the next. This enables complex pipelines.");
 
-        ctx.sayCode(
                 """
             // Chain gatherers: dedupe → batch
             var items = List.of(1, 1, 2, 2, 3, 3, 4, 4, 5, 5);
@@ -350,7 +311,6 @@ class GathererPatternsTest implements WithAssertions {
 
         assertThat(result).containsExactly(List.of(1, 2), List.of(3, 4), List.of(5));
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input",
                         "[1, 1, 2, 2, 3, 3, 4, 4, 5, 5]",
@@ -361,7 +321,6 @@ class GathererPatternsTest implements WithAssertions {
                         "Pipeline",
                         "stream → dedupe → batch → toList"));
 
-        ctx.sayNote(
                 "Gatherer chaining is composable and type-safe. Each gatherer is independent and can"
                         + " be reused in different pipelines. This is the essence of functional"
                         + " programming principles applied to streams.");

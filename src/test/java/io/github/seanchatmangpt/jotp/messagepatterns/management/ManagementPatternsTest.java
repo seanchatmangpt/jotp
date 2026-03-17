@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.messagepatterns.management;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messagepatterns.construction.CorrelationIdentifier;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -35,11 +34,8 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("processes message through filter chain")
-        void filterChain(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Pipes and Filters");
-            ctx.say(
+        void filterChain() throws InterruptedException {
                     "Processes messages through a chain of independent filters, each performing a single transformation. Filters are connected by pipes (channels).");
-            ctx.sayCode(
                     """
                     var pipeline = PipesAndFilters.<String>builder()
                         .filter("decrypt", s -> s.replace("(encrypted)", ""))
@@ -50,7 +46,6 @@ class ManagementPatternsTest implements WithAssertions {
                     pipeline.process("(encrypted) Hello World (cert) ");
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Input] --> B[Filter 1: decrypt]
@@ -58,7 +53,6 @@ class ManagementPatternsTest implements WithAssertions {
                         C --> D[Filter 3: trim]
                         D --> E[Output]
                     """);
-            ctx.sayNote(
                     "Use for complex message processing workflows where each step is independent and composable.");
 
             var latch = new CountDownLatch(1);
@@ -89,11 +83,8 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("taps messages without affecting primary flow")
-        void tapMessages(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Wire Tap");
-            ctx.say(
+        void tapMessages() throws InterruptedException {
                     "Inspects messages passing through a channel without affecting the primary message flow, enabling monitoring and auditing.");
-            ctx.sayCode(
                     """
                     var wireTap = new WireTap<String>(
                         msg -> { primary.set(msg); latch.countDown(); },
@@ -101,14 +92,12 @@ class ManagementPatternsTest implements WithAssertions {
                     wireTap.send("message-1");
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B[Wire Tap]
                         B -->|Original| C[Primary Consumer]
                         B -->|Copy| D[Tapped Consumer]
                     """);
-            ctx.sayNote(
                     "Use for audit logging, monitoring, analytics, or testing without disrupting production message flow.");
 
             var latch = new CountDownLatch(1);
@@ -132,17 +121,13 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("deactivated tap does not receive messages")
-        void deactivatedTap(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Wire Tap: Dynamic Control");
-            ctx.say("Wire taps can be activated and deactivated at runtime.");
-            ctx.sayCode(
+        void deactivatedTap() throws InterruptedException {
                     """
                     var wireTap = new WireTap<String>(msg -> latch.countDown(), tapped::add);
                     wireTap.deactivate();
                     wireTap.send("message-1");
                     """,
                     "java");
-            ctx.sayNote(
                     "Dynamic control allows temporary monitoring without code changes or redeployment.");
 
             var latch = new CountDownLatch(1);
@@ -168,11 +153,8 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("tracks and routes replies to requesters")
-        void tracksReplies(DtrContext ctx) throws Exception {
-            ctx.sayNextSection("Smart Proxy");
-            ctx.say(
+        void tracksReplies() throws Exception {
                     "Acts as an intermediary that tracks pending requests and routes replies back to the appropriate requesters, decoupling request and reply timing.");
-            ctx.sayCode(
                     """
                     var proxy = new SmartProxy<Request, Reply>(
                         Request::id, Reply::id, serviceReceived::add);
@@ -181,7 +163,6 @@ class ManagementPatternsTest implements WithAssertions {
                     boolean matched = proxy.deliverReply(new Reply(corrId, "found"));
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Requester 1] -->|Request| B[Smart Proxy]
@@ -191,7 +172,6 @@ class ManagementPatternsTest implements WithAssertions {
                         B -->|Route| A
                         B -->|Route| C
                     """);
-            ctx.sayNote(
                     "Essential for async request-reply patterns where multiple requesters share the same reply channel.");
 
             var serviceReceived = new CopyOnWriteArrayList<Request>();
@@ -236,11 +216,8 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("commit persists state changes")
-        void commit(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Transactional Actor");
-            ctx.say(
+        void commit() throws InterruptedException {
                     "Applies events to tentative state, then commits to persist changes. Provides transactional semantics for event-driven state management.");
-            ctx.sayCode(
                     """
                     var actor = new TransactionalActor<OrderState, OrderEvent>(
                         OrderState.empty(),
@@ -254,7 +231,6 @@ class ManagementPatternsTest implements WithAssertions {
                     actor.commit();
                     """,
                     "java");
-            ctx.sayNote(
                     "Use for event sourcing and CQRS where state changes must be atomic and consistent.");
 
             var actor =
@@ -288,11 +264,8 @@ class ManagementPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("rollback reverts to last committed state")
-        void rollback(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Transactional Actor: Rollback");
-            ctx.say(
+        void rollback() throws InterruptedException {
                     "Uncommitted changes can be rolled back, reverting to the last committed state.");
-            ctx.sayCode(
                     """
                     actor.apply(new OrderStarted("C001"));
                     actor.commit();
@@ -300,7 +273,6 @@ class ManagementPatternsTest implements WithAssertions {
                     actor.rollback();
                     """,
                     "java");
-            ctx.sayNote(
                     "Rollback is essential for error handling and compensation in distributed transactions.");
 
             var actor =

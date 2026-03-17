@@ -1,0 +1,126 @@
+@startuml c4-jotp-07g-sequence-distributed-failover
+title JOTP - Distributed Failover Sequence Diagram
+
+participant "Node A\n(Primary)" as NodeA #lightblue
+participant "Node B\n(Secondary)" as NodeB #lightgreen
+participant "NodeDiscovery" as Discovery
+participant "FailoverController" as Failover
+participant "GlobalProcRegistry" as Registry
+participant "RocksDBGlobalRegistryBackend" as Backend
+participant "Replicated Log\n(Future)" as ReplicatedLog #gray
+
+== Normal Operation ==
+
+NodeA ->> Registry: registerGlobal("order-svc", ref, "NodeA")
+activate Registry
+Registry ->> Backend: storeAtomic("order-svc", GlobalProcRef)
+activate Backend
+
+Backend ->> Backend: WriteBatch {registry, ack}
+Backend -->> Registry: Ok
+deactivate Backend
+
+Registry -->> NodeA: registered
+deactivate Registry
+
+NodeA ->> Discovery: sendHeartbeat()
+activate Discovery
+Discovery ->> Discovery: updateHeartbeat("NodeA", now)
+deactivate Discovery
+
+== Node Failure Detection ==
+
+note over Discovery
+  Health check runs every 5s
+  Timeout: 10s -> DEGRADED
+  Timeout: 30s -> DOWN
+end note
+
+Discovery ->> Discovery: runHealthChecks()
+Discovery ->> Discovery: now - lastHeartbeat > 30s
+
+Discovery ->> Discovery: onNodeDown("NodeA")
+activate Discovery
+
+Discovery ->> Failover: trigger failover for NodeA
+deactivate Discovery
+
+== Failover Execution ==
+
+activate Failover
+
+Failover ->> Registry: listGlobal()
+activate Registry
+Registry ->> Backend: listAll()
+Backend -->> Registry: Map of all registrations
+deactivate Registry
+
+note over Failover
+  Find processes on NodeA:
+  filter: ref.nodeName == "NodeA"
+end note
+
+Failover ->> Discovery: getHealthyNodes()
+Discovery -->> Failover: ["NodeB", "NodeC"]
+
+loop For each process on NodeA (parallel via StructuredTaskScope)
+    Failover ->> Failover: select target (round-robin)
+    note over Failover
+      Target: NodeB
+      Process: "order-svc"
+    end note
+
+    Failover ->> Registry: transferGlobal("order-svc", "NodeB")
+    activate Registry
+
+    Registry ->> Backend: compareAndSwap(name, expected, newRef)
+    activate Backend
+
+    note over Backend
+      Atomic update with
+      incremented sequence number
+    end note
+
+    Backend ->> Backend: WriteBatch {registry, ack}
+    Backend -->> Registry: true (success)
+    deactivate Backend
+
+    Registry -->> Failover: transferred
+    deactivate Registry
+end
+
+deactivate Failover
+
+== State Recovery on Target Node ==
+
+NodeB ->> NodeB: receive migration request
+activate NodeB
+
+NodeB ->> ReplicatedLog: replayEvents("order-svc", from=lastAckSeq)
+activate ReplicatedLog
+note over ReplicatedLog #gray
+  Future: replicated log provides
+  cross-node state durability
+end note
+ReplicatedLog -->> NodeB: events[]
+deactivate ReplicatedLog
+
+NodeB ->> NodeB: rebuildState(initialState, events)
+
+NodeB ->> Registry: rehydrate("order-svc", localRef)
+activate Registry
+Registry ->> Backend: rehydrate(name, ref)
+Backend -->> Registry: updated GlobalProcRef
+deactivate Registry
+
+NodeB ->> NodeB: start process with recovered state
+
+note over NodeB
+  Process continues transparently
+  Clients see no interruption
+  Location-transparent messaging
+end note
+
+deactivate NodeB
+
+@enduml

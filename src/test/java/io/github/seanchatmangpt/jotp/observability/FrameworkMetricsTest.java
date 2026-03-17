@@ -18,9 +18,6 @@ package io.github.seanchatmangpt.jotp.observability;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.MetricsCollector;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Instant;
@@ -36,11 +33,9 @@ import org.junit.jupiter.api.Test;
  * <p>Verifies that FrameworkMetrics correctly bridges FrameworkEventBus events to MetricsCollector,
  * collecting only P0 and P1 events while ignoring P2.
  */
-@DtrTest
 @DisplayName("FrameworkMetrics: Zero-Cost Telemetry Bridge")
 class FrameworkMetricsTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private MetricsCollector collector;
     private FrameworkMetrics metrics;
@@ -54,9 +49,7 @@ class FrameworkMetricsTest {
 
     @Test
     @DisplayName("Factory methods create configured metrics bridge")
-    void testFactoryMethods(DtrContext ctx) {
-        ctx.sayNextSection("Observability: Zero-Cost Telemetry");
-        ctx.say(
+    void testFactoryMethods() {
                 """
                 FrameworkMetrics provides zero-cost abstraction for observability. When disabled
                 (default), the overhead is <100ns — a single branch check. Only when enabled via
@@ -66,7 +59,6 @@ class FrameworkMetricsTest {
                 can disable observability entirely with zero runtime cost.
                 """);
 
-        ctx.sayCode(
                 """
                 // Factory creates metrics bridge with auto-subscription
                 FrameworkMetrics metrics = FrameworkMetrics.create("test-metrics", collector, eventBus);
@@ -81,7 +73,6 @@ class FrameworkMetricsTest {
         assertEquals("test-metrics", metrics.name());
         assertSame(collector, metrics.getCollector());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Metrics Name",
                         metrics.name(),
@@ -92,16 +83,13 @@ class FrameworkMetricsTest {
                         "Feature Flag",
                         "-Djotp.observability.enabled=true"));
 
-        ctx.sayNote(
                 "The metrics bridge is feature-gated. Production systems without the flag enabled"
                         + " experience zero overhead — no event bus subscription, no allocation, no metrics collection.");
     }
 
     @Test
     @DisplayName("P0: ProcessCreated event increments counter")
-    void testProcessCreatedEvent(DtrContext ctx) {
-        ctx.sayNextSection("Event Bus Telemetry: Process Lifecycle Events");
-        ctx.say(
+    void testProcessCreatedEvent() {
                 """
                 FrameworkEventBus publishes P0 (fault detection) events when processes are created.
                 FrameworkMetrics subscribes to these events and bridges them to MetricsCollector counters
@@ -120,7 +108,6 @@ class FrameworkMetricsTest {
         Map<String, Object> snapshot = collector.snapshot();
         assertTrue(snapshot.containsKey("jotp.process.created"));
 
-        ctx.sayCode(
                 """
                 // Event published automatically by process creation
                 FrameworkEventBus.FrameworkEvent event =
@@ -136,7 +123,6 @@ class FrameworkMetricsTest {
                 """,
                 "java");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric Type", "Purpose", "Example Tags"},
                     {"Counter", "Monotonically increasing values", "type=TestProcess"},
@@ -145,16 +131,13 @@ class FrameworkMetricsTest {
                     {"Timer", "Duration measurements", "request.duration=50ms"}
                 });
 
-        ctx.sayNote(
                 "ProcessCreated events fire in the constructor path, not the hot message loop."
                         + " This ensures observability doesn't impact throughput.");
     }
 
     @Test
     @DisplayName("P0: ProcessTerminated event tracks abnormal terminations")
-    void testProcessTerminatedEvent_Abnormal(DtrContext ctx) {
-        ctx.sayNextSection("Fault Detection: Crash Classification");
-        ctx.say(
+    void testProcessTerminatedEvent_Abnormal() {
                 """
                 Abnormal process terminations are critical P0 events. FrameworkMetrics tracks
                 both terminations (all exits) and crashes (abnormal exits) separately.
@@ -179,7 +162,6 @@ class FrameworkMetricsTest {
         assertTrue(snapshot.containsKey("jotp.process.terminated"));
         assertTrue(snapshot.containsKey("jotp.process.crashed"));
 
-        ctx.sayCode(
                 """
                 // Abnormal termination creates TWO metrics
                 FrameworkEventBus.FrameworkEvent event =
@@ -194,7 +176,6 @@ class FrameworkMetricsTest {
                 """,
                 "java");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Event Type",
                         "ProcessTerminated",
@@ -209,7 +190,6 @@ class FrameworkMetricsTest {
                         "Crashed Counter",
                         "incremented"));
 
-        ctx.sayNote(
                 "Crash classification enables targeted alerting. High 'exception' crashes suggest"
                         + " bugs, while 'timeout' crashes indicate performance issues.");
     }
@@ -242,9 +222,7 @@ class FrameworkMetricsTest {
 
     @Test
     @DisplayName("P0: SupervisorRestartAttempted tracks restart strategies")
-    void testSupervisorRestartAttempted(DtrContext ctx) {
-        ctx.sayNextSection("Distributed Tracing: Supervisor Recovery Chains");
-        ctx.say(
+    void testSupervisorRestartAttempted() {
                 """
                 Supervisor restart attempts are critical for understanding fault recovery patterns.
                 Each restart attempt creates metrics with:
@@ -266,7 +244,6 @@ class FrameworkMetricsTest {
         Map<String, Object> snapshot = collector.snapshot();
         assertTrue(snapshot.containsKey("jotp.supervisor.restart_attempted"));
 
-        ctx.sayCode(
                 """
                 // Supervisor attempts to restart crashed child
                 FrameworkEventBus.FrameworkEvent event =
@@ -282,7 +259,6 @@ class FrameworkMetricsTest {
                 """,
                 "java");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Strategy", "Behavior", "Use Case"},
                     {
@@ -298,7 +274,6 @@ class FrameworkMetricsTest {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Supervisor ID",
                         "sup-1",
@@ -311,7 +286,6 @@ class FrameworkMetricsTest {
                         "Alert Threshold",
                         ">5 crashes/minute"));
 
-        ctx.sayNote(
                 "Crash count >5 in 60 seconds indicates a restart loop. The supervisor should"
                         + " give up and escalate to higher-level supervision instead of thrashing.");
     }
@@ -376,9 +350,7 @@ class FrameworkMetricsTest {
 
     @Test
     @DisplayName("P2: Operational events ignored for metrics")
-    void testP2EventsIgnored_ProcessMonitorRegistered(DtrContext ctx) {
-        ctx.sayNextSection("Zero-Cost Abstraction: Priority-Based Event Filtering");
-        ctx.say(
+    void testP2EventsIgnored_ProcessMonitorRegistered() {
                 """
                 FrameworkMetrics uses priority-based event filtering to control overhead:
 
@@ -403,7 +375,6 @@ class FrameworkMetricsTest {
         // P2 events should not create metrics
         assertFalse(snapshot.containsKey("jotp.monitor.registered"));
 
-        ctx.sayCode(
                 """
                 // P2 events are explicitly ignored in the switch
                 case FrameworkEventBus.FrameworkEvent.ProcessMonitorRegistered e -> {
@@ -417,7 +388,6 @@ class FrameworkMetricsTest {
                 """,
                 "java");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Priority", "Event Type", "Collected", "Rationale"},
                     {"P0", "Fault Detection", "YES", "Crashes, restarts, terminations"},
@@ -425,7 +395,6 @@ class FrameworkMetricsTest {
                     {"P2", "Operational", "NO", "Low-value, high-cardinality"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Event Priority",
                         "P2 (Operational)",
@@ -436,7 +405,6 @@ class FrameworkMetricsTest {
                         "Reason",
                         "Low signal-to-noise ratio"));
 
-        ctx.sayNote(
                 "P2 filtering prevents metric cardinality explosion. Monitor registration events"
                         + " can occur thousands of times per second but provide little operational value."
                         + " Collecting them would drown out the important P0/P1 signals.");

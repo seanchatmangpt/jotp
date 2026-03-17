@@ -1,0 +1,61 @@
+# JOTP Code Ownership Configuration
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global default - all files owned by maintainers
+* @seanchatmangpt
+
+# Core OTP primitives - require maintainer review
+/src/main/java/io/github/seanchatmangpt/jotp/Proc.java @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/Supervisor.java @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/StateMachine.java @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/ProcRef.java @seanchatmangpt
+
+# Process primitives - require maintainer review
+/src/main/java/io/github/seanchatmangpt/jotp/ProcLink.java @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/ProcMonitor.java @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/ProcRegistry.java @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/ProcTimer.java @seanchatmangpt
+
+# Build and release automation - require maintainer approval
+/pom.xml @seanchatmangpt
+/Makefile @seanchatmangpt
+/.mvn/** @seanchatmangpt
+/mvnw* @seanchatmangpt
+
+# CI/CD pipelines - require maintainer approval
+.github/workflows/*.yml @seanchatmangpt
+.github/dependabot.yml @seanchatmangpt
+
+# Infrastructure as Code - require maintainer approval
+/terraform/** @seanchatmangpt
+/k8s/** @seanchatmangpt
+/helm/** @seanchatmangpt
+/docker/** @seanchatmangpt
+
+# Security configurations - require maintainer approval
+/ci/gpg-key.properties @seanchatmangpt
+/ci/maven-settings.xml @seanchatmangpt
+
+# Documentation - any contributor can modify
+/docs/** @seanchatmangpt
+/book/** @seanchatmangpt
+*.md @seanchatmangpt
+
+# Test code - less strict ownership
+/src/test/** @seanchatmangpt
+
+# Examples and dogfood tests
+/src/main/java/io/github/seanchatmangpt/jotp/examples/** @seanchatmangpt
+/src/main/java/io/github/seanchatmangpt/jotp/dogfood/** @seanchatmangpt
+
+# Scripts and tooling
+/scripts/** @seanchatmangpt
+/bin/** @seanchatmangpt
+
+# Guard system (Rust)
+/guard-system/** @seanchatmangpt
+
+# Deployment automation
+/deploy.sh @seanchatmangpt
+/dx.sh @seanchatmangpt
+/.claude/** @seanchatmangpt

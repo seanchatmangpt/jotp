@@ -1,0 +1,50 @@
+# Staging overlay with reduced resources for testing
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base manifests
+resources:
+  - ../../
+
+# Staging replicas
+replicas:
+  - name: jotp
+    count: 2
+
+# Staging resource patches
+patches:
+  # Reduce memory for staging
+  - patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "2Gi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "4Gi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "1000m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "2000m"
+    target:
+      kind: StatefulSet
+      name: jotp
+
+# Staging ConfigMap overrides
+configMapGenerator:
+  - name: jotp-config
+    behavior: merge
+    literals:
+      - JAVA_OPTS=--enable-preview -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseZGC -Xms2g -Xmx2g
+      - JOTP_CLUSTER_SIZE=2
+      - LOGGING_LEVEL_ROOT=DEBUG
+      - LOGGING_LEVEL_JOTP=DEBUG
+
+# Staging namespace
+namespace: staging
+
+# Staging labels
+commonLabels:
+  environment: staging
+  tier: backend

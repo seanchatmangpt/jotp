@@ -9,10 +9,11 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.0"
     }
-    openshift = {
-      source  = "openshift/openshift"
-      version = "~> 0.1"
-    }
+    # Note: openshift provider is optional and may require additional setup
+    # openshift = {
+    #   source  = "openshift/openshift"
+    #   version = "~> 0.1"
+    # }
   }
 }
 

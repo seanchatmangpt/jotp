@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
@@ -25,7 +23,6 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>Covers filtering correctness, chaining, edge cases, and performance characteristics.
  */
-@DtrTest
 @Timeout(10)
 @DisplayName("Message Filter Pattern (EIP)")
 class MessageFilterTest implements WithAssertions {
@@ -42,12 +39,9 @@ class MessageFilterTest implements WithAssertions {
     class BasicFiltering {
 
         @Test
-        void forwardsMatchingMessages(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Message Filter Pattern");
-            ctx.say(
+        void forwardsMatchingMessages() throws InterruptedException {
                     "The Message Filter pattern selectively forwards messages based on criteria."
                             + " Messages that don't match are silently dropped.");
-            ctx.sayCode(
                     """
                     MessageFilter<Message> filter = MessageFilter.create(
                         msg -> msg.value() > 5,
@@ -60,14 +54,12 @@ class MessageFilterTest implements WithAssertions {
                     assertThat(forwarded.get()).isEqualTo(1);
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B{Filter: value > 5?}
                         B -->|yes| C[Forward]
                         B -->|no| D[Drop]
                     """);
-            ctx.sayNote(
                     "Use for spam filtering, content-based throttling, or routing only relevant"
                             + " messages to downstream processors.");
             AtomicInteger forwarded = new AtomicInteger(0);
@@ -137,12 +129,9 @@ class MessageFilterTest implements WithAssertions {
     class FilterChaining {
 
         @Test
-        void chainsMultipleFilters(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Message Filter: Chaining");
-            ctx.say(
+        void chainsMultipleFilters() throws InterruptedException {
                     "Filters can be chained to create multi-stage filtering pipelines. Each filter"
                             + " in the chain can drop or forward to the next stage.");
-            ctx.sayCode(
                     """
                     // Create chain: value > 5 -> category == IMPORTANT -> final
                     MessageFilter<Message> categoryFilter = MessageFilter.create(

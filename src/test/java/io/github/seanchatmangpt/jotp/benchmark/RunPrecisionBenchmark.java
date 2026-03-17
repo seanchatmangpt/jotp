@@ -18,9 +18,6 @@ package io.github.seanchatmangpt.jotp.benchmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcSys;
 import io.github.seanchatmangpt.jotp.observability.PrecisionTimer;
@@ -43,21 +40,16 @@ import org.junit.jupiter.api.Test;
  * ./mvnw test -Dtest=RunPrecisionBenchmark
  * }</pre>
  */
-@DtrTest
 @DisplayName("Run Precision Benchmark")
 class RunPrecisionBenchmark {
 
     private static final int WARMUP_ITERATIONS = 1_000;
     private static final int MEASUREMENT_ITERATIONS = 10_000;
 
-    @DtrContextField private DtrContext ctx;
 
     @Test
     @DisplayName("Benchmark: Proc.ask() Precision")
     void measureAskPrecision() throws Exception {
-        ctx.sayNextSection("Benchmark: Proc.ask() Precision");
-        ctx.say("Measures the precision and latency distribution of Proc.ask() operations.");
-        ctx.say(
                 "ask() is a synchronous request-response pattern that blocks until a reply is received.");
 
         // Create a process that responds to messages
@@ -87,7 +79,6 @@ class RunPrecisionBenchmark {
 
         boolean pass = stats.p95() < 100_000; // p95 < 100us
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value (ns)", "Value (us)"},
                     {
@@ -122,7 +113,6 @@ class RunPrecisionBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Operation",
                         "Proc.ask()",
@@ -135,7 +125,6 @@ class RunPrecisionBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "ask() precision validates synchronous messaging latency. "
                         + "p95 should be < 100us for responsive request-reply patterns.");
 
@@ -145,8 +134,6 @@ class RunPrecisionBenchmark {
     @Test
     @DisplayName("Benchmark: State Access Precision")
     void measureStateAccessPrecision() throws Exception {
-        ctx.sayNextSection("Benchmark: State Access Precision");
-        ctx.say("Measures the precision of accessing process state synchronously via ProcSys.");
 
         Proc<Integer, String> proc = createCounterProcess();
 
@@ -180,7 +167,6 @@ class RunPrecisionBenchmark {
 
         boolean pass = stats.mean() < 100_000; // mean < 100us (sys channel has higher latency)
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value (ns)"},
                     {"Mean", String.format("%.2f", stats.mean())},
@@ -190,7 +176,6 @@ class RunPrecisionBenchmark {
                     {"p99", String.valueOf(stats.p99())}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Operation",
                         "ProcSys.getState()",
@@ -203,7 +188,6 @@ class RunPrecisionBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "State access via ProcSys uses a sys channel with higher latency than direct access.");
 
         assertThat(stats.mean()).as("getState() mean should be < 100us").isLessThan(100_000.0);
@@ -212,8 +196,6 @@ class RunPrecisionBenchmark {
     @Test
     @DisplayName("Benchmark: Blocking Run Duration Precision")
     void measureBlockingRunPrecision() throws Exception {
-        ctx.sayNextSection("Benchmark: Blocking Run Duration Precision");
-        ctx.say("Measures timing precision for blocking operations with timeouts.");
 
         Proc<Integer, String> proc = createEchoProcess();
 
@@ -241,7 +223,6 @@ class RunPrecisionBenchmark {
 
         boolean pass = driftPercent < 10.0; // < 10% drift
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value (ns)", "Value (ms)"},
                     {"Target", String.valueOf(targetDurationNs), "10.00"},
@@ -267,7 +248,6 @@ class RunPrecisionBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Target Duration",
                         "10 ms",
@@ -280,7 +260,6 @@ class RunPrecisionBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "Thread.sleep() precision varies by platform. "
                         + "Drift should be < 10% for reliable timeout behavior.");
 

@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.messagepatterns.construction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.time.Instant;
@@ -36,18 +35,14 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("unique IDs do not collide")
-        void uniqueIds(DtrContext ctx) {
-            ctx.sayNextSection("Correlation Identifier");
-            ctx.say(
+        void uniqueIds() {
                     "Uniquely identifies related messages, enabling request-reply correlation and distributed transaction tracking.");
-            ctx.sayCode(
                     """
                     var id1 = CorrelationIdentifier.create();
                     var id2 = CorrelationIdentifier.create();
                     assertThat(id1.matches(id2)).isFalse();
                     """,
                     "java");
-            ctx.sayNote(
                     "Essential for async messaging where requests and responses are decoupled in time.");
 
             var id1 = CorrelationIdentifier.create();
@@ -57,10 +52,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("same ID matches itself")
-        void sameIdMatches(DtrContext ctx) {
-            ctx.sayNextSection("Correlation Identifier: ID Matching");
-            ctx.say("Correlation IDs can be reconstructed and compared for equality.");
-            ctx.sayCode(
+        void sameIdMatches() {
                     """
                     var id = CorrelationIdentifier.create();
                     var copy = CorrelationIdentifier.of(id.id());
@@ -83,17 +75,13 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("message with long TTL is not expired")
-        void notExpired(DtrContext ctx) {
-            ctx.sayNextSection("Message Expiration");
-            ctx.say(
+        void notExpired() {
                     "Messages carry their own expiration time, allowing systems to discard stale messages automatically.");
-            ctx.sayCode(
                     """
                     var order = new TestOrder("o1", Instant.now(), Duration.ofHours(1));
                     assertThat(order.isExpired()).isFalse();
                     """,
                     "java");
-            ctx.sayNote(
                     "Use for time-sensitive data like quotes, offers, or cache invalidation notifications.");
 
             var order = new TestOrder("o1", Instant.now(), Duration.ofHours(1));
@@ -102,10 +90,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("message with zero TTL is expired")
-        void expired(DtrContext ctx) {
-            ctx.sayNextSection("Message Expiration: Expired Messages");
-            ctx.say("Messages with zero or negative TTL are immediately considered expired.");
-            ctx.sayCode(
+        void expired() {
                     """
                     var order = new TestOrder("o1", Instant.now().minusSeconds(1), Duration.ZERO);
                     assertThat(order.isExpired()).isTrue();
@@ -118,10 +103,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("expiresAt returns correct instant")
-        void expiresAt(DtrContext ctx) {
-            ctx.sayNextSection("Message Expiration: Expiration Calculation");
-            ctx.say("The expiresAt method calculates the exact expiration timestamp.");
-            ctx.sayCode(
+        void expiresAt() {
                     """
                     var now = Instant.now();
                     var ttl = Duration.ofMinutes(5);
@@ -143,11 +125,8 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("empty metadata has no entries")
-        void empty(DtrContext ctx) {
-            ctx.sayNextSection("Message Metadata");
-            ctx.say(
+        void empty() {
                     "Immutable audit trail that tracks message processing history through multiple systems.");
-            ctx.sayCode(
                     """
                     var metadata = MessageMetadata.empty();
                     assertThat(metadata.size()).isZero();
@@ -155,7 +134,6 @@ class ConstructionPatternsTest implements WithAssertions {
                     assertThat(metadata2.size()).isEqualTo(1);
                     """,
                     "java");
-            ctx.sayNote(
                     "Use for debugging, compliance, and understanding message flow through distributed systems.");
 
             var metadata = MessageMetadata.empty();
@@ -165,11 +143,8 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("addEntry accumulates audit trail")
-        void accumulates(DtrContext ctx) {
-            ctx.sayNextSection("Message Metadata: Audit Trail");
-            ctx.say(
+        void accumulates() {
                     "Each entry records who processed the message, what action was taken, and why.");
-            ctx.sayCode(
                     """
                     var metadata = MessageMetadata.empty()
                         .addEntry("OrderService", "validated", "Router", "business rules")
@@ -189,10 +164,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("metadata is immutable")
-        void immutable(DtrContext ctx) {
-            ctx.sayNextSection("Message Metadata: Immutability");
-            ctx.say("Metadata is immutable - each addEntry returns a new instance.");
-            ctx.sayCode(
+        void immutable() {
                     """
                     var m1 = MessageMetadata.empty();
                     var m2 = m1.addEntry("A", "B", "C", "D");
@@ -216,18 +188,14 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("wraps and unwraps payload")
-        void wrapUnwrap(DtrContext ctx) {
-            ctx.sayNextSection("Envelope Wrapper");
-            ctx.say(
+        void wrapUnwrap() {
                     "Encapsulates a message with metadata headers, providing a standardized container for message transport.");
-            ctx.sayCode(
                     """
                     var envelope = EnvelopeWrapper.wrap(payload, Map.of("content-type", "json"));
                     Payload unwrapped = envelope.unwrap();
                     String contentType = envelope.header("content-type");
                     """,
                     "java");
-            ctx.sayNote(
                     "Use for adding cross-cutting concerns like authentication, tracing, or routing information to messages.");
 
             var payload = new Payload("test");
@@ -241,10 +209,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("withHeader adds header without mutating")
-        void withHeader(DtrContext ctx) {
-            ctx.sayNextSection("Envelope Wrapper: Immutable Headers");
-            ctx.say("Headers can be added without mutating the original envelope.");
-            ctx.sayCode(
+        void withHeader() {
                     """
                     var envelope = EnvelopeWrapper.wrap(new Payload("x"));
                     var updated = envelope.withHeader("auth", "token123");
@@ -265,11 +230,8 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("check-in and check-out round trips")
-        void roundTrip(DtrContext ctx) {
-            ctx.sayNextSection("Claim Check");
-            ctx.say(
+        void roundTrip() {
                     "Stores large message payloads externally and passes only a token through the messaging system, reducing channel load.");
-            ctx.sayCode(
                     """
                     var store = new ClaimCheck<String>();
                     var token = store.checkIn("large-payload");
@@ -277,7 +239,6 @@ class ConstructionPatternsTest implements WithAssertions {
                     Optional<String> checkedOut = store.checkOut(token);
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Large Payload] --> B[Claim Check]
@@ -286,7 +247,6 @@ class ConstructionPatternsTest implements WithAssertions {
                         D -->|Token| B
                         B -->|Payload| D
                     """);
-            ctx.sayNote(
                     "Use for large messages (files, documents) that would otherwise overwhelm the messaging system.");
 
             var store = new ClaimCheck<String>();
@@ -300,11 +260,8 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("claim without checkout preserves item")
-        void claimPreserves(DtrContext ctx) {
-            ctx.sayNextSection("Claim Check: Claim vs Checkout");
-            ctx.say(
+        void claimPreserves() {
                     "Claim returns the item without removing it; checkout removes it from storage.");
-            ctx.sayCode(
                     """
                     var store = new ClaimCheck<String>();
                     var token = store.checkIn("data");
@@ -321,10 +278,7 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("checkout unknown token returns empty")
-        void unknownToken(DtrContext ctx) {
-            ctx.sayNextSection("Claim Check: Unknown Tokens");
-            ctx.say("Checking out an unknown or already-claimed token returns empty.");
-            ctx.sayCode(
+        void unknownToken() {
                     """
                     var store = new ClaimCheck<String>();
                     Optional<String> result = store.checkOut(ClaimCheck.CheckToken.create());
@@ -347,11 +301,8 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("request returns reply synchronously")
-        void syncRequest(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Request-Reply");
-            ctx.say(
+        void syncRequest() throws InterruptedException {
                     "Synchronous communication pattern where a client sends a request and blocks until receiving a reply.");
-            ctx.sayCode(
                     """
                     var server = RequestReply.server("", (state, msg) ->
                         switch (msg) {
@@ -361,13 +312,11 @@ class ConstructionPatternsTest implements WithAssertions {
                     String reply = server.request(new Echo("Hello"), Duration.ofSeconds(2));
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Client] -->|Request| B[Server]
                         B -->|Reply| A
                     """);
-            ctx.sayNote(
                     "Use for query operations or when immediate response is required. Avoid for long-running operations.");
 
             var server =
@@ -395,11 +344,8 @@ class ConstructionPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("return address wraps message with reply-to")
-        void wrapsMessage(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Return Address");
-            ctx.say(
+        void wrapsMessage() throws InterruptedException {
                     "Encapsulates the destination for reply messages, enabling bidirectional communication over asynchronous channels.");
-            ctx.sayCode(
                     """
                     var client = new Proc<String, String>(null, (state, msg) -> {
                         received.set(msg);
@@ -410,7 +356,6 @@ class ConstructionPatternsTest implements WithAssertions {
                     returnAddr.reply("RE: Hello");
                     """,
                     "java");
-            ctx.sayNote(
                     "Essential for async request-reply over message channels where the reply destination must be explicitly specified.");
 
             var latch = new CountDownLatch(1);

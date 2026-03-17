@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -54,7 +52,6 @@ import org.junit.jupiter.api.Test;
  * @see ProcRef
  * @see Supervisor
  */
-@DtrTest
 @DisplayName("Proc: Lightweight Virtual-Thread Process")
 class ProcTest {
 
@@ -93,9 +90,7 @@ class ProcTest {
 
     @Test
     @DisplayName("tell(): Fire-and-forget message delivery")
-    void testTellFireAndForget(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Proc: Lightweight Virtual-Thread Process");
-        ctx.say(
+    void testTellFireAndForget() throws Exception {
                 """
                 Proc<S,M> is the fundamental OTP primitive in JOTP - a lightweight process backed by a virtual thread.
                 Each Proc has its own mailbox (LinkedTransferQueue) and processes messages sequentially.
@@ -123,8 +118,7 @@ class ProcTest {
 
     @Test
     @DisplayName("ask(): Request-reply with future completion")
-    void testAskRequestReply(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testAskRequestReply() throws Exception {
                 """
                 The ask() method provides synchronous request-reply semantics.
                 It sends a message and returns a CompletableFuture that completes when the handler processes the message.
@@ -182,8 +176,7 @@ class ProcTest {
 
     @Test
     @DisplayName("Mailbox FIFO: 100 messages received in order")
-    void testMailboxOrdering(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testMailboxOrdering() throws Exception {
                 """
                 Proc mailboxes guarantee FIFO (First-In-First-Out) message ordering.
                 Messages are delivered in the exact order they were sent, ensuring deterministic behavior.
@@ -266,8 +259,7 @@ class ProcTest {
 
     @Test
     @DisplayName("Crash callback: Fired on abnormal termination")
-    void testCrashCallbackFiredOnException(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testCrashCallbackFiredOnException() throws Exception {
                 """
                 When a Proc's handler throws an unhandled exception, the process terminates abnormally.
                 Crash callbacks are invoked ONLY on abnormal termination, enabling cleanup and monitoring.
@@ -337,8 +329,7 @@ class ProcTest {
 
     @Test
     @DisplayName("trapExits(true): EXIT signals become mailbox messages")
-    void testExitSignalTrapAsMessage(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testExitSignalTrapAsMessage() throws Exception {
                 """
                 By default, EXIT signals from linked processes immediately terminate the receiving Proc.
                 With trapExits(true), EXIT signals are converted to ExitSignal messages in the mailbox.

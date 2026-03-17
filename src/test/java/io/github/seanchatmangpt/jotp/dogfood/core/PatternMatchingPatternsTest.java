@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.core;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.dogfood.core.PatternMatchingPatterns.Payment;
 import java.util.Map;
@@ -21,10 +18,8 @@ import org.junit.jupiter.api.Test;
  * <p>These features enable concise, type-safe code that's verified at compile time.
  */
 @DisplayName("PatternMatchingPatterns - Java 26 Pattern Matching")
-@DtrTest
 class PatternMatchingPatternsTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -34,13 +29,10 @@ class PatternMatchingPatternsTest implements WithAssertions {
     @Test
     @DisplayName("describe masks credit card number")
     void describe_creditCard_masksNumber() {
-        ctx.sayNextSection("Exhaustive Switch with Record Destructuring");
-        ctx.say(
                 "Java 26 switch expressions can deconstruct records directly, extracting fields in"
                         + " the case clause. Combined with sealed types, the compiler enforces exhaustive"
                         + " handling — all variants must be covered.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Feature", "Compile-time verification", "Verbose casting"},
                     {"Traditional Switch", "Exhaustiveness", "Concise destructuring"},
@@ -49,7 +41,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                     {"Runtime errors", "Code", "Null case handling"}
                 });
 
-        ctx.sayCode(
                 """
             // Sealed hierarchy ensures exhaustive switch
             public sealed interface Payment permits
@@ -76,7 +67,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
         assertThat(desc).contains("************3456");
         assertThat(desc).doesNotContain("1234567890123456");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Payment Type",
                         "Credit Card",
@@ -87,7 +77,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                         "Full Number",
                         "Not exposed (security)"));
 
-        ctx.sayNote(
                 "Record destructuring eliminates the need for getters and casting. The var keyword"
                         + " infers types from the record components, making the code concise yet type-safe.");
     }
@@ -95,12 +84,9 @@ class PatternMatchingPatternsTest implements WithAssertions {
     @Test
     @DisplayName("riskLevel uses guarded patterns")
     void riskLevel_creditCardHighLimit_isHigh() {
-        ctx.sayNextSection("Guarded Patterns with When Clauses");
-        ctx.say(
                 "Guarded patterns (when clause) add conditional logic to pattern matching. A case"
                         + " only matches if both the pattern matches AND the when condition is true.");
 
-        ctx.sayCode(
                 """
             // Guarded pattern: only matches high-limit cards
             String riskLevel(Payment payment) {
@@ -125,7 +111,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
         var ccLow = new Payment.CreditCard("1234", "Bob", 456, 500);
         assertThat(PatternMatchingPatterns.riskLevel(ccLow)).isEqualTo("LOW");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "High Limit Card",
                         "Risk: HIGH",
@@ -136,7 +121,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                         "Pattern",
                         "Guarded with when clause"));
 
-        ctx.sayNote(
                 "Guarded patterns enable sophisticated business logic without nested if statements."
                         + " The conditions are evaluated in order, so put specific cases before general ones.");
     }
@@ -144,12 +128,9 @@ class PatternMatchingPatternsTest implements WithAssertions {
     @Test
     @DisplayName("extractFee uses instanceof pattern matching")
     void extractFee_fromDouble_returnsValue() {
-        ctx.sayNextSection("instanceof Pattern Matching");
-        ctx.say(
                 "Java 26 enhances instanceof with pattern matching: test and cast in one operation."
                         + " No more tedious casting after type checks.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Operation", "1 line", "Verbose"},
                     {"Traditional instanceof", "Type Safety", "Concise"},
@@ -158,7 +139,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                     {"3-4 (test + cast + assign)", "Readability", "Pattern match fail"}
                 });
 
-        ctx.sayCode(
                 """
             // Old way: verbose and error-prone
             if (obj instanceof Double) {
@@ -187,7 +167,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
         var resultString = PatternMatchingPatterns.extractFee("  123.45  ");
         assertThat(resultString).contains(123.45);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Double Input",
                         "25.5 → Optional(25.5)",
@@ -198,7 +177,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                         "Pattern",
                         "Test, cast, and guard in one"));
 
-        ctx.sayNote(
                 "Pattern matching with instanceof supports guards (&& condition) for additional"
                         + " filtering. The pattern variable (d, i, etc.) is only in scope when the pattern"
                         + " matches.");
@@ -207,12 +185,9 @@ class PatternMatchingPatternsTest implements WithAssertions {
     @Test
     @DisplayName("processingFee uses switch as expression")
     void processingFee_creditCardHighLimit_lowerRate() {
-        ctx.sayNextSection("Switch Expressions as Values");
-        ctx.say(
                 "Switch expressions return values, eliminating the need for temporary variables and"
                         + " break statements. They're expressions, not statements.");
 
-        ctx.sayCode(
                 """
             // Switch expression returns a value
             double processingFee(Payment payment, double amount) {
@@ -241,7 +216,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
         var feeBT = PatternMatchingPatterns.processingFee(bt, 1000);
         assertThat(feeBT).isEqualTo(1.0); // 0.1% rate
 
-        ctx.sayKeyValue(
                 Map.of(
                         "High-Limit Card Fee",
                         "2.5% ($25 on $1000)",
@@ -252,7 +226,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                         "Expression",
                         "Returns value directly"));
 
-        ctx.sayNote(
                 "Switch expressions must be exhaustive — the compiler ensures all cases are covered."
                         + " This prevents missing case bugs that plagued traditional switch statements.");
     }
@@ -260,13 +233,10 @@ class PatternMatchingPatternsTest implements WithAssertions {
     @Test
     @DisplayName("route handles null payment")
     void route_nullPayment_rejected() {
-        ctx.sayNextSection("Null-Safe Switch with Null Case");
-        ctx.say(
                 "Switch expressions in Java 26 handle null explicitly with a separate null case. No"
                         + " more NullPointerException at runtime — the null handling is codified in the"
                         + " switch.");
 
-        ctx.sayCode(
                 """
             // Null-safe switch
             String route(Payment payment) {
@@ -289,7 +259,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
         var bt = new Payment.BankTransfer("IBAN", "BIC", "Name");
         assertThat(PatternMatchingPatterns.route(bt)).isEqualTo("sepa-gateway");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Null Payment",
                         "Routed to: rejected",
@@ -300,7 +269,6 @@ class PatternMatchingPatternsTest implements WithAssertions {
                         "Null Safety",
                         "Explicit null case"));
 
-        ctx.sayNote(
                 "The null case must come first (or compiler warns). This explicit null handling makes"
                         + " the API contract clear — null inputs are rejected with a specific error message.");
     }

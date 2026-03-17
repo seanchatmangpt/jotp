@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.enterprise.recovery;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -24,7 +22,6 @@ import org.junit.jupiter.api.*;
 @DisplayName("EnterpriseRecovery: Joe Armstrong exponential backoff with supervised retry")
 class EnterpriseRecoveryTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -45,12 +42,9 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("createWithValidConfig_returnsInstance: valid config produces non-null instance")
     void createWithValidConfig_returnsInstance() {
-        ctx.sayNextSection("Enterprise Recovery: Self-Healing from Transient Failures");
-        ctx.say(
                 "EnterpriseRecovery implements exponential backoff with jitter for retrying transient"
                         + " failures. Prevents retry storms and enables self-healing from network glitches,"
                         + " service restarts, and momentary overload.");
-        ctx.sayCode(
                 """
             // Configure retry with exponential backoff
             RecoveryConfig config = RecoveryConfig.builder("database-connection")
@@ -69,14 +63,12 @@ class EnterpriseRecoveryTest implements WithAssertions {
         var recovery = EnterpriseRecovery.create(config);
         assertThat(recovery).isNotNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Max Attempts", "3",
                         "Initial Delay", "10ms",
                         "Max Delay", "500ms",
                         "Jitter Factor", "0.0 (disabled)",
                         "Backoff Multiplier", "2.0"));
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> INITIAL
@@ -91,11 +83,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("configBuilder_rejectsMaxAttemptsLessThanOne: maxAttempts < 1 throws exception")
     void configBuilder_rejectsMaxAttemptsLessThanOne() {
-        ctx.sayNextSection("Configuration Validation: Safety Constraints");
-        ctx.say(
                 "Recovery configurations enforce invariants at construction time. Max attempts less than"
                         + " one, zero initial delay, and invalid backoff multipliers are rejected.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 RecoveryConfig.builder("task")
@@ -120,16 +109,13 @@ class EnterpriseRecoveryTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayWarning(
                 "Max attempts < 1 means no execution. Must be ≥ 1 to attempt operation at least once.");
     }
 
     @DisplayName("configBuilder_rejectsZeroInitialDelay: Duration.ZERO throws exception")
     void configBuilder_rejectsZeroInitialDelay() {
-        ctx.say(
                 "Zero initial delay causes immediate retry, preventing downstream recovery. Minimum delay"
                         + " allows system to stabilize.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 RecoveryConfig.builder("task")
@@ -154,7 +140,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Recommended", "10-100ms for transient failures",
                         "Too Short", "Overwhelms downstream",
@@ -164,10 +149,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
     @DisplayName(
             "configBuilder_rejectsMaxDelayLessThanInitial: maxDelay < initialDelay throws exception")
     void configBuilder_rejectsMaxDelayLessThanInitial() {
-        ctx.say(
                 "Max delay must be greater than or equal to initial delay. Backoff increases delay, so"
                         + " max < initial is logically impossible.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 RecoveryConfig.builder("task")
@@ -192,17 +175,14 @@ class EnterpriseRecoveryTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayWarning(
                 "Max delay < initial delay prevents backoff from working. Always use maxDelay ≥"
                         + " initialDelay.");
     }
 
     @DisplayName("configBuilder_rejectsJitterFactorOutOfRange: jitterFactor > 1.0 throws exception")
     void configBuilder_rejectsJitterFactorOutOfRange() {
-        ctx.say(
                 "Jitter factor must be between 0.0 and 1.0. Values outside this range cause invalid"
                         + " delay calculations.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 RecoveryConfig.builder("task")
@@ -227,7 +207,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayTable(
                 List.of(
                         List.of("0.0", "No jitter (deterministic)"),
                         List.of("0.1", "10% jitter (recommended)"),
@@ -237,10 +216,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("configBuilder_rejectsBackoffMultiplierAtOne: multiplier ≤ 1.0 throws exception")
     void configBuilder_rejectsBackoffMultiplierAtOne() {
-        ctx.say(
                 "Backoff multiplier must be greater than 1.0 to increase delay between attempts. Multiplier"
                         + " of 1.0 creates fixed delay, not exponential backoff.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 RecoveryConfig.builder("task")
@@ -265,7 +242,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayTable(
                 List.of(
                         List.of("1.5", "Slow exponential growth"),
                         List.of("2.0", "Standard exponential backoff"),
@@ -277,11 +253,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("retry_immediateSuccess_returnsFirstAttempt: immediate success returns Success")
     void retry_immediateSuccess_returnsFirstAttempt() {
-        ctx.sayNextSection("Execution: Immediate Success");
-        ctx.say(
                 "When task succeeds on first attempt, recovery returns Success variant immediately. No"
                         + " backoff delay incurred. This is the happy path.");
-        ctx.sayCode(
                 """
             var recovery = EnterpriseRecovery.create(config);
             var callCount = new AtomicInteger(0);
@@ -313,7 +286,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
         assertThat(success.value()).isEqualTo("hello");
         assertThat(callCount.get()).isEqualTo(1);
 
-        ctx.sayTable(
                 List.of(
                         List.of("Result", "Success<String>"),
                         List.of("Value", "hello"),
@@ -325,11 +297,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("retry_failsOnce_succeedsSecond_returnsSuccess: fails once then succeeds")
     void retry_failsOnce_succeedsSecond_returnsSuccess() {
-        ctx.sayNextSection("Execution: Retry on Failure");
-        ctx.say(
                 "When task fails then succeeds on retry, recovery returns Success variant. Backoff delay"
                         + " is applied between attempts. Shows self-healing in action.");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant R as Recovery
@@ -343,7 +312,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
                 R-->>Client: Success result
             """);
 
-        ctx.sayCode(
                 """
             var recovery = EnterpriseRecovery.create(config);
             var callCount = new AtomicInteger(0);
@@ -381,7 +349,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
         assertThat(success.value()).isEqualTo("ok");
         assertThat(callCount.get()).isEqualTo(2);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Attempt 1", "Failed (RuntimeException)",
                         "Backoff", "10ms (initialDelay)",
@@ -393,11 +360,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
     @DisplayName(
             "retry_allAttemptsExhausted_returnsFailure: all attempts exhausted returns Failure")
     void retry_allAttemptsExhausted_returnsFailure() {
-        ctx.sayNextSection("Execution: Exhausted Retries");
-        ctx.say(
                 "When all retry attempts are exhausted, recovery returns Failure variant. Total delay"
                         + " includes all backoff periods. Caller must handle permanent failure.");
-        ctx.sayCode(
                 """
             var config = RecoveryConfig.builder("always-fail")
                 .maxAttempts(2)
@@ -435,7 +399,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
         assertThat(result).isInstanceOf(EnterpriseRecovery.Result.Failure.class);
 
-        ctx.sayTable(
                 List.of(
                         List.of("Attempt 1", "Failed"),
                         List.of("Backoff", "5ms"),
@@ -448,12 +411,9 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("retry_exponentialBackoff_delayIncreases: exponential backoff increases delay")
     void retry_exponentialBackoff_delayIncreases() {
-        ctx.sayNextSection("Backoff Strategy: Exponential Growth");
-        ctx.say(
                 "Exponential backoff increases delay between attempts: delay = min(initial *"
                         + " 2^(attempt-1), maxDelay). This gives downstream system time to recover while"
                         + " maintaining reasonable total retry time.");
-        ctx.sayCode(
                 """
             var config = RecoveryConfig.builder("backoff-task")
                 .maxAttempts(3)
@@ -498,7 +458,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
         assertThat(elapsed).isGreaterThanOrEqualTo(30L);
 
-        ctx.sayTable(
                 List.of(
                         List.of("Attempt 1", "Fail → 30ms backoff"),
                         List.of("Attempt 2", "Fail → 60ms backoff"),
@@ -512,11 +471,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("addListener_invokedOnRetry: listener registered without throwing")
     void addListener_invokedOnRetry() {
-        ctx.sayNextSection("Observability: Retry Listeners");
-        ctx.say(
                 "RecoveryListeners receive callbacks on each retry attempt with attempt number and"
                         + " delay. Useful for monitoring, logging, and custom metrics.");
-        ctx.sayCode(
                 """
             var recovery = EnterpriseRecovery.create(config);
             var listenerCalled = new AtomicBoolean(false);
@@ -551,7 +507,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
         assertThat(result).isInstanceOf(EnterpriseRecovery.Result.Success.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Listener Callback", "onAttempt(attemptNumber, delay)",
                         "Attempt Number", "1-based (first retry = 2)",
@@ -561,10 +516,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("removeListener_notCalledAfterRemoval: removed listener does not interfere")
     void removeListener_notCalledAfterRemoval() {
-        ctx.say(
                 "Listeners can be removed to stop receiving callbacks. Removed listeners don't affect"
                         + " subsequent retries.");
-        ctx.sayCode(
                 """
             var recovery = EnterpriseRecovery.create(config);
             var listenerCalled = new AtomicBoolean(false);
@@ -608,7 +561,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
         assertThat(result).isInstanceOf(EnterpriseRecovery.Result.Success.class);
         assertThat(listenerCalled.get()).isFalse();
 
-        ctx.sayWarning(
                 "Listener removal is idempotent. Removing non-existent listener or removing twice is"
                         + " safe.");
         recovery.shutdown();
@@ -618,11 +570,8 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("shutdown_doesNotThrow: calling shutdown does not throw")
     void shutdown_doesNotThrow() {
-        ctx.sayNextSection("Lifecycle: Graceful Shutdown");
-        ctx.say(
                 "Recovery coordinators must be shutdown to release process resources. Shutdown is"
                         + " idempotent and safe to call multiple times.");
-        ctx.sayCode(
                 """
             var recovery = EnterpriseRecovery.create(config);
             recovery.shutdown();
@@ -634,7 +583,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
         assertThatNoException().isThrownBy(recovery::shutdown);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Process Shutdown", "Coordinator process terminated",
                         "Listener Cleanup", "All listeners cleared",
@@ -645,12 +593,9 @@ class EnterpriseRecoveryTest implements WithAssertions {
 
     @DisplayName("retryPolicy_allVariantsInstantiable: all RetryPolicy sealed variants construct")
     void retryPolicy_allVariantsInstantiable() {
-        ctx.sayNextSection("Retry Policies: Multiple Backoff Strategies");
-        ctx.say(
                 "RetryPolicy sealed type provides multiple backoff strategies: ExponentialBackoff"
                         + " (standard), LinearBackoff (constant increase), FixedDelay (no increase), and"
                         + " ExponentialCapped (exponential with hard limit).");
-        ctx.sayCode(
                 """
             RetryPolicy exponential = new RetryPolicy.ExponentialBackoff();
             RetryPolicy linear = new RetryPolicy.LinearBackoff();
@@ -669,7 +614,6 @@ class EnterpriseRecoveryTest implements WithAssertions {
         assertThat(fixed).isNotNull();
         assertThat(capped).isNotNull();
 
-        ctx.sayTable(
                 List.of(
                         List.of("ExponentialBackoff", "Delay * 2^(n-1), standard"),
                         List.of("LinearBackoff", "Delay + (n-1) * step, predictable"),

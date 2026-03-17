@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.concurrency;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -23,11 +20,9 @@ import org.junit.jupiter.api.Test;
  * leaks 3) Virtual thread safe — no per-thread overhead 4) Nested scopes — inner scopes can shadow
  * outer bindings
  */
-@DtrTest
 @DisplayName("ScopedValuePatterns - Java 26 Scoped Context")
 class ScopedValuePatternsTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -37,13 +32,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("handleAsUser binds user for scope")
     void handleAsUser_bindsUserForScope() {
-        ctx.sayNextSection("Java 26 ScopedValue: Immutable Context Passing");
-        ctx.say(
                 "ScopedValue provides a way to pass context through call stacks without explicit"
                         + " parameter passing. Unlike ThreadLocal, it's immutable and automatically cleaned"
                         + " up when the scope exits.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Feature", "Cleanup", "Inheritance"},
                     {"ThreadLocal", "Manual (memory leak risk)", "InheritableThreadLocal needed"},
@@ -53,7 +45,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                     {"Immutable (safe)", "Zero overhead", "Compile-time generics"}
                 });
 
-        ctx.sayCode(
                 """
             // Define a scoped value (usually as a static final field)
             static final ScopedValue<String> CURRENT_USER = ScopedValue.newInstance();
@@ -74,7 +65,6 @@ class ScopedValuePatternsTest implements WithAssertions {
 
         assertThat(captured.get()).isEqualTo("alice");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Scoped Binding",
                         "alice",
@@ -85,7 +75,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Cleanup",
                         "Automatic"));
 
-        ctx.sayNote(
                 "ScopedValue.where(key, value).run(task) binds the value for the duration of task."
                         + " After task completes (successfully or exceptionally), the binding is automatically"
                         + " removed.");
@@ -94,13 +83,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("currentUser throws when not bound")
     void currentUser_throwsWhenNotBound() {
-        ctx.sayNextSection("Accessing Unbound Scoped Values");
-        ctx.say(
                 "Attempting to get() an unbound ScopedValue throws NoSuchElementException. This is a"
                         + " feature, not a bug — it ensures that missing context is detected immediately rather"
                         + " silently using defaults.");
 
-        ctx.sayCode(
                 """
             // Throws NoSuchElementException if not bound
             assertThatThrownBy(ScopedValuePatterns::currentUser)
@@ -116,7 +102,6 @@ class ScopedValuePatternsTest implements WithAssertions {
         assertThatThrownBy(ScopedValuePatterns::currentUser)
                 .isInstanceOf(java.util.NoSuchElementException.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Unbound Access",
                         "Throws NoSuchElementException",
@@ -127,7 +112,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Alternative",
                         "Optional wrapper or default"));
 
-        ctx.sayNote(
                 "The fail-fast behavior prevents bugs where context is accidentally missing. Always use"
                         + " isBound() or Optional wrappers when the value might not be set.");
     }
@@ -135,12 +119,9 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("withTrace binds and returns")
     void withTrace_bindsAndReturns() throws Exception {
-        ctx.sayNextSection("Scoped Values with Return Values");
-        ctx.say(
                 "ScopedValue.where().call() supports tasks that return values. This is ideal for"
                         + " propagating context through computation pipelines while capturing results.");
 
-        ctx.sayCode(
                 """
             // Bind trace ID and return a value
             Callable<String> task = () -> ScopedValuePatterns.TRACE_ID.get();
@@ -156,7 +137,6 @@ class ScopedValuePatternsTest implements WithAssertions {
 
         assertThat(result).isEqualTo("trace-123");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Bound Value",
                         "trace-123",
@@ -167,7 +147,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Cleanup",
                         "Automatic after call"));
 
-        ctx.sayNote(
                 "The Callable-based withTrace() allows tasks to return values while maintaining the"
                         + " scoped binding. This is perfect for request-scoped tracing, authentication, and"
                         + " tenant isolation.");
@@ -176,13 +155,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("withTrace unbinds after scope")
     void withTrace_unbindsAfterScope() throws Exception {
-        ctx.sayNextSection("Automatic Unbinding After Scope");
-        ctx.say(
                 "ScopedValue bindings are automatically removed when the scope exits, whether normally"
                         + " or exceptionally. This eliminates the ThreadLocal memory leak pattern where"
                         + " values persist indefinitely.");
 
-        ctx.sayCode(
                 """
             // Binding is only active during the lambda
             ScopedValuePatterns.withTrace("trace-456", () -> {
@@ -204,7 +180,6 @@ class ScopedValuePatternsTest implements WithAssertions {
 
         assertThat(ScopedValuePatterns.TRACE_ID.isBound()).isFalse();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "During Lambda",
                         "TRACE_ID is bound",
@@ -215,7 +190,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Memory Leak Risk",
                         "Zero"));
 
-        ctx.sayNote(
                 "This automatic cleanup is a huge improvement over ThreadLocal, where manual remove()"
                         + " calls are often forgotten, causing memory leaks in thread pools.");
     }
@@ -223,13 +197,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("withRequestContext binds all values")
     void withRequestContext_bindsAllValues() {
-        ctx.sayNextSection("Multiple Scoped Values Bound Together");
-        ctx.say(
                 "Real-world applications often need multiple context values: user, trace ID, tenant,"
                         + " locale, etc. ScopedValue supports binding multiple values in a single scope using"
                         + " ScopedValue.where().where().call().");
 
-        ctx.sayCode(
                 """
             // Bind multiple values together
             var ctx = new RequestContext("user-1", "trace-1", "tenant-1");
@@ -259,7 +230,6 @@ class ScopedValuePatternsTest implements WithAssertions {
         assertThat(capturedTrace.get()).isEqualTo("trace-1");
         assertThat(capturedTenant.get()).isEqualTo("tenant-1");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "User",
                         capturedUser.get(),
@@ -272,7 +242,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Scope",
                         "All values share same lifetime"));
 
-        ctx.sayNote(
                 "The chained where() calls create a composite scope with all bindings. All values are"
                         + " unbound together when the scope exits, ensuring consistency.");
     }
@@ -280,13 +249,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("nested scopes shadow existing bindings")
     void nestedScopes_innerShadowsOuter() {
-        ctx.sayNextSection("Nested Scoped Values and Shadowing");
-        ctx.say(
                 "Inner scopes can shadow outer bindings, similar to lexical variable scoping. The"
                         + " outer binding is temporarily hidden and automatically restored when the inner"
                         + " scope exits.");
 
-        ctx.sayCode(
                 """
             // Outer scope: bound to "alice"
             ScopedValuePatterns.handleAsUser("alice", () -> {
@@ -316,7 +282,6 @@ class ScopedValuePatternsTest implements WithAssertions {
         assertThat(outerUser.get()).isEqualTo("alice");
         assertThat(innerUser.get()).isEqualTo("SYSTEM");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Outer Scope",
                         "alice",
@@ -327,7 +292,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Pattern",
                         "Lexical scoping"));
 
-        ctx.sayNote(
                 "This shadowing behavior is perfect for privilege escalation (admin vs user) or"
                         + " request context switching in multi-tenant systems.");
     }
@@ -335,13 +299,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("concurrentWithContext inherits scoped values")
     void concurrentWithContext_inheritsScopedValues() throws Exception {
-        ctx.sayNextSection("ScopedValue with Structured Concurrency");
-        ctx.say(
                 "Scoped values are automatically inherited by virtual threads spawned in a scope."
                         + " This is a game-changer compared to InheritableThreadLocal, which doesn't work"
                         + " reliably with thread pools.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Feature", "Works correctly", "Mutable (racy)"},
                     {"InheritableThreadLocal", "Virtual Threads", "Immutable (safe)"},
@@ -350,7 +311,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                     {"Broken (stale values)", "Immutability", "Automatic"}
                 });
 
-        ctx.sayCode(
                 """
             // Bind context in parent, virtual threads inherit it
             Callable<String> taskA = () -> ScopedValuePatterns.CURRENT_USER.get() + "|A";
@@ -370,7 +330,6 @@ class ScopedValuePatternsTest implements WithAssertions {
 
         assertThat(results).containsExactlyInAnyOrder("alice|A", "trace-xyz|B");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Parent Scope",
                         "user=alice, trace=trace-xyz",
@@ -383,7 +342,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Thread Type",
                         "Virtual threads"));
 
-        ctx.sayNote(
                 "This automatic inheritance makes distributed tracing and authentication context"
                         + " propagation trivial. No more passing context through every method signature!");
     }
@@ -391,13 +349,10 @@ class ScopedValuePatternsTest implements WithAssertions {
     @Test
     @DisplayName("currentUserOrDefault returns default when not bound")
     void currentUserOrDefault_returnsDefaultWhenNotBound() {
-        ctx.sayNextSection("Safe Scoped Value Access Patterns");
-        ctx.say(
                 "When scoped values might be unbound, use safe access patterns: isBound() checks,"
                         + " Optional wrappers, or default values. Avoid NoSuchElementException in production"
                         + " code.");
 
-        ctx.sayCode(
                 """
             // Pattern 1: Default value
             String user = ScopedValuePatterns.currentUserOrDefault("anonymous");
@@ -415,7 +370,6 @@ class ScopedValuePatternsTest implements WithAssertions {
         assertThat(ScopedValuePatterns.currentUserOrDefault("default")).isEqualTo("default");
         assertThat(ScopedValuePatterns.currentUserOptional()).isEmpty();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Default Pattern",
                         "Returns 'default' when unbound",
@@ -426,7 +380,6 @@ class ScopedValuePatternsTest implements WithAssertions {
                         "Recommendation",
                         "Use Optional for explicit handling"));
 
-        ctx.sayNote(
                 "The Optional pattern is most explicit and forces callers to handle the missing case."
                         + " Default values can hide bugs where context should have been set but wasn't.");
     }

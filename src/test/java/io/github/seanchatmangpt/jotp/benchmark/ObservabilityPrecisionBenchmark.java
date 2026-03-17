@@ -18,9 +18,6 @@ package io.github.seanchatmangpt.jotp.benchmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.observability.FrameworkEventBus;
 import io.github.seanchatmangpt.jotp.observability.FrameworkMetrics;
@@ -46,14 +43,12 @@ import org.junit.jupiter.api.Test;
  * ./mvnw test -Dtest=ObservabilityPrecisionBenchmark
  * }</pre>
  */
-@DtrTest
 @DisplayName("Observability Precision Benchmark")
 class ObservabilityPrecisionBenchmark {
 
     private static final int WARMUP_ITERATIONS = 10_000;
     private static final int MEASUREMENT_ITERATIONS = 100_000;
 
-    @DtrContextField private DtrContext ctx;
 
     private List<Long> disabledLatencies;
     private List<Long> enabledLatencies;
@@ -73,9 +68,6 @@ class ObservabilityPrecisionBenchmark {
     @Test
     @DisplayName("Benchmark: Observability Precision - Disabled vs Enabled")
     void measurePrecision() throws Exception {
-        ctx.sayNextSection("Benchmark: Observability Precision");
-        ctx.say("Measures nanosecond-level precision of observability timing.");
-        ctx.say("Compares hot path latency with observability disabled vs enabled.");
 
         // Phase 1: Baseline with observability disabled
         System.clearProperty("jotp.observability.enabled");
@@ -133,7 +125,6 @@ class ObservabilityPrecisionBenchmark {
         double overhead = enabledStats.mean() - disabledStats.mean();
         boolean pass = overhead < 100;
 
-        ctx.sayTable(
                 new String[][] {
                     {"Operation", "Mean (ns)", "StdDev", "p50", "p95", "p99"},
                     {
@@ -154,7 +145,6 @@ class ObservabilityPrecisionBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Precision",
                         "Nanosecond",
@@ -165,7 +155,6 @@ class ObservabilityPrecisionBenchmark {
                         "Status",
                         pass ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "Precision timing validated for observability metrics. "
                         + "Zero-overhead principle requires overhead < 100 ns.");
 
@@ -178,8 +167,6 @@ class ObservabilityPrecisionBenchmark {
     @Test
     @DisplayName("Benchmark: System.nanoTime() Precision")
     void measureNanoTimePrecision() {
-        ctx.sayNextSection("Benchmark: System.nanoTime() Precision");
-        ctx.say("Validates the precision and overhead of System.nanoTime() itself.");
 
         int iterations = 1_000_000;
         long[] latencies = new long[iterations];
@@ -193,7 +180,6 @@ class ObservabilityPrecisionBenchmark {
 
         PrecisionTimer.PercentileResult stats = PrecisionTimer.calculatePercentiles(latencies);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Metric", "Value (ns)"},
                     {"Min", String.valueOf(stats.min())},
@@ -204,7 +190,6 @@ class ObservabilityPrecisionBenchmark {
                     {"p99", String.valueOf(stats.p99())}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Timer Resolution",
                         "Nanosecond",
@@ -215,7 +200,6 @@ class ObservabilityPrecisionBenchmark {
                         "Java",
                         System.getProperty("java.version")));
 
-        ctx.sayNote(
                 "System.nanoTime() provides nanosecond precision for accurate timing measurements.");
 
         // nanoTime() should be sub-microsecond

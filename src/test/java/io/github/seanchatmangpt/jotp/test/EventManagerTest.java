@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.test;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrExtension;
 import io.github.seanchatmangpt.jotp.EventManager;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -33,7 +30,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @Timeout(10)
 class EventManagerTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     sealed interface AppEvent permits AppEvent.UserLogin, AppEvent.OrderPlaced {
         record UserLogin(String userId) implements AppEvent {}
@@ -45,10 +41,7 @@ class EventManagerTest implements WithAssertions {
 
     @Test
     void notify_deliversToAllHandlers() throws Exception {
-        ctx.sayNextSection("EventManager: Broadcast to All Handlers");
-        ctx.say(
                 "EventManager implements OTP gen_event semantics. notify() broadcasts events to all registered handlers.");
-        ctx.sayMermaid(
                 """
             graph LR
                 E[Event] --> EM[EventManager]
@@ -59,9 +52,7 @@ class EventManagerTest implements WithAssertions {
                 style H2 fill:#90EE90
                 style Hn fill:#90EE90
                 """);
-        ctx.say(
                 "When syncNotify() is called, the event is delivered to ALL registered handlers. Each handler processes independently.");
-        ctx.sayCode(
                 """
             var mgr = EventManager.<AppEvent>start();
             var counter1 = new AtomicInteger(0);
@@ -99,7 +90,6 @@ class EventManagerTest implements WithAssertions {
         assertThat(counter1.get()).isEqualTo(2);
         assertThat(counter2.get()).isEqualTo(2);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Handler 1 Invocations",
                         String.valueOf(counter1.get()),
@@ -114,10 +104,7 @@ class EventManagerTest implements WithAssertions {
 
     @Test
     void addHandler_dynamically_receivesSubsequentEvents() throws Exception {
-        ctx.sayNextSection("EventManager: Dynamic Handler Registration");
-        ctx.say(
                 "Handlers can be added at runtime. Late-bound handlers only receive events sent after registration.");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant EM as EventManager
@@ -132,7 +119,6 @@ class EventManagerTest implements WithAssertions {
                 EM->>H2: Event 2
                 Note over H1,H2: Both received
                 """);
-        ctx.sayCode(
                 """
             var mgr = EventManager.<AppEvent>start();
             var earlyCount = new AtomicInteger(0);
@@ -170,7 +156,6 @@ class EventManagerTest implements WithAssertions {
         assertThat(earlyCount.get()).isEqualTo(2); // received both events
         assertThat(lateCount.get()).isEqualTo(1); // only received the second
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Early Handler Count",
                         String.valueOf(earlyCount.get()),
@@ -183,10 +168,7 @@ class EventManagerTest implements WithAssertions {
 
     @Test
     void deleteHandler_stopsReceiving() throws Exception {
-        ctx.sayNextSection("EventManager: Handler Removal");
-        ctx.say(
                 "Handlers can be removed with deleteHandler(). The terminate() callback is invoked for cleanup.");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Registered: addHandler()
@@ -196,7 +178,6 @@ class EventManagerTest implements WithAssertions {
                 Terminated --> [*]: terminate() called
                 Note over Processing, Terminated: Handler removed from registry
                 """);
-        ctx.sayCode(
                 """
             var mgr = EventManager.<AppEvent>start();
             var count = new AtomicInteger(0);
@@ -252,7 +233,6 @@ class EventManagerTest implements WithAssertions {
 
         assertThat(count.get()).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Handler Removed",
                         String.valueOf(removed),
@@ -267,10 +247,7 @@ class EventManagerTest implements WithAssertions {
 
     @Test
     void crashingHandler_doesNotKillManager() throws Exception {
-        ctx.sayNextSection("EventManager: Fault Isolation");
-        ctx.say(
                 "A crashing handler is automatically removed but does NOT crash the EventManager. This is core OTP fault isolation.");
-        ctx.sayMermaid(
                 """
             graph TB
                 subgraph "Before Crash"
@@ -293,9 +270,7 @@ class EventManagerTest implements WithAssertions {
                 S1 --> S2
                 M1 --> M2
                 """);
-        ctx.say(
                 "When a handler crashes, the EventManager catches the exception, removes the failed handler, and continues processing events with remaining handlers.");
-        ctx.sayCode(
                 """
             var mgr = EventManager.<AppEvent>start();
             var survivorCount = new AtomicInteger(0);
@@ -354,7 +329,6 @@ class EventManagerTest implements WithAssertions {
 
         assertThat(survivorCount.get()).isEqualTo(2);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Crasher Terminated",
                         String.valueOf(terminateCalled.get()),
@@ -369,10 +343,7 @@ class EventManagerTest implements WithAssertions {
 
     @Test
     void call_synchronouslyCallsSpecificHandler() throws Exception {
-        ctx.sayNextSection("EventManager: Targeted Handler Call");
-        ctx.say(
                 "call() delivers an event to a specific handler only, not a broadcast. This enables handler-specific queries.");
-        ctx.sayMermaid(
                 """
             graph LR
                 E[Event] --> EM[EventManager]
@@ -383,9 +354,7 @@ class EventManagerTest implements WithAssertions {
                 style H2 fill:#d3d3d3
                 style Hn fill:#d3d3d3
                 """);
-        ctx.say(
                 "Unlike notify() which broadcasts to all handlers, call() targets a single handler. This is useful for request-response patterns.");
-        ctx.sayCode(
                 """
             var mgr = EventManager.<AppEvent>start();
             var h1Events = new CopyOnWriteArrayList<AppEvent>();
@@ -422,7 +391,6 @@ class EventManagerTest implements WithAssertions {
         assertThat(h1Events).hasSize(1);
         assertThat(h2Events).isEmpty();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Handler 1 Events",
                         String.valueOf(h1Events.size()),

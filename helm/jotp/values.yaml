@@ -1,0 +1,214 @@
+replicaCount: 3
+image:
+  repository: ghcr.io/seanchatmangpt/jotp
+  pullPolicy: IfNotPresent
+  tag: 1.0.0
+imagePullSecrets: []
+nameOverride: ''
+fullnameOverride: ''
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ''
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+jvm:
+  xmx: 8G
+  xms: 8G
+  gc: ZGC
+  gcOptions: -XX:+UseZGC -XX:+DisableExplicitGC
+  extraOpts: -XX:+AlwaysPreTouch -XX:+PrintGCDetails -XX:+PrintGCTimeStamps
+  enablePreview: true
+jotp:
+  nodeName: jotp
+  cookie: jotp-cluster-cookie
+  distributed: true
+  peerDiscovery:
+    enabled: true
+    serviceName: jotp-headless
+    port: 9100
+  maxProcesses: 1000000
+  mailbox:
+    capacity: 10000
+    fair: true
+  supervision:
+    strategy: ONE_FOR_ONE
+    maxRestarts: 5
+    maxSeconds: 60
+service:
+  type: ClusterIP
+  ports:
+    http: 8080
+    cluster: 9100
+    management: 9090
+  clusterIP: None
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+  hosts:
+  - host: jotp.example.com
+    paths:
+    - path: /
+      pathType: Prefix
+  tls:
+  - secretName: jotp-tls
+    hosts:
+    - jotp.example.com
+resources:
+  requests:
+    cpu: '2'
+    memory: 12Gi
+  limits:
+    cpu: '4'
+    memory: 16Gi
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 15
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: jotp
+- maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: jotp
+healthChecks:
+  liveness:
+    enabled: true
+    path: /health/live
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /health/ready
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus
+  jmxExporter:
+    enabled: true
+    port: 9091
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+logging:
+  level: INFO
+  format: json
+serviceMesh:
+  enabled: false
+  annotations:
+    sidecar.istio.io/inject: 'true'
+    traffic.sidecar.istio.io/includeInboundPorts: 8080,9100
+    traffic.sidecar.istio.io/includeOutboundIPRanges: '*'
+configMap:
+  enabled: true
+  data: {}
+secret:
+  enabled: false
+  name: jotp-secrets
+backup:
+  enabled: false
+  schedule: 0 2 * * *
+  retention: 7
+  storageClass: standard
+  storageSize: 10Gi
+networkPolicy:
+  enabled: true
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: jotp
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: jotp
+    ports:
+    - protocol: TCP
+      port: 9100
+rollingUpdate:
+  maxUnavailable: 1
+  maxSurge: 1
+volumes: []
+volumeMounts: []
+env: []
+statefulSet:
+  enabled: false
+  podManagementPolicy: Parallel
+  partition: 0
+  persistence:
+    enabled: false
+    storageClass: standard
+    size: 10Gi
+    accessModes:
+    - ReadWriteOnce

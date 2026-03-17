@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jotp-distributed
+  labels:
+    app: jotp-distributed
+    environment: development

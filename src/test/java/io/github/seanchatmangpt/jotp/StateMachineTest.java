@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -42,7 +40,6 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(10)
 class StateMachineTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -288,10 +285,7 @@ class StateMachineTest implements WithAssertions {
     // ── gen_statem contract overview ───────────────────────────────────────────
 
     void gen_statem_contract_overview() throws Exception {
-        ctx.sayNextSection("StateMachine: OTP gen_statem Contract Implementation");
-        ctx.say(
                 "StateMachine provides full gen_statem feature parity with Java 26 patterns. It implements the Erlang/OTP state machine behavior model.");
-        ctx.sayCode(
                 """
             // gen_statem core contract: (State, Event, Data) → Transition
             @FunctionalInterface
@@ -314,10 +308,8 @@ class StateMachineTest implements WithAssertions {
             );
             """,
                 "java");
-        ctx.sayNote(
                 "Unlike traditional state machines, gen_statem separates state transitions (Next/Keep) from event processing. State data is immutable and carried through transitions.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"gen_statem Feature", "Java 26 Implementation", "OTP Equivalent"},
                     {
@@ -348,7 +340,6 @@ class StateMachineTest implements WithAssertions {
         assertThat(sm.isRunning()).isTrue();
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "StateMachine Running",
                         String.valueOf(sm.isRunning()),
@@ -368,10 +359,7 @@ class StateMachineTest implements WithAssertions {
     // ── Initial state ─────────────────────────────────────────────────────────
 
     void initialState_isLockedWithEmptyEntered() throws Exception {
-        ctx.sayNextSection("StateMachine: Initial State and Sealed State Types");
-        ctx.say(
                 "StateMachine implements OTP gen_statem with sealed state types for exhaustive pattern matching.");
-        ctx.sayCode(
                 """
             sealed interface LockState permits LockState.Locked, LockState.Open {
                 record Locked() implements LockState {}
@@ -389,7 +377,6 @@ class StateMachineTest implements WithAssertions {
             assertThat(sm.isRunning()).isTrue();
             """,
                 "java");
-        ctx.sayNote(
                 "Sealed state types enable exhaustive switch expressions. The compiler guarantees all states are handled, eliminating missing state bugs.");
 
         var sm = codeLock("1234");
@@ -397,7 +384,6 @@ class StateMachineTest implements WithAssertions {
         assertThat(sm.data().entered()).isEmpty();
         assertThat(sm.isRunning()).isTrue();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial State",
                         sm.state().getClass().getSimpleName(),
@@ -411,10 +397,7 @@ class StateMachineTest implements WithAssertions {
     // ── Correct code opens the lock ───────────────────────────────────────────
 
     void correctCode_transitionsToOpen() throws Exception {
-        ctx.sayNextSection("StateMachine: State Transitions with Sealed Events");
-        ctx.say(
                 "Events are also sealed types, enabling exhaustive pattern matching on events within each state.");
-        ctx.sayCode(
                 """
             sealed interface LockEvent permits LockEvent.PushButton, LockEvent.Lock {
                 record PushButton(char button) implements LockEvent {}
@@ -440,7 +423,6 @@ class StateMachineTest implements WithAssertions {
             };
             """,
                 "java");
-        ctx.sayNote(
                 "Pattern matching with record patterns (var b) extracts button values directly. Exhaustive switches guarantee all state/event combinations are handled.");
 
         var sm = codeLock("1234");
@@ -453,7 +435,6 @@ class StateMachineTest implements WithAssertions {
         assertThat(sm.state()).isInstanceOf(LockState.Open.class);
         assertThat(data.entered()).isEmpty();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Code Entered",
                         "1234",
@@ -469,10 +450,7 @@ class StateMachineTest implements WithAssertions {
     // ── Wrong code stays locked ───────────────────────────────────────────────
 
     void wrongCode_staysLocked() throws Exception {
-        ctx.sayNextSection("StateMachine: State Persistence and KeepState Transitions");
-        ctx.say(
                 "Transition.keepState() maintains current state while updating state data. Wrong codes accumulate but don't unlock.");
-        ctx.sayCode(
                 """
             // When code doesn't match, keep the Locked state
             case SMEvent.User(LockEvent.PushButton(var b)) -> {
@@ -483,7 +461,6 @@ class StateMachineTest implements WithAssertions {
             }
             """,
                 "java");
-        ctx.sayTable(
                 new String[][] {
                     {"Event", "State Before", "State After", "Entered Data", "Match Code?"},
                     {"PushButton('9')", "Locked", "Locked", "9", "false"},
@@ -500,7 +477,6 @@ class StateMachineTest implements WithAssertions {
 
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Expected Code",
                         "1234",
@@ -516,10 +492,7 @@ class StateMachineTest implements WithAssertions {
     // ── Partial code accumulates ──────────────────────────────────────────────
 
     void partialCode_accumulatesDigits() throws Exception {
-        ctx.sayNextSection("StateMachine: State Data Persistence Across Events");
-        ctx.say(
                 "State data persists across transitions. Each event can update data without changing state, accumulating partial input.");
-        ctx.sayCode(
                 """
             record LockData(String code, String entered) {
                 LockData withEntered(String e) {
@@ -535,7 +508,6 @@ class StateMachineTest implements WithAssertions {
             // data.entered() == "99"
             """,
                 "java");
-        ctx.sayNote(
                 "State data is immutable. Each transition returns a new data instance. The state machine holds the current (state, data) pair.");
 
         var sm = codeLock("999");
@@ -545,7 +517,6 @@ class StateMachineTest implements WithAssertions {
         data = sm.call(new LockEvent.PushButton('9')).get(5, TimeUnit.SECONDS);
         assertThat(data.entered()).isEqualTo("99");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Target Code",
                         "999",
@@ -561,10 +532,7 @@ class StateMachineTest implements WithAssertions {
     // ── Re-locking ────────────────────────────────────────────────────────────
 
     void lock_afterOpen_transitionsToLocked() throws Exception {
-        ctx.sayNextSection("StateMachine: Bidirectional State Transitions");
-        ctx.say(
                 "State machines support bidirectional transitions. Open → Locked is a separate transition from Locked → Open.");
-        ctx.sayCode(
                 """
             // Open state handles Lock event to return to Locked
             case LockState.Open() -> switch (event) {
@@ -582,7 +550,6 @@ class StateMachineTest implements WithAssertions {
             // Now back in Locked state with empty entered data
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Locked
@@ -600,7 +567,6 @@ class StateMachineTest implements WithAssertions {
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
         assertThat(data.entered()).isEmpty();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial State",
                         "Locked",
@@ -616,10 +582,7 @@ class StateMachineTest implements WithAssertions {
     // ── Ignored events ────────────────────────────────────────────────────────
 
     void lockEvent_inLockedState_isIgnored() throws Exception {
-        ctx.sayNextSection("StateMachine: Event Handling with Default Clauses");
-        ctx.say(
                 "Events not explicitly handled in a state fall through to default clauses. This implements 'ignored event' semantics.");
-        ctx.sayCode(
                 """
             case LockState.Locked() -> switch (event) {
                 case SMEvent.User(LockEvent.PushButton(var b)) -> { /* handle */ }
@@ -632,7 +595,6 @@ class StateMachineTest implements WithAssertions {
             };
             """,
                 "java");
-        ctx.sayNote(
                 "Default clauses provide explicit handling for ignored events. This is preferred over implicit ignore behavior, as it makes state machine behavior explicit and verifiable.");
 
         var sm = codeLock("99");
@@ -640,7 +602,6 @@ class StateMachineTest implements WithAssertions {
         assertThat(sm.state()).isInstanceOf(LockState.Locked.class);
         assertThat(data.entered()).isEmpty();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Event Sent",
                         "Lock()",
@@ -670,10 +631,7 @@ class StateMachineTest implements WithAssertions {
     }
 
     void stop_transition_terminatesMachine() throws Exception {
-        ctx.sayNextSection("StateMachine: Normal Termination with Transition.stop()");
-        ctx.say(
                 "Transition.stop(reason) terminates the state machine gracefully. The virtual thread exits and stopReason() captures the termination cause.");
-        ctx.sayCode(
                 """
             (state, event, data) -> switch (event) {
                 case SMEvent.User(SimpleEvent.Work(var n)) ->
@@ -694,7 +652,6 @@ class StateMachineTest implements WithAssertions {
             assertThat(sm.stopReason()).isEqualTo("normal");
             """,
                 "java");
-        ctx.sayNote(
                 "Transition.stop() is the gen_statem equivalent of {stop, Reason, NewStateData}. It terminates the state machine process after processing the current event.");
 
         var sm =
@@ -719,7 +676,6 @@ class StateMachineTest implements WithAssertions {
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !sm.isRunning());
         assertThat(sm.stopReason()).isEqualTo("normal");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Work Accumulated",
                         String.valueOf(data),
@@ -971,10 +927,7 @@ class StateMachineTest implements WithAssertions {
     // ── State Timeout ─────────────────────────────────────────────────────────
 
     void stateTimeout_firesAfterDelay() throws Exception {
-        ctx.sayNextSection("StateMachine: State Timeout Transitions");
-        ctx.say(
                 "State timeouts provide automatic transitions after a period of inactivity. They're essential for implementing SLAs, circuit breakers, and session expiration.");
-        ctx.sayCode(
                 """
             // Set state timeout when returning from transition
             case SMEvent.User(TEvent.Start()) ->
@@ -991,7 +944,6 @@ class StateMachineTest implements WithAssertions {
                 Transition.nextState(new CSState.B(), data); // cancels pending timeout
             """,
                 "java");
-        ctx.sayNote(
                 "State timeouts are gen_statem's {{state_timeout, Time}} feature. They're automatically cancelled when transitioning to a new state, preventing timeout leaks.");
 
         var timedOut = new AtomicInteger(0);
@@ -1028,7 +980,6 @@ class StateMachineTest implements WithAssertions {
 
         assertThat(timedOut.get()).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Timeout Set",
                         "80ms",

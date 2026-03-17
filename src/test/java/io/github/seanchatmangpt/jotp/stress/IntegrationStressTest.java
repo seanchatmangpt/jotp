@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.EventManager;
 import io.github.seanchatmangpt.jotp.Supervisor;
@@ -28,11 +25,9 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of how JOTP
  * primitives compose in real-world applications. Run with DTR to see integration patterns.
  */
-@DtrTest
 @DisplayName("Integration Stress Tests (Multi-Primitive Real-World Scenario)")
 class IntegrationStressTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -51,13 +46,6 @@ class IntegrationStressTest {
     @Test
     @DisplayName("Supervisor + Proc + EventManager (10 workers, 100 msg/sec each)")
     void testSupervisorWithEventManager() {
-        ctx.sayNextSection("Stress Test: Multi-Primitive Integration");
-        ctx.say("Real-world integration pattern combining three core OTP primitives:");
-        ctx.say("1. Supervisor - manages worker lifecycle and restarts");
-        ctx.say("2. Proc - lightweight worker processes");
-        ctx.say("3. EventManager - typed pub/sub event broadcasting");
-        ctx.say("");
-        ctx.say("This pattern is common in event-driven microservices.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 20, Duration.ofSeconds(60));
         EventManager<String> eventManager = new EventManager<>();
@@ -67,7 +55,6 @@ class IntegrationStressTest {
             int workerCount = 10;
             List<AtomicInteger> workerCounts = new ArrayList<>();
 
-            ctx.sayCode(
                     """
                     // Integration pattern: Supervisor + EventManager
                     Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 20, Duration.ofSeconds(60));
@@ -91,11 +78,6 @@ class IntegrationStressTest {
                     """,
                     "java");
 
-            ctx.say("Test configuration:");
-            ctx.say("- 10 supervised workers");
-            ctx.say("- 100 events/sec per worker (1000 total)");
-            ctx.say("- 5 second sustained load");
-            ctx.say("- Measure: throughput, latency, error rate");
 
             // Supervise 10 workers
             for (int i = 0; i < workerCount; i++) {
@@ -140,7 +122,6 @@ class IntegrationStressTest {
             assertThat(metrics.getOperationCount()).isGreaterThan(1000);
             assertThat(metrics.getLatencyPercentileMs(99)).isLessThan(50);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Target"},
                         {
@@ -167,7 +148,6 @@ class IntegrationStressTest {
                         {"Error rate", String.format("%.2f%%", metrics.getErrorRate()), "< 1%"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Workers", "10",
                             "Events/sec per worker", "100",
@@ -175,7 +155,6 @@ class IntegrationStressTest {
                             "Pattern", "Event-driven microservice",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Integration results: Event delivery guaranteed to all workers. Supervisor maintains worker pool despite load. Linear scaling with worker count. No deadlocks or message loss.");
 
         } finally {
@@ -196,20 +175,12 @@ class IntegrationStressTest {
     @Test
     @DisplayName("Durability test (30 sec, random crashes every 2 sec)")
     void testSystemDurabilityWithCrashes() {
-        ctx.sayNextSection("Stress Test: System Durability");
-        ctx.say("Durability testing validates system behavior under sustained stress.");
-        ctx.say("Simulates 30-second production run with periodic failures.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 50, Duration.ofSeconds(30));
         AtomicInteger processedMessages = new AtomicInteger();
         AtomicInteger totalMessages = new AtomicInteger();
 
         try {
-            ctx.say("Durability test configuration:");
-            ctx.say("- Single supervised worker");
-            ctx.say("- 100 messages/sec for 30 seconds");
-            ctx.say("- Simulated crashes every 2 seconds");
-            ctx.say("- Measure: recovery time, message loss rate");
 
             // Single worker process
             supervisor.supervise(
@@ -244,7 +215,6 @@ class IntegrationStressTest {
             assertThat(messageDeliveryRate).isGreaterThan(95);
             assertThat(metrics.getOperationCount()).isGreaterThan(100);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Target"},
                         {"Duration", "30 seconds", "Sustained"},
@@ -258,7 +228,6 @@ class IntegrationStressTest {
                         {"SLO compliance", "99.9%", "Verified"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Duration", "30 seconds",
                             "Message delivery rate",
@@ -267,7 +236,6 @@ class IntegrationStressTest {
                             "SLO compliance", "99.9%",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Durability validation: Message delivery rate >95%. Automatic recovery from failures. No degradation over 30 seconds. Production-ready under sustained load.");
 
         } finally {
@@ -287,9 +255,6 @@ class IntegrationStressTest {
     @Test
     @DisplayName("Cascade behavior (linked workers, single crash)")
     void testCascadeBehavior() {
-        ctx.sayNextSection("Stress Test: Cascade Containment");
-        ctx.say("Cascade containment is critical for fault isolation.");
-        ctx.say("Tests how supervisor strategies prevent failure propagation.");
 
         Supervisor supervisor = new Supervisor(Strategy.ONE_FOR_ONE, 20, Duration.ofSeconds(60));
         List<Long> workerStartTimes = new ArrayList<>();
@@ -297,11 +262,6 @@ class IntegrationStressTest {
         try {
             int workerCount = 5;
 
-            ctx.say("Cascade containment test:");
-            ctx.say("- 5 supervised workers");
-            ctx.say("- ONE_FOR_ONE strategy (isolated restarts)");
-            ctx.say("- 100 messages/sec for 5 seconds");
-            ctx.say("- Measure: cascade depth, recovery time");
 
             // Supervise 5 linked workers
             for (int i = 0; i < workerCount; i++) {
@@ -331,7 +291,6 @@ class IntegrationStressTest {
             // Verify all workers were responsive
             assertThat(metrics.getOperationCount()).isGreaterThan(100);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Metric", "Value", "Status"},
                         {"Workers", "5", "Supervised"},
@@ -345,7 +304,6 @@ class IntegrationStressTest {
                         {"Recovery time", "<50ms", "Target met"}
                     });
 
-            ctx.sayKeyValue(
                     Map.of(
                             "Workers", "5",
                             "Strategy", "ONE_FOR_ONE",
@@ -353,7 +311,6 @@ class IntegrationStressTest {
                             "Recovery time", "<50ms",
                             "Status", "PASS"));
 
-            ctx.sayNote(
                     "Cascade containment results: Failures isolated to single worker. Sibling workers unaffected. Supervisor manages restart transparently. No cascading failures detected.");
 
         } finally {

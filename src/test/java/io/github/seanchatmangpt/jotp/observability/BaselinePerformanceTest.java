@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.observability;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +33,6 @@ import org.junit.jupiter.api.TestInfo;
  *
  * <p>Results are captured in {@code benchmark-results/baseline-results.md}
  */
-@DtrTest
 @DisplayName("Baseline Performance Tests")
 class BaselinePerformanceTest {
 
@@ -68,9 +65,7 @@ class BaselinePerformanceTest {
 
     @Test
     @DisplayName("Baseline: Proc.tell() latency without observability")
-    void measureBaselineTellLatency(DtrContext ctx) throws Exception {
-        ctx.say("Baseline performance measurement for Proc.tell() without observability");
-        ctx.say("This establishes the zero-overhead baseline for hot path comparison");
+    void measureBaselineTellLatency() throws Exception {
 
         System.out.println("\n=== MEASURING BASELINE (NO OBSERVABILITY) ===");
 
@@ -116,14 +111,11 @@ class BaselinePerformanceTest {
                 baselineStats.p95() < 1_000,
                 "Baseline p95 should be < 1us, got: " + baselineStats.p95() + " ns");
 
-        ctx.say("Baseline p95: " + baselineStats.p95() + " ns (target: < 1000 ns)");
     }
 
     @Test
     @DisplayName("Observability: Proc.tell() latency with observability enabled")
-    void measureObservabilityTellLatency(DtrContext ctx) throws Exception {
-        ctx.say("Measuring Proc.tell() latency with observability infrastructure active");
-        ctx.say("Framework event bus and metrics are enabled to simulate production load");
+    void measureObservabilityTellLatency() throws Exception {
 
         System.out.println("\n=== MEASURING WITH OBSERVABILITY ENABLED ===");
 
@@ -183,7 +175,6 @@ class BaselinePerformanceTest {
                         + observabilityStats.p95()
                         + " ns");
 
-        ctx.say(
                 "Observability p95: "
                         + observabilityStats.p95()
                         + " ns - hot path remains sub-microsecond");
@@ -191,9 +182,7 @@ class BaselinePerformanceTest {
 
     @Test
     @DisplayName("Comparison: Observability overhead analysis")
-    void measureObservabilityOverhead(DtrContext ctx) throws Exception {
-        ctx.say("Comparative analysis: baseline vs observability-enabled performance");
-        ctx.say("This validates the zero-overhead principle for async event bus design");
+    void measureObservabilityOverhead() throws Exception {
 
         System.out.println("\n=== COMPARATIVE ANALYSIS ===");
 
@@ -273,8 +262,6 @@ class BaselinePerformanceTest {
         HotPathValidation.validateHotPaths();
         System.out.println("Hot path validation passed - no contamination detected");
 
-        ctx.say("Overhead: " + String.format("%.2f", overheadNs) + " ns (target: < 100 ns)");
-        ctx.say(
                 "Zero-overhead principle verified - async event bus does not contaminate hot paths");
     }
 

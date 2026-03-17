@@ -1,0 +1,76 @@
+@startuml c4-jotp-03h-components-distributed
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title JOTP - Distributed Systems Container Components
+
+Container_Boundary(distributedContainer, "Distributed Container") {
+
+    Component(globalRegistry, "GlobalProcRegistry", "Interface", "registerGlobal(name, ref, node)\nfindGlobal(name)\ntransferGlobal(name, toNode)\nCluster-wide process lookup")
+
+    Component(backend, "GlobalRegistryBackend", "Interface", "store(name, ref)\nlookup(name)\ncompareAndSwap(name, expected, new)\ncleanupNode(nodeName)")
+
+    Component(rocksdbBackend, "RocksDBGlobalRegistryBackend", "Persistent Backend", "RocksDB storage\nColumn families: registry, ack\nAtomic batch writes\nIdempotent recovery")
+
+    Component(inMemoryBackend, "InMemoryGlobalRegistryBackend", "In-Memory Backend", "ConcurrentHashMap\nSingle-node testing\nNo persistence")
+
+    Component(failover, "FailoverController", "Migration Manager", "handleNodeDown(node)\nmigrateProcess(name, target)\nrebalanceAfterNodeDown(node)\nRound-robin assignment")
+
+    Component(nodeDiscovery, "NodeDiscovery", "Interface", "registerNode(name, addr)\ngetHealthyNodes()\nonNodeDown(name)\nstartHealthChecks()")
+
+    Component(staticDiscovery, "StaticNodeDiscovery", "Static Discovery", "Pre-configured node list\nPeriodic health checks\nHeartbeat monitoring\nDEGRADED/DOWN states")
+
+    Component(discoveryBackend, "NodeDiscoveryBackend", "Storage Interface", "storeNode(info)\nfindStaleNodes(threshold)\nupdateHeartbeat(node, time)")
+
+    Component(globalRef, "GlobalProcRef", "Cluster Reference", "name, nodeName\nlocalRef (ProcRef)\nsequenceNumber\nregisteredAt timestamp")
+
+    ComponentDb(replicatedLog, "DistributedMessageLog", "Future Component", "Replicated event log\nCross-node durability\nKafka/Raft backend\nMessage ordering")
+
+    ComponentDb(sequenceService, "GlobalSequenceService", "Future Component", "Cluster-wide seq numbers\nSnowflake/Ticket algorithm\nNodeId embedded\nNo coordination needed")
+
+}
+
+Rel(globalRegistry, backend, "delegates to")
+Rel(backend, rocksdbBackend, "implemented by")
+Rel(backend, inMemoryBackend, "or implemented by")
+
+Rel(failover, globalRegistry, "updates")
+Rel(failover, nodeDiscovery, "queries")
+
+Rel(nodeDiscovery, staticDiscovery, "implemented by")
+Rel(staticDiscovery, discoveryBackend, "stores in")
+
+Rel(globalRegistry, globalRef, "manages")
+Rel(rocksdbBackend, globalRef, "serializes")
+
+Rel(staticDiscovery, failover, "triggers onNodeDown")
+
+Rel(rocksdbBackend, replicatedLog, "future: replicate via")
+Rel(globalRef, sequenceService, "future: uses")
+
+note on link globalRegistry
+  Equivalent to Erlang global
+  Location-transparent messaging
+  Name-to-ProcRef mapping
+end note
+
+note on link failover
+  Parallel migration via
+  StructuredTaskScope
+  Virtual threads per process
+end note
+
+note on link staticDiscovery
+  HEALTHY -> DEGRADED -> DOWN
+  Configurable timeouts
+  Automatic recovery
+end note
+
+note on link rocksdbBackend
+  Atomic WriteBatch pattern:
+  registry + ack together
+  Survives JVM crash
+end note
+
+SHOW_LEGEND()
+
+@enduml

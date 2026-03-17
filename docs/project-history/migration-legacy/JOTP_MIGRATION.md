@@ -210,9 +210,9 @@ For template issues: Use this repo's issue tracker.
 | Date | Milestone |
 |------|-----------|
 | 2026-03-11 | JOTP extracted to standalone project |
-| 2026-03-11 | JOTP v1.0.0 released to Maven Central |
+| 2026-03-11 | JOTP 2026.1.0 released to Maven Central |
 | 2026-03-11 | java-maven-template updated to depend on external JOTP |
-| Future | JOTP v1.1.0 (RPC framework, clustering primitives) |
+| Future | JOTP 2026.2.0 (RPC framework, clustering primitives) |
 | Future | JOTP v2.0.0 (Java 27+ support) |
 
 ---

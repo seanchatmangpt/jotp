@@ -1,0 +1,89 @@
+# Kustomization for JOTP Kubernetes Deployment
+# This file allows easy customization of the deployment without modifying the base manifests.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Resources to deploy
+resources:
+  - serviceaccount.yaml
+  - configmap.yaml
+  - service.yaml
+  - statefulset.yaml
+  - PodDisruptionBudget.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: jotp
+  app.kubernetes.io/instance: jotp-production
+  app.kubernetes.io/component: distributed-node
+  app.kubernetes.io/managed-by: kubectl
+
+# ConfigMap generator (allows overriding values)
+configMapGenerator:
+  - name: jotp-config
+    literals:
+      - JAVA_OPTS=--enable-preview -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -Xms4g -Xmx4g
+      - JOTP_CLUSTER_SIZE=3
+      - JOTP_PEER_DISCOVERY=dns
+      - JOTP_PEER_SERVICE=jotp-headless.default.svc.cluster.local
+
+# Secret generator (for sensitive data)
+secretGenerator:
+  - name: jotp-secrets
+    literals:
+      - DATABASE_URL=postgresql://localhost:5432/jotp
+      - DATABASE_PASSWORD=change-me
+    type: Opaque
+
+# Images (allows easy image tag updates)
+images:
+  - name: jotp
+    newName: your-registry/jotp
+    newTag: "1.0"
+
+# Replicas (overrides StatefulSet replica count)
+replicas:
+  - name: jotp
+    count: 3
+
+# Patches for customization
+patches:
+  # Patch StatefulSet to add node selector
+  - patch: |-
+    - op: add
+      path: /spec/template/spec/nodeSelector
+      value:
+        workload: jotp
+    target:
+      kind: StatefulSet
+      name: jotp
+
+  # Patch StatefulSet to add pod anti-affinity
+  - patch: |-
+    - op: add
+      path: /spec/template/spec/affinity
+      value:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - jotp
+                topologyKey: kubernetes.io/hostname
+    target:
+      kind: StatefulSet
+      name: jotp
+
+# Namespace (overrides the namespace for all resources)
+namespace: default
+
+# Name prefix (adds prefix to all resources)
+namePrefix: jotp-
+
+# Name suffix (adds suffix to all resources)
+# nameSuffix: -production

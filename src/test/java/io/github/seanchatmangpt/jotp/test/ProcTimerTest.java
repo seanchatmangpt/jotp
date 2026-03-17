@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcTimer;
 import java.time.Duration;
@@ -33,11 +30,9 @@ import org.junit.jupiter.api.Timeout;
  *   <li>{@code cancel} stops a repeating interval timer
  * </ol>
  */
-@DtrTest
 @Timeout(10)
 class ProcTimerTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     sealed interface Msg permits Msg.Tick, Msg.Ping {
         record Tick() implements Msg {}
@@ -62,10 +57,7 @@ class ProcTimerTest implements WithAssertions {
 
     @Test
     void sendAfter_deliversOneMessageAfterDelay() throws InterruptedException {
-        ctx.sayNextSection("ProcTimer: One-Shot Delayed Message Delivery");
-        ctx.say(
                 "sendAfter() delivers a single message after a specified delay. The timer fires once, then auto-cancels.");
-        ctx.sayCode(
                 """
             var proc = counter();
 
@@ -85,7 +77,6 @@ class ProcTimerTest implements WithAssertions {
             assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(1);
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant C as Client
@@ -101,7 +92,6 @@ class ProcTimerTest implements WithAssertions {
 
                 style T fill:#ffd43b
             """);
-        ctx.sayNote(
                 "sendAfter is the primitive for delayed operations. It's used for timeouts, retries, and any 'do X later' behavior.");
 
         var proc = counter();
@@ -116,7 +106,6 @@ class ProcTimerTest implements WithAssertions {
         Thread.sleep(200);
         assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Delay",
                         "100ms",
@@ -137,10 +126,7 @@ class ProcTimerTest implements WithAssertions {
 
     @Test
     void sendInterval_deliversRepeatingMessages() throws InterruptedException {
-        ctx.sayNextSection("ProcTimer: Repeating Interval Timer");
-        ctx.say(
                 "sendInterval() delivers messages repeatedly at a fixed period. The timer continues until explicitly cancelled.");
-        ctx.sayCode(
                 """
             var proc = counter();
 
@@ -155,7 +141,6 @@ class ProcTimerTest implements WithAssertions {
             ProcTimer.cancel(ref);
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant C as Client
@@ -173,7 +158,6 @@ class ProcTimerTest implements WithAssertions {
 
                 style T fill:#51cf66
             """);
-        ctx.sayNote(
                 "Interval timers are for recurring tasks: heartbeats, polling, metrics collection, periodic cleanup. Always cancel when done to prevent memory leaks.");
 
         var proc = counter();
@@ -184,7 +168,6 @@ class ProcTimerTest implements WithAssertions {
         ProcTimer.cancel(ref);
         proc.stop();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Interval",
                         "50ms",
@@ -202,10 +185,7 @@ class ProcTimerTest implements WithAssertions {
 
     @Test
     void cancel_preventsOneShot() throws InterruptedException {
-        ctx.sayNextSection("ProcTimer: Cancel One-Shot Timer");
-        ctx.say(
                 "Cancelling a one-shot timer prevents message delivery. The timer is removed from the scheduler before it fires.");
-        ctx.sayCode(
                 """
             var proc = counter();
 
@@ -222,7 +202,6 @@ class ProcTimerTest implements WithAssertions {
             assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(0);
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Scheduled: sendAfter(200ms)
@@ -234,7 +213,6 @@ class ProcTimerTest implements WithAssertions {
                     No message delivery
                 end note
             """);
-        ctx.sayNote(
                 "cancel() is idempotent - calling it multiple times is safe. Returns true if timer was pending, false if already fired/cancelled.");
 
         var proc = counter();
@@ -245,7 +223,6 @@ class ProcTimerTest implements WithAssertions {
         Thread.sleep(350);
         assertThat(proc.ask(new Msg.Ping()).join()).isEqualTo(0);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Original Delay",
                         "200ms",
@@ -266,10 +243,7 @@ class ProcTimerTest implements WithAssertions {
 
     @Test
     void cancel_stopsInterval() throws InterruptedException {
-        ctx.sayNextSection("ProcTimer: Cancel Interval Timer");
-        ctx.say(
                 "Cancelling an interval timer stops all future deliveries. In-flight messages may still arrive, but no new ones are scheduled.");
-        ctx.sayCode(
                 """
             var proc = counter();
 
@@ -292,7 +266,6 @@ class ProcTimerTest implements WithAssertions {
             assertThat(countLater).isLessThanOrEqualTo(countAfterCancel + 1);
             """,
                 "java");
-        ctx.sayNote(
                 "Allow +1 for in-flight messages that were already scheduled when cancel() was called. Cancel prevents new scheduling, doesn't intercept in-flight messages.");
 
         var proc = counter();
@@ -308,7 +281,6 @@ class ProcTimerTest implements WithAssertions {
 
         assertThat(countLater).isLessThanOrEqualTo(countAfterCancel + 1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Interval",
                         "50ms",
@@ -329,10 +301,7 @@ class ProcTimerTest implements WithAssertions {
 
     @Test
     void timerRef_cancel_returnsTrueWhenPending() throws InterruptedException {
-        ctx.sayNextSection("ProcTimer: Cancel Return Value");
-        ctx.say(
                 "cancel() returns true if the timer was pending (cancelled before firing), false if already fired or previously cancelled.");
-        ctx.sayCode(
                 """
             var proc = counter();
 
@@ -346,14 +315,12 @@ class ProcTimerTest implements WithAssertions {
             assertThat(ref.cancel()).isFalse();
             """,
                 "java");
-        ctx.sayTable(
                 new String[][] {
                     {"Cancel Timing", "Return Value", "Meaning"},
                     {"Before fire", "true", "Timer was pending, now cancelled"},
                     {"After fire", "false", "Timer already fired"},
                     {"Already cancelled", "false", "No-op, already cancelled"}
                 });
-        ctx.sayNote(
                 "Return value helps distinguish successful cancellation from no-ops. Useful for debugging and conditional logic.");
 
         var proc = counter();
@@ -362,7 +329,6 @@ class ProcTimerTest implements WithAssertions {
         assertThat(ref.cancel()).isTrue();
         assertThat(ref.cancel()).isFalse();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "First cancel()",
                         "true (was pending)",
@@ -379,10 +345,7 @@ class ProcTimerTest implements WithAssertions {
 
     @Test
     void multipleConcurrentTimers_allFire() throws InterruptedException {
-        ctx.sayNextSection("ProcTimer: Multiple Concurrent Timers");
-        ctx.say(
                 "Multiple timers targeting the same process fire independently. Each timer maintains its own schedule and delivery.");
-        ctx.sayCode(
                 """
             var proc = counter();
 
@@ -396,7 +359,6 @@ class ProcTimerTest implements WithAssertions {
                 .until(() -> proc.ask(new Msg.Ping()).join() == 3);
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             gantt
                 title Timer Timeline
@@ -412,7 +374,6 @@ class ProcTimerTest implements WithAssertions {
                 section Timer 3
                 Fire  : 110, 110
             """);
-        ctx.sayNote(
                 "Timers don't interfere with each other. Each one-shot timer delivers exactly one message. This enables complex timed behavior patterns.");
 
         var ticks = new AtomicInteger(0);
@@ -430,7 +391,6 @@ class ProcTimerTest implements WithAssertions {
 
         await().atMost(Duration.ofSeconds(3)).until(() -> ticks.get() == 3);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Timers Created",
                         "3",

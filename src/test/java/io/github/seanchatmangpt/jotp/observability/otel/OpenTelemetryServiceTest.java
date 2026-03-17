@@ -18,8 +18,6 @@ package io.github.seanchatmangpt.jotp.observability.otel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -29,13 +27,10 @@ import org.junit.jupiter.api.Test;
 @DisplayName("OpenTelemetryService: Distributed Tracing Integration")
 class OpenTelemetryServiceTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @Test
     @DisplayName("Create service with default configuration")
-    void createWithDefaultConfiguration(DtrContext ctx) {
-        ctx.sayNextSection("OpenTelemetry Integration: Zero-Setup Observability");
-        ctx.say(
+    void createWithDefaultConfiguration() {
                 """
                 OpenTelemetryService provides a zero-setup integration point for distributed tracing
                 and metrics export. The factory method creates a fully configured OpenTelemetry SDK
@@ -46,7 +41,6 @@ class OpenTelemetryServiceTest {
                 backends.
                 """);
 
-        ctx.sayCode(
                 """
                 // Zero-configuration factory method
                 OpenTelemetryService service = OpenTelemetryService.create();
@@ -69,7 +63,6 @@ class OpenTelemetryServiceTest {
         assertThat(service.meterProvider()).isNotNull();
         assertThat(service.tracerProvider()).isNotNull();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Component", "Purpose", "Status"},
                     {"SDK", "OpenTelemetry SDK instance", "Placeholder"},
@@ -78,7 +71,6 @@ class OpenTelemetryServiceTest {
                     {"TracerProvider", "Distributed tracing API", "Placeholder"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Service Name",
                         service.name(),
@@ -91,7 +83,6 @@ class OpenTelemetryServiceTest {
                         "TracerProvider",
                         service.tracerProvider().toString()));
 
-        ctx.sayNote(
                 "The placeholder pattern allows testing lifecycle and configuration without"
                         + " requiring the full OpenTelemetry SDK dependency. Integration is additive"
                         + " — no breaking changes when SDK is added.");
@@ -108,9 +99,7 @@ class OpenTelemetryServiceTest {
 
     @Test
     @DisplayName("Create service with custom configuration")
-    void createWithCustomConfiguration(DtrContext ctx) {
-        ctx.sayNextSection("Metrics Export Formats: OTLP Configuration");
-        ctx.say(
+    void createWithCustomConfiguration() {
                 """
                 OpenTelemetry uses the OpenTelemetry Protocol (OTLP) for exporting telemetry data.
                 Configuration includes endpoint, export intervals, timeouts, and feature flags for
@@ -121,7 +110,6 @@ class OpenTelemetryServiceTest {
                 OpenTelemetry Collector.
                 """);
 
-        ctx.sayCode(
                 """
                 // Builder pattern for custom configuration
                 OtelConfiguration config = OtelConfiguration.builder()
@@ -155,7 +143,6 @@ class OpenTelemetryServiceTest {
         assertThat(service.configuration()).containsEntry("enableMetrics", true);
         assertThat(service.configuration()).containsEntry("enableTracing", false);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Setting", "Default", "Custom", "Impact"},
                     {"serviceName", "jotp-service", "test-service", "Resource identity"},
@@ -170,7 +157,6 @@ class OpenTelemetryServiceTest {
                     {"enableTracing", "true", "false", "Distributed tracing"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Configuration Type",
                         "OtelConfiguration",
@@ -183,7 +169,6 @@ class OpenTelemetryServiceTest {
                         "Transport",
                         "HTTP/2 or gRPC"));
 
-        ctx.sayNote(
                 "Disable tracing (enableTracing=false) in high-throughput scenarios where span"
                         + " collection overhead is unacceptable. Metrics-only mode still provides"
                         + " visibility without performance impact.");
@@ -201,9 +186,7 @@ class OpenTelemetryServiceTest {
 
     @Test
     @DisplayName("Configuration builder pattern")
-    void configurationBuilderPattern(DtrContext ctx) {
-        ctx.sayNextSection("Performance Profiling: Export Tuning");
-        ctx.say(
+    void configurationBuilderPattern() {
                 """
                 Export tuning is critical for performance profiling in production systems:
 
@@ -216,7 +199,6 @@ class OpenTelemetryServiceTest {
                 to reduce export overhead.
                 """);
 
-        ctx.sayCode(
                 """
                 // High-throughput configuration: frequent exports, tracing only
                 OtelConfiguration config = OtelConfiguration.builder()
@@ -250,7 +232,6 @@ class OpenTelemetryServiceTest {
         assertThat(config.enableTracing()).isTrue();
         assertThat(config.enableLogging()).isFalse();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Workload Type", "exportInterval", "enableMetrics", "enableTracing"},
                     {"High-throughput", "10-30s", "false", "true"},
@@ -259,7 +240,6 @@ class OpenTelemetryServiceTest {
                     {"Tracing-only", "30s", "false", "true"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Export Interval",
                         "30s",
@@ -274,7 +254,6 @@ class OpenTelemetryServiceTest {
                         "Use Case",
                         "High-throughput tracing"));
 
-        ctx.sayNote(
                 "gRPC endpoint (4317) is preferred over HTTP (4318) for high-volume scenarios"
                         + " due to better throughput and lower latency. Use HTTP for compatibility"
                         + " with older collectors.");

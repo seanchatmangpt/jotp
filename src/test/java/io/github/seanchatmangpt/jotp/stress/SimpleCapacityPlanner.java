@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,11 +18,9 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of capacity
  * planning methodology. Run with DTR to see executable examples with actual capacity estimates.
  */
-@DtrTest
 @DisplayName("Simple Capacity Planner — Basic Resource Planning")
 class SimpleCapacityPlanner {
 
-    @DtrContextField private DtrContext ctx;
 
     private CapacityPlanner planner;
 
@@ -42,11 +37,7 @@ class SimpleCapacityPlanner {
     @Test
     @DisplayName("Capacity: Estimate Max Throughput at SLA Targets")
     void testEstimateMaxThroughput() {
-        ctx.sayNextSection("Capacity Planning: Max Throughput Estimation");
-        ctx.say("Determines maximum throughput achievable at different latency SLA targets.");
-        ctx.say("Uses measured data points to extrapolate system capacity.");
 
-        ctx.sayCode(
                 """
                 // Record capacity data points
                 planner.recordDataPoint(10_000, 5.0, 25.0, 512);   // 10K ops, 5ms p99
@@ -66,7 +57,6 @@ class SimpleCapacityPlanner {
         double maxAt50ms = planner.estimateMaxThroughput(50.0);
         double maxAt100ms = planner.estimateMaxThroughput(100.0);
 
-        ctx.sayTable(
                 new String[][] {
                     {"SLA Target (p99)", "Max Throughput", "Estimated CPU", "Status"},
                     {"< 10 ms", String.format("%.0f ops/sec", maxAt10ms), "~45%", "TIGHT"},
@@ -74,7 +64,6 @@ class SimpleCapacityPlanner {
                     {"< 100 ms", String.format("%.0f ops/sec", maxAt100ms), "~95%", "LIMIT"},
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "System name",
                         "JOTP-Test-System",
@@ -87,7 +76,6 @@ class SimpleCapacityPlanner {
                         "Planning status",
                         "DOCUMENTED"));
 
-        ctx.sayNote(
                 "For strict SLA (p99<10ms), limit to "
                         + String.format("%.0f", maxAt10ms)
                         + " ops/sec. "
@@ -108,11 +96,7 @@ class SimpleCapacityPlanner {
     @Test
     @DisplayName("Capacity: Resource Estimation for Target Throughput")
     void testEstimateResourcesForTargetThroughput() {
-        ctx.sayNextSection("Capacity Planning: Resource Estimation");
-        ctx.say("Estimates CPU, memory, and instance requirements for target throughput.");
-        ctx.say("Enables horizontal and vertical scaling decisions.");
 
-        ctx.sayCode(
                 """
                 // Estimate resources for 75K ops/sec target
                 ResourceRequirement req = planner.estimateResourcesFor(75_000);
@@ -131,7 +115,6 @@ class SimpleCapacityPlanner {
         ResourceRequirement req75k = planner.estimateResourcesFor(75_000);
         ResourceRequirement req100k = planner.estimateResourcesFor(100_000);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Target Throughput", "CPU Required", "Memory Required", "Instances"},
                     {
@@ -160,7 +143,6 @@ class SimpleCapacityPlanner {
                     },
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Target throughput",
                         "75,000 ops/sec",
@@ -173,7 +155,6 @@ class SimpleCapacityPlanner {
                         "Scaling model",
                         "Linear"));
 
-        ctx.sayNote(
                 "For 75K ops/sec, provision "
                         + String.format("%.0f", req75k.cpuPercent())
                         + "% CPU and "
@@ -192,9 +173,6 @@ class SimpleCapacityPlanner {
     @Test
     @DisplayName("Capacity: Report Generation")
     void testGenerateReport() {
-        ctx.sayNextSection("Capacity Planning: Report Generation");
-        ctx.say("Generates comprehensive capacity planning report.");
-        ctx.say("Documents all measured data points and extrapolated limits.");
 
         // Record comprehensive data points
         planner.recordDataPoint(5_000, 3.0, 15.0, 256);
@@ -206,9 +184,7 @@ class SimpleCapacityPlanner {
 
         String report = planner.generateReport();
 
-        ctx.sayCode(report, "text");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Data points recorded",
                         "6",
@@ -219,7 +195,6 @@ class SimpleCapacityPlanner {
                         "Report status",
                         "GENERATED"));
 
-        ctx.sayNote(
                 "Capacity report provides actionable data for infrastructure planning and SLA negotiation.");
 
         assertThat(report).contains("Capacity Planning");

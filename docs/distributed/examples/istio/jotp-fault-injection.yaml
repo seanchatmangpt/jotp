@@ -1,0 +1,83 @@
+# Istio fault injection example for JOTP chaos testing
+# Demonstrates delay and abort injection for testing supervisor restart behavior
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: jotp-chaos-testing
+  namespace: jotp-system
+spec:
+  hosts:
+  - jotp-telemetry
+  http:
+  # Test 1: Crash injection (10% of requests return 503)
+  - match:
+    - headers:
+        x-chaos-test:
+          exact: "crash-injection"
+    fault:
+      abort:
+        percentage:
+          value: 10
+        httpStatus: 503
+    route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1
+
+  # Test 2: Delay injection (50% of requests delayed by 5s)
+  - match:
+    - headers:
+        x-chaos-test:
+          exact: "delay-injection"
+    fault:
+      delay:
+        percentage:
+          value: 50
+        fixedDelay: 5s
+    route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1
+
+  # Test 3: Combined delay and abort
+  - match:
+    - headers:
+        x-chaos-test:
+          exact: "combined-faults"
+    fault:
+      delay:
+        percentage:
+          value: 100
+        fixedDelay: 2s
+      abort:
+        percentage:
+          value: 5
+        httpStatus: 503
+    route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1
+
+  # Test 4: gRPC fault injection
+  - match:
+    - headers:
+        content-type:
+          regex: "application/grpc.*"
+        x-chaos-test:
+          exact: "grpc-faults"
+    fault:
+      abort:
+        percentage:
+          value: 5
+        httpStatus: 503
+    route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1
+
+  # Default: no faults
+  - route:
+    - destination:
+        host: jotp-telemetry
+        subset: v1

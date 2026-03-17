@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.errorhandling;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,11 +19,9 @@ import org.junit.jupiter.api.Test;
  * <p>Key patterns: - map/flatMap for chaining operations - recover for fallback values - fold for"
  * + " branching - peek/peekError for side effects
  */
-@DtrTest
 @DisplayName("ResultRailway - Railway-Oriented Error Handling")
 class ResultRailwayTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -36,13 +31,10 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("success is success")
     void success_isSuccess() {
-        ctx.sayNextSection("Railway-Oriented Programming Basics");
-        ctx.say(
                 "Railway-oriented programming (ROP) treats errors as values, not exceptions. A Result<T,E>"
                         + " is either Success<T> or Failure<E>. This enables explicit error handling without"
                         + " try-catch blocks.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Aspect", "Error Handling", "Composition"},
                     {"Exception-Based", "try-catch blocks", "Difficult (exception flow)"},
@@ -56,7 +48,6 @@ class ResultRailwayTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayCode(
                 """
             // Create success result
             Result<String, String> success = ResultRailway.success("hello");
@@ -84,7 +75,6 @@ class ResultRailwayTest implements WithAssertions {
         assertThat(r2.isSuccess()).isFalse();
         assertThat(r2).isInstanceOf(ResultRailway.Failure.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success Variant",
                         "isSuccess() = true",
@@ -95,7 +85,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Type Safety",
                         "Compile-time"));
 
-        ctx.sayNote(
                 "Result<T,E> is a sealed interface with Success<T,E> and Failure<T,E> records. The"
                         + " compiler enforces exhaustive pattern matching, ensuring all cases are handled.");
     }
@@ -103,12 +92,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("of wraps successful supplier")
     void of_wrapsSuccessfulSupplier() {
-        ctx.sayNextSection("Exception Wrapping with of()");
-        ctx.say(
                 "The Result.of() factory method wraps a supplier, catching exceptions and converting them"
                         + " to Failure results. This bridges exception-based and railway-oriented code.");
 
-        ctx.sayCode(
                 """
             // Wrap supplier that may throw
             Result<Integer, RuntimeException> result = ResultRailway.of(() -> 42);
@@ -143,7 +129,6 @@ class ResultRailwayTest implements WithAssertions {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("boom");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success Path",
                         "Value wrapped in Success",
@@ -154,7 +139,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Bridge",
                         "Exception → Railway"));
 
-        ctx.sayNote(
                 "Result.of() is perfect for wrapping legacy exception-based APIs. The exception becomes"
                         + " a value that can be processed with map/flatMap instead of try-catch.");
     }
@@ -162,12 +146,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("map transforms success value")
     void map_transformsSuccessValue() {
-        ctx.sayNextSection("Functor: map() for Transforming Success");
-        ctx.say(
                 "The map() method transforms the success value while preserving failures. This is the"
                         + " functor pattern — applying a function to the wrapped value without unwrapping.");
 
-        ctx.sayCode(
                 """
             // Map only applies to Success
             Result<String, String> success = ResultRailway.success("hello");
@@ -193,7 +174,6 @@ class ResultRailwayTest implements WithAssertions {
         assertThat(r2.isFailure()).isTrue();
         assertThat(((ResultRailway.Failure<?, String>) r2).error()).isEqualTo("err");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success.map",
                         "Transforms value",
@@ -204,7 +184,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Composition",
                         "Chainable"));
 
-        ctx.sayNote(
                 "map() is one-directional: it transforms Success but ignores Failure. For two-way"
                         + " transformation, use fold() or bimap() if available.");
     }
@@ -212,12 +191,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("flatMap chains success")
     void flatMap_chainsSuccess() {
-        ctx.sayNextSection("Monad: flatMap() for Chaining Operations");
-        ctx.say(
                 "The flatMap() method chains operations that return Results. This is the monad pattern —"
                         + " sequencing computations that might fail, short-circuiting on the first failure.");
 
-        ctx.sayCode(
                 """
             // Chain operations that return Result
             Result<Integer, String> result = ResultRailway.<String, String>success("42")
@@ -252,7 +228,6 @@ class ResultRailwayTest implements WithAssertions {
                         .flatMap(s -> ResultRailway.failure("inner error"));
         assertThat(r3.isFailure()).isTrue();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success Chain",
                         "Continues to next operation",
@@ -263,7 +238,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Railway",
                         "Fail → Fail"));
 
-        ctx.sayNote(
                 "flatMap() enables railway-oriented programming where operations are chained like"
                         + " track switches. If any operation fails, the rest of the chain is skipped.");
     }
@@ -271,12 +245,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("fold branches on success/failure")
     void fold_appliesSuccessBranch() {
-        ctx.sayNextSection("Branching with fold()");
-        ctx.say(
                 "The fold() method branches on success or failure, applying different functions to each"
                         + " case. This is the catamorphism pattern — collapsing a structure into a value.");
 
-        ctx.sayCode(
                 """
             // Fold applies different functions based on variant
             int result = ResultRailway.<String, String>success("hello")
@@ -306,7 +277,6 @@ class ResultRailwayTest implements WithAssertions {
         var result2 = ResultRailway.<String, String>failure("err").fold(String::length, e -> -1);
         assertThat(result2).isEqualTo(-1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success Path",
                         "Applies success function",
@@ -317,7 +287,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Pattern",
                         "Catamorphism"));
 
-        ctx.sayNote(
                 "fold() is the most flexible way to extract values from Result. Unlike orElse(), it"
                         + " handles both success and failure cases explicitly.");
     }
@@ -325,12 +294,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("recover applies fallback on failure")
     void recover_appliesFallbackOnFailure() {
-        ctx.sayNextSection("Error Recovery with recover()");
-        ctx.say(
                 "The recover() method provides fallback values for failures. This is similar to"
                         + " Optional.orElse() but for errors — convert failures into successes with defaults.");
 
-        ctx.sayCode(
                 """
             // Recover with default value on failure
             String value = ResultRailway.<String, String>failure("err")
@@ -354,7 +320,6 @@ class ResultRailwayTest implements WithAssertions {
         var r2 = ResultRailway.<String, String>failure("err").recover(e -> "fallback");
         assertThat(r2).isEqualTo("fallback");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success Path",
                         "Returns value unchanged",
@@ -365,7 +330,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Pattern",
                         "Error recovery"));
 
-        ctx.sayNote(
                 "recover() is perfect for providing defaults: missing config → default value, API"
                         + " failure → cached response, validation error → sanitized input.");
     }
@@ -373,12 +337,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("peek called on success")
     void peek_calledOnSuccess() {
-        ctx.sayNextSection("Side Effects with peek() and peekError()");
-        ctx.say(
                 "The peek() methods execute side effects without transforming values. peek() runs on"
                         + " success, peekError() runs on failure. Useful for logging, metrics, debugging.");
 
-        ctx.sayCode(
                 """
             // Peek runs on success
             var called = new AtomicBoolean(false);
@@ -418,7 +379,6 @@ class ResultRailwayTest implements WithAssertions {
         var r = ResultRailway.<String, String>success("ok");
         assertThat(r.peek(v -> {})).isSameAs(r);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "peek()",
                         "Runs on success",
@@ -429,7 +389,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Use Case",
                         "Logging, metrics, debugging"));
 
-        ctx.sayNote(
                 "peek() returns the original Result, enabling chaining. Use it for logging and"
                         + " observability without affecting the computation pipeline.");
     }
@@ -437,12 +396,9 @@ class ResultRailwayTest implements WithAssertions {
     @Test
     @DisplayName("railwayChain short-circuits on first failure")
     void railwayChain_shortCircuitsOnFirstFailure() {
-        ctx.sayNextSection("Railway-Oriented Pipelines");
-        ctx.say(
                 "Railway-oriented programming chains operations like track switches. Success moves"
                         + " forward; failure switches to a side track and bypasses remaining operations.");
 
-        ctx.sayCode(
                 """
             // Railway pipeline: strip → parse → double → format
             String result = ResultRailway.<String, String>success("  42  ")
@@ -481,7 +437,6 @@ class ResultRailwayTest implements WithAssertions {
 
         assertThat(result2).isEqualTo("failed: not a number");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Success Pipeline",
                         "strip → parse → double → format",
@@ -494,7 +449,6 @@ class ResultRailwayTest implements WithAssertions {
                         "Pattern",
                         "Railway switches"));
 
-        ctx.sayNote(
                 "Railway-oriented programming makes error paths explicit and type-safe. The compiler"
                         + " ensures all cases are handled, and the control flow is visible in the type"
                         + " system.");

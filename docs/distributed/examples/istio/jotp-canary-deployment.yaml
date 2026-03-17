@@ -1,0 +1,150 @@
+# Istio canary deployment example for JOTP
+# Demonstrates traffic splitting between stable and canary versions
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jotp-system
+  labels:
+    istio-injection: enabled
+---
+# Stable version deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-telemetry-v1
+  namespace: jotp-system
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: jotp-telemetry
+        version: v1
+    spec:
+      containers:
+      - name: jotp
+        image: jotp/telemetry-service:1.0.0
+        ports:
+        - containerPort: 8080
+        - containerPort: 9090
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+---
+# Canary version deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jotp-telemetry-v2
+  namespace: jotp-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jotp-telemetry
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: jotp-telemetry
+        version: v2
+    spec:
+      containers:
+      - name: jotp
+        image: jotp/telemetry-service:2.0.0-canary
+        ports:
+        - containerPort: 8080
+        - containerPort: 9090
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+---
+# Service for stable version
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-telemetry-v1
+  namespace: jotp-system
+spec:
+  ports:
+  - port: 8080
+    name: http
+  - port: 9090
+    name: grpc
+  selector:
+    app: jotp-telemetry
+    version: v1
+---
+# Service for canary version
+apiVersion: v1
+kind: Service
+metadata:
+  name: jotp-telemetry-v2
+  namespace: jotp-system
+spec:
+  ports:
+  - port: 8080
+    name: http
+  - port: 9090
+    name: grpc
+  selector:
+    app: jotp-telemetry
+    version: v2
+---
+# Traffic split: 95% v1, 5% v2
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: jotp-telemetry-canary
+  namespace: jotp-system
+spec:
+  hosts:
+  - jotp-telemetry
+  http:
+  # Header-based routing for testing
+  - match:
+    - headers:
+        x-canary:
+          exact: "true"
+    route:
+    - destination:
+        host: jotp-telemetry-v2
+      weight: 100
+
+  # Production traffic split
+  - route:
+    - destination:
+        host: jotp-telemetry-v1
+      weight: 95
+    - destination:
+        host: jotp-telemetry-v2
+      weight: 5
+---
+# Destination rule for both versions
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: jotp-telemetry-versions
+  namespace: jotp-system
+spec:
+  host: jotp-telemetry
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
