@@ -19,7 +19,7 @@ sources:
 icon: https://raw.githubusercontent.com/seanchatmangpt/jotp/main/docs/assets/jotp-logo.png
 annotations:
   artifacthub.io/category: "developer-tools"
-  artifacthub.io/license: "MIT"
+  artifacthub.io/license: "Apache-2.0"
   artifacthub.io/links: |
     - name: Documentation
       url: https://jotp.io/docs

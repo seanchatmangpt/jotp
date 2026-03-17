@@ -89,7 +89,7 @@ jobs:
 
       - name: Build release artifacts
         run: |
-          ./mvnw clean deploy -DskipTests \
+          ./mvnw clean deploy -DskipTests -Prelease \
             -Dgpg.keyname=${{ secrets.GPG_KEY_ID }} \
             -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }} \
             -Dgpg.publicKeyring=/tmp/secring.gpg \
@@ -225,13 +225,13 @@ jobs:
           java-version: '26'
           java-package: 'jdk'
           cache: 'maven'
-          server-id: ossrh
+          server-id: central
           server-username: MAVEN_CENTRAL_TOKEN
           server-password: MAVEN_CENTRAL_PASSWORD
 
       - name: Publish to Maven Central
         run: |
-          ./mvnw deploy -DskipTests \
+          ./mvnw deploy -DskipTests -Prelease \
             -Dgpg.keyname=${{ secrets.GPG_KEY_ID }} \
             --no-transfer-progress
         env:
