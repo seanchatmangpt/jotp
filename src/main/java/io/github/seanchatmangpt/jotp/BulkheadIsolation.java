@@ -335,20 +335,30 @@ public final class BulkheadIsolation<F, M> {
                             var ws = (WorkerState) state;
                             @SuppressWarnings("unchecked")
                             M typedMsg = (M) msg;
+
+                            // Track message in queue for depth monitoring
                             ws.queue.offer(typedMsg);
+
                             // Process the message using the handler
                             try {
                                 var nextState = handler.apply(ws, typedMsg);
                                 @SuppressWarnings("unchecked")
                                 WorkerState nextWs =
                                         (WorkerState) (nextState != null ? nextState : state);
+
+                                // Remove from queue after processing
+                                ws.queue.poll();
+
                                 return nextWs;
                             } catch (Exception e) {
+                                // Clean up queue on error
+                                ws.queue.poll();
                                 // Re-throw to trigger crash recovery
                                 throw new RuntimeException("Worker processing failed", e);
                             }
                         });
 
+        // Add worker to queue and ensure it's added before returning
         workers.offer((ProcRef<WorkerState, M>) ref);
     }
 
