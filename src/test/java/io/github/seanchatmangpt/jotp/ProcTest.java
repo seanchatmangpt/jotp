@@ -168,10 +168,11 @@ class ProcTest {
         var future1 = proc.ask(new TestMsg.Timeout(50), Duration.ofMillis(500));
         assertThatNoException().isThrownBy(() -> future1.get(2, TimeUnit.SECONDS));
 
-        // Ask with insufficient timeout → TimeoutException
+        // Ask with insufficient timeout → ExecutionException wrapping TimeoutException
         var future2 = proc.ask(new TestMsg.Timeout(500), Duration.ofMillis(50));
         assertThatThrownBy(() -> future2.get(1, TimeUnit.SECONDS))
-                .isInstanceOf(TimeoutException.class);
+                .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                .hasCauseInstanceOf(TimeoutException.class);
 
         proc.stop();
     }

@@ -409,11 +409,13 @@ class SupervisorTest implements WithAssertions {
         var sup = new Supervisor(Strategy.ONE_FOR_ONE, 2, Duration.ofSeconds(5));
         var ref = sup.supervise("fragile", 0, SupervisorTest::counterHandler);
 
-        // Crash 3 times — 3rd pushes over maxRestarts=2
+        // Crash 3 times — 3rd pushes over maxRestarts=2.
+        // Each crash triggers a 75ms restart delay in the supervisor before a new process is ready.
+        // Use 150ms sleep to ensure each crash lands on the newly restarted process.
         for (int i = 0; i < 3; i++) {
             ref.tell(new CounterMsg.Boom("crash " + i));
             // Wait for restart before next crash to reliably hit the threshold
-            Thread.sleep(50);
+            Thread.sleep(150);
         }
 
         // Supervisor should have terminated itself
@@ -488,26 +490,7 @@ class SupervisorTest implements WithAssertions {
 
     @Property
     void supervisedProcessIsAlwaysEventuallyReachable(
-            @ForAll @IntRange(min = 1, max = 5) int crashCount, DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: Property-Based Resilience");
-        ctx.say(
-                "For any crash count within the max restart threshold, the supervised process is always eventually reachable again.");
-        ctx.sayMermaid(
-                """
-            graph LR
-                A[Property Test] --> B[Random Crash Count: 1-5]
-                B --> C[Max Restarts = count + 2]
-                C --> D[Assert: Always Reachable]
-
-                D --> E[Pass: Supervisor resilient]
-                D --> F[Fail: Supervisor unreliable]
-
-                style E fill:#51cf66
-                style F fill:#ff6b6b
-                """);
-        ctx.say(
-                "This property-based test verifies that supervisors maintain availability under fault pressure. jqwik generates random crash counts (1-5), and for each, the process must recover and respond. The buffer of +2 restarts ensures we test within the threshold, not the boundary condition.");
-
+            @ForAll @IntRange(min = 1, max = 5) int crashCount) throws Exception {
         var sup = new Supervisor(Strategy.ONE_FOR_ONE, crashCount + 2, Duration.ofSeconds(30));
         var ref = sup.supervise("resilient", 0, SupervisorTest::counterHandler);
 
@@ -524,16 +507,6 @@ class SupervisorTest implements WithAssertions {
 
         assertThat(sup.isRunning()).isTrue();
 
-        ctx.sayKeyValue(
-                Map.of(
-                        "Crash Count",
-                        String.valueOf(crashCount),
-                        "Max Restarts",
-                        String.valueOf(crashCount + 2),
-                        "Final Reachable",
-                        "true",
-                        "Supervisor Running",
-                        String.valueOf(sup.isRunning())));
         sup.shutdown();
     }
 }

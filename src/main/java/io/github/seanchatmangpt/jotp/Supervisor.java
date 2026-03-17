@@ -601,17 +601,6 @@ public final class Supervisor {
         ChildEntry entry = find(id);
         if (entry == null || entry.stopping) return;
 
-        Instant now = Instant.now();
-        entry.restartHistory.removeIf(t -> t.isBefore(now.minus(window)));
-        entry.restartHistory.add(now);
-
-        if (entry.restartHistory.size() >= maxRestarts) {
-            fatalError = cause;
-            running = false;
-            stopAllOrdered();
-            return;
-        }
-
         // Enforce restart intensity (PERMANENT and TRANSIENT both restart on crash)
         if (exceedsIntensity(entry, cause)) return;
 
