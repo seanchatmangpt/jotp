@@ -763,14 +763,6 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
                     if (!completedSteps.contains(success.stepName())) {
                         completedSteps.add(success.stepName());
                     }
-                    new SagaContext(
-                            ctx.sagaId(),
-                            ctx.sagaName(),
-                            ctx.startTime(),
-                            ctx.currentStep() + 1,
-                            ctx.status(),
-                            results,
-                            completedSteps);
                     yield ctx.withResult(success.stepName(), success.result());
                 }
 
