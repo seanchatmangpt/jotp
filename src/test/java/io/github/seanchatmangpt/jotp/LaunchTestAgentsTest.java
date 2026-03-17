@@ -28,7 +28,52 @@ class LaunchTestAgentsTest {
         ApplicationController.reset();
     }
 
-    /** Sealed message protocol for all test agents. */
+    /**
+     * Sealed message protocol for all test agents.
+     *
+     * <p>This sealed interface enforces <b>compiler-verified exhaustiveness</b> of message handlers:
+     * all permitted message types must be explicitly handled in switch expressions, making the
+     * handler implementation provably complete at compile time. This is a key guarantee that all
+     * possible messages are accounted for, analogous to OTP's gen_server cast/call pattern where
+     * the handler must pattern-match on all message forms.
+     *
+     * <h3>Message Types</h3>
+     *
+     * <ul>
+     *   <li><b>{@code Ping()}</b> — State query message. Used for health checks and introspection;
+     *       does not modify agent state. Returns the current {@link AgentState} unchanged.
+     *   <li><b>{@code Increment(int amount)}</b> — State mutation message. Increments the agent's
+     *       counter by the specified amount. Demonstrates accumulation of numeric state.
+     *   <li><b>{@code GetState()}</b> — Introspection message. Queries the full agent state
+     *       (name, counter, log). Used for verification of internal state in tests.
+     *   <li><b>{@code Crash(String reason)}</b> — Error injection message. Throws a
+     *       RuntimeException to simulate agent failure and trigger supervisor restart logic.
+     *   <li><b>{@code Work(String payload)}</b> — Accumulation message. Appends a work entry to
+     *       the agent's log. Demonstrates stateful log accumulation over time.
+     * </ul>
+     *
+     * <h3>Immutability Guarantee</h3>
+     *
+     * <p>Each record variant is <b>immutable</b> by construction: records cannot be mutated after
+     * creation, and message handlers consume messages without side effects (they return a new
+     * {@link AgentState} rather than modifying in place). This aligns with OTP's "let it crash"
+     * philosophy where each message transforms state in a pure, functional manner.
+     *
+     * <h3>OTP Patterns</h3>
+     *
+     * <p>This sealed interface mirrors the design of Erlang/OTP's {@code gen_server} message
+     * protocol:
+     * <ul>
+     *   <li>Messages are typed at compile time (sealed permits list)
+     *   <li>Handler must account for all message forms (exhaustive switch)
+     *   <li>State is immutable and transformed by pure functions
+     *   <li>Crashes inject controlled failures for fault tolerance testing
+     * </ul>
+     *
+     * @see AgentState
+     * @see io.github.seanchatmangpt.jotp.Proc
+     * @see io.github.seanchatmangpt.jotp.Supervisor
+     */
     sealed interface AgentMsg
             permits AgentMsg.Ping,
                     AgentMsg.Increment,
