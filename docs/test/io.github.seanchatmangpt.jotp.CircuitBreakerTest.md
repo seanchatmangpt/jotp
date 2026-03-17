@@ -6,8 +6,8 @@
 - [Integration with Supervisor Semantics](#integrationwithsupervisorsemantics)
 - [Performance: Fail-Fast Latency Savings](#performancefailfastlatencysavings)
 - [CircuitBreaker: CLOSED State - Normal Operation](#circuitbreakerclosedstatenormaloperation)
-- [Complete Recovery Cycle](#completerecoverycycle)
 - [HALF_OPEN State: Automatic Recovery](#halfopenstateautomaticrecovery)
+- [Complete Recovery Cycle](#completerecoverycycle)
 
 
 In CLOSED state, failures are tracked but requests still pass through. The circuit only opens when the failure threshold is reached. This allows for transient failures without blocking legitimate requests.
@@ -24,9 +24,9 @@ var nextResult = breaker.execute("request-2", request -> "success");
 
 | Key | Value |
 | --- | --- |
-| `Next Request Result` | `Success (still allowed)` |
-| `State After Failure` | `CLOSED` |
 | `Failure Count` | `0` |
+| `State After Failure` | `CLOSED` |
+| `Next Request Result` | `Success (still allowed)` |
 
 When the probe request in HALF_OPEN state succeeds, the circuit closes. Failure count is reset to 0, and normal operation resumes. This automatic recovery enables self-healing systems.
 
@@ -44,10 +44,10 @@ assertThat(breaker.getFailureCount()).isEqualTo(0); // Reset
 
 | Key | Value |
 | --- | --- |
-| `Recovery Mode` | `Complete` |
 | `Probe Result` | `Success` |
-| `Failure Count` | `0 (reset)` |
+| `Recovery Mode` | `Complete` |
 | `New State` | `CLOSED` |
+| `Failure Count` | `0 (reset)` |
 
 ## OPEN State: Failure Threshold Triggered
 
@@ -68,8 +68,8 @@ assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
 | Key | Value |
 | --- | --- |
 | `Request Behavior` | `Fail-fast (rejected)` |
-| `New State` | `OPEN` |
 | `Threshold Reached` | `3 failures` |
+| `New State` | `OPEN` |
 
 ## Integration with Supervisor Semantics
 
@@ -93,9 +93,9 @@ assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
 | Key | Value |
 | --- | --- |
 | `maxFailures` | `5 (like Supervisor intensity)` |
-| `Threshold Triggered` | `Yes (5 failures)` |
-| `State` | `OPEN` |
 | `Window` | `1 second (like Supervisor period)` |
+| `State` | `OPEN` |
+| `Threshold Triggered` | `Yes (5 failures)` |
 
 > [!NOTE]
 > CircuitBreaker complements Supervisor by preventing cascading failures at the service call level, while Supervisor handles process-level crashes. Use both for comprehensive fault tolerance.
@@ -122,10 +122,10 @@ assertThat(latencyMs).isLessThan(10); // Should be < 10ms
 
 | Key | Value |
 | --- | --- |
-| `Latency` | `0ms` |
 | `Result Type` | `CircuitOpen` |
-| `Thread Blocked` | `No` |
+| `Latency` | `0ms` |
 | `Remote Call Executed` | `No` |
+| `Thread Blocked` | `No` |
 
 ## CircuitBreaker: CLOSED State - Normal Operation
 
@@ -147,24 +147,9 @@ var result = breaker.execute("request-1", request -> {
 | Key | Value |
 | --- | --- |
 | `Result Type` | `Success` |
-| `Requests Executed` | `1` |
-| `Response Value` | `response-1` |
 | `State` | `CLOSED` |
-
-In OPEN state, the circuit breaker rejects requests immediately without executing them. This fail-fast behavior protects the system from waiting on timeouts for known-unhealthy services. Returns CircuitOpen result instead of executing.
-
-```java
-breaker.open(); // Force circuit to OPEN
-
-var result = breaker.execute("request", request -> {
-    callCount.incrementAndGet(); // Never runs
-    return "success";
-});
-
-// Result is CircuitOpen - operation never executed
-assertThat(callCount.get()).isEqualTo(0);
-assertThat(result).isInstanceOf(CircuitBreakerResult.CircuitOpen.class);
-```
+| `Response Value` | `response-1` |
+| `Requests Executed` | `1` |
 
 > [!WARNING]
 > HALF_OPEN Probe Failure: When the probe request fails, the circuit reopens immediately. The resetTimeout starts again, preventing rapid oscillation between states. This backoff mechanism gives the service time to recover fully.
@@ -184,33 +169,10 @@ assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
 
 | Key | Value |
 | --- | --- |
-| `Result Type` | `CircuitOpen` |
-| `Operation Invoked` | `No (fail-fast)` |
-| `State` | `OPEN` |
-| `Latency Impact` | `< 1ms (no remote call)` |
-
-## Complete Recovery Cycle
-
-The full lifecycle demonstrates automatic recovery: CLOSED accumulates failures, OPEN blocks requests, HALF_OPEN probes for recovery, and success returns to CLOSED.
-
-| State | Behavior | Requests | Failures |
-| --- | --- | --- | --- |
-| CLOSED | Normal operation | All pass through | Tracked |
-
-| Key | Value |
-| --- | --- |
-| `Oscillation Prevention` | `Backoff timer` |
 | `Probe Result` | `Failure` |
-| `Next Retry` | `After resetTimeout` |
+| `Oscillation Prevention` | `Backoff timer` |
 | `New State` | `OPEN (reopened)` |
-
-| Key | Value |
-| --- | --- |
-| `Step 1` | `CLOSED → OPEN (3 failures)` |
-| `Step 5` | `CLOSED: recovery complete` |
-| `Step 4` | `HALF_OPEN: probe succeeds` |
-| `Step 3` | `Wait 600ms for timeout` |
-| `Step 2` | `OPEN: request rejected` |
+| `Next Retry` | `After resetTimeout` |
 
 ## HALF_OPEN State: Automatic Recovery
 
@@ -259,10 +221,48 @@ assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
 
 | Key | Value |
 | --- | --- |
-| `After Timeout` | `HALF_OPEN` |
 | `Initial State` | `OPEN` |
-| `Final State` | `CLOSED` |
+| `After Timeout` | `HALF_OPEN` |
 | `Probe Result` | `Success` |
+| `Final State` | `CLOSED` |
+
+## Complete Recovery Cycle
+
+The full lifecycle demonstrates automatic recovery: CLOSED accumulates failures, OPEN blocks requests, HALF_OPEN probes for recovery, and success returns to CLOSED.
+
+| State | Behavior | Requests | Failures |
+| --- | --- | --- | --- |
+| CLOSED | Normal operation | All pass through | Tracked |
+
+| Key | Value |
+| --- | --- |
+| `Step 1` | `CLOSED → OPEN (3 failures)` |
+| `Step 2` | `OPEN: request rejected` |
+| `Step 3` | `Wait 600ms for timeout` |
+| `Step 4` | `HALF_OPEN: probe succeeds` |
+| `Step 5` | `CLOSED: recovery complete` |
+
+In OPEN state, the circuit breaker rejects requests immediately without executing them. This fail-fast behavior protects the system from waiting on timeouts for known-unhealthy services. Returns CircuitOpen result instead of executing.
+
+```java
+breaker.open(); // Force circuit to OPEN
+
+var result = breaker.execute("request", request -> {
+    callCount.incrementAndGet(); // Never runs
+    return "success";
+});
+
+// Result is CircuitOpen - operation never executed
+assertThat(callCount.get()).isEqualTo(0);
+assertThat(result).isInstanceOf(CircuitBreakerResult.CircuitOpen.class);
+```
+
+| Key | Value |
+| --- | --- |
+| `Result Type` | `CircuitOpen` |
+| `Latency Impact` | `< 1ms (no remote call)` |
+| `State` | `OPEN` |
+| `Operation Invoked` | `No (fail-fast)` |
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

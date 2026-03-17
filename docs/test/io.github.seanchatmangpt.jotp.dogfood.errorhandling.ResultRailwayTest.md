@@ -4,12 +4,12 @@
 
 - [Exception Wrapping with of()](#exceptionwrappingwithof)
 - [Error Recovery with recover()](#errorrecoverywithrecover)
-- [Railway-Oriented Pipelines](#railwayorientedpipelines)
 - [Side Effects with peek() and peekError()](#sideeffectswithpeekandpeekerror)
-- [Functor: map() for Transforming Success](#functormapfortransformingsuccess)
 - [Branching with fold()](#branchingwithfold)
-- [Monad: flatMap() for Chaining Operations](#monadflatmapforchainingoperations)
 - [Railway-Oriented Programming Basics](#railwayorientedprogrammingbasics)
+- [Monad: flatMap() for Chaining Operations](#monadflatmapforchainingoperations)
+- [Functor: map() for Transforming Success](#functormapfortransformingsuccess)
+- [Railway-Oriented Pipelines](#railwayorientedpipelines)
 
 
 ## Exception Wrapping with of()
@@ -37,10 +37,10 @@ assertThat((Throwable) ((ResultRailway.Failure<Integer, ?>) failed).error())
 
 | Key | Value |
 | --- | --- |
-| `Exception Type` | `RuntimeException` |
-| `Failure Path` | `Exception caught and wrapped` |
-| `Success Path` | `Value wrapped in Success` |
 | `Bridge` | `Exception → Railway` |
+| `Success Path` | `Value wrapped in Success` |
+| `Failure Path` | `Exception caught and wrapped` |
+| `Exception Type` | `RuntimeException` |
 
 > [!NOTE]
 > Result.of() is perfect for wrapping legacy exception-based APIs. The exception becomes a value that can be processed with map/flatMap instead of try-catch.
@@ -65,32 +65,12 @@ String value2 = ResultRailway.<String, String>success("ok")
 assertThat(value2).isEqualTo("ok");
 ```
 
-## Railway-Oriented Pipelines
-
-Railway-oriented programming chains operations like track switches. Success moves forward; failure switches to a side track and bypasses remaining operations.
-
-```java
-// Railway pipeline: strip → parse → double → format
-String result = ResultRailway.<String, String>success("  42  ")
-    .map(String::strip)              // Success: "42"
-    .flatMap(s ->
-        s.matches("\d+")
-            ? ResultRailway.success(Integer.parseInt(s))  // Success: 42
-            : ResultRailway.failure("not a number")        // Failure: short-circuit
-    )
-    .map(n -> n * 2)                // Success: 84
-    .fold(n -> "result=" + n, e -> "error=" + e);
-
-// Result: "result=84"
-assertThat(result).isEqualTo("result=84");
-```
-
 | Key | Value |
 | --- | --- |
 | `Result Type` | `Success value type (T)` |
-| `Failure Path` | `Applies recovery function` |
-| `Success Path` | `Returns value unchanged` |
 | `Pattern` | `Error recovery` |
+| `Success Path` | `Returns value unchanged` |
+| `Failure Path` | `Applies recovery function` |
 
 > [!NOTE]
 > recover() is perfect for providing defaults: missing config → default value, API failure → cached response, validation error → sanitized input.
@@ -124,51 +104,10 @@ assertThat(called3).isTrue();
 
 | Key | Value |
 | --- | --- |
-| `Failure Result` | `"failed: not a number"` |
-| `Failure Pipeline` | `parse fails → rest skipped` |
-| `Success Pipeline` | `strip → parse → double → format` |
-| `Pattern` | `Railway switches` |
-| `Success Result` | `"result=84"` |
-
-> [!NOTE]
-> Railway-oriented programming makes error paths explicit and type-safe. The compiler ensures all cases are handled, and the control flow is visible in the type system.
-
-## Functor: map() for Transforming Success
-
-The map() method transforms the success value while preserving failures. This is the functor pattern — applying a function to the wrapped value without unwrapping.
-
-```java
-// Map only applies to Success
-Result<String, String> success = ResultRailway.success("hello");
-Result<String, String> upper = success.map(String::toUpperCase);
-
-assertThat(upper.isSuccess()).isTrue();
-assertThat(((ResultRailway.Success<String, ?>) upper).value()).isEqualTo("HELLO");
-
-// Map passes through Failure unchanged
-Result<String, String> failure = ResultRailway.failure("err");
-Result<String, String> mapped = failure.map(String::toUpperCase);
-
-assertThat(mapped.isFailure()).isTrue();
-assertThat(((ResultRailway.Failure<?, String>) mapped).error()).isEqualTo("err");
-```
-
-| Key | Value |
-| --- | --- |
-| `Composition` | `Chainable` |
-| `Pattern` | `Functor` |
-| `Success.map` | `Transforms value` |
-| `Failure.map` | `Passes through unchanged` |
-
-> [!NOTE]
-> map() is one-directional: it transforms Success but ignores Failure. For two-way transformation, use fold() or bimap() if available.
-
-| Key | Value |
-| --- | --- |
 | `peekError()` | `Runs on failure` |
-| `peek()` | `Runs on success` |
-| `Use Case` | `Logging, metrics, debugging` |
 | `Return` | `Original Result (chainable)` |
+| `Use Case` | `Logging, metrics, debugging` |
+| `peek()` | `Runs on success` |
 
 > [!NOTE]
 > peek() returns the original Result, enabling chaining. Use it for logging and observability without affecting the computation pipeline.
@@ -201,44 +140,13 @@ assertThat(result2).isEqualTo(-1);
 
 | Key | Value |
 | --- | --- |
-| `Return Type` | `Same for both branches (R)` |
-| `Failure Path` | `Applies error function` |
-| `Success Path` | `Applies success function` |
 | `Pattern` | `Catamorphism` |
+| `Success Path` | `Applies success function` |
+| `Failure Path` | `Applies error function` |
+| `Return Type` | `Same for both branches (R)` |
 
 > [!NOTE]
 > fold() is the most flexible way to extract values from Result. Unlike orElse(), it handles both success and failure cases explicitly.
-
-## Monad: flatMap() for Chaining Operations
-
-The flatMap() method chains operations that return Results. This is the monad pattern — sequencing computations that might fail, short-circuiting on the first failure.
-
-```java
-// Chain operations that return Result
-Result<Integer, String> result = ResultRailway.<String, String>success("42")
-    .flatMap(s -> {
-        try {
-            int n = Integer.parseInt(s);
-            return ResultRailway.success(n);
-        } catch (NumberFormatException e) {
-            return ResultRailway.failure("not a number");
-        }
-    })
-    .map(n -> n * 2);
-
-// Result: Success(84)
-assertThat(result.isSuccess()).isTrue();
-```
-
-| Key | Value |
-| --- | --- |
-| `Railway` | `Fail → Fail` |
-| `Success Chain` | `Continues to next operation` |
-| `Failure Chain` | `Short-circuits (skips rest)` |
-| `Pattern` | `Monad` |
-
-> [!NOTE]
-> flatMap() enables railway-oriented programming where operations are chained like track switches. If any operation fails, the rest of the chain is skipped.
 
 ## Railway-Oriented Programming Basics
 
@@ -270,13 +178,105 @@ assertThat(failure).isInstanceOf(ResultRailway.Failure.class);
 
 | Key | Value |
 | --- | --- |
-| `Type Safety` | `Compile-time` |
-| `Pattern` | `Sealed interface` |
-| `Success Variant` | `isSuccess() = true` |
 | `Failure Variant` | `isFailure() = true` |
+| `Success Variant` | `isSuccess() = true` |
+| `Pattern` | `Sealed interface` |
+| `Type Safety` | `Compile-time` |
 
 > [!NOTE]
 > Result<T,E> is a sealed interface with Success<T,E> and Failure<T,E> records. The compiler enforces exhaustive pattern matching, ensuring all cases are handled.
+
+## Monad: flatMap() for Chaining Operations
+
+The flatMap() method chains operations that return Results. This is the monad pattern — sequencing computations that might fail, short-circuiting on the first failure.
+
+```java
+// Chain operations that return Result
+Result<Integer, String> result = ResultRailway.<String, String>success("42")
+    .flatMap(s -> {
+        try {
+            int n = Integer.parseInt(s);
+            return ResultRailway.success(n);
+        } catch (NumberFormatException e) {
+            return ResultRailway.failure("not a number");
+        }
+    })
+    .map(n -> n * 2);
+
+// Result: Success(84)
+assertThat(result.isSuccess()).isTrue();
+```
+
+| Key | Value |
+| --- | --- |
+| `Railway` | `Fail → Fail` |
+| `Pattern` | `Monad` |
+| `Failure Chain` | `Short-circuits (skips rest)` |
+| `Success Chain` | `Continues to next operation` |
+
+> [!NOTE]
+> flatMap() enables railway-oriented programming where operations are chained like track switches. If any operation fails, the rest of the chain is skipped.
+
+## Functor: map() for Transforming Success
+
+The map() method transforms the success value while preserving failures. This is the functor pattern — applying a function to the wrapped value without unwrapping.
+
+```java
+// Map only applies to Success
+Result<String, String> success = ResultRailway.success("hello");
+Result<String, String> upper = success.map(String::toUpperCase);
+
+assertThat(upper.isSuccess()).isTrue();
+assertThat(((ResultRailway.Success<String, ?>) upper).value()).isEqualTo("HELLO");
+
+// Map passes through Failure unchanged
+Result<String, String> failure = ResultRailway.failure("err");
+Result<String, String> mapped = failure.map(String::toUpperCase);
+
+assertThat(mapped.isFailure()).isTrue();
+assertThat(((ResultRailway.Failure<?, String>) mapped).error()).isEqualTo("err");
+```
+
+| Key | Value |
+| --- | --- |
+| `Failure.map` | `Passes through unchanged` |
+| `Success.map` | `Transforms value` |
+| `Pattern` | `Functor` |
+| `Composition` | `Chainable` |
+
+> [!NOTE]
+> map() is one-directional: it transforms Success but ignores Failure. For two-way transformation, use fold() or bimap() if available.
+
+## Railway-Oriented Pipelines
+
+Railway-oriented programming chains operations like track switches. Success moves forward; failure switches to a side track and bypasses remaining operations.
+
+```java
+// Railway pipeline: strip → parse → double → format
+String result = ResultRailway.<String, String>success("  42  ")
+    .map(String::strip)              // Success: "42"
+    .flatMap(s ->
+        s.matches("\d+")
+            ? ResultRailway.success(Integer.parseInt(s))  // Success: 42
+            : ResultRailway.failure("not a number")        // Failure: short-circuit
+    )
+    .map(n -> n * 2)                // Success: 84
+    .fold(n -> "result=" + n, e -> "error=" + e);
+
+// Result: "result=84"
+assertThat(result).isEqualTo("result=84");
+```
+
+| Key | Value |
+| --- | --- |
+| `Failure Pipeline` | `parse fails → rest skipped` |
+| `Failure Result` | `"failed: not a number"` |
+| `Success Result` | `"result=84"` |
+| `Pattern` | `Railway switches` |
+| `Success Pipeline` | `strip → parse → double → format` |
+
+> [!NOTE]
+> Railway-oriented programming makes error paths explicit and type-safe. The compiler ensures all cases are handled, and the control flow is visible in the type system.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

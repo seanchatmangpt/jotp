@@ -2,90 +2,19 @@
 
 ## Table of Contents
 
-- [Bulkhead Status: FAILED State](#bulkheadstatusfailedstate)
-- [Lifecycle: Recreation After Shutdown](#lifecyclerecreationaftershutdown)
 - [Rejection Handling: FAILED State](#rejectionhandlingfailedstate)
 - [Resource Limits: Pool Size and Queue Depth](#resourcelimitspoolsizeandqueuedepth)
+- [Lifecycle: Recreation After Shutdown](#lifecyclerecreationaftershutdown)
+- [Bulkhead Status: FAILED State](#bulkheadstatusfailedstate)
 - [Fault Tolerance: Supervision-Based Recovery](#faulttolerancesupervisionbasedrecovery)
+- [BulkheadIsolation: Process-Pool-Based Feature Isolation](#bulkheadisolationprocesspoolbasedfeatureisolation)
+- [Concurrency: Multiple Senders](#concurrencymultiplesenders)
+- [Performance Trade-offs: Isolation vs Efficiency](#performancetradeoffsisolationvsefficiency)
 - [Worker Pool: On-Demand Process Spawning](#workerpoolondemandprocessspawning)
 - [Lifecycle: Graceful Shutdown](#lifecyclegracefulshutdown)
 - [Bulkhead Status: DEGRADED State](#bulkheadstatusdegradedstate)
 - [Bulkhead Status: ACTIVE State](#bulkheadstatusactivestate)
-- [Concurrency: Multiple Senders](#concurrencymultiplesenders)
-- [BulkheadIsolation: Process-Pool-Based Feature Isolation](#bulkheadisolationprocesspoolbasedfeatureisolation)
-- [Performance Trade-offs: Isolation vs Efficiency](#performancetradeoffsisolationvsefficiency)
 
-
-## Bulkhead Status: FAILED State
-
-When supervisor exceeds max restarts, bulkhead transitions to FAILED:
-- Supervisor has terminated (cannot recover)
-- All messages rejected with Rejected.Reason.FAILED
-- Manual intervention required to restart
-- Indicates systemic failure in feature
-
-Failure cascade protection:
-- One feature's failure doesn't affect others
-- Failed bulkhead stops accepting messages
-- Caller must handle Rejected result
-- System remains partially available
-
-
-```java
-var crashCounter = new AtomicInteger(0);
-var bulkhead = BulkheadIsolation.create(
-    "feature-failed",
-    2,              // Pool size
-    10,             // Queue depth
-    (state, msg) -> {
-        if (msg instanceof TestMsg.Crash) {
-            crashCounter.incrementAndGet();
-            throw new RuntimeException("Worker crash");
-        }
-        return state;
-    });
-
-// Trigger repeated crashes to exceed max restarts
-for (int i = 0; i < 10; i++) {
-    bulkhead.send(new TestMsg.Crash("test-crash-" + i));
-    Thread.sleep(50);
-}
-
-// Status transitions to FAILED
-```
-
-## Lifecycle: Recreation After Shutdown
-
-After shutdown, bulkheads can be recreated for the same feature:
-- Clean state: No residual messages or workers
-- Fresh supervisor: Reset restart counters
-- New process pool: No prior crash state
-- Same feature ID: Maintains identity
-
-Recreation pattern:
-1. Shutdown old bulkhead
-2. Create new bulkhead with same feature ID
-3. Resume message processing
-4. Fresh isolation boundaries
-
-
-```java
-var bulkhead1 = BulkheadIsolation.create(
-    "feature-recreate",
-    2, 10,
-    (state, msg) -> state);
-
-bulkhead1.shutdown();
-
-// Recreate bulkhead for same feature
-var bulkhead2 = BulkheadIsolation.create(
-    "feature-recreate",
-    2, 10,
-    (state, msg) -> state);
-
-var result = bulkhead2.send(new TestMsg.Noop());
-// result == Success (fresh bulkhead)
-```
 
 ## Rejection Handling: FAILED State
 
@@ -180,6 +109,85 @@ var bulkhead = BulkheadIsolation.create(
 | Queue | Configurable | Configurable |
 | Context Switch | Virtual scheduler | Virtual scheduler |
 
+## Lifecycle: Recreation After Shutdown
+
+After shutdown, bulkheads can be recreated for the same feature:
+- Clean state: No residual messages or workers
+- Fresh supervisor: Reset restart counters
+- New process pool: No prior crash state
+- Same feature ID: Maintains identity
+
+Recreation pattern:
+1. Shutdown old bulkhead
+2. Create new bulkhead with same feature ID
+3. Resume message processing
+4. Fresh isolation boundaries
+
+
+```java
+var bulkhead1 = BulkheadIsolation.create(
+    "feature-recreate",
+    2, 10,
+    (state, msg) -> state);
+
+bulkhead1.shutdown();
+
+// Recreate bulkhead for same feature
+var bulkhead2 = BulkheadIsolation.create(
+    "feature-recreate",
+    2, 10,
+    (state, msg) -> state);
+
+var result = bulkhead2.send(new TestMsg.Noop());
+// result == Success (fresh bulkhead)
+```
+
+| Key | Value |
+| --- | --- |
+| `First Bulkhead` | `Shut down` |
+| `Message Processing` | `Resumed normally` |
+| `Second Bulkhead` | `Created successfully` |
+| `State` | `Fresh (no residual)` |
+| `Feature ID` | `Same (feature-recreate)` |
+
+## Bulkhead Status: FAILED State
+
+When supervisor exceeds max restarts, bulkhead transitions to FAILED:
+- Supervisor has terminated (cannot recover)
+- All messages rejected with Rejected.Reason.FAILED
+- Manual intervention required to restart
+- Indicates systemic failure in feature
+
+Failure cascade protection:
+- One feature's failure doesn't affect others
+- Failed bulkhead stops accepting messages
+- Caller must handle Rejected result
+- System remains partially available
+
+
+```java
+var crashCounter = new AtomicInteger(0);
+var bulkhead = BulkheadIsolation.create(
+    "feature-failed",
+    2,              // Pool size
+    10,             // Queue depth
+    (state, msg) -> {
+        if (msg instanceof TestMsg.Crash) {
+            crashCounter.incrementAndGet();
+            throw new RuntimeException("Worker crash");
+        }
+        return state;
+    });
+
+// Trigger repeated crashes to exceed max restarts
+for (int i = 0; i < 10; i++) {
+    bulkhead.send(new TestMsg.Crash("test-crash-" + i));
+    Thread.sleep(50);
+}
+
+// Status transitions to FAILED
+```
+
 ## Fault Tolerance: Supervision-Based Recovery
 
 BulkheadIsolation uses JOTP's supervision for fault tolerance:
@@ -224,126 +232,59 @@ await().until(() -> {
 });
 ```
 
-## Worker Pool: On-Demand Process Spawning
+| Key | Value |
+| --- | --- |
+| `Send Result` | `Rejected` |
+| `Behavior` | `Fast-fail, no queuing` |
+| `Rejection Reason` | `FAILED` |
+| `Caller Action` | `Apply fallback strategy` |
 
-BulkheadIsolation creates worker processes on-demand up to the pool size limit.
-This provides efficient resource utilization while maintaining isolation boundaries.
+| Rejection Reason | When | Caller Action |
+| --- | --- | --- |
+| DEGRADED | Queue depth exceeded | Retry with backoff, shed load |
+| FAILED | Supervisor terminated | Failover to alternate, alert ops |
+| NOT_FOUND | Bulkhead doesn't exist | Create bulkhead, check configuration |
 
-Process Pool Strategy:
-- Workers created when messages arrive
-- Pool size limits maximum concurrent workers
-- Virtual threads enable lightweight scaling (~1KB per process)
-- Workers handle messages sequentially per process
+## BulkheadIsolation: Process-Pool-Based Feature Isolation
+
+BulkheadIsolation implements Joe Armstrong's bulkhead pattern using JOTP's supervision trees.
+Each feature gets its own isolated process pool with bounded queue depth, preventing
+cascading failures across features.
+
+Architecture:
+- Per-feature Supervisor with ONE_FOR_ONE restart strategy
+- Bounded process pool (poolSize workers)
+- Queue depth monitoring for overload detection
+- Graceful rejection when degraded or failed
 
 
 ```java
 var bulkhead = BulkheadIsolation.create(
-    "feature-pool",
-    5,              // Pool size: 5 workers max
-    100,            // Max queue depth
+    "feature-1",     // Feature identifier
+    3,               // Pool size: 3 worker processes
+    10,              // Max queue depth per worker
     (state, msg) -> {
-        if (msg instanceof TestMsg.Process p) {
-            Thread.sleep(p.delay);  // Simulate work
-        }
+        if (msg instanceof TestMsg.Noop) return state;
         return state;
     });
 
-// Send 5 messages to spawn 5 workers
-for (int i = 0; i < 5; i++) {
-    bulkhead.send(new TestMsg.Process("msg-" + i, 10));
-}
-
-// Process count grows to 5
-```
-
-## Lifecycle: Graceful Shutdown
-
-BulkheadIsolation supports graceful shutdown:
-- Stops accepting new messages immediately
-- In-flight messages complete processing
-- Workers terminate after queue drains
-- Clean resource release
-
-Shutdown behavior:
-- send() returns Rejected after shutdown()
-- No new messages queued
-- Existing workers finish current messages
-- Supervisor terminates all workers
-
-
-```java
-var bulkhead = BulkheadIsolation.create(
-    "feature-shutdown",
-    2, 10,
-    (state, msg) -> state);
-
-// Send message before shutdown
-bulkhead.send(new TestMsg.Noop());
-
-// Shutdown bulkhead
-bulkhead.shutdown();
-
-// Send after shutdown returns Rejected
 var result = bulkhead.send(new TestMsg.Noop());
-// result == Rejected
+// result == Success
 ```
 
-## Bulkhead Status: DEGRADED State
+| Key | Value |
+| --- | --- |
+| `Feature ID` | `feature-1` |
+| `Pool Size` | `3 workers` |
+| `Process Count` | `1` |
+| `Send Result` | `Success` |
 
-When queue depth exceeds maxQueueDepth threshold, bulkhead transitions to DEGRADED:
-- At least one worker's mailbox is overloaded
-- Messages still accepted but system is under stress
-- Alerts triggered for monitoring
-- May lead to rejections if overload continues
-
-Degraded status provides early warning before failure:
-- maxQueueDepth: Depth of most congested worker queue
-- totalRejections: Running count of rejected messages
-
-
-```java
-var bulkhead = BulkheadIsolation.create(
-    "feature-degraded",
-    1,              // Single worker
-    3,              // Low queue threshold
-    (state, msg) -> {
-        if (msg instanceof TestMsg.Process p) {
-            Thread.sleep(100);  // Slow processing
-        }
-        return state;
-    });
-
-// Send many messages to overwhelm queue
-for (int i = 0; i < 6; i++) {
-    bulkhead.send(new TestMsg.Process("msg-" + i, 50));
-}
-
-// Status transitions to DEGRADED
-```
-
-## Bulkhead Status: ACTIVE State
-
-Freshly created bulkheads start in ACTIVE status, indicating:
-- All workers healthy and responsive
-- Queue depths below threshold
-- No supervisor restarts exceeded
-- System accepting messages
-
-Active status includes metrics for observability:
-- processCount: Number of active worker processes
-- totalRejections: Cumulative rejected messages
-
-
-```java
-var bulkhead = BulkheadIsolation.create(
-    "feature-status",
-    3,              // Pool size
-    5,              // Max queue depth
-    (state, msg) -> state);
-
-BulkheadIsolation.BulkheadStatus status = bulkhead.status();
-// status == Active(processCount=3, totalRejections=0)
-```
+| Component | Purpose | Key Benefit |
+| --- | --- | --- |
+| Supervisor | ONE_FOR_ONE restart strategy | Isolated crash recovery per feature |
+| Process Pool | Bounded worker processes | Prevents resource exhaustion |
+| Queue Monitor | Tracks mailbox depth | Detects overload before failure |
+| Graceful Rejection | Returns Rejected on overload | Caller can apply backpressure |
 
 ## Concurrency: Multiple Senders
 
@@ -395,37 +336,10 @@ latch.await();
 
 | Key | Value |
 | --- | --- |
-| `Health` | `All workers healthy` |
-| `Process Count` | `0` |
-| `Total Rejections` | `0` |
-| `Status` | `ACTIVE` |
-
-## BulkheadIsolation: Process-Pool-Based Feature Isolation
-
-BulkheadIsolation implements Joe Armstrong's bulkhead pattern using JOTP's supervision trees.
-Each feature gets its own isolated process pool with bounded queue depth, preventing
-cascading failures across features.
-
-Architecture:
-- Per-feature Supervisor with ONE_FOR_ONE restart strategy
-- Bounded process pool (poolSize workers)
-- Queue depth monitoring for overload detection
-- Graceful rejection when degraded or failed
-
-
-```java
-var bulkhead = BulkheadIsolation.create(
-    "feature-1",     // Feature identifier
-    3,               // Pool size: 3 worker processes
-    10,              // Max queue depth per worker
-    (state, msg) -> {
-        if (msg instanceof TestMsg.Noop) return state;
-        return state;
-    });
-
-var result = bulkhead.send(new TestMsg.Noop());
-// result == Success
-```
+| `Recovery` | `Manual restart required` |
+| `Total Rejections` | `5` |
+| `Status` | `FAILED` |
+| `Crashes Triggered` | `3` |
 
 ## Performance Trade-offs: Isolation vs Efficiency
 
@@ -485,62 +399,45 @@ var efficient = BulkheadIsolation.create(
 | Medium (10/100) | ~100 msg/sec | ~100KB |
 | Large (20/1000) | ~1000 msg/sec | ~200KB |
 
-| Key | Value |
-| --- | --- |
-| `Feature ID` | `Same (feature-recreate)` |
-| `First Bulkhead` | `Shut down` |
-| `Message Processing` | `Resumed normally` |
-| `Second Bulkhead` | `Created successfully` |
-| `State` | `Fresh (no residual)` |
+## Worker Pool: On-Demand Process Spawning
+
+BulkheadIsolation creates worker processes on-demand up to the pool size limit.
+This provides efficient resource utilization while maintaining isolation boundaries.
+
+Process Pool Strategy:
+- Workers created when messages arrive
+- Pool size limits maximum concurrent workers
+- Virtual threads enable lightweight scaling (~1KB per process)
+- Workers handle messages sequentially per process
+
+
+```java
+var bulkhead = BulkheadIsolation.create(
+    "feature-pool",
+    5,              // Pool size: 5 workers max
+    100,            // Max queue depth
+    (state, msg) -> {
+        if (msg instanceof TestMsg.Process p) {
+            Thread.sleep(p.delay);  // Simulate work
+        }
+        return state;
+    });
+
+// Send 5 messages to spawn 5 workers
+for (int i = 0; i < 5; i++) {
+    bulkhead.send(new TestMsg.Process("msg-" + i, 10));
+}
+
+// Process count grows to 5
+```
 
 | Key | Value |
 | --- | --- |
-| `In-Flight Messages` | `Complete normally` |
-| `Post-Shutdown Send` | `Rejected` |
-| `Resource Release` | `Clean termination` |
-| `Pre-Shutdown Send` | `Success` |
-
-| Key | Value |
-| --- | --- |
-| `Feature ID` | `feature-1` |
-| `Pool Size` | `3 workers` |
-| `Process Count` | `1` |
-| `Send Result` | `Success` |
-
-| Component | Purpose | Key Benefit |
-| --- | --- | --- |
-| Supervisor | ONE_FOR_ONE restart strategy | Isolated crash recovery per feature |
-| Process Pool | Bounded worker processes | Prevents resource exhaustion |
-| Queue Monitor | Tracks mailbox depth | Detects overload before failure |
-| Graceful Rejection | Returns Rejected on overload | Caller can apply backpressure |
-
-| Key | Value |
-| --- | --- |
-| `Crashes Triggered` | `3` |
-| `Recovery` | `Manual restart required` |
-| `Total Rejections` | `4` |
-| `Status` | `FAILED` |
-
-| Key | Value |
-| --- | --- |
-| `Caller Action` | `Apply fallback strategy` |
-| `Send Result` | `Rejected` |
-| `Behavior` | `Fast-fail, no queuing` |
-| `Rejection Reason` | `FAILED` |
-
-| Rejection Reason | When | Caller Action |
-| --- | --- | --- |
-| DEGRADED | Queue depth exceeded | Retry with backoff, shed load |
-| FAILED | Supervisor terminated | Failover to alternate, alert ops |
-| NOT_FOUND | Bulkhead doesn't exist | Create bulkhead, check configuration |
-
-| Key | Value |
-| --- | --- |
-| `Other Workers` | `Continued during restart` |
-| `Message Loss` | `None (queue preserved)` |
 | `Manual Intervention` | `Not required` |
 | `Recovery Strategy` | `ONE_FOR_ONE supervision` |
 | `Crashes Detected` | `1` |
+| `Other Workers` | `Continued during restart` |
+| `Message Loss` | `None (queue preserved)` |
 
 | Supervision Feature | Benefit | Enterprise Value |
 | --- | --- | --- |
@@ -549,12 +446,84 @@ var efficient = BulkheadIsolation.create(
 | State Preservation | Queue preserved during restart | No message loss, no data corruption |
 | Restart Throttling | Max restarts prevents crash loops | System stability, controlled failure |
 
+## Lifecycle: Graceful Shutdown
+
+BulkheadIsolation supports graceful shutdown:
+- Stops accepting new messages immediately
+- In-flight messages complete processing
+- Workers terminate after queue drains
+- Clean resource release
+
+Shutdown behavior:
+- send() returns Rejected after shutdown()
+- No new messages queued
+- Existing workers finish current messages
+- Supervisor terminates all workers
+
+
+```java
+var bulkhead = BulkheadIsolation.create(
+    "feature-shutdown",
+    2, 10,
+    (state, msg) -> state);
+
+// Send message before shutdown
+bulkhead.send(new TestMsg.Noop());
+
+// Shutdown bulkhead
+bulkhead.shutdown();
+
+// Send after shutdown returns Rejected
+var result = bulkhead.send(new TestMsg.Noop());
+// result == Rejected
+```
+
 | Key | Value |
 | --- | --- |
-| `Messages Sent` | `5` |
+| `Post-Shutdown Send` | `Rejected` |
+| `Resource Release` | `Clean termination` |
+| `Pre-Shutdown Send` | `Success` |
+| `In-Flight Messages` | `Complete normally` |
+
+## Bulkhead Status: DEGRADED State
+
+When queue depth exceeds maxQueueDepth threshold, bulkhead transitions to DEGRADED:
+- At least one worker's mailbox is overloaded
+- Messages still accepted but system is under stress
+- Alerts triggered for monitoring
+- May lead to rejections if overload continues
+
+Degraded status provides early warning before failure:
+- maxQueueDepth: Depth of most congested worker queue
+- totalRejections: Running count of rejected messages
+
+
+```java
+var bulkhead = BulkheadIsolation.create(
+    "feature-degraded",
+    1,              // Single worker
+    3,              // Low queue threshold
+    (state, msg) -> {
+        if (msg instanceof TestMsg.Process p) {
+            Thread.sleep(100);  // Slow processing
+        }
+        return state;
+    });
+
+// Send many messages to overwhelm queue
+for (int i = 0; i < 6; i++) {
+    bulkhead.send(new TestMsg.Process("msg-" + i, 50));
+}
+
+// Status transitions to DEGRADED
+```
+
+| Key | Value |
+| --- | --- |
 | `Strategy` | `On-demand spawning` |
 | `Pool Size Limit` | `5 workers` |
 | `Active Processes` | `1` |
+| `Messages Sent` | `5` |
 
 | Metric | Value |
 | --- | --- |
@@ -562,6 +531,37 @@ var efficient = BulkheadIsolation.create(
 | Spawn Time | <1ms |
 | Max Pool Size | Configurable |
 | Context Switch | Virtual thread scheduler |
+
+## Bulkhead Status: ACTIVE State
+
+Freshly created bulkheads start in ACTIVE status, indicating:
+- All workers healthy and responsive
+- Queue depths below threshold
+- No supervisor restarts exceeded
+- System accepting messages
+
+Active status includes metrics for observability:
+- processCount: Number of active worker processes
+- totalRejections: Cumulative rejected messages
+
+
+```java
+var bulkhead = BulkheadIsolation.create(
+    "feature-status",
+    3,              // Pool size
+    5,              // Max queue depth
+    (state, msg) -> state);
+
+BulkheadIsolation.BulkheadStatus status = bulkhead.status();
+// status == Active(processCount=3, totalRejections=0)
+```
+
+| Key | Value |
+| --- | --- |
+| `Process Count` | `0` |
+| `Total Rejections` | `0` |
+| `Status` | `ACTIVE` |
+| `Health` | `All workers healthy` |
 
 | Key | Value |
 | --- | --- |

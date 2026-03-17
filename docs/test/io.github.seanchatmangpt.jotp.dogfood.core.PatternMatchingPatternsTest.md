@@ -40,9 +40,9 @@ String describe(Payment payment) {
 | Key | Value |
 | --- | --- |
 | `Cardholder` | `Alice` |
-| `Payment Type` | `Credit Card` |
-| `Number Display` | `Masked (************3456)` |
 | `Full Number` | `Not exposed (security)` |
+| `Number Display` | `Masked (************3456)` |
+| `Payment Type` | `Credit Card` |
 
 > [!NOTE]
 > Record destructuring eliminates the need for getters and casting. The var keyword infers types from the record components, making the code concise yet type-safe.
@@ -67,10 +67,10 @@ String riskLevel(Payment payment) {
 
 | Key | Value |
 | --- | --- |
-| `High Limit Card` | `Risk: HIGH` |
-| `Pattern` | `Guarded with when clause` |
-| `Low Limit Card` | `Risk: LOW` |
 | `Medium Limit Card` | `Risk: MEDIUM` |
+| `Low Limit Card` | `Risk: LOW` |
+| `Pattern` | `Guarded with when clause` |
+| `High Limit Card` | `Risk: HIGH` |
 
 > [!NOTE]
 > Guarded patterns enable sophisticated business logic without nested if statements. The conditions are evaluated in order, so put specific cases before general ones.
@@ -96,10 +96,10 @@ double processingFee(Payment payment, double amount) {
 
 | Key | Value |
 | --- | --- |
-| `High-Limit Card Fee` | `2.5% ($25 on $1000)` |
 | `Bank Transfer Fee` | `0.1% ($1 on $1000)` |
-| `Expression` | `Returns value directly` |
+| `High-Limit Card Fee` | `2.5% ($25 on $1000)` |
 | `Normal Card Fee` | `3% ($30 on $1000)` |
+| `Expression` | `Returns value directly` |
 
 > [!NOTE]
 > Switch expressions must be exhaustive — the compiler ensures all cases are covered. This prevents missing case bugs that plagued traditional switch statements.
@@ -135,10 +135,10 @@ if (obj instanceof Double d && d > 0) {
 
 | Key | Value |
 | --- | --- |
-| `String Input` | `'  123.45  ' → Optional(123.45)` |
-| `Double Input` | `25.5 → Optional(25.5)` |
-| `Pattern` | `Test, cast, and guard in one` |
 | `Integer Input` | `42 → Optional(42.0)` |
+| `Pattern` | `Test, cast, and guard in one` |
+| `Double Input` | `25.5 → Optional(25.5)` |
+| `String Input` | `'  123.45  ' → Optional(123.45)` |
 
 > [!NOTE]
 > Pattern matching with instanceof supports guards (&& condition) for additional filtering. The pattern variable (d, i, etc.) is only in scope when the pattern matches.
@@ -163,9 +163,9 @@ String route(Payment payment) {
 | Key | Value |
 | --- | --- |
 | `Null Payment` | `Routed to: rejected` |
-| `Null Safety` | `Explicit null case` |
-| `Bank Transfer` | `Routed to: sepa-gateway` |
 | `Credit Card` | `Routed to: card-processor` |
+| `Bank Transfer` | `Routed to: sepa-gateway` |
+| `Null Safety` | `Explicit null case` |
 
 > [!NOTE]
 > The null case must come first (or compiler warns). This explicit null handling makes the API contract clear — null inputs are rejected with a specific error message.

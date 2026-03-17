@@ -16,11 +16,11 @@ Tests concurrent message delivery with zero message loss guarantee.
 
 | Key | Value |
 | --- | --- |
-| `Messages` | `10000` |
-| `Pattern` | `Actor` |
-| `Notes` | `Concurrent delivery validated under stress` |
-| `Delivered` | `10000` |
 | `Status` | `PASS` |
+| `Delivered` | `10000` |
+| `Notes` | `Concurrent delivery validated under stress` |
+| `Pattern` | `Actor` |
+| `Messages` | `10000` |
 
 ## Pattern Stress Test: Supervisor Crash Recovery
 

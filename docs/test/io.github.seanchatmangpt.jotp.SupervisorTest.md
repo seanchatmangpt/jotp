@@ -5,17 +5,17 @@
 - [Supervisor: Fault-Tolerant Supervision Tree](#supervisorfaulttolerantsupervisiontree)
 
 
+Max restarts throttling prevents infinite restart loops.
+If a child crashes more than maxRestarts times within the window duration,
+the supervisor gives up and terminates itself (including all children).
+This prevents cascading failures from unstable processes.
+
+
 ## Supervisor: Fault-Tolerant Supervision Tree
 
 Supervisor implements hierarchical process supervision with configurable restart strategies.
 ONE_FOR_ONE: Only the crashed child is restarted. Siblings are unaffected.
 Best for independent workers where one failure shouldn't cascade to healthy processes.
-
-
-Max restarts throttling prevents infinite restart loops.
-If a child crashes more than maxRestarts times within the window duration,
-the supervisor gives up and terminates itself (including all children).
-This prevents cascading failures from unstable processes.
 
 
 REST_FOR_ONE: The crashed child and all children started AFTER it are restarted.

@@ -30,10 +30,10 @@ assertThat(result.third()).isEqualTo("c");
 | Key | Value |
 | --- | --- |
 | `Task 1 Result` | `a` |
-| `Pattern` | `Extensible to N tasks` |
-| `Completion` | `All 3 tasks succeeded` |
-| `Task 2 Result` | `b` |
 | `Task 3 Result` | `c` |
+| `Task 2 Result` | `b` |
+| `Completion` | `All 3 tasks succeeded` |
+| `Pattern` | `Extensible to N tasks` |
 
 > [!NOTE]
 > In production, you'd use generic StructuredTaskScope to run any number of tasks. The runAll pattern here shows a typed triple for convenience. Consider using StructuredTaskScope.join() with a list of Subtasks for N-ary concurrency.
@@ -65,9 +65,9 @@ assertThat(result).isIn("fast", "slow");
 | Key | Value |
 | --- | --- |
 | `Winning Task` | `slow` |
-| `Race Condition` | `Non-deterministic` |
-| `Losing Task` | `Cancelled` |
 | `Pattern` | `First-success wins` |
+| `Losing Task` | `Cancelled` |
+| `Race Condition` | `Non-deterministic` |
 
 > [!NOTE]
 > This pattern is ideal for redundant services (multiple APIs, database replicas) where you want the fastest response. StructuredTaskScope ensures the slower tasks are cancelled to free resources.
@@ -98,9 +98,9 @@ assertThat(result.second()).isEqualTo(42);
 | Key | Value |
 | --- | --- |
 | `Completion` | `Both tasks succeeded` |
-| `Second Task Result` | `42` |
-| `Resource Cleanup` | `Automatic` |
 | `First Task Result` | `hello` |
+| `Resource Cleanup` | `Automatic` |
+| `Second Task Result` | `42` |
 
 > [!NOTE]
 > StructuredTaskScope ensures that if the first task fails, the second is automatically cancelled. No more orphaned threads wasting resources.
@@ -126,9 +126,9 @@ try {
 | Key | Value |
 | --- | --- |
 | `Exception Type` | `StructuredTaskScope$FailedException` |
-| `Error Propagation` | `Immediate` |
-| `Task 2 Status` | `Cancelled` |
 | `Resource Cleanup` | `Automatic` |
+| `Task 2 Status` | `Cancelled` |
+| `Error Propagation` | `Immediate` |
 
 > [!NOTE]
 > StructuredTaskScope.join() throws if any task failed. The exception contains all aggregated failures, making debugging easier than manual Future.get() error handling.
@@ -152,9 +152,9 @@ assertThatThrownBy(() ->
 | Key | Value |
 | --- | --- |
 | `First Task` | `Completed (result discarded)` |
-| `Cleanup` | `All tasks cancelled` |
-| `Second Task` | `Failed` |
 | `Overall Result` | `Exception propagated` |
+| `Second Task` | `Failed` |
+| `Cleanup` | `All tasks cancelled` |
 
 > [!NOTE]
 > This 'fail-fast' behavior is crucial for resource management. When a database query fails, there's no point continuing to fetch related data — cancel everything and report the error.
