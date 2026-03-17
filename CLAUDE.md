@@ -118,8 +118,15 @@ If genuinely blocked: `throw new UnsupportedOperationException("not implemented:
 io.github.seanchatmangpt.jotp
 ├── Proc, ProcRef, ProcLink, ProcMonitor, ProcRegistry, ProcTimer, ProcSys, ProcLib
 ├── Supervisor, CrashRecovery, StateMachine, EventManager, Parallel, ExitSignal, Result
-├── ApplicationController, ApplicationSpec, ApplicationCallback, StartType, RunType
-└── dogfood/   ← template-generated examples, not production primitives
+├── GenServer, ApplicationController, ApplicationSpec, ApplicationCallback, StartType, RunType
+├── CircuitBreaker, RateLimiter, BulkheadIsolation, LoadBalancer, AckRetry
+├── EventStore, EventSourcingAuditLog, MessageBus, MessageStore
+├── DistributedActorBridge, DistributedSagaCoordinator, SagaOrchestrator
+├── MetricsCollector, DebugEvent, DebugObserver, DistributedTracer
+└── dogfood/     ← template-generated examples, not production primitives
+    enterprise/  ← enterprise-grade patterns (compiled, tests excluded from CI)
+    messagepatterns/  ← Vaughn Vernon's reactive messaging patterns (Java 26 port)
+    examples/    ← working application examples
 ```
 
 ### Key Design Patterns
@@ -133,11 +140,13 @@ io.github.seanchatmangpt.jotp
 ### Testing Architecture
 
 Tests are organized in several categories:
-- **Unit Tests**: Core functionality (`*Test.java`)
-- **Integration Tests**: Cross-component interactions (`*IT.java`)
-- **Dogfood Tests**: Self-validation of JOTP using JOTP (`dogfood.*`)
-- **Stress Tests**: Performance and reliability under load (`stress.*`)
-- **Pattern Tests**: Enterprise integration patterns (`messagepatterns.*`)
+- **Unit Tests**: Core functionality (`*Test.java`) — run in CI
+- **Integration Tests**: Cross-component interactions (`*IT.java`) — run in CI
+- **Dogfood Tests**: Self-validation of JOTP using JOTP (`dogfood.*`) — run in CI
+- **Stress Tests**: Performance and reliability under load (`stress.*`) — excluded from CI
+- **Pattern Tests**: Enterprise integration patterns (`messagepatterns.*`) — excluded from CI
+- **Enterprise Tests**: Enterprise components (`enterprise.*`) — excluded from CI
+- **Observability Tests**: Framework metrics and profiling (`observability.*`) — partially excluded
 
 ### Test Conventions
 
@@ -148,13 +157,25 @@ Tests are organized in several categories:
 - **Instancio** for test data generation
 - `ApplicationController.reset()` in `@BeforeEach` — required for test isolation
 
-### Excluded Components
+### Excluded Components (pom.xml)
 
-Some components are currently excluded from compilation due to ongoing development:
-- `**/messaging/**` - Experimental messaging system
-- `**/enterprise/**` - Enterprise patterns under evaluation
-- `**/pool/**` - Connection pooling patterns
-- Various experimental features with integration dependencies
+The following are excluded from the standard test run due to unimplemented dependencies or ongoing development:
+
+**Source exclusions (compilation):**
+- `**/messaging/**` — experimental messaging system (unimplemented classes)
+- `**/dogfood/messaging/DeadLetterChannelExample.java` — references unimplemented messaging
+- `**/dogfood/messaging/MessageExpirationExample.java` — references unimplemented messaging
+
+**Test exclusions (Surefire/Failsafe):**
+- `**/messaging/**` — test references unimplemented classes
+- `**/testing/util/**`, `**/testing/extensions/**` — test utilities with messaging deps
+- Specific `testing/` tests: `MessageBuilderTest`, `MessageAssertionsTest`, `AnnotationsValidationTest`, `CorrelationIdTrackerTest`, `JotpTestHelperTest`, `PerformanceTestHelperTest`, `MessageCapturingExtensionTest`
+- `**/enterprise/**` — enterprise tests
+- `**/messagepatterns/**` — reactive messaging pattern tests
+- `**/stress/**`, `**/test/AtlasOtpStressTest.java` — stress tests
+- `**/test/patterns/**` — pattern tests
+- `EventSourcingAuditLogTest`, `ProcSysTest`, `ProcStressTest`, `ProcAskTimeoutTest`
+- `**/pool/**` — connection pooling
 
 ## Key Conventions
 
@@ -172,11 +193,45 @@ Some components are currently excluded from compilation due to ongoing developme
 
 ## Documentation
 
-- **Book**: `book/src/` - Comprehensive guide with examples
-- **Docs**: `docs/` - Technical documentation and patterns
+- **Books**: `books/jotp-patterns/` and `books/jotpops/` — comprehensive guides
+- **Docs**: `docs/` — technical documentation and patterns
   - `docs/ARCHITECTURE.md` — enterprise patterns, competitive analysis, performance benchmarks
+  - `docs/ARCHITECTURE-C4.md` — C4 model diagrams
   - `docs/SLA-PATTERNS.md` — SRE runbooks, monitoring, disaster recovery
   - `docs/INTEGRATION-PATTERNS.md` — brownfield Spring Boot adoption strategy
-- **Examples**: `src/main/java/io/github/seanchatmangpt/jotp/examples/` - Working examples
-- **Thesis**: `docs/phd-thesis-otp-java26.md` - Formal OTP ↔ Java 26 equivalence proofs
-- **User Guide**: `docs/user-guide/` - Next.js/MDX documentation (100+ files, 150K+ words)
+  - `docs/OPENTELEMETRY.md` — OpenTelemetry integration guide
+  - `docs/JOTP-PERFORMANCE-REPORT.md` — validated DTR benchmark results
+  - `docs/user-guide/` — Next.js/MDX documentation (100+ files, 150K+ words)
+- **Examples**: `src/main/java/io/github/seanchatmangpt/jotp/examples/` — working examples
+  - `ApplicationLifecycleExample.java`, `ChaosDemo.java`, `DistributedPaymentProcessing.java`
+  - `EcommerceOrderService.java`, `MultiTenantSaaSPlatform.java`
+- **User Guide**: `docs/user-guide/` — Next.js/MDX documentation (100+ files, 150K+ words)
+
+## Repository Layout
+
+```
+jotp/
+├── src/main/java/       # 240+ Java source files
+├── src/test/java/       # 234 test files
+├── src/test-archive/    # Archived experimental tests
+├── docs/                # 30+ markdown docs, 20+ subdirectories
+├── books/               # jotp-patterns/, jotpops/ books
+├── benchmark-site/      # Next.js benchmark visualization
+├── benchmark-results/   # JMH benchmark output data
+├── spring-boot-integration/ # Spring Boot integration examples
+├── docker/              # Container build artifacts
+├── otel/                # OpenTelemetry config (Jaeger, Prometheus, Grafana)
+├── .github/workflows/   # 14 CI/CD GitHub Actions workflows
+├── .mvn/                # Maven Daemon + proxy + JVM config
+├── scripts/             # Utility scripts
+├── bin/                 # Executables: dogfood, feed-patterns, jgen, mvndw
+└── templates/           # Code generation templates
+```
+
+## CI/CD and Deployment
+
+- **GitHub Actions**: 14 workflows covering CI, quality gates, publishing, deployment
+- **Quality Gates**: `quality-gates.yml` enforces guard checks, formatting, and test pass
+- **Publishing**: `publish.yml` → Maven Central via Nexus Staging + GPG signing
+- **Deployment**: `make deploy CLOUD=oci` — full cloud pipeline (OCI default)
+- **Docker**: Multi-variant images (production, dev, minimal) via `Containerfile.*`
