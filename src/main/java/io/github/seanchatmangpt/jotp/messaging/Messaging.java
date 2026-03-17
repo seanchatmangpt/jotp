@@ -180,7 +180,7 @@ public final class Messaging {
          * @param handler the handler to receive messages of this type
          */
         <T extends M> void addRoute(
-                Class<T> messageType, io.github.seanchatmangpt.jotp.ProcRef<T> handler);
+                Class<T> messageType, io.github.seanchatmangpt.jotp.ProcRef<?, T> handler);
 
         /**
          * Dispatches a message to the appropriate handler based on its type.
@@ -210,6 +210,9 @@ public final class Messaging {
 
         /** Drains all undelivered messages from the channel. */
         List<DeadLetter<M>> drain();
+
+        /** Sends a message with a specific failure reason. */
+        void send(M message, String reason);
 
         /** Dead letter with reason. */
         record DeadLetter<M>(M message, String reason, Instant timestamp) {
@@ -362,14 +365,14 @@ public final class Messaging {
     private static final class DataTypeChannelImpl<M extends Message<?>>
             implements DataTypeChannel<M> {
 
-        private final Map<Class<?>, io.github.seanchatmangpt.jotp.ProcRef<?>> routes =
+        private final Map<Class<?>, io.github.seanchatmangpt.jotp.ProcRef<?, ?>> routes =
                 new java.util.concurrent.ConcurrentHashMap<>();
         private final java.util.concurrent.atomic.AtomicLong totalDispatched =
                 new java.util.concurrent.atomic.AtomicLong(0);
 
         @Override
         public <T extends M> void addRoute(
-                Class<T> messageType, io.github.seanchatmangpt.jotp.ProcRef<T> handler) {
+                Class<T> messageType, io.github.seanchatmangpt.jotp.ProcRef<?, T> handler) {
             routes.put(messageType, handler);
         }
 
@@ -379,7 +382,7 @@ public final class Messaging {
             totalDispatched.incrementAndGet();
             var handler = routes.get(message.getClass());
             if (handler != null) {
-                ((io.github.seanchatmangpt.jotp.ProcRef<M>) handler).tell(message);
+                ((io.github.seanchatmangpt.jotp.ProcRef<?, M>) handler).tell(message);
             }
         }
 
@@ -409,13 +412,15 @@ public final class Messaging {
         }
 
         @Override
+        @SuppressWarnings("unchecked")
         public ChannelState getState() {
             var dispatchCounts = new java.util.HashMap<Class<?>, Long>();
             for (var type : routes.keySet()) {
                 dispatchCounts.put(type, totalDispatched.get());
             }
-            return new ChannelState(
-                    List.copyOf(routes.keySet()), totalDispatched.get(), dispatchCounts);
+            var registeredTypes = new java.util.ArrayList<>(
+                    (java.util.Collection<Class<? extends Message<?>>>) (java.util.Collection<?>) routes.keySet());
+            return new ChannelState(registeredTypes, totalDispatched.get(), dispatchCounts);
         }
     }
 

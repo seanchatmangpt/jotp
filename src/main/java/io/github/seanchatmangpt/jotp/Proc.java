@@ -392,8 +392,8 @@ public final class Proc<S, M> {
         }
     }
 
-    /** Package-private: current mailbox depth — used by {@link ProcSys#statistics}. */
-    int mailboxSize() {
+    /** Returns the current mailbox depth. Used by {@link ProcSys#statistics} and channel implementations. */
+    public int mailboxSize() {
         return mailbox.size();
     }
 

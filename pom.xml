@@ -166,51 +166,19 @@
                         <arg>--enable-preview</arg>
                     </compilerArgs>
                     <excludes>
-                        <!-- Messaging system - experimental package under development -->
-                        <!-- Root messaging package excluded (tests reference unimplemented classes) -->
-                        <exclude>io/github/seanchatmangpt/jotp/messaging/**</exclude>
-                        <!-- dogfood/messaging examples that reference unimplemented messaging.system classes -->
-                        <exclude>io/github/seanchatmangpt/jotp/dogfood/messaging/DeadLetterChannelExample.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/dogfood/messaging/MessageExpirationExample.java</exclude>
                     </excludes>
                     <testExcludes>
                         <!-- Messaging tests reference unimplemented classes in io.github.seanchatmangpt.jotp.messaging -->
                         <exclude>io/github/seanchatmangpt/jotp/messaging/**</exclude>
-                        <!-- Other tests with compilation issues referencing unimplemented messaging classes -->
-                        <exclude>io/github/seanchatmangpt/jotp/testing/util/**</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/extensions/**</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/MessageBuilderTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/MessageAssertionsTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/AnnotationsValidationTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/CorrelationIdTrackerTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/JotpTestHelperTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/PerformanceTestHelperTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/testing/MessageCapturingExtensionTest.java</exclude>
-                        <!-- Observability tests with API incompatibility issues -->
-                        <exclude>io/github/seanchatmangpt/jotp/observability/FrameworkObservabilityTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/PatternsIntegrationTest.java</exclude>
-                        <!-- Tests with @DtrTest annotation issues or missing DTR imports - being migrated -->
-                        <!-- TODO: Fix DTR annotations and remove exclusions -->
-                        <!-- DTR Tests Converted - Ready for compilation -->
-                        <!-- Core OTP Tests -->
-                        <exclude>io/github/seanchatmangpt/jotp/test/ProcSysTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/test/ProcStressTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/test/ProcAskTimeoutTest.java</exclude>
-                        <exclude>io/github/seanchatmangpt/jotp/test/DistributedActorBridgeTest.java</exclude>
-                        <!-- Enterprise Tests -->
-                        <exclude>io/github/seanchatmangpt/jotp/enterprise/**</exclude>
-                        <!-- Message Patterns -->
+                        <!-- Message Patterns depend on messaging system -->
                         <exclude>io/github/seanchatmangpt/jotp/messagepatterns/**</exclude>
-                        <!-- Observability Tests -->
-                        <exclude>io/github/seanchatmangpt/jotp/observability/FrameworkObservabilityTest.java</exclude>
-                        <!-- Stress Tests -->
+                        <!-- Stress Tests - performance benchmarks, not part of regular test suite -->
                         <exclude>io/github/seanchatmangpt/jotp/stress/**</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/test/AtlasOtpStressTest.java</exclude>
+                        <!-- Integration tests that require full infrastructure -->
                         <exclude>io/github/seanchatmangpt/jotp/test/EnterpriseCompositionIT.java</exclude>
-                        <!-- Pattern Tests -->
                         <exclude>io/github/seanchatmangpt/jotp/test/patterns/**</exclude>
-                        <!-- Additional Tests -->
-                        <exclude>io/github/seanchatmangpt/jotp/EventSourcingAuditLogTest.java</exclude>
+                        <!-- Connection pooling - not yet implemented -->
                         <exclude>io/github/seanchatmangpt/jotp/pool/**</exclude>
                     </testExcludes>
                 </configuration>

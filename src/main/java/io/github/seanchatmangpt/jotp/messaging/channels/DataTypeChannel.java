@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class DataTypeChannel<M extends Message<?>> {
 
-    private final Map<Class<?>, ProcRef<?>> routes = new ConcurrentHashMap<>();
+    private final Map<Class<?>, ProcRef<?, ?>> routes = new ConcurrentHashMap<>();
     private final AtomicLong totalDispatched = new AtomicLong(0);
     private final Map<Class<?>, AtomicLong> dispatchCountByType = new ConcurrentHashMap<>();
 
@@ -74,7 +74,7 @@ public final class DataTypeChannel<M extends Message<?>> {
      * @param <T> the specific message type
      */
     @SuppressWarnings("unchecked")
-    public <T extends M> void addRoute(Class<T> messageType, ProcRef<T> handler) {
+    public <T extends M> void addRoute(Class<T> messageType, ProcRef<?, T> handler) {
         routes.put(messageType, handler);
         dispatchCountByType.put(messageType, new AtomicLong(0));
     }
@@ -89,7 +89,7 @@ public final class DataTypeChannel<M extends Message<?>> {
         totalDispatched.incrementAndGet();
         var handler = routes.get(message.getClass());
         if (handler != null) {
-            ((ProcRef<M>) handler).tell(message);
+            ((ProcRef<?, M>) handler).tell(message);
             var counter = dispatchCountByType.get(message.getClass());
             if (counter != null) {
                 counter.incrementAndGet();
@@ -103,15 +103,15 @@ public final class DataTypeChannel<M extends Message<?>> {
      * @param channel the channel to get state from
      * @return the channel state snapshot
      */
+    @SuppressWarnings("unchecked")
     public static <M extends Message<?>> ChannelState getState(DataTypeChannel<M> channel) {
         var dispatchCounts = new ConcurrentHashMap<Class<?>, Long>();
         for (var entry : channel.dispatchCountByType.entrySet()) {
             dispatchCounts.put(entry.getKey(), entry.getValue().get());
         }
-        return new ChannelState(
-                new ArrayList<>(channel.routes.keySet()),
-                channel.totalDispatched.get(),
-                dispatchCounts);
+        var registeredTypes =
+                new ArrayList<>((java.util.Collection<Class<? extends Message<?>>>) (java.util.Collection<?>) channel.routes.keySet());
+        return new ChannelState(registeredTypes, channel.totalDispatched.get(), dispatchCounts);
     }
 
     /**

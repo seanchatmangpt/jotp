@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.enterprise.bulkhead;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -25,7 +23,6 @@ import org.junit.jupiter.api.*;
 @DisplayName("BulkheadIsolationEnterprise: Enterprise-Grade Semaphore Isolation")
 class BulkheadIsolationEnterpriseTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -39,8 +36,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @Test
     @DisplayName("createWithValidConfig_returnsInstance: valid config produces non-null bulkhead")
     void createWithValidConfig_returnsInstance() {
-        ctx.sayNextSection("BulkheadIsolationEnterprise: Configuration");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise uses a declarative configuration model for resource limits:
 
@@ -59,7 +54,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Self-documenting constraints
                 """);
 
-        ctx.sayCode(
                 """
             BulkheadConfig config = BulkheadConfig.builder("payments")
                 .limits(List.of(new ResourceLimit.MaxConcurrentRequests(3)))
@@ -81,7 +75,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
 
         assertThat(bulkhead).isNotNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Feature Name",
                         config.featureName(),
@@ -156,8 +149,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @DisplayName(
             "execute_successfulTask_returnsSuccess: task returning 'done' produces Success variant")
     void execute_successfulTask_returnsSuccess() {
-        ctx.sayNextSection("Task Execution: Success Path");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise.execute() wraps task execution with bulkhead protection:
 
@@ -174,7 +165,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Observability via metrics
                 """);
 
-        ctx.sayCode(
                 """
             BulkheadConfig config = BulkheadConfig.builder("payments")
                 .limits(List.of(new ResourceLimit.MaxConcurrentRequests(3)))
@@ -202,7 +192,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 (BulkheadIsolationEnterprise.Result.Success<String>) result;
         assertThat(success.value()).isEqualTo("done");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Task Result",
                         success.value(),
@@ -220,8 +209,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @DisplayName(
             "execute_taskThrows_returnsFailure: task throwing RuntimeException produces Failure variant")
     void execute_taskThrows_returnsFailure() {
-        ctx.sayNextSection("Task Execution: Exception Handling");
-        ctx.say(
                 """
                 When tasks throw exceptions, BulkheadIsolationEnterprise handles them gracefully:
 
@@ -239,7 +226,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Caller handles failure explicitly
                 """);
 
-        ctx.sayCode(
                 """
             BulkheadConfig config = BulkheadConfig.builder("payments")
                 .limits(List.of(new ResourceLimit.MaxConcurrentRequests(3)))
@@ -271,7 +257,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
         assertThat(result).isInstanceOf(BulkheadIsolationEnterprise.Result.Failure.class);
 
         var failure = (BulkheadIsolationEnterprise.Result.Failure<String>) result;
-        ctx.sayKeyValue(
                 Map.of(
                         "Task Result",
                         "Failed",
@@ -291,8 +276,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @DisplayName(
             "execute_semaphoreTimeout_returnsFailure: second request times out when single permit is held")
     void execute_semaphoreTimeout_returnsFailure() throws Exception {
-        ctx.sayNextSection("Semaphore Isolation: Timeout Handling");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise uses semaphore-based concurrency control:
 
@@ -317,7 +300,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Predictable latency
                 """);
 
-        ctx.sayCode(
                 """
             // queueTimeout uses getSeconds() internally; 1s is minimum
             BulkheadConfig config = BulkheadConfig.builder("payments")
@@ -394,7 +376,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
         holder.join();
         bulkhead.shutdown();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Permit Limit",
                         "1",
@@ -409,7 +390,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                         "Prevents",
                         "Unbounded wait, thread starvation"));
 
-        ctx.sayTable(
                 new String[] {"Scenario", "Permit Available", "Result"},
                 new String[][] {
                     {"First task starts", "Yes (1/1)", "Acquires permit, executes"},
@@ -427,8 +407,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @Test
     @DisplayName("getStatus_initiallyHealthy: freshly created bulkhead reports HEALTHY status")
     void getStatus_initiallyHealthy() {
-        ctx.sayNextSection("Bulkhead Status: HEALTHY State");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise tracks status via a state machine:
 
@@ -444,7 +422,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Ready to accept requests
                 """);
 
-        ctx.sayCode(
                 """
             BulkheadConfig config = BulkheadConfig.builder("payments")
                 .limits(List.of(new ResourceLimit.MaxConcurrentRequests(5)))
@@ -467,7 +444,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
         assertThat(bulkhead.getStatus())
                 .isEqualTo(BulkheadIsolationEnterprise.BulkheadState.Status.HEALTHY);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial Status",
                         "HEALTHY",
@@ -505,8 +481,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @DisplayName(
             "resourceLimit_maxConcurrentRequests_permits3Concurrent: 3 concurrent tasks all succeed with MaxConcurrentRequests(3)")
     void resourceLimit_maxConcurrentRequests_permits3Concurrent() throws Exception {
-        ctx.sayNextSection("Concurrency Control: MaxConcurrentRequests");
-        ctx.say(
                 """
                 MaxConcurrentRequests is the primary resource limit for throughput control:
 
@@ -524,7 +498,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Predictable performance
                 """);
 
-        ctx.sayCode(
                 """
             BulkheadConfig config = BulkheadConfig.builder("payments")
                 .limits(List.of(new ResourceLimit.MaxConcurrentRequests(3)))
@@ -608,7 +581,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
 
         assertThat(successCount.get()).isEqualTo(3);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Max Concurrent",
                         "3",
@@ -621,7 +593,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                         "Concurrency Enforced",
                         "Yes (3 concurrent max)"));
 
-        ctx.sayTable(
                 new String[] {"Resource Limit", "Purpose", "Typical Values"},
                 new String[][] {
                     {
@@ -645,8 +616,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @DisplayName(
             "resourceLimit_allVariantsInstantiable: all ResourceLimit sealed variants construct without error")
     void resourceLimit_allVariantsInstantiable() {
-        ctx.sayNextSection("Resource Limits: Multi-Dimensional Constraints");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise supports multiple resource limit types:
 
@@ -665,7 +634,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Cascading failures
                 """);
 
-        ctx.sayCode(
                 """
             // Limit concurrent requests
             ResourceLimit maxConcurrent =
@@ -704,7 +672,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
         assertThat(maxCpu).isNotNull();
         assertThat(composite).isNotNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "MaxConcurrentRequests",
                         "10",
@@ -717,7 +684,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                         "Composite",
                         "2 limits (concurrent + queue)"));
 
-        ctx.sayTable(
                 new String[] {"Limit Type", "Protects Against", "Selection Criteria"},
                 new String[][] {
                     {
@@ -740,8 +706,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @DisplayName(
             "bulkheadStrategy_allVariantsInstantiable: all BulkheadStrategy sealed variants construct without error")
     void bulkheadStrategy_allVariantsInstantiable() {
-        ctx.sayNextSection("Isolation Strategies: ThreadPool vs Semaphore vs Process");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise supports multiple isolation strategies:
 
@@ -758,7 +722,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Complexity vs simplicity
                 """);
 
-        ctx.sayCode(
                 """
             // Thread pool: 10 threads per feature
             BulkheadStrategy threadPool =
@@ -788,7 +751,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
         assertThat(weighted).isNotNull();
         assertThat(adaptive).isNotNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "ThreadPoolBased",
                         "8 threads",
@@ -799,7 +761,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                         "Adaptive",
                         "Min 2, Max 20 workers"));
 
-        ctx.sayTable(
                 new String[] {"Strategy", "Memory Cost", "Scalability", "Best For"},
                 new String[][] {
                     {
@@ -818,7 +779,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                     {"Adaptive", "Dynamic", "Dynamic", "Variable load patterns"}
                 });
 
-        ctx.sayTable(
                 "Performance Comparison: ThreadPool vs Process (Semaphore)",
                 new String[] {"Metric", "ThreadPool (8 threads)", "Process (virtual threads)"},
                 new String[][] {
@@ -838,8 +798,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @Test
     @DisplayName("performance_tradeoffs_threadPool_vs_semaphore: comparative analysis")
     void performance_tradeoffs_threadPool_vs_semaphore() {
-        ctx.sayNextSection("Performance Trade-offs: ThreadPool vs Semaphore Strategies");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise offers ThreadPool vs Semaphore strategies:
 
@@ -864,7 +822,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 Use ThreadPoolBased only when strict isolation is required.
                 """);
 
-        ctx.sayCode(
                 """
             // ThreadPool strategy: 8 platform threads
             BulkheadConfig threadPoolConfig = BulkheadConfig.builder("critical")
@@ -880,7 +837,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
             """,
                 "java");
 
-        ctx.sayTable(
                 new String[] {"Dimension", "ThreadPool (8 threads)", "Semaphore (100 virtual)"},
                 new String[][] {
                     {"Memory", "~8MB", "~100KB"},
@@ -893,7 +849,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                     {"Efficiency", "Low (idle threads)", "High (on-demand)"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Virtual Thread Advantage",
                         "1000x less memory",
@@ -904,7 +859,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                         "Recommendation",
                         "Use ProcessBased for 99% of cases"));
 
-        ctx.sayTable(
                 "Throughput Analysis",
                 new String[] {"Metric", "ThreadPool (8)", "Semaphore (100)"},
                 new String[][] {
@@ -936,8 +890,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
     @Test
     @DisplayName("lifecycle_shutdown_and_cleanup: proper resource cleanup")
     void lifecycle_shutdown_and_cleanup() {
-        ctx.sayNextSection("Lifecycle: Shutdown and Resource Cleanup");
-        ctx.say(
                 """
                 BulkheadIsolationEnterprise supports graceful shutdown:
 
@@ -955,7 +907,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                 - Clean process termination
                 """);
 
-        ctx.sayCode(
                 """
             BulkheadConfig config = BulkheadConfig.builder("payments")
                 .limits(List.of(new ResourceLimit.MaxConcurrentRequests(3)))
@@ -990,7 +941,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
         // Shutdown
         bulkhead.shutdown();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Tasks Before Shutdown",
                         "2 completed",
@@ -1001,7 +951,6 @@ class BulkheadIsolationEnterpriseTest implements WithAssertions {
                         "Resource Leaks",
                         "None"));
 
-        ctx.sayTable(
                 new String[] {"Resource", "Before Shutdown", "After Shutdown"},
                 new String[][] {
                     {"Semaphore Permits", "Released", "Clean"},

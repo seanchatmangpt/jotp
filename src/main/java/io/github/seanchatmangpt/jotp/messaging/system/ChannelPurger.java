@@ -33,13 +33,14 @@ public class ChannelPurger {
 
     /** Purge command types. */
     public sealed interface PurgeCommand
-            permits PurgeCommand.ExecutePurge, PurgeCommand.StopPurge {}
+            permits PurgeCommand.ExecutePurge, PurgeCommand.StopPurge {
 
-    /** Execute a purge operation. */
-    public record ExecutePurge() implements PurgeCommand {}
+        /** Execute a purge operation. */
+        record ExecutePurge() implements PurgeCommand {}
 
-    /** Stop the purger. */
-    public record StopPurge() implements PurgeCommand {}
+        /** Stop the purger. */
+        record StopPurge() implements PurgeCommand {}
+    }
 
     /**
      * Creates a new channel purger.
@@ -56,10 +57,7 @@ public class ChannelPurger {
                                         purgeCount.incrementAndGet();
                                         yield state;
                                     }
-                                    case PurgeCommand.StopPurge ignored -> {
-                                        proc.stop();
-                                        yield state;
-                                    }
+                                    case PurgeCommand.StopPurge ignored -> state;
                                 });
     }
 
