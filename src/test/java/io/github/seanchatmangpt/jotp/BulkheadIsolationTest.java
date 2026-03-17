@@ -524,9 +524,15 @@ class BulkheadIsolationTest {
                             return state;
                         });
 
-        // Trigger supervisor failure
+        // Trigger supervisor failure — sleep between sends so each crash is processed
+        // before the next message arrives (without delay, messages pile up in a dead proc's queue)
         for (int i = 0; i < 10; i++) {
             bulkhead.send(new TestMsg.Crash("crash-" + i));
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         await().timeout(AWAIT_TIMEOUT)
