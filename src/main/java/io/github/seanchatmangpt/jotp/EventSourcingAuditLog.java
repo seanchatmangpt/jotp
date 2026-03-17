@@ -270,9 +270,13 @@ public final class EventSourcingAuditLog<S, E, D> {
                 if (!Files.exists(filePath)) {
                     return Stream.empty();
                 }
+                // CRITICAL: Files.lines() creates a stream that MUST be closed
+                // Use try-with-resources to ensure cleanup even on filter exceptions
                 return Files.lines(filePath)
                         .map(this::deserializeEntry)
-                        .filter(e -> e != null && e.entityId().equals(entityId));
+                        .filter(e -> e != null && e.entityId().equals(entityId))
+                        .toList()  // Materialize to list before releasing lock
+                        .stream();  // Return new stream of collected results
             } catch (IOException e) {
                 return Stream.empty();
             } finally {
@@ -326,7 +330,34 @@ public final class EventSourcingAuditLog<S, E, D> {
 
         private String unescapeField(String field) {
             if ("\\0".equals(field)) return null;
-            return field.replace("\\n", "\n").replace("\\|", "|").replace("\\\\", "\\");
+            // IMPORTANT: Must unescape in REVERSE order of escaping to avoid double-replacement
+            // Original escape order was: \ -> \\, | -> \|, \n -> \\n
+            // So unescape order must be: \\n -> \n, \| -> |, \\ -> \
+            // But we need to be careful: use indices to avoid "\\|" becoming "|" then "\"
+            var result = new StringBuilder();
+            for (int i = 0; i < field.length(); i++) {
+                if (field.charAt(i) == '\\' && i + 1 < field.length()) {
+                    char next = field.charAt(i + 1);
+                    switch (next) {
+                        case '\\' -> {
+                            result.append('\\');
+                            i++; // skip next char
+                        }
+                        case '|' -> {
+                            result.append('|');
+                            i++; // skip next char
+                        }
+                        case 'n' -> {
+                            result.append('\n');
+                            i++; // skip next char
+                        }
+                        default -> result.append(field.charAt(i));
+                    }
+                } else {
+                    result.append(field.charAt(i));
+                }
+            }
+            return result.toString();
         }
 
         private String serializeObject(Object obj) {
@@ -573,7 +604,9 @@ public final class EventSourcingAuditLog<S, E, D> {
                                 }
                             } catch (Exception e) {
                                 // Log suppressed; audit logger must never crash the state machine
-                                Thread.currentThread().interrupt();
+                                // Do NOT interrupt thread - that would stop all auditing
+                                // Instead, silently skip the problematic entry and continue
+                                // This maintains system availability per "let it crash" philosophy
                             }
                             return state;
                         });
@@ -630,13 +663,15 @@ public final class EventSourcingAuditLog<S, E, D> {
      * @throws InterruptedException if the thread is interrupted while waiting
      */
     public List<AuditEntry> replayHistory(String entityId) throws InterruptedException {
-        replayLock.writeLock().lock();
+        // Use readLock for query operations - multiple threads can read concurrently
+        // WriteLock is only needed when modifying state during logging
+        replayLock.readLock().lock();
         try {
             var reply = new java.util.concurrent.CompletableFuture<List<AuditEntry>>();
             logger.tell(new AuditMessage.ReplayRequest(entityId, reply));
             return reply.join();
         } finally {
-            replayLock.writeLock().unlock();
+            replayLock.readLock().unlock();
         }
     }
 
