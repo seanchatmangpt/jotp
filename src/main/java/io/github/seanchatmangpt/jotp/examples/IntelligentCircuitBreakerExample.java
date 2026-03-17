@@ -218,7 +218,7 @@ public class IntelligentCircuitBreakerExample {
   static void exampleCascadingFailurePrevention() {
     System.out.println("\n=== Example 5: Cascading Failure Prevention ===\n");
 
-    var breaker =
+    IntelligentCircuitBreaker<String, String, Exception> breaker =
         IntelligentCircuitBreaker.create(
             "upstream-api",
             3,
@@ -248,17 +248,16 @@ public class IntelligentCircuitBreakerExample {
     // Now cascading requests fail fast
     System.out.println("\nRequests 5+: Fast-fail (no handler invocation)");
     for (int i = 4; i < 6; i++) {
-      var result = breaker.execute("req-" + i, req -> {
+      Result<String, Exception> result = breaker.execute("req-" + i, req -> {
         throw new AssertionError("Should not reach handler");
       });
 
-      switch (result) {
-        case Result.CircuitOpen<String, Exception> ignored ->
-            System.out.println("  Request " + (i + 1) + ": Fast-fail (circuit open)");
-        case Result.Failure<String, Exception> ignored ->
-            System.out.println("  Request " + (i + 1) + ": Handler executed");
-        case Result.Success<String, Exception> ignored ->
-            System.out.println("  Request " + (i + 1) + ": Success");
+      if (result instanceof Result.CircuitOpen<String, Exception>) {
+        System.out.println("  Request " + (i + 1) + ": Fast-fail (circuit open)");
+      } else if (result instanceof Result.Failure<String, Exception>) {
+        System.out.println("  Request " + (i + 1) + ": Handler executed");
+      } else if (result instanceof Result.Success<String, Exception>) {
+        System.out.println("  Request " + (i + 1) + ": Success");
       }
     }
 
