@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.0)'
+        description: 'Version to release (CalVer, e.g., 2026.1.0)'
         required: true
         type: string
 
@@ -46,9 +46,9 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
 
-          # Validate semver format
+          # Validate CalVer format (YYYY.MINOR.PATCH, e.g. 2026.1.0)
           if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "❌ Invalid semantic version: $VERSION"
+            echo "❌ Invalid version (expected CalVer YYYY.MINOR.PATCH, e.g. 2026.1.0): $VERSION"
             exit 1
           fi
 
