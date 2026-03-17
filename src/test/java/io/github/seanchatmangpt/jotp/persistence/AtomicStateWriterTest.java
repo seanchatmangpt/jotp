@@ -94,22 +94,21 @@ class AtomicStateWriterTest {
         // Corrupt the main file
         Files.writeString(testFile, "corrupted-data");
 
-        // Recover from backup
-        boolean recovered = writer.recoverFromBackup();
+        // Recover from backup - returns the recovered state
+        String recovered = writer.recoverFromBackup();
 
-        assertThat(recovered).isTrue();
+        assertThat(recovered).isEqualTo("{\"value\":1}");
         assertThat(Files.readString(testFile)).isEqualTo("{\"value\":1}");
     }
 
     @Test
-    @DisplayName("Should return false when recovering without backup")
-    void recoverFromBackup_returnsFalseWhenNoBackup() {
+    @DisplayName("Should throw when recovering without backup")
+    void recoverFromBackup_throwsWhenNoBackup() {
         var writer = new TestAtomicStateWriter(testFile);
 
-        boolean recovered = writer.recoverFromBackup();
-
-        assertThat(recovered).isFalse();
-        assertThat(Files.exists(testFile)).isFalse();
+        assertThatThrownBy(() -> writer.recoverFromBackup())
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("No backup file found");
     }
 
     @Test

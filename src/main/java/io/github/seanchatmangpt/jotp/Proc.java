@@ -1,6 +1,8 @@
 package io.github.seanchatmangpt.jotp;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -394,6 +396,48 @@ public final class Proc<S, M> {
     int mailboxSize() {
         return mailbox.size();
     }
+
+    /** Package-private: check if process is suspended — used by {@link CrashDumpCollector}. */
+    boolean isSuspended() {
+        return suspended;
+    }
+
+    /**
+     * Package-private: sample pending messages for crash dump.
+     *
+     * <p>Returns a snapshot of messages currently in the mailbox. Messages are drained temporarily
+     * and re-queued to avoid losing them.
+     *
+     * @param maxMessages maximum number of messages to sample
+     * @return list of message snapshots (message class name and toString representation)
+     */
+    List<MessageSnapshot> samplePendingMessages(int maxMessages) {
+        List<MessageSnapshot> snapshots = new ArrayList<>();
+        List<Envelope<M>> drainBuffer = new ArrayList<>();
+
+        // Drain up to maxMessages from mailbox
+        Envelope<M> env;
+        while (snapshots.size() < maxMessages && (env = mailbox.poll()) != null) {
+            drainBuffer.add(env);
+            if (env.msg() != null) {
+                snapshots.add(
+                        new MessageSnapshot(
+                                env.msg().getClass().getName(),
+                                env.msg().toString(),
+                                Instant.now()));
+            }
+        }
+
+        // Re-queue all drained messages
+        for (Envelope<M> e : drainBuffer) {
+            mailbox.add(e);
+        }
+
+        return snapshots;
+    }
+
+    /** Snapshot of a pending message for crash dump. */
+    record MessageSnapshot(String messageClass, String messageString, Instant enqueuedAt) {}
 
     /** Debug observer for trace operations — can be null. */
     private volatile DebugObserver<S, M> debugObserver = null;

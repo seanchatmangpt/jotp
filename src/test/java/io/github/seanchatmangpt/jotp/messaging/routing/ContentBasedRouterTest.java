@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>Covers routing correctness, edge cases, and performance characteristics.
  */
+@DtrTest
 @Timeout(10)
 @DisplayName("Content-Based Router Pattern (EIP)")
 class ContentBasedRouterTest implements WithAssertions {

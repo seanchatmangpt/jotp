@@ -1,0 +1,153 @@
+@startuml c4-jotp-07h-sequence-atomic-write
+title JOTP - Atomic Write Sequence Diagram (Dual-Write Problem Solution)
+
+participant "Process\nHandler" as Handler
+participant "AtomicStateWriter" as Writer
+participant "RocksDBBackend" as Backend
+participant "WriteBatch" as Batch
+participant "RocksDB\nEngine" as Engine
+participant "WAL\n(Write-Ahead Log)" as WAL
+participant "SSTable\n(Disk)" as SSTable
+participant "Column Family:\nstate" as StateCF
+participant "Column Family:\nack" as AckCF
+
+== The Dual-Write Problem ==
+
+note over Handler, AckCF #pink
+  WITHOUT ATOMIC WRITES:
+  1. Write state -> SUCCESS
+  2. JVM CRASH!
+  3. ACK never written
+  4. On recovery: message replayed as unprocessed
+  5. DUPLICATE PROCESSING IS INEVITABLE
+end note
+
+== Atomic Write Solution ==
+
+Handler ->> Handler: process message
+note over Handler
+  newState = handle(state, msg)
+  seqNum = msg.sequenceNumber()
+end note
+
+Handler ->> Writer: writeAtomic(key, newState, seqNum)
+activate Writer
+
+Writer ->> Writer: codec.encode(newState)
+Writer ->> Writer: ackBytes = String.valueOf(seqNum)
+
+Writer ->> Backend: writeAtomic(key, stateBytes, ackBytes)
+activate Backend
+
+Backend ->> Batch: new WriteBatch()
+activate Batch
+
+note over Batch
+  Single batch containing
+  BOTH writes:
+  1. State update
+  2. ACK marker
+end note
+
+Batch ->> StateCF: batch.put(key, stateBytes)
+Batch ->> AckCF: batch.put(ackKey, ackBytes)
+
+Backend ->> Engine: db.write(syncWriteOptions, batch)
+activate Engine
+
+note over Engine
+  WriteOptions.setSync(true)
+  CRITICAL for crash safety
+end note
+
+Engine ->> WAL: append batch entry
+activate WAL
+
+note over WAL
+  Write-Ahead Log ensures:
+  - All or nothing semantics
+  - Atomic persistence guarantee
+  - Crash recovery support
+end note
+
+WAL ->> SSTable: eventually compacted
+activate SSTable
+SSTable -->> WAL: persisted
+deactivate SSTable
+
+WAL -->> Engine: fsync complete
+deactivate WAL
+
+Engine -->> Backend: success
+deactivate Engine
+
+deactivate Batch
+Backend -->> Writer: committed
+deactivate Backend
+
+Writer -->> Handler: success
+deactivate Writer
+
+note over Handler, AckCF #lightgreen
+  WITH ATOMIC WRITES:
+  1. WriteBatch contains state + ACK
+  2. If JVM crashes mid-write:
+     - WAL ensures both are persisted, OR
+     - Neither is persisted
+  3. On recovery:
+     - If state.seq == ack.seq: consistent
+     - If mismatch: use ACK as truth
+  4. IDEMPOTENT RECOVERY GUARANTEED
+end note
+
+== Crash During Write ==
+
+alt JVM crashes after batch.put(state) but before db.write()
+
+    note over Engine #red
+      JVM CRASH!
+      Batch never submitted
+    end note
+
+    note over WAL
+      WAL is empty for this transaction
+      No partial writes visible
+    end note
+
+    == Recovery ==
+
+    Backend ->> Backend: getAckSequence(key)
+    Backend -->> Backend: Optional.empty()
+
+    Backend ->> Backend: load(key)
+    Backend -->> Backend: Optional.empty()
+
+    note over Backend
+      Neither state nor ACK exist
+      Clean state - start fresh
+    end note
+
+else JVM crashes during db.write() after WAL append
+
+    note over Engine #red
+      JVM CRASH!
+      After WAL, before return
+    end note
+
+    == Recovery ==
+
+    Backend ->> Backend: getAckSequence(key)
+    Backend -->> Backend: Optional.of(42)
+
+    Backend ->> Backend: load(key)
+    Backend -->> Backend: state with seq=42
+
+    Backend ->> Backend: verify state.seq == ack.seq
+    note over Backend
+      42 == 42 -> CONSISTENT
+      Recovery succeeds
+    end note
+
+end
+
+@enduml

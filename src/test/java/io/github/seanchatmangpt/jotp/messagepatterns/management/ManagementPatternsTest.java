@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messagepatterns.management;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.messagepatterns.construction.CorrelationIdentifier;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) management patterns provide message monitoring, routing
  * control, and system maintainability features.
  */
+@DtrTest
 @DisplayName("Management Patterns")
 class ManagementPatternsTest implements WithAssertions {
 

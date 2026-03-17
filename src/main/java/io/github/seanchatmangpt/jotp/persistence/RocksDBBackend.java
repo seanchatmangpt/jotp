@@ -360,7 +360,7 @@ public final class RocksDBBackend implements PersistenceBackend {
 
     @Override
     public void close() throws Exception {
-        if (db != null && !db.isOwningHandle()) {
+        if (db != null && db.isOwningHandle()) {
             // Get all column family handles and close them
             try (var iterator = db.newIterator()) {
                 // Iterator will be closed automatically
@@ -369,17 +369,17 @@ public final class RocksDBBackend implements PersistenceBackend {
             db.close();
         }
 
-        if (dbOptions != null && !dbOptions.isOwningHandle()) {
+        if (dbOptions != null && dbOptions.isOwningHandle()) {
             dbOptions.close();
         }
 
-        if (columnFamilyOptions != null && !columnFamilyOptions.isOwningHandle()) {
+        if (columnFamilyOptions != null && columnFamilyOptions.isOwningHandle()) {
             columnFamilyOptions.close();
         }
     }
 
     private void ensureOpen() {
-        if (db == null || db.isOwningHandle()) {
+        if (db == null || !db.isOwningHandle()) {
             throw new PersistenceException("RocksDB backend is closed");
         }
     }

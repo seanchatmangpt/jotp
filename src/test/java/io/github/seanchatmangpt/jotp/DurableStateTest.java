@@ -22,7 +22,6 @@ import org.junit.jupiter.api.io.TempDir;
  */
 @DisplayName("DurableState Tests")
 class DurableStateTest {
-
     @TempDir Path tempDir;
 
     private Path snapshotFile;

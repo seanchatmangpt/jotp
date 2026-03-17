@@ -3,6 +3,7 @@ package io.github.seanchatmangpt.jotp.messagepatterns.transformation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
+import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) transformation patterns modify message content, format,
  * or structure to enable communication between incompatible systems.
  */
+@DtrTest
 @DisplayName("Transformation Patterns")
 class TransformationPatternsTest implements WithAssertions {
 

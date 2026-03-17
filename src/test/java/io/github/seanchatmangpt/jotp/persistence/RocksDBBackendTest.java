@@ -306,7 +306,7 @@ class RocksDBBackendTest {
 
     @Test
     @DisplayName("Should handle multiple column families")
-    void constructor_supportsMultipleColumnFamilies() {
+    void constructor_supportsMultipleColumnFamilies() throws Exception {
         var cfNames = java.util.List.of("default", "cf1", "cf2");
 
         RocksDBBackend multiCFBackend = new RocksDBBackend(dataDir, cfNames);
