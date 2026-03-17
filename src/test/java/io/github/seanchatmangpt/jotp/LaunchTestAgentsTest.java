@@ -279,7 +279,23 @@ class LaunchTestAgentsTest {
         for (int i = 0; i < 10; i++) {
             refs[i].tell(new AgentMsg.Increment(i + 1));
         }
-        Thread.sleep(100);
+
+        // Wait for all agents' increment messages to be processed
+        await().atMost(AWAIT_TIMEOUT)
+                .until(
+                        () -> {
+                            for (int i = 0; i < 10; i++) {
+                                var state =
+                                        (AgentState)
+                                                refs[i]
+                                                        .ask(new AgentMsg.GetState())
+                                                        .get(2, TimeUnit.SECONDS);
+                                int expectedBase = (i == 8) ? 100 : 0; // counterAgentSpec
+                                // starts at 100
+                                if (state.counter() != expectedBase + (i + 1)) return false;
+                            }
+                            return true;
+                        });
 
         // Verify each agent's counter updated
         for (int i = 0; i < 10; i++) {
@@ -320,7 +336,23 @@ class LaunchTestAgentsTest {
         for (int i = 0; i < 10; i++) {
             refs[i].tell(new AgentMsg.Work("task-" + i));
         }
-        Thread.sleep(100);
+
+        // Wait for all agents' work messages to be processed and logged
+        await().atMost(AWAIT_TIMEOUT)
+                .until(
+                        () -> {
+                            for (int i = 0; i < 10; i++) {
+                                var state =
+                                        (AgentState)
+                                                refs[i]
+                                                        .ask(new AgentMsg.GetState())
+                                                        .get(2, TimeUnit.SECONDS);
+                                if (!state.log().contains("task-" + i)) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        });
 
         // Verify each agent logged the work
         for (int i = 0; i < 10; i++) {
@@ -346,15 +378,65 @@ class LaunchTestAgentsTest {
         refPermanent.tell(new AgentMsg.Increment(42));
         refTransient.tell(new AgentMsg.Increment(42));
         refTemporary.tell(new AgentMsg.Increment(42));
-        Thread.sleep(100);
+
+        // Wait for all three agents to process their increment messages
+        await().atMost(AWAIT_TIMEOUT)
+                .until(
+                        () -> {
+                            var permState =
+                                    (AgentState)
+                                            refPermanent
+                                                    .ask(new AgentMsg.GetState())
+                                                    .get(2, TimeUnit.SECONDS);
+                            var transState =
+                                    (AgentState)
+                                            refTransient
+                                                    .ask(new AgentMsg.GetState())
+                                                    .get(2, TimeUnit.SECONDS);
+                            var tempState =
+                                    (AgentState)
+                                            refTemporary
+                                                    .ask(new AgentMsg.GetState())
+                                                    .get(2, TimeUnit.SECONDS);
+                            return permState.counter() == 42
+                                    && transState.counter() == 42
+                                    && tempState.counter() == 42;
+                        });
 
         // Crash all three
         refPermanent.tell(new AgentMsg.Crash("test"));
         refTransient.tell(new AgentMsg.Crash("test"));
         refTemporary.tell(new AgentMsg.Crash("test"));
 
-        // Wait for supervisor to process crashes
+        // Wait for supervisor to detect crashes
         await().atMost(AWAIT_TIMEOUT).until(() -> refPermanent.proc().lastError() != null);
+
+        // Explicit restart-completion await: send ping and wait for response from restarted process.
+        // This ensures the supervisor has completed the restart and the new process is ready.
+        await().atMost(AWAIT_TIMEOUT)
+                .until(
+                        () -> {
+                            try {
+                                var response =
+                                        refPermanent.ask(new AgentMsg.Ping()).get(1, TimeUnit.SECONDS);
+                                return response instanceof AgentState;
+                            } catch (Exception e) {
+                                return false;
+                            }
+                        });
+
+        // Transient restart-completion verification
+        await().atMost(AWAIT_TIMEOUT)
+                .until(
+                        () -> {
+                            try {
+                                var response =
+                                        refTransient.ask(new AgentMsg.Ping()).get(1, TimeUnit.SECONDS);
+                                return response instanceof AgentState;
+                            } catch (Exception e) {
+                                return false;
+                            }
+                        });
 
         // Permanent should restart with fresh state (counter = 0)
         var permState =
@@ -366,6 +448,16 @@ class LaunchTestAgentsTest {
         var transState =
                 (AgentState) refTransient.ask(new AgentMsg.GetState()).get(2, TimeUnit.SECONDS);
         assertThat(transState.counter()).isEqualTo(0);
+
+        // Temporary agent must NOT restart after crash — verify it's gone from supervisor's children
+        var childrenAfterCrash = supervisor.whichChildren();
+        var temporaryChild =
+                childrenAfterCrash.stream()
+                        .filter(c -> c.id().equals("agent-temporary"))
+                        .findFirst();
+        assertThat(temporaryChild)
+                .as("Temporary agent should not be restarted by supervisor")
+                .isEmpty();
 
         supervisor.shutdown();
     }
@@ -453,7 +545,10 @@ class LaunchTestAgentsTest {
         for (Thread t : threads) t.join();
 
         // Wait for all messages to be processed
-        await().atMost(Duration.ofSeconds(5))
+        await()
+                .atMost(AWAIT_TIMEOUT)
+                .pollDelay(Duration.ofMillis(50))
+                .pollInterval(Duration.ofMillis(100))
                 .until(
                         () -> {
                             for (int i = 0; i < 10; i++) {
@@ -461,7 +556,7 @@ class LaunchTestAgentsTest {
                                         (AgentState)
                                                 refs[i]
                                                         .ask(new AgentMsg.GetState())
-                                                        .get(2, TimeUnit.SECONDS);
+                                                        .get(1, TimeUnit.SECONDS);
                                 int expectedBase = (i == 8) ? 100 : 0;
                                 if (state.counter() != expectedBase + messagesPerAgent) return false;
                             }
