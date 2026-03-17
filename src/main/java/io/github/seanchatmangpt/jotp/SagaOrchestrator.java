@@ -267,14 +267,24 @@ public final class SagaOrchestrator<S, D> implements Application.Infrastructure 
 
         coordinator.tell(new SagaMsg.Start(sagaId, data, future));
 
-        // Set global timeout with proper compensation trigger
+        // Schedule global timeout that sends a Timeout message to the coordinator
+        // This allows proper compensation of completed steps before timeout failure
         final UUID finalSagaId = sagaId;
-        return future.orTimeout(globalTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                .exceptionally(e -> {
-                    // Trigger compensation by sending timeout message
-                    coordinator.tell(new SagaMsg.Timeout(finalSagaId));
-                    return new SagaResult.Failure("global", e);
-                });
+        Thread.ofVirtual()
+                .start(
+                        () -> {
+                            try {
+                                Thread.sleep(globalTimeout.toMillis());
+                                // Only send timeout if saga hasn't already completed
+                                if (!future.isDone()) {
+                                    coordinator.tell(new SagaMsg.Timeout(finalSagaId));
+                                }
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+
+        return future;
     }
 
     /** Get the status of a saga. */
