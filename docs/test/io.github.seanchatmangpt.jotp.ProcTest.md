@@ -5,18 +5,14 @@
 - [Proc: Lightweight Virtual-Thread Process](#proclightweightvirtualthreadprocess)
 
 
+By default, EXIT signals from linked processes immediately terminate the receiving Proc.
+With trapExits(true), EXIT signals are converted to ExitSignal messages in the mailbox.
+This enables the "trap_exit" pattern where processes can handle linked process failures gracefully.
+
+
 When a Proc's handler throws an unhandled exception, the process terminates abnormally.
 Crash callbacks are invoked ONLY on abnormal termination, enabling cleanup and monitoring.
 This is the "Let It Crash" philosophy - processes don't catch exceptions, supervisors restart them.
-
-
-The ask() method provides synchronous request-reply semantics.
-It sends a message and returns a CompletableFuture that completes when the handler processes the message.
-The handler's return value becomes the future's result, enabling type-safe request-response patterns.
-
-Proc mailboxes guarantee FIFO (First-In-First-Out) message ordering.
-Messages are delivered in the exact order they were sent, ensuring deterministic behavior.
-This is critical for protocols where message sequence matters (e.g., state machine transitions).
 
 
 ## Proc: Lightweight Virtual-Thread Process
@@ -26,9 +22,14 @@ Each Proc has its own mailbox (LinkedTransferQueue) and processes messages seque
 The tell() method provides fire-and-forget message delivery - the sender doesn't wait for a response.
 
 
-By default, EXIT signals from linked processes immediately terminate the receiving Proc.
-With trapExits(true), EXIT signals are converted to ExitSignal messages in the mailbox.
-This enables the "trap_exit" pattern where processes can handle linked process failures gracefully.
+Proc mailboxes guarantee FIFO (First-In-First-Out) message ordering.
+Messages are delivered in the exact order they were sent, ensuring deterministic behavior.
+This is critical for protocols where message sequence matters (e.g., state machine transitions).
+
+
+The ask() method provides synchronous request-reply semantics.
+It sends a message and returns a CompletableFuture that completes when the handler processes the message.
+The handler's return value becomes the future's result, enabling type-safe request-response patterns.
 
 
 ---
