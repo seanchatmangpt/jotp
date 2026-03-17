@@ -318,7 +318,8 @@ class LivingDocGeneratorTest implements WithAssertions {
                             .toList();
 
             assertThat(packages).hasSize(1);
-            assertThat(packages.getFirst().name()).isEqualTo("org.acme.dogfood.innovation");
+            assertThat(packages.getFirst().name())
+                    .isEqualTo("io.github.seanchatmangpt.jotp.dogfood.innovation");
         }
     }
 
@@ -449,7 +450,7 @@ class LivingDocGeneratorTest implements WithAssertions {
             assertThat(md).contains("record Success");
             assertThat(md).contains("record Failure");
             // Should contain package
-            assertThat(md).contains("`org.acme`");
+            assertThat(md).contains("`io.github.seanchatmangpt.jotp`");
             // Overall structure
             assertThat(md).startsWith("# API Documentation");
         }

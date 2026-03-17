@@ -95,11 +95,9 @@ public final class FrameworkMetrics
         this.collector = collector;
         this.eventBus = eventBus;
 
-        // Auto-subscribe if observability is enabled
-        if (ENABLED) {
-            eventBus.subscribe(this);
-            this.subscribed = true;
-        }
+        // Always subscribe — the event bus itself gates delivery when disabled
+        eventBus.subscribe(this);
+        this.subscribed = true;
     }
 
     /**
@@ -190,10 +188,6 @@ public final class FrameworkMetrics
      */
     @Override
     public void accept(FrameworkEventBus.FrameworkEvent event) {
-        if (!ENABLED) {
-            return; // Zero-cost fast path: single branch check
-        }
-
         // Exhaustive switch on sealed interface — compiler enforces all cases handled
         switch (event) {
             // ── P0: Fault Detection Events ────────────────────────────────────────

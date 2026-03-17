@@ -3,10 +3,10 @@
 ## Table of Contents
 
 - [Fault Detection: Crash Classification](#faultdetectioncrashclassification)
-- [Observability: Zero-Cost Telemetry](#observabilityzerocosttelemetry)
-- [Distributed Tracing: Supervisor Recovery Chains](#distributedtracingsupervisorrecoverychains)
 - [Zero-Cost Abstraction: Priority-Based Event Filtering](#zerocostabstractionprioritybasedeventfiltering)
 - [Event Bus Telemetry: Process Lifecycle Events](#eventbustelemetryprocesslifecycleevents)
+- [Distributed Tracing: Supervisor Recovery Chains](#distributedtracingsupervisorrecoverychains)
+- [Observability: Zero-Cost Telemetry](#observabilityzerocosttelemetry)
 
 
 ## Fault Detection: Crash Classification
@@ -22,48 +22,6 @@ Crash classification uses heuristics on the reason string:
 - other → unknown
 
 This enables alerting on crash spikes and root cause analysis.
-
-
-## Observability: Zero-Cost Telemetry
-
-FrameworkMetrics provides zero-cost abstraction for observability. When disabled
-(default), the overhead is <100ns — a single branch check. Only when enabled via
--Djotp.observability.enabled=true does it bridge events to MetricsCollector.
-
-This design follows the principle of "pay for what you use": production systems
-can disable observability entirely with zero runtime cost.
-
-
-```java
-// Factory creates metrics bridge with auto-subscription
-FrameworkMetrics metrics = FrameworkMetrics.create("test-metrics", collector, eventBus);
-
-// Metrics are NOT collected unless observability is enabled
-// Check subscription status
-boolean isSubscribed = metrics.isSubscribed();
-```
-
-| Key | Value |
-| --- | --- |
-| `Subscribed` | `true` |
-| `Collector Type` | `MetricsCollector` |
-| `Feature Flag` | `-Djotp.observability.enabled=true` |
-| `Metrics Name` | `test-metrics` |
-
-> [!NOTE]
-> The metrics bridge is feature-gated. Production systems without the flag enabled experience zero overhead — no event bus subscription, no allocation, no metrics collection.
-
-## Distributed Tracing: Supervisor Recovery Chains
-
-Supervisor restart attempts are critical for understanding fault recovery patterns.
-Each restart attempt creates metrics with:
-
-- Supervisor ID and child ID for correlation
-- Restart strategy (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)
-- Crash count to detect restart loops
-
-This enables tracking of fault tolerance effectiveness and identifying flaky processes
-that crash-restart repeatedly (the "restart loop" anti-pattern).
 
 
 ## Zero-Cost Abstraction: Priority-Based Event Filtering
@@ -101,13 +59,6 @@ Map<String, Object> snapshot = collector.snapshot();
 
 | Key | Value |
 | --- | --- |
-| `Event Priority` | `P2 (Operational)` |
-| `Metrics Created` | `0` |
-| `Reason` | `Low signal-to-noise ratio` |
-| `Event Type` | `ProcessMonitorRegistered` |
-
-> [!NOTE]
-> P2 filtering prevents metric cardinality explosion. Monitor registration events can occur thousands of times per second but provide little operational value. Collecting them would drown out the important P0/P1 signals.
 
 ## Event Bus Telemetry: Process Lifecycle Events
 
@@ -118,6 +69,55 @@ with tags for process type and classification.
 This enables monitoring of process population growth, leak detection, and capacity
 planning without instrumenting application code.
 
+| `Event Priority` | `P2 (Operational)` |
+| `Metrics Created` | `0` |
+| `Reason` | `Low signal-to-noise ratio` |
+| `Event Type` | `ProcessMonitorRegistered` |
+
+> [!NOTE]
+> P2 filtering prevents metric cardinality explosion. Monitor registration events can occur thousands of times per second but provide little operational value. Collecting them would drown out the important P0/P1 signals.
+
+## Distributed Tracing: Supervisor Recovery Chains
+
+Supervisor restart attempts are critical for understanding fault recovery patterns.
+Each restart attempt creates metrics with:
+
+- Supervisor ID and child ID for correlation
+- Restart strategy (ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE)
+- Crash count to detect restart loops
+
+This enables tracking of fault tolerance effectiveness and identifying flaky processes
+that crash-restart repeatedly (the "restart loop" anti-pattern).
+
+
+## Observability: Zero-Cost Telemetry
+
+FrameworkMetrics provides zero-cost abstraction for observability. When disabled
+(default), the overhead is <100ns — a single branch check. Only when enabled via
+-Djotp.observability.enabled=true does it bridge events to MetricsCollector.
+
+This design follows the principle of "pay for what you use": production systems
+can disable observability entirely with zero runtime cost.
+
+
+```java
+// Factory creates metrics bridge with auto-subscription
+FrameworkMetrics metrics = FrameworkMetrics.create("test-metrics", collector, eventBus);
+
+// Metrics are NOT collected unless observability is enabled
+// Check subscription status
+boolean isSubscribed = metrics.isSubscribed();
+```
+
+| Key | Value |
+| --- | --- |
+| `Subscribed` | `false` |
+| `Collector Type` | `MetricsCollector` |
+| `Feature Flag` | `-Djotp.observability.enabled=true` |
+| `Metrics Name` | `test-metrics` |
+
+> [!NOTE]
+> The metrics bridge is feature-gated. Production systems without the flag enabled experience zero overhead — no event bus subscription, no allocation, no metrics collection.
 
 ---
 *Generated by [DTR](http://www.dtr.org)*

@@ -271,12 +271,15 @@ public final class JvmShutdownManager {
     }
 
     /**
-     * Clear all registered callbacks (primarily for testing).
+     * Clear all registered callbacks and reset shutdown state (primarily for testing).
      *
-     * <p>This method is intended for test isolation. Do not use in production.
+     * <p>This method is intended for test isolation. Do not use in production. Resets both the
+     * callback list and the shutdown flag so that {@link #triggerGraceful()} can be invoked again
+     * after a clear.
      */
     public void clearCallbacks() {
         callbacks.clear();
+        shuttingDown.set(false);
     }
 
     /**

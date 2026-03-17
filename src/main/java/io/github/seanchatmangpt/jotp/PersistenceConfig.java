@@ -1,5 +1,8 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -96,13 +99,23 @@ public record PersistenceConfig(
     }
 
     /** Default persistence configuration. */
-    public static final PersistenceConfig DEFAULT =
-            new PersistenceConfig(
-                    DurabilityLevel.DURABLE,
-                    60L, // 60 seconds between snapshots
-                    1000, // 1000 events per snapshot
-                    Path.of(System.getProperty("java.io.tmpdir"), "jotp-persistence"),
-                    true); // syncWrites=true for crash safety
+    public static final PersistenceConfig DEFAULT = createDefault();
+
+    private static PersistenceConfig createDefault() {
+        Path dir = Path.of(System.getProperty("java.io.tmpdir"), "jotp-persistence");
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+            throw new UncheckedIOException(
+                    "Failed to create default persistence directory: " + dir, e);
+        }
+        return new PersistenceConfig(
+                DurabilityLevel.DURABLE,
+                60L, // 60 seconds between snapshots
+                1000, // 1000 events per snapshot
+                dir,
+                true); // syncWrites=true for crash safety
+    }
 
     /**
      * Create a production-ready durable configuration.
@@ -147,30 +160,46 @@ public record PersistenceConfig(
      */
     public static PersistenceConfig fromEnvironment(PersistenceConfig defaults) {
         DurabilityLevel level =
-                parseDurabilityLevel(System.getenv("JOTP_DURABILITY"))
+                parseDurabilityLevel(resolveProperty("JOTP_DURABILITY"))
                         .orElse(defaults.durabilityLevel());
 
         Path directory =
-                Optional.ofNullable(System.getenv("JOTP_PERSISTENCE_DIR"))
+                Optional.ofNullable(resolveProperty("JOTP_PERSISTENCE_DIR"))
                         .map(Path::of)
                         .orElse(defaults.persistenceDirectory());
 
         long interval =
-                Optional.ofNullable(System.getenv("JOTP_SNAPSHOT_INTERVAL"))
+                Optional.ofNullable(resolveProperty("JOTP_SNAPSHOT_INTERVAL"))
                         .map(Long::parseLong)
                         .orElse(defaults.snapshotInterval());
 
         int eventsPerSnap =
-                Optional.ofNullable(System.getenv("JOTP_EVENTS_PER_SNAPSHOT"))
+                Optional.ofNullable(resolveProperty("JOTP_EVENTS_PER_SNAPSHOT"))
                         .map(Integer::parseInt)
                         .orElse(defaults.eventsPerSnapshot());
 
         boolean sync =
-                Optional.ofNullable(System.getenv("JOTP_SYNC_WRITES"))
+                Optional.ofNullable(resolveProperty("JOTP_SYNC_WRITES"))
                         .map(Boolean::parseBoolean)
                         .orElse(defaults.syncWrites());
 
         return new PersistenceConfig(level, interval, eventsPerSnap, directory, sync);
+    }
+
+    /**
+     * Resolves a configuration value by checking system properties first, then environment
+     * variables. This allows test overrides via {@code System.setProperty()} while still supporting
+     * real environment variable configuration in production.
+     *
+     * @param key the property/environment variable name
+     * @return the resolved value, or {@code null} if not set in either source
+     */
+    private static String resolveProperty(String key) {
+        String sysProp = System.getProperty(key);
+        if (sysProp != null) {
+            return sysProp;
+        }
+        return System.getenv(key);
     }
 
     private static Optional<DurabilityLevel> parseDurabilityLevel(String value) {

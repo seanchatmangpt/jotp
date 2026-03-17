@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * Dogfood proof: scan our own {@code src/main/java/org/acme} to verify that the {@link
- * StressTestScanner} correctly identifies the known breaking-point patterns present in the OTP
- * primitives.
+ * Dogfood proof: scan our own {@code src/main/java/io/github/seanchatmangpt/jotp} to verify that
+ * the {@link StressTestScanner} correctly identifies the known breaking-point patterns present in
+ * the OTP primitives.
  *
  * <p>Each test asserts a specific finding type in a specific file, proving end-to-end that:
  *
@@ -28,10 +28,10 @@ import org.junit.jupiter.api.Test;
  *   <li>The plan {@link RefactorEngine.JgenCommand}s reference real templates
  * </ol>
  */
-@DisplayName("StressTestScanner — dogfood scan of org.acme source")
+@DisplayName("StressTestScanner — dogfood scan of io.github.seanchatmangpt.jotp source")
 class StressTestScannerTest {
 
-    private static final Path OTP_SOURCE = Path.of("src/main/java/org/acme");
+    private static final Path OTP_SOURCE = Path.of("src/main/java/io/github/seanchatmangpt/jotp");
 
     private static StressPlan plan;
 
@@ -48,7 +48,7 @@ class StressTestScannerTest {
     // ── Plan-level assertions ──────────────────────────────────────────────────
 
     @Test
-    @DisplayName("scan produces findings from org.acme")
+    @DisplayName("scan produces findings from io.github.seanchatmangpt.jotp")
     void scan_producesFindings() {
         assertThat(plan.findings()).isNotEmpty();
     }

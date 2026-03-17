@@ -194,12 +194,12 @@ public final class FrameworkEventBus implements Application.Infrastructure {
      * @param event the event to publish
      */
     public void publish(FrameworkEvent event) {
-        if (!ENABLED || !running || subscribers.isEmpty()) {
+        if (!running || subscribers.isEmpty()) {
             return; // Zero-cost fast path: single branch check
         }
 
-        // Fire-and-forget async delivery
-        ASYNC_EXECUTOR.submit(() -> notifySubscribers(event));
+        // Fire-and-forget async delivery via virtual thread
+        Thread.ofVirtual().name("jotp-obs-").start(() -> notifySubscribers(event));
     }
 
     /**
