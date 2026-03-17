@@ -1,0 +1,261 @@
+#!/bin/bash
+# JOTP Release Automation Script (2026.1.0 -> Maven Central)
+# Usage: ./bin/release [validate|prepare|publish|verify|rollback]
+# Requires: Java 26, Maven 4, GPG key, Sonatype Central token
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+VERSION="2026.1.0"
+RELEASE_TAG="v${VERSION}"
+
+# Color output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[✓]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[✗]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[!]${NC} $1"
+}
+
+# Pre-release validation
+validate_release() {
+    log_info "Starting pre-release validation..."
+
+    # Check Java version
+    JAVA_VERSION=$(java -version 2>&1 | grep -oP 'version "\K[^"]+' || echo "unknown")
+    if [[ ! "$JAVA_VERSION" =~ 26 ]]; then
+        log_error "Java 26 required, found: $JAVA_VERSION"
+        return 1
+    fi
+    log_success "Java 26 detected: $JAVA_VERSION"
+
+    # Check Maven
+    if ! command -v mvn &> /dev/null && ! command -v mvnd &> /dev/null; then
+        log_error "Maven 4 or mvnd not found"
+        return 1
+    fi
+    log_success "Maven found"
+
+    # Check git
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        log_error "Not in a git repository"
+        return 1
+    fi
+    log_success "Git repository detected"
+
+    # Check for uncommitted changes
+    if ! git diff-index --quiet HEAD --; then
+        log_error "Uncommitted changes detected. Commit or stash first."
+        return 1
+    fi
+    log_success "Working tree clean"
+
+    # Check version in pom.xml
+    POM_VERSION=$(grep '<version>' "$PROJECT_ROOT/pom.xml" | head -1 | sed 's/<[^>]*>//g' | xargs)
+    if [[ "$POM_VERSION" != "$VERSION" ]]; then
+        log_warning "Version mismatch: pom.xml=$POM_VERSION, expected=$VERSION"
+    else
+        log_success "Version correct: $VERSION"
+    fi
+
+    # Run full test suite
+    log_info "Running full test suite..."
+    if cd "$PROJECT_ROOT" && ./mvnw clean verify -Prelease --quiet; then
+        log_success "All tests passed"
+    else
+        log_error "Test suite failed"
+        return 1
+    fi
+
+    log_success "Pre-release validation complete"
+}
+
+# Prepare release artifacts
+prepare_release() {
+    log_info "Preparing release artifacts..."
+
+    cd "$PROJECT_ROOT"
+
+    # Clean and build
+    log_info "Cleaning previous builds..."
+    ./mvnw clean --quiet
+
+    # Compile
+    log_info "Compiling sources..."
+    ./mvnw compile --quiet
+
+    # Generate sources JAR
+    log_info "Generating sources JAR..."
+    ./mvnw source:jar --quiet
+
+    # Generate JavaDoc JAR
+    log_info "Generating JavaDoc JAR..."
+    ./mvnw javadoc:jar --quiet
+
+    # Package JAR
+    log_info "Packaging JAR..."
+    ./mvnw package -DskipTests --quiet
+
+    log_success "Release artifacts prepared"
+    ls -lh "$PROJECT_ROOT/target/jotp-${VERSION}*.jar"
+}
+
+# Publish to Maven Central
+publish_release() {
+    log_info "Publishing to Maven Central..."
+
+    # Check for required credentials
+    if [[ -z "${GPG_KEYNAME:-}" ]]; then
+        log_error "GPG_KEYNAME not set. Export your GPG keyname:"
+        echo "  export GPG_KEYNAME='<keyname from gpg --list-keys>'"
+        return 1
+    fi
+
+    if [[ -z "${SONATYPE_TOKEN:-}" ]]; then
+        log_error "SONATYPE_TOKEN not set. Get it from:"
+        echo "  https://central.sonatype.com/publish"
+        echo "  export SONATYPE_TOKEN='<your-token>'"
+        return 1
+    fi
+
+    cd "$PROJECT_ROOT"
+
+    # Create git tag
+    log_info "Creating git tag: $RELEASE_TAG"
+    git tag -a "$RELEASE_TAG" -m "Release JOTP $VERSION" || log_warning "Tag already exists"
+
+    # Deploy with GPG signing
+    log_info "Deploying to Maven Central (signing artifacts)..."
+    ./mvnw clean deploy -Prelease \
+        -Dgpg.keyname="$GPG_KEYNAME" \
+        --quiet || {
+        log_error "Deployment failed"
+        return 1
+    }
+
+    log_success "Deployment complete"
+    log_info "Monitor progress at: https://central.sonatype.com/publish"
+}
+
+# Verify release in Maven Central
+verify_release() {
+    log_info "Verifying release in Maven Central..."
+
+    # Wait for sync
+    log_info "Waiting for Maven Central sync (this may take 5-10 minutes)..."
+    for i in {1..30}; do
+        sleep 10
+        if curl -s "https://repo.maven.apache.org/maven2/io/github/seanchatmangpt/jotp/${VERSION}/jotp-${VERSION}.jar" \
+            | grep -q "jar"; then
+            log_success "Release available in Maven Central!"
+            return 0
+        fi
+        log_info "Checking... ($((i * 10))s elapsed)"
+    done
+
+    log_warning "Could not verify in Maven Central within 5 minutes"
+    log_info "Check manually: https://central.sonatype.com/publish"
+}
+
+# Rollback release
+rollback_release() {
+    log_warning "Rolling back release..."
+
+    # Remove git tag
+    if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
+        log_info "Removing git tag: $RELEASE_TAG"
+        git tag -d "$RELEASE_TAG"
+    fi
+
+    # Note: Maven Central artifacts cannot be deleted; use staging repo if unpublished
+    log_warning "Note: Published artifacts cannot be deleted from Maven Central"
+    log_warning "Use Sonatype Central Portal to manage staging if not yet promoted"
+}
+
+# Main command handler
+main() {
+    case "${1:-help}" in
+        validate)
+            validate_release
+            ;;
+        prepare)
+            validate_release && prepare_release
+            ;;
+        publish)
+            publish_release
+            ;;
+        verify)
+            verify_release
+            ;;
+        rollback)
+            rollback_release
+            ;;
+        full)
+            log_info "Starting full release pipeline..."
+            validate_release || exit 1
+            prepare_release || exit 1
+            publish_release || exit 1
+            verify_release || exit 1
+            log_success "Release complete!"
+            log_info "Push tag: git push origin $RELEASE_TAG"
+            ;;
+        help|*)
+            cat << EOF
+JOTP Release Automation (2026.1.0)
+
+USAGE:
+    ./bin/release [command]
+
+COMMANDS:
+    validate      - Validate pre-release requirements (Java 26, git clean, tests pass)
+    prepare       - Build and package release artifacts (JAR, sources, JavaDoc)
+    publish       - Deploy to Maven Central (requires GPG_KEYNAME, SONATYPE_TOKEN)
+    verify        - Verify release is available in Maven Central (~5-10 min)
+    rollback      - Remove git tag (artifacts cannot be deleted)
+    full          - Run complete pipeline (validate → prepare → publish → verify)
+    help          - Show this message
+
+REQUIRED ENVIRONMENT VARIABLES:
+    GPG_KEYNAME     - GPG key identifier (from: gpg --list-keys)
+    SONATYPE_TOKEN  - Maven Central token (from: https://central.sonatype.com/publish)
+
+EXAMPLE:
+    # Full release workflow
+    export GPG_KEYNAME='<your@email.com>'
+    export SONATYPE_TOKEN='<token>'
+    ./bin/release full
+
+    # Step-by-step
+    ./bin/release validate
+    ./bin/release prepare
+    ./bin/release publish
+    ./bin/release verify
+
+DOCUMENTATION:
+    - Release checklist: RELEASE_CHECKLIST.md
+    - Maven Central guide: MAVEN_CENTRAL_RELEASE.md
+    - GitHub release template: GITHUB_RELEASE_TEMPLATE.md
+
+EOF
+            ;;
+    esac
+}
+
+main "$@"
