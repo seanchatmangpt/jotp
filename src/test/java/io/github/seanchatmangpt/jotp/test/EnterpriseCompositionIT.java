@@ -704,9 +704,6 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(18)
     @DisplayName("CommandDispatcher: middleware should validate and transform commands")
     void commandDispatcherMiddlewareShouldValidateAndTransform() {
-        // This test verifies the before/after middleware hooks work correctly
-        // The before hook validates input and can short-circuit dispatch
-        // The after hook processes results after handler execution
         AtomicInteger beforeCount = new AtomicInteger(0);
         AtomicInteger afterCount = new AtomicInteger(0);
 

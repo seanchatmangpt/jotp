@@ -386,21 +386,32 @@ public final class EventSourcingAuditLog<S, E, D> {
 
         private AuditEntry deserializeEntry(String line) {
             try {
-                var parts = line.split("\\|", -1); // Include trailing empty strings
-                if (parts.length < 2) return null;
+                // Split only on the first 3 separators to get type, fieldCount, and rest
+                var firstPipe = line.indexOf('|');
+                if (firstPipe == -1) return null;
 
-                var type = parts[0];
-                var timestamp = Instant.parse(parts[1]);
-                var entityId = parts[2];
+                var type = line.substring(0, firstPipe);
+                var remainder = line.substring(firstPipe + 1);
+
+                var secondPipe = remainder.indexOf('|');
+                if (secondPipe == -1) return null;
+
+                var fieldCountStr = remainder.substring(0, secondPipe);
+                var fieldCount = Integer.parseInt(fieldCountStr);
+                var dataStr = remainder.substring(secondPipe + 1);
+
+                // Split the remaining data, preserving escaped characters
+                var fields = smartSplit(dataStr, fieldCount);
 
                 return switch (type) {
-                    case "StateChange" -> {
-                        if (parts.length < 8) yield null;
-                        var fromStateClass = Class.forName(parts[3]);
-                        var eventClass = Class.forName(parts[4]);
-                        var toStateClass = Class.forName(parts[5]);
-                        var data = deserializeObject(parts[6]);
-                        // Return with wildcard types suppressed
+                    case "SC" -> {
+                        if (fields.length < 6) yield null;
+                        var timestamp = Instant.parse(fields[0]);
+                        var entityId = fields[1];
+                        var fromStateClass = Class.forName(unescapeField(fields[2]));
+                        var eventClass = Class.forName(unescapeField(fields[3]));
+                        var toStateClass = Class.forName(unescapeField(fields[4]));
+                        var data = deserializeObject(unescapeField(fields[5]));
                         @SuppressWarnings({"unchecked", "rawtypes"})
                         AuditEntry entry =
                                 new StateChange(
@@ -408,27 +419,33 @@ public final class EventSourcingAuditLog<S, E, D> {
                                         data);
                         yield entry;
                     }
-                    case "ErrorEntry" -> {
-                        if (parts.length < 5) yield null;
-                        var stateClass = Class.forName(parts[3]);
-                        var exception = deserializeThrowable(parts[4]);
+                    case "EE" -> {
+                        if (fields.length < 4) yield null;
+                        var timestamp = Instant.parse(fields[0]);
+                        var entityId = fields[1];
+                        var stateClass = Class.forName(unescapeField(fields[2]));
+                        var exception = deserializeThrowable(unescapeField(fields[3]));
                         @SuppressWarnings({"unchecked", "rawtypes"})
                         AuditEntry entry = new ErrorEntry(timestamp, entityId, stateClass, exception);
                         yield entry;
                     }
-                    case "Replay" -> {
-                        if (parts.length < 4) yield null;
-                        var replayedFromTimestamp = Instant.parse(parts[3]);
+                    case "RP" -> {
+                        if (fields.length < 3) yield null;
+                        var timestamp = Instant.parse(fields[0]);
+                        var entityId = fields[1];
+                        var replayedFromTimestamp = Instant.parse(fields[2]);
                         @SuppressWarnings({"unchecked", "rawtypes"})
                         AuditEntry entry =
                                 new Replay(timestamp, entityId, replayedFromTimestamp);
                         yield entry;
                     }
-                    case "SnapshotEntry" -> {
-                        if (parts.length < 7) yield null;
-                        var state = deserializeObject(parts[3]);
-                        var data = deserializeObject(parts[4]);
-                        var sequenceNumber = Long.parseLong(parts[5]);
+                    case "SN" -> {
+                        if (fields.length < 5) yield null;
+                        var timestamp = Instant.parse(fields[0]);
+                        var entityId = fields[1];
+                        var state = deserializeObject(unescapeField(fields[2]));
+                        var data = deserializeObject(unescapeField(fields[3]));
+                        var sequenceNumber = Long.parseLong(fields[4]);
                         @SuppressWarnings({"unchecked", "rawtypes"})
                         AuditEntry entry =
                                 new SnapshotEntry(timestamp, entityId, state, data, sequenceNumber);
@@ -440,6 +457,36 @@ public final class EventSourcingAuditLog<S, E, D> {
                 // Log silently and return null to allow stream to skip malformed entries
                 return null;
             }
+        }
+
+        private String[] smartSplit(String data, int expectedFields) {
+            var fields = new ArrayList<String>();
+            var current = new StringBuilder();
+            var escaped = false;
+
+            for (int i = 0; i < data.length(); i++) {
+                var c = data.charAt(i);
+
+                if (escaped) {
+                    current.append(c);
+                    escaped = false;
+                } else if (c == '\\') {
+                    current.append(c);
+                    escaped = true;
+                } else if (c == '|') {
+                    fields.add(current.toString());
+                    current = new StringBuilder();
+                } else {
+                    current.append(c);
+                }
+            }
+
+            // Add last field
+            if (current.length() > 0 || fields.size() < expectedFields) {
+                fields.add(current.toString());
+            }
+
+            return fields.toArray(new String[0]);
         }
     }
 
