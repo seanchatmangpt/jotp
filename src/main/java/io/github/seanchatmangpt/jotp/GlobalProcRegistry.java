@@ -9,16 +9,16 @@ import java.util.stream.Collectors;
  * Node-wide process name registry with a hook for distributed resolution.
  *
  * <p>Extends the single-JVM {@link ProcRegistry} concept with node-prefixed name display and a
- * pluggable {@link RemoteResolver} hook for future distributed lookup. In phase 1 (in-JVM), this
- * is functionally identical to {@link ProcRegistry} but provides a stable API surface for
- * distributed extensions without breaking callers.
+ * pluggable {@link RemoteResolver} hook for future distributed lookup. In phase 1 (in-JVM), this is
+ * functionally identical to {@link ProcRegistry} but provides a stable API surface for distributed
+ * extensions without breaking callers.
  *
  * <p>Node name is set via the {@code jotp.node.name} system property (default: {@code "local"}).
- * All registered names are stored without the node prefix; the prefix is only applied in
- * {@link #allNames()} for distributed display purposes.
+ * All registered names are stored without the node prefix; the prefix is only applied in {@link
+ * #allNames()} for distributed display purposes.
  *
- * <p>Like {@link ProcRegistry}, registrations are automatically removed when the process
- * terminates — normal or abnormal.
+ * <p>Like {@link ProcRegistry}, registrations are automatically removed when the process terminates
+ * — normal or abnormal.
  *
  * <p><b>Phase 1 usage (in-JVM):</b>
  *
@@ -50,8 +50,7 @@ public final class GlobalProcRegistry {
 
     private GlobalProcRegistry() {}
 
-    private static final ConcurrentHashMap<String, Proc<?, ?>> REGISTRY =
-            new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Proc<?, ?>> REGISTRY = new ConcurrentHashMap<>();
 
     private static volatile RemoteResolver remoteResolver = null;
 

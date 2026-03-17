@@ -100,9 +100,7 @@ class ApplicationControllerStopAllTest {
         var stopOrder = Collections.synchronizedList(new ArrayList<String>());
 
         var specC =
-                ApplicationSpec.builder("c")
-                        .mod(callback("c", () -> stopOrder.add("c")))
-                        .build();
+                ApplicationSpec.builder("c").mod(callback("c", () -> stopOrder.add("c"))).build();
         var specB =
                 ApplicationSpec.builder("b")
                         .applications("c")

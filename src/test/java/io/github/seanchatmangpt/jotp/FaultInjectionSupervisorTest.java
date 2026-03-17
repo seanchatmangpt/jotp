@@ -196,7 +196,9 @@ class FaultInjectionSupervisorTest {
 
         var ref =
                 chaos.superviseWithFault(
-                        "worker", 0, (s, m) -> s,
+                        "worker",
+                        0,
+                        (s, m) -> s,
                         FaultInjectionSupervisor.FaultSpec.afterMessages(0));
 
         ref.tell(new Msg.Inc()); // triggers immediate fault
@@ -217,10 +219,7 @@ class FaultInjectionSupervisorTest {
         var chaos = FaultInjectionSupervisor.wrap(sup);
 
         Supervisor.ChildSpec<Integer, Msg> spec =
-                Supervisor.ChildSpec.worker(
-                        "spec-worker",
-                        () -> 0,
-                        (state, msg) -> state + 1);
+                Supervisor.ChildSpec.worker("spec-worker", () -> 0, (state, msg) -> state + 1);
 
         var ref =
                 chaos.<Integer, Msg>superviseWithFault(

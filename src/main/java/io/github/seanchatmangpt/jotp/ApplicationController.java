@@ -423,8 +423,8 @@ public final class ApplicationController {
     }
 
     /**
-     * Stop all running applications in reverse dependency order, allowing up to {@code perAppTimeout}
-     * for each application's {@link ApplicationCallback#stop} to complete.
+     * Stop all running applications in reverse dependency order, allowing up to {@code
+     * perAppTimeout} for each application's {@link ApplicationCallback#stop} to complete.
      *
      * <p>Algorithm:
      *
@@ -507,10 +507,7 @@ public final class ApplicationController {
      * first, roots last — the reverse of the correct stop order.
      */
     private static void dfsStopVisit(
-            String name,
-            Map<String, RunningEntry> apps,
-            Set<String> visited,
-            List<String> result) {
+            String name, Map<String, RunningEntry> apps, Set<String> visited, List<String> result) {
         if (visited.contains(name)) {
             return;
         }

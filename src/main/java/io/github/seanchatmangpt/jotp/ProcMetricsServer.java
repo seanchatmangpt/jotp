@@ -13,8 +13,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Java developers running production services need a way to scrape process metrics without
  * pulling in Micrometer, Prometheus client libraries, or a separate metrics registry. This server
- * uses the JDK's built-in {@code com.sun.net.httpserver.HttpServer} (stable since Java 6, zero
- * heap overhead) to expose {@link MetricsCollector} snapshots over HTTP.
+ * uses the JDK's built-in {@code com.sun.net.httpserver.HttpServer} (stable since Java 6, zero heap
+ * overhead) to expose {@link MetricsCollector} snapshots over HTTP.
  *
  * <p>Two endpoints are available:
  *
@@ -43,10 +43,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * server.close(); // stops the HTTP server
  * }</pre>
  *
- * <p><strong>Prometheus text format:</strong> Counter and gauge values are emitted as plain numbers.
- * Histogram and timer values emit one line per sub-metric (count, mean, min, max, p50, p95, p99).
- * Metric names are sanitized: {@code .} and {@code -} become {@code _}, the {@code jotp_} prefix
- * is prepended, and collector name is added as a label.
+ * <p><strong>Prometheus text format:</strong> Counter and gauge values are emitted as plain
+ * numbers. Histogram and timer values emit one line per sub-metric (count, mean, min, max, p50,
+ * p95, p99). Metric names are sanitized: {@code .} and {@code -} become {@code _}, the {@code
+ * jotp_} prefix is prepended, and collector name is added as a label.
  *
  * @see MetricsCollector
  */

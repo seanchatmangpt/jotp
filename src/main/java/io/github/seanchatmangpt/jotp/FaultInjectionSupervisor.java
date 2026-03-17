@@ -58,7 +58,8 @@ public final class FaultInjectionSupervisor {
      *   <li>{@link OnMessage} — crash when a predicate matches the incoming message
      * </ul>
      */
-    public sealed interface FaultSpec permits FaultSpec.AfterMessages, FaultSpec.AfterDuration, FaultSpec.OnMessage {
+    public sealed interface FaultSpec
+            permits FaultSpec.AfterMessages, FaultSpec.AfterDuration, FaultSpec.OnMessage {
 
         /**
          * Crash after {@code count} messages have been processed successfully. The crash occurs on
@@ -146,8 +147,8 @@ public final class FaultInjectionSupervisor {
     // ── Public API ────────────────────────────────────────────────────────────────
 
     /**
-     * Supervise a process with fault injection using the simple {@link
-     * Supervisor#supervise(String, Object, BiFunction)} API.
+     * Supervise a process with fault injection using the simple {@link Supervisor#supervise(String,
+     * Object, BiFunction)} API.
      *
      * <p>The real {@code handler} runs normally until the {@link FaultSpec} condition is met, at
      * which point an {@link InjectedFault} is thrown. The supervisor restarts the process; after
@@ -213,9 +214,9 @@ public final class FaultInjectionSupervisor {
     /**
      * Create a wrapper around {@code handler} that injects a fault when {@code faultSpec} fires.
      *
-     * <p>Each call creates a fresh closure with its own counters and state. Since {@link Supervisor}
-     * reuses the same handler BiFunction across restarts, the fault fires exactly once per
-     * {@link #superviseWithFault} registration (one-shot semantics).
+     * <p>Each call creates a fresh closure with its own counters and state. Since {@link
+     * Supervisor} reuses the same handler BiFunction across restarts, the fault fires exactly once
+     * per {@link #superviseWithFault} registration (one-shot semantics).
      */
     private <S, M> BiFunction<S, M, S> wrappedHandler(
             BiFunction<S, M, S> handler, FaultSpec faultSpec) {

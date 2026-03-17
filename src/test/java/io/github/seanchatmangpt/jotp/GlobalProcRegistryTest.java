@@ -175,12 +175,13 @@ class GlobalProcRegistryTest {
     @Test
     @DisplayName("setRemoteResolver(null): disables remote resolution")
     void setRemoteResolver_null_disablesRemote() {
-        GlobalProcRegistry.setRemoteResolver(new GlobalProcRegistry.RemoteResolver() {
-            @Override
-            public <S, M> java.util.Optional<Proc<S, M>> resolve(String globalName) {
-                return java.util.Optional.empty();
-            }
-        });
+        GlobalProcRegistry.setRemoteResolver(
+                new GlobalProcRegistry.RemoteResolver() {
+                    @Override
+                    public <S, M> java.util.Optional<Proc<S, M>> resolve(String globalName) {
+                        return java.util.Optional.empty();
+                    }
+                });
         GlobalProcRegistry.setRemoteResolver(null);
 
         assertThat(GlobalProcRegistry.whereis("anything")).isEmpty();
@@ -193,12 +194,13 @@ class GlobalProcRegistryTest {
     void reset_clearsEverything() {
         var proc = Proc.spawn(0, (state, msg) -> state);
         GlobalProcRegistry.register("temp", proc);
-        GlobalProcRegistry.setRemoteResolver(new GlobalProcRegistry.RemoteResolver() {
-            @Override
-            public <S, M> java.util.Optional<Proc<S, M>> resolve(String globalName) {
-                return java.util.Optional.empty();
-            }
-        });
+        GlobalProcRegistry.setRemoteResolver(
+                new GlobalProcRegistry.RemoteResolver() {
+                    @Override
+                    public <S, M> java.util.Optional<Proc<S, M>> resolve(String globalName) {
+                        return java.util.Optional.empty();
+                    }
+                });
 
         GlobalProcRegistry.reset();
 
