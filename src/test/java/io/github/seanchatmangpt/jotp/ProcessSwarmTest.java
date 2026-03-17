@@ -106,7 +106,7 @@ class ProcessSwarmTest {
         AtomicInteger resetCount = new AtomicInteger(0);
 
         swarm =
-                ProcessSwarm.builder(
+                ProcessSwarm.<CounterState, CounterMsg>builder(
                                 CounterState::initial,
                                 (state, msg) -> {
                                     if (msg instanceof CounterMsg.Reset) {
@@ -162,7 +162,7 @@ class ProcessSwarmTest {
         AtomicInteger processedCount = new AtomicInteger(0);
 
         ProcessSwarm<CounterState, CounterMsg> localSwarm =
-                ProcessSwarm.builder(
+                ProcessSwarm.<CounterState, CounterMsg>builder(
                                 CounterState::initial,
                                 (state, msg) -> {
                                     processedCount.incrementAndGet();
@@ -191,7 +191,7 @@ class ProcessSwarmTest {
         Set<Long> processingThreadIds = ConcurrentHashMap.newKeySet();
 
         swarm =
-                ProcessSwarm.builder(
+                ProcessSwarm.<CounterState, CounterMsg>builder(
                                 CounterState::initial,
                                 (state, msg) -> {
                                     processingThreadIds.add(Thread.currentThread().threadId());
