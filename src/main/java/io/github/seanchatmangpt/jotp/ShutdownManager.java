@@ -91,7 +91,7 @@ public final class ShutdownManager {
       });
 
       log.fine("OS signal handlers installed (SIGTERM, SIGINT)");
-    } catch (IllegalArgumentException | sun.misc.SignalException e) {
+    } catch (IllegalArgumentException e) {
       // Signals may not be available on all platforms (e.g., Windows)
       log.warning("Could not install signal handlers: " + e.getMessage());
     }

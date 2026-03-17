@@ -101,9 +101,13 @@ public final class EtcdServiceDiscovery implements ServiceDiscoveryProvider {
             synchronized (leaseIds) {
               leaseIds.forEach(
                   (processName, leaseId) -> {
-                    String key = KEY_PREFIX + processName;
-                    deleteKey(key);
-                    toRemove.add(processName);
+                    try {
+                      String key = KEY_PREFIX + processName;
+                      deleteKey(key);
+                      toRemove.add(processName);
+                    } catch (Exception e) {
+                      System.err.println("Failed to delete key " + processName + ": " + e.getMessage());
+                    }
                   });
             }
             synchronized (leaseIds) {

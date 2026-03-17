@@ -137,7 +137,9 @@ public final class ApplicationController {
 
     private record RunningEntry(ApplicationSpec spec, RunType runType, Object state) {}
 
-    private ApplicationController() {}
+    private ApplicationController() {
+        this.instanceName = "default";
+    }
 
     // ── JVM Restart Recovery Methods ─────────────────────────────────────────────
 

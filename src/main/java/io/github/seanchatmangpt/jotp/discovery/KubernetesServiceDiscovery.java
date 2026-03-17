@@ -257,7 +257,7 @@ public final class KubernetesServiceDiscovery implements ServiceDiscoveryProvide
             .uri(URI.create(url))
             .header("Authorization", "Bearer " + token)
             .header("Content-Type", "application/strategic-merge-patch+json")
-            .PATCH(HttpRequest.BodyPublishers.ofString(json))
+            .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
             .timeout(Duration.ofSeconds(5))
             .build();
 

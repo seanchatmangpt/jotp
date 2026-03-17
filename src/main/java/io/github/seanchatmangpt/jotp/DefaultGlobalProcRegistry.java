@@ -101,12 +101,14 @@ public final class DefaultGlobalProcRegistry implements GlobalProcRegistry {
   @Override
   public Optional<ProcRef<?, ?>> lookupLocal(String processName) {
     // Fast path: check local registry first
-    Optional<Proc<?, ?>> localProc = ProcRegistry.whereis(processName);
+    Optional<Proc<String, String>> localProc = ProcRegistry.whereis(processName);
     if (localProc.isPresent()) {
       // Found locally, wrap in a stable ProcRef
       // Note: ProcRegistry returns Proc; we need to find the corresponding ProcRef
       // In practice, callers should track their own ProcRefs, but we can return a wrapper
-      return Optional.of(new ProcRef<>(localProc.get()));
+      @SuppressWarnings("unchecked")
+      Proc<String, String> proc = (Proc<String, String>) localProc.get();
+      return Optional.of(new ProcRef<>(proc));
     }
 
     return Optional.empty();

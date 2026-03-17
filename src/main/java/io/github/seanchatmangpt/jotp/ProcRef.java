@@ -168,11 +168,9 @@ public final class ProcRef<S, M> {
         ProcessServiceDiscoveryProvider provider = discoveryProvider.get();
 
         // Fast path: check local registry first
-        Optional<Proc<?, ?>> localProc = ProcRegistry.whereis(processName);
+        Optional<Proc<S, M>> localProc = ProcRegistry.whereis(processName);
         if (localProc.isPresent()) {
-            @SuppressWarnings("unchecked")
-            Proc<S, M> local = (Proc<S, M>) localProc.get();
-            local.tell(msg);
+            localProc.get().tell(msg);
             return;
         }
 
@@ -215,11 +213,9 @@ public final class ProcRef<S, M> {
         ProcessServiceDiscoveryProvider provider = discoveryProvider.get();
 
         // Fast path: check local registry first
-        Optional<Proc<?, ?>> localProc = ProcRegistry.whereis(processName);
+        Optional<Proc<S, M>> localProc = ProcRegistry.whereis(processName);
         if (localProc.isPresent()) {
-            @SuppressWarnings("unchecked")
-            Proc<S, M> local = (Proc<S, M>) localProc.get();
-            return local.ask(msg).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return localProc.get().ask(msg).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
         // Slow path: query discovery provider

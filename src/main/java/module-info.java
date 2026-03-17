@@ -95,8 +95,11 @@
  */
 module io.github.seanchatmangpt.jotp {
     requires java.management;
+    requires java.logging; // For ShutdownManager
     requires jdk.management;
     requires jdk.unsupported;
+    requires jdk.httpserver;
+    requires java.net.http;
     requires static rocksdbjni; // Optional for persistent registry backend
     requires com.fasterxml.jackson.databind;
     requires com.fasterxml.jackson.datatype.jsr310;
