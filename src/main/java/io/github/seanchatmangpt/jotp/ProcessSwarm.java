@@ -2,38 +2,32 @@ package io.github.seanchatmangpt.jotp;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
- * Elastic pool of identical {@link Proc} replicas that auto-scales and uses work-stealing for
- * optimal throughput — a first-class OTP primitive for supervised, stateful process pools.
+ * Elastic pool of identical OTP processes that auto-scales and uses work-stealing for optimal
+ * throughput.
  *
- * <p>Unlike a simple thread pool, each replica is a full OTP process with its own immutable state
- * and {@link java.util.concurrent.LinkedTransferQueue} mailbox. The swarm routes work to the
- * least-loaded replica via the <em>Power-of-2 choices</em> algorithm (pick 2 random replicas, send
- * to the one with the smaller queue) — O(1) and statistically near-optimal.
+ * <p>Each replica is a full {@link Proc} with its own state and mailbox. Work is routed using the
+ * power-of-2-choices algorithm: pick two random replicas, send to the one with the smaller queue
+ * depth. This is O(1) and statistically near-optimal.
  *
- * <p><strong>Auto-scaling:</strong> A background virtual thread checks every 1 second:
+ * <p>Auto-scaling runs on a background virtual thread:
  *
  * <ul>
- *   <li>Scale up: if ANY replica queue depth &gt; {@code scaleUpQueueDepth} AND {@code replicaCount
- *       &lt; maxSize}, a new replica is spawned.
- *   <li>Scale down: if ALL replicas have been idle for at least {@code scaleDownIdleTime} AND
- *       {@code replicaCount &gt; minSize}, one idle replica is shut down.
+ *   <li>Scale up: if ANY replica queue depth &gt; {@code scaleUpQueueDepth} AND {@code
+ *       replicaCount < maxSize}, spawn a new replica.
+ *   <li>Scale down: if ALL replicas have been idle for {@code scaleDownIdleTime} AND {@code
+ *       replicaCount > minSize}, shut down one replica.
  * </ul>
  *
- * <p><strong>Graceful close:</strong> {@link #close()} drains all in-flight messages from every
- * replica before shutting down.
- *
- * <p><strong>Usage:</strong>
+ * <p>Example usage:
  *
  * <pre>{@code
  * ProcessSwarm<CounterState, CounterMsg> swarm = ProcessSwarm
@@ -44,25 +38,18 @@ import java.util.function.Supplier;
  *     .scaleDownIdleTime(Duration.ofSeconds(30))
  *     .build();
  *
- * swarm.send(new Increment(1));   // routes to least-loaded replica
- * swarm.broadcast(new Reset());   // sends to ALL replicas
+ * swarm.send(new Increment(1));
+ * swarm.broadcast(new Reset());
  * SwarmStats stats = swarm.stats();
  * swarm.close();
  * }</pre>
  *
- * @param <S> process state type (immutable value type recommended)
- * @param <M> message type — use a sealed interface of records for type safety
+ * @param <S> process state type
+ * @param <M> message type
  */
 public final class ProcessSwarm<S, M> implements AutoCloseable {
 
-    // ── Records ──────────────────────────────────────────────────────────────
-
-    /**
-     * Swarm configuration — captured at {@link Builder#build()} time.
-     *
-     * @param <S> state type
-     * @param <M> message type
-     */
+    /** Configuration for a swarm. */
     public record Config<S, M>(
             Supplier<S> initialState,
             BiFunction<S, M, S> handler,
@@ -71,25 +58,10 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
             int scaleUpQueueDepth,
             Duration scaleDownIdleTime) {}
 
-    /**
-     * Stats snapshot for a single replica.
-     *
-     * @param id replica index (0-based)
-     * @param queueDepth current number of pending messages in the mailbox
-     * @param processedCount total messages processed since this replica started
-     * @param idle {@code true} if no messages have been received since last check
-     */
+    /** Per-replica statistics snapshot. */
     public record ReplicaStats(int id, int queueDepth, long processedCount, boolean idle) {}
 
-    /**
-     * Aggregate stats for the entire swarm.
-     *
-     * @param replicaCount current number of live replicas
-     * @param totalProcessed sum of all processed messages across all replicas
-     * @param totalInFlight total messages currently queued across all replicas
-     * @param avgQueueDepth average queue depth across all replicas (0 if none)
-     * @param maxQueueDepth maximum queue depth across all replicas
-     */
+    /** Aggregate swarm statistics snapshot. */
     public record SwarmStats(
             int replicaCount,
             long totalProcessed,
@@ -97,46 +69,39 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
             int avgQueueDepth,
             int maxQueueDepth) {}
 
-    // ── Internal Replica ─────────────────────────────────────────────────────
+    // ── Internal replica wrapper ──────────────────────────────────────────────
 
-    /** Wraps a single {@link Proc} with bookkeeping for load balancing and idle detection. */
     private final class Replica {
         final int id;
         final Proc<S, M> proc;
-
-        /** Last time a message was enqueued to this replica (for idle detection). */
-        volatile Instant lastActivity = Instant.now();
-
-        /** Snapshot of messagesIn at the last idle-check cycle. */
-        volatile long lastMessagesIn = 0;
+        final AtomicLong processed = new AtomicLong(0);
+        volatile Instant lastActive = Instant.now();
 
         Replica(int id) {
             this.id = id;
-            this.proc = new Proc<>(config.initialState().get(), config.handler());
+            this.proc = Proc.spawn(config.initialState().get(), (state, msg) -> {
+                S next = config.handler().apply(state, msg);
+                processed.incrementAndGet();
+                lastActive = Instant.now();
+                return next;
+            });
         }
 
         int queueDepth() {
             return proc.mailboxSize();
         }
 
-        long processedCount() {
-            return proc.messagesOut.sum();
+        boolean isIdle(Duration idleThreshold) {
+            return queueDepth() == 0
+                    && Duration.between(lastActive, Instant.now()).compareTo(idleThreshold) >= 0;
         }
 
-        void send(M message) {
-            lastActivity = Instant.now();
-            proc.tell(message);
+        ReplicaStats toStats() {
+            return new ReplicaStats(id, queueDepth(), processed.get(), isIdle(config.scaleDownIdleTime()));
         }
 
-        /** Stop the replica gracefully — drain then interrupt. */
-        void drain() {
+        void stop() {
             try {
-                // Wait for the queue to drain (up to 5 seconds)
-                long deadline = System.currentTimeMillis() + 5_000;
-                while (proc.mailboxSize() > 0 && System.currentTimeMillis() < deadline) {
-                    Thread.sleep(5);
-                }
-                // Graceful stop: signals the loop to exit after draining
                 proc.stop();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -144,82 +109,82 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
         }
     }
 
-    // ── Fields ───────────────────────────────────────────────────────────────
+    // ── Fields ────────────────────────────────────────────────────────────────
 
     private final Config<S, M> config;
     private final CopyOnWriteArrayList<Replica> replicas = new CopyOnWriteArrayList<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
-    private final Thread scalerThread;
-    private volatile int nextId = 0;
+    private final AtomicLong nextId = new AtomicLong(0);
+    private final Thread scalingThread;
 
-    // ── Constructor / Factory ─────────────────────────────────────────────────
+    // ── Constructor (private — use builder) ───────────────────────────────────
 
     private ProcessSwarm(Config<S, M> config) {
         this.config = config;
 
-        // Start minimum replicas
+        // Spawn minimum replicas
         for (int i = 0; i < config.minSize(); i++) {
-            replicas.add(new Replica(nextId++));
+            replicas.add(new Replica((int) nextId.getAndIncrement()));
         }
 
-        // Start the background auto-scaler
-        scalerThread = Thread.ofVirtual().name("swarm-scaler").start(this::scalerLoop);
+        // Background auto-scaling thread
+        this.scalingThread = Thread.ofVirtual().name("process-swarm-scaler").start(this::scalingLoop);
     }
 
+    // ── Factory ───────────────────────────────────────────────────────────────
+
     /**
-     * Create a builder for a new {@code ProcessSwarm}.
+     * Create a builder for a new swarm.
      *
-     * @param initialState factory producing the initial state for each replica
-     * @param handler pure {@code (state, message) -> nextState} function
+     * @param initialState factory for per-replica initial state
+     * @param handler message handler {@code (state, message) -> nextState}
      * @param <S> state type
      * @param <M> message type
-     * @return a new {@link Builder}
+     * @return a new builder
      */
     public static <S, M> Builder<S, M> builder(
             Supplier<S> initialState, BiFunction<S, M, S> handler) {
-        Objects.requireNonNull(initialState, "initialState");
-        Objects.requireNonNull(handler, "handler");
         return new Builder<>(initialState, handler);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
-     * Route {@code message} to the least-loaded replica using the Power-of-2 choices algorithm.
+     * Route a message to the least-loaded replica using the power-of-2-choices algorithm.
      *
-     * <p>Two replicas are chosen at random; the one with the smaller queue depth receives the
-     * message. This is O(1) per send and statistically near-optimal.
+     * <p>Picks two random replicas and sends to the one with the smaller queue depth.
      *
-     * @param message the message to route
+     * @param message the message to send
      * @throws IllegalStateException if the swarm has been closed
      */
     public void send(M message) {
-        if (closed.get()) throw new IllegalStateException("ProcessSwarm is closed");
-        Objects.requireNonNull(message, "message");
-        leastLoaded().send(message);
+        if (closed.get()) {
+            throw new IllegalStateException("ProcessSwarm is closed");
+        }
+        leastLoaded().proc.tell(message);
     }
 
     /**
-     * Send {@code message} to every replica.
+     * Broadcast a message to ALL replicas.
      *
-     * <p>Useful for configuration updates, cache invalidation, or any operation that must be
-     * applied to all replicas' state.
+     * <p>Useful for configuration updates, cache invalidation, or coordinated state resets.
      *
-     * @param message the message to broadcast
+     * @param message the message to send to every replica
      * @throws IllegalStateException if the swarm has been closed
      */
     public void broadcast(M message) {
-        if (closed.get()) throw new IllegalStateException("ProcessSwarm is closed");
-        Objects.requireNonNull(message, "message");
+        if (closed.get()) {
+            throw new IllegalStateException("ProcessSwarm is closed");
+        }
         for (Replica r : replicas) {
-            r.send(message);
+            r.proc.tell(message);
         }
     }
 
     /**
-     * Return aggregate stats across all replicas.
+     * Return aggregate statistics across all replicas.
      *
-     * @return a point-in-time {@link SwarmStats} snapshot
+     * @return a snapshot of current swarm metrics
      */
     public SwarmStats stats() {
         List<Replica> snapshot = List.copyOf(replicas);
@@ -228,151 +193,132 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
         }
         long totalProcessed = 0;
         long totalInFlight = 0;
-        int maxQueue = 0;
+        int maxQueueDepth = 0;
         for (Replica r : snapshot) {
-            totalProcessed += r.processedCount();
-            int q = r.queueDepth();
-            totalInFlight += q;
-            if (q > maxQueue) maxQueue = q;
+            totalProcessed += r.processed.get();
+            int depth = r.queueDepth();
+            totalInFlight += depth;
+            if (depth > maxQueueDepth) {
+                maxQueueDepth = depth;
+            }
         }
-        int avgQueue = (int) (totalInFlight / snapshot.size());
-        return new SwarmStats(snapshot.size(), totalProcessed, totalInFlight, avgQueue, maxQueue);
+        int avgQueueDepth = (int) (totalInFlight / snapshot.size());
+        return new SwarmStats(
+                snapshot.size(), totalProcessed, totalInFlight, avgQueueDepth, maxQueueDepth);
     }
 
     /**
-     * Return per-replica stats.
+     * Return per-replica statistics.
      *
-     * @return unmodifiable list of {@link ReplicaStats}, one per live replica
+     * @return an unmodifiable list of replica stats snapshots
      */
     public List<ReplicaStats> replicaStats() {
-        List<Replica> snapshot = List.copyOf(replicas);
-        List<ReplicaStats> result = new ArrayList<>(snapshot.size());
-        for (Replica r : snapshot) {
-            long currentIn = r.proc.messagesIn.sum();
-            boolean idle = currentIn == r.lastMessagesIn && r.queueDepth() == 0;
-            result.add(new ReplicaStats(r.id, r.queueDepth(), r.processedCount(), idle));
-        }
-        return Collections.unmodifiableList(result);
+        return replicas.stream().map(Replica::toStats).toList();
     }
 
     /**
-     * Gracefully drain all in-flight messages and shut down every replica.
+     * Gracefully drain and shut down all replicas.
      *
-     * <p>Stops the auto-scaler first, then drains each replica. Blocks until all replicas have
-     * finished. Idempotent — safe to call multiple times.
+     * <p>Waits for each replica's mailbox to drain before stopping. The scaling thread is
+     * interrupted and joined.
      */
     @Override
     public void close() {
-        if (!closed.compareAndSet(false, true)) return;
+        if (!closed.compareAndSet(false, true)) {
+            return; // Already closed
+        }
 
-        // Stop the scaler loop
-        scalerThread.interrupt();
+        scalingThread.interrupt();
         try {
-            scalerThread.join(2_000);
+            scalingThread.join(5000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
-        // Drain all replicas
-        List<Replica> snapshot = List.copyOf(replicas);
-        List<Thread> drainers = new ArrayList<>(snapshot.size());
-        for (Replica r : snapshot) {
-            drainers.add(Thread.ofVirtual().start(r::drain));
+        // Drain all replicas: wait for mailboxes to empty
+        for (Replica r : replicas) {
+            drainReplica(r);
         }
-        for (Thread t : drainers) {
-            try {
-                t.join(6_000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+        // Stop all replicas
+        for (Replica r : replicas) {
+            r.stop();
         }
         replicas.clear();
     }
 
-    // ── Internal: routing ─────────────────────────────────────────────────────
+    // ── Internal helpers ──────────────────────────────────────────────────────
 
     /**
-     * Power-of-2 choices: pick 2 random replicas, return the one with the smaller queue. Falls back
-     * to the first replica if only one exists.
+     * Power-of-2-choices: pick 2 random replicas, return the one with the smaller queue depth.
+     * Falls back to the first replica if only one exists.
      */
     private Replica leastLoaded() {
         List<Replica> snapshot = List.copyOf(replicas);
         int size = snapshot.size();
-        if (size == 1) return snapshot.get(0);
-
+        if (size == 1) {
+            return snapshot.get(0);
+        }
         ThreadLocalRandom rng = ThreadLocalRandom.current();
-        int i = rng.nextInt(size);
-        int j;
-        do {
-            j = rng.nextInt(size);
-        } while (j == i);
-
-        Replica a = snapshot.get(i);
-        Replica b = snapshot.get(j);
-        return a.queueDepth() <= b.queueDepth() ? a : b;
+        int idx1 = rng.nextInt(size);
+        int idx2 = rng.nextInt(size - 1);
+        if (idx2 >= idx1) idx2++;
+        Replica r1 = snapshot.get(idx1);
+        Replica r2 = snapshot.get(idx2);
+        return r1.queueDepth() <= r2.queueDepth() ? r1 : r2;
     }
 
-    // ── Internal: auto-scaler ─────────────────────────────────────────────────
-
-    private void scalerLoop() {
-        while (!Thread.currentThread().isInterrupted() && !closed.get()) {
+    /** Wait for a replica's mailbox to drain (at most 5 seconds). */
+    private void drainReplica(Replica r) {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (r.queueDepth() > 0 && System.currentTimeMillis() < deadline) {
             try {
-                Thread.sleep(1_000);
+                Thread.sleep(5);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                break;
-            }
-
-            if (closed.get()) break;
-
-            List<Replica> snapshot = List.copyOf(replicas);
-
-            // Scale up: if any replica queue > threshold and we're below maxSize
-            if (snapshot.size() < config.maxSize()) {
-                for (Replica r : snapshot) {
-                    if (r.queueDepth() > config.scaleUpQueueDepth()) {
-                        Replica fresh = new Replica(nextId++);
-                        replicas.add(fresh);
-                        break; // one new replica per check cycle
-                    }
-                }
-            }
-
-            // Scale down: if all replicas are idle beyond scaleDownIdleTime and above minSize
-            if (snapshot.size() > config.minSize()) {
-                Instant idleCutoff = Instant.now().minus(config.scaleDownIdleTime());
-                // Update idle tracking
-                for (Replica r : snapshot) {
-                    r.lastMessagesIn = r.proc.messagesIn.sum();
-                }
-
-                boolean allIdle =
-                        snapshot.stream()
-                                .allMatch(
-                                        r ->
-                                                r.queueDepth() == 0
-                                                        && r.lastActivity.isBefore(idleCutoff));
-
-                if (allIdle) {
-                    // Remove the last replica (most recently added)
-                    Replica toRemove = snapshot.get(snapshot.size() - 1);
-                    if (replicas.remove(toRemove)) {
-                        toRemove.drain();
-                    }
-                }
+                return;
             }
         }
     }
 
+    /** Background loop: check every 1 second and scale up or down as needed. */
+    private void scalingLoop() {
+        while (!closed.get() && !Thread.currentThread().isInterrupted()) {
+            try {
+                Thread.sleep(1000);
+                if (closed.get()) break;
+                maybeScaleUp();
+                maybeScaleDown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+
+    private synchronized void maybeScaleUp() {
+        if (replicas.size() >= config.maxSize()) return;
+        for (Replica r : replicas) {
+            if (r.queueDepth() > config.scaleUpQueueDepth()) {
+                replicas.add(new Replica((int) nextId.getAndIncrement()));
+                return; // add one at a time
+            }
+        }
+    }
+
+    private synchronized void maybeScaleDown() {
+        if (replicas.size() <= config.minSize()) return;
+        // Only scale down if ALL replicas are idle
+        for (Replica r : replicas) {
+            if (!r.isIdle(config.scaleDownIdleTime())) return;
+        }
+        // Remove the last replica
+        Replica toRemove = replicas.remove(replicas.size() - 1);
+        toRemove.stop();
+    }
+
     // ── Builder ───────────────────────────────────────────────────────────────
 
-    /**
-     * Builder for {@link ProcessSwarm}.
-     *
-     * @param <S> state type
-     * @param <M> message type
-     */
+    /** Builder for {@link ProcessSwarm}. */
     public static final class Builder<S, M> {
 
         private final Supplier<S> initialState;
@@ -387,72 +333,46 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
             this.handler = handler;
         }
 
-        /**
-         * Minimum number of replicas — always kept alive regardless of load.
-         *
-         * @param min minimum size (must be &ge; 1)
-         * @return this builder
-         */
+        /** Minimum number of replicas (default: 2). */
         public Builder<S, M> minSize(int min) {
-            if (min < 1) throw new IllegalArgumentException("minSize must be >= 1, got: " + min);
+            if (min < 1) throw new IllegalArgumentException("minSize must be >= 1");
             this.minSize = min;
             return this;
         }
 
-        /**
-         * Maximum number of replicas the swarm may scale up to.
-         *
-         * @param max maximum size (must be &ge; minSize)
-         * @return this builder
-         */
+        /** Maximum number of replicas (default: 10). */
         public Builder<S, M> maxSize(int max) {
-            if (max < 1) throw new IllegalArgumentException("maxSize must be >= 1, got: " + max);
+            if (max < 1) throw new IllegalArgumentException("maxSize must be >= 1");
             this.maxSize = max;
             return this;
         }
 
         /**
-         * Queue depth threshold that triggers a scale-up event.
-         *
-         * <p>When any replica's queue depth exceeds this value and the swarm is below {@code
-         * maxSize}, a new replica is spawned.
-         *
-         * @param depth depth threshold (must be &ge; 0)
-         * @return this builder
+         * Queue depth threshold that triggers a scale-up (default: 50). When any replica's queue
+         * exceeds this depth and the swarm is below maxSize, a new replica is spawned.
          */
         public Builder<S, M> scaleUpQueueDepth(int depth) {
-            if (depth < 0)
-                throw new IllegalArgumentException("scaleUpQueueDepth must be >= 0, got: " + depth);
+            if (depth < 0) throw new IllegalArgumentException("scaleUpQueueDepth must be >= 0");
             this.scaleUpQueueDepth = depth;
             return this;
         }
 
         /**
-         * Time a replica must be continuously idle before it may be removed during scale-down.
-         *
-         * @param idle idle duration (must be positive)
-         * @return this builder
+         * Idle time threshold for scale-down (default: 30s). When ALL replicas have been idle
+         * (empty queue, no recent activity) for at least this duration and the swarm is above
+         * minSize, one replica is shut down.
          */
         public Builder<S, M> scaleDownIdleTime(Duration idle) {
-            Objects.requireNonNull(idle, "scaleDownIdleTime");
-            if (idle.isNegative() || idle.isZero())
-                throw new IllegalArgumentException("scaleDownIdleTime must be positive");
             this.scaleDownIdleTime = idle;
             return this;
         }
 
-        /**
-         * Build and start the swarm.
-         *
-         * @return a new running {@link ProcessSwarm}
-         * @throws IllegalStateException if {@code maxSize &lt; minSize}
-         */
+        /** Build and start the swarm. */
         public ProcessSwarm<S, M> build() {
             if (maxSize < minSize) {
-                throw new IllegalStateException(
-                        "maxSize (" + maxSize + ") must be >= minSize (" + minSize + ")");
+                throw new IllegalArgumentException("maxSize must be >= minSize");
             }
-            Config<S, M> cfg =
+            Config<S, M> config =
                     new Config<>(
                             initialState,
                             handler,
@@ -460,7 +380,7 @@ public final class ProcessSwarm<S, M> implements AutoCloseable {
                             maxSize,
                             scaleUpQueueDepth,
                             scaleDownIdleTime);
-            return new ProcessSwarm<>(cfg);
+            return new ProcessSwarm<>(config);
         }
     }
 }
