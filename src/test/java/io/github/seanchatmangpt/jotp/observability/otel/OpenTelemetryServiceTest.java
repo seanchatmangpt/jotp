@@ -20,12 +20,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
+import io.github.seanchatmangpt.dtr.junit5.DtrExtension;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /** Tests for OpenTelemetryService. */
+@ExtendWith(DtrExtension.class)
 @DisplayName("OpenTelemetryService: Distributed Tracing Integration")
 class OpenTelemetryServiceTest {
 
