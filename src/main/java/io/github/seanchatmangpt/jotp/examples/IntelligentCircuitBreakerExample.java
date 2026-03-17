@@ -177,19 +177,15 @@ public class IntelligentCircuitBreakerExample {
 
     // Simulate a failure and recovery to build history
     System.out.println("Recording failure and successful recovery:");
-    Exception ex = new SocketTimeoutException("Redis timeout");
+    SocketTimeoutException timeoutEx = new SocketTimeoutException("Redis timeout");
 
-    try {
-      breaker.execute("get-cache-123", request -> {
-        throw ex;
-      });
-    } catch (Exception ignored) {
-      // Expected
-    }
+    breaker.execute("get-cache-123", request -> {
+      throw timeoutEx;
+    });
 
     // Record retry success
-    breaker.recordRetrySuccess(ex);
-    breaker.recordRetrySuccess(ex);
+    breaker.recordRetrySuccess(timeoutEx);
+    breaker.recordRetrySuccess(timeoutEx);
 
     // Check predictions
     Optional<Duration> predictedRecovery = breaker.predictRecoveryTime();
