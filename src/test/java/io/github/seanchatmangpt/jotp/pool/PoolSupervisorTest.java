@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp.pool;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.time.Duration;
@@ -34,7 +32,6 @@ import org.junit.jupiter.api.Test;
  * @see PoolSupervisor
  * @see PoolStats
  */
-@DtrTest
 @DisplayName("PoolSupervisor: Worker Pool Abstraction")
 class PoolSupervisorTest {
 
@@ -58,9 +55,7 @@ class PoolSupervisorTest {
 
     @Test
     @DisplayName("Pool executes submitted tasks and returns results")
-    void testTaskExecution(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("PoolSupervisor: Worker Pool Pattern");
-        ctx.say(
+    void testTaskExecution() throws Exception {
                 """
                 PoolSupervisor provides a worker pool abstraction built on JOTP's supervision trees.
                 Tasks are submitted via ask() and distributed to workers using round-robin. Each worker
@@ -114,8 +109,7 @@ class PoolSupervisorTest {
 
     @Test
     @DisplayName("Round-robin distributes tasks across workers")
-    void testRoundRobinDistribution(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testRoundRobinDistribution() throws Exception {
                 """
                 Round-robin load balancing ensures even distribution of work across all pool workers.
                 This prevents any single worker from becoming a bottleneck while others remain idle.
@@ -157,8 +151,7 @@ class PoolSupervisorTest {
 
     @Test
     @DisplayName("Task timeout returns TimeoutException")
-    void testTaskTimeout(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testTaskTimeout() throws Exception {
                 """
                 Task timeouts prevent slow operations from blocking the pool indefinitely. When a task
                 exceeds its deadline, the caller receives a TimeoutException while the worker continues
@@ -247,8 +240,7 @@ class PoolSupervisorTest {
 
     @Test
     @DisplayName("Worker crash triggers supervisor restart")
-    void testWorkerCrashRecovery(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testWorkerCrashRecovery() throws Exception {
                 """
                 Worker crash recovery demonstrates the "let it crash" philosophy. When a worker throws
                 an exception, the supervisor restarts it automatically. Subsequent tasks succeed because
@@ -534,8 +526,7 @@ class PoolSupervisorTest {
 
     @Test
     @DisplayName("Pool handles high concurrency (50+ concurrent submissions)")
-    void testHighConcurrency(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testHighConcurrency() throws Exception {
                 """
                 High concurrency tests verify the pool can handle burst loads. With virtual threads,
                 JOTP pools can scale to thousands of concurrent submissions without the overhead of

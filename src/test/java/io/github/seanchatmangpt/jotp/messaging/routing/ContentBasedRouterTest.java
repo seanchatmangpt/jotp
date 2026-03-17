@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,7 +24,6 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>Covers routing correctness, edge cases, and performance characteristics.
  */
-@DtrTest
 @Timeout(10)
 @DisplayName("Content-Based Router Pattern (EIP)")
 class ContentBasedRouterTest implements WithAssertions {
@@ -43,13 +40,10 @@ class ContentBasedRouterTest implements WithAssertions {
     class BasicRouting {
 
         @Test
-        void routesToFirstMatchingPredicate(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router");
-            ctx.say(
+        void routesToFirstMatchingPredicate() throws InterruptedException {
                     "Routes messages to different destinations based on message content. Each message"
                             + " is examined and routed to the appropriate channel based on predefined"
                             + " conditions.");
-            ctx.sayCode(
                     """
                     ContentBasedRouter<Message> router = new ContentBasedRouter<>();
                     router.addRoute(msg -> msg.priority() >= 8, urgentHandler);
@@ -59,14 +53,12 @@ class ContentBasedRouterTest implements WithAssertions {
                     router.route(new Message("info", 3, "normal"));
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B{Content-Based Router}
                         B -->|priority >= 8| C[Urgent Handler]
                         B -->|priority < 8| D[Normal Handler]
                     """);
-            ctx.sayNote(
                     "Use when you need to route messages based on their content, such as order type,"
                             + " customer tier, or message priority. The first matching route wins.");
 
@@ -100,12 +92,9 @@ class ContentBasedRouterTest implements WithAssertions {
         }
 
         @Test
-        void firstMatchingRouteWins(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: First Match Wins");
-            ctx.say(
+        void firstMatchingRouteWins() throws InterruptedException {
                     "When multiple predicates match a message, the first matching route is used. Route"
                             + " order matters!");
-            ctx.sayCode(
                     """
                     // Both predicates match, but first should be used
                     router.addRoute(msg -> msg.priority() >= 5, firstHandler);
@@ -117,7 +106,6 @@ class ContentBasedRouterTest implements WithAssertions {
                     assertThat(secondRoute.get()).isEqualTo(0);  // Should not be invoked
                     """,
                     "java");
-            ctx.sayNote(
                     "Order routes from most specific to most general to ensure correct routing."
                             + " Think of it like a switch statement.");
 
@@ -150,12 +138,9 @@ class ContentBasedRouterTest implements WithAssertions {
         }
 
         @Test
-        void unmatchedMessagesSilentlyDropped(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Unmatched Messages");
-            ctx.say(
+        void unmatchedMessagesSilentlyDropped() throws InterruptedException {
                     "Messages that don't match any route are silently dropped unless a default route"
                             + " is configured.");
-            ctx.sayCode(
                     """
                     router.addRoute(msg -> msg.type().equals("ORDER"), handler);
 
@@ -166,7 +151,6 @@ class ContentBasedRouterTest implements WithAssertions {
                     assertThat(delivered.get()).isEqualTo(0);
                     """,
                     "java");
-            ctx.sayNote(
                     "Always provide a default route or dead letter channel to handle unexpected"
                             + " message types and prevent silent message loss.");
 
@@ -196,12 +180,9 @@ class ContentBasedRouterTest implements WithAssertions {
     class DefaultRoute {
 
         @Test
-        void defaultRouteHandlesUnmatchedMessages(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Default Route");
-            ctx.say(
+        void defaultRouteHandlesUnmatchedMessages() throws InterruptedException {
                     "A default route handles messages that don't match any specific condition,"
                             + " preventing message loss.");
-            ctx.sayCode(
                     """
                     ContentBasedRouter<Message> router = new ContentBasedRouter<>();
                     router.addRoute(msg -> msg.type().equals("ORDER"), mainRoute);
@@ -215,7 +196,6 @@ class ContentBasedRouterTest implements WithAssertions {
                     assertThat(defaultRoute.get()).isEqualTo(1);
                     """,
                     "java");
-            ctx.sayNote(
                     "Default routes are essential for robustness—they catch unexpected message types"
                             + " and enable graceful error handling or logging.");
 
@@ -247,10 +227,7 @@ class ContentBasedRouterTest implements WithAssertions {
         }
 
         @Test
-        void nullDefaultDropsUnmatched(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Null Default");
-            ctx.say("Setting default to null explicitly drops unmatched messages.");
-            ctx.sayCode(
+        void nullDefaultDropsUnmatched() throws InterruptedException {
                     """
                     router.setDefault(null);  // Explicitly null default
 
@@ -292,10 +269,7 @@ class ContentBasedRouterTest implements WithAssertions {
     class EdgeCases {
 
         @Test
-        void nullPredicateThrows(DtrContext ctx) {
-            ctx.sayNextSection("Content-Based Router: Validation");
-            ctx.say("The router validates that predicates and destinations are not null.");
-            ctx.sayCode(
+        void nullPredicateThrows() {
                     """
                     assertThatThrownBy(() -> router.addRoute(null, msg -> {}))
                         .isInstanceOf(IllegalArgumentException.class)
@@ -319,10 +293,7 @@ class ContentBasedRouterTest implements WithAssertions {
         }
 
         @Test
-        void emptyRouterDropsAll(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Empty Router");
-            ctx.say("A router with no routes drops all messages.");
-            ctx.sayCode(
+        void emptyRouterDropsAll() throws InterruptedException {
                     """
                     ContentBasedRouter<Message> router = new ContentBasedRouter<>();
                     // No routes added
@@ -355,12 +326,9 @@ class ContentBasedRouterTest implements WithAssertions {
     class Concurrency {
 
         @Test
-        void concurrentRouting(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Concurrency");
-            ctx.say(
+        void concurrentRouting() throws InterruptedException {
                     "The router is thread-safe and can handle concurrent routing from multiple virtual"
                             + " threads.");
-            ctx.sayCode(
                     """
                     ContentBasedRouter<Message> router = new ContentBasedRouter<>();
                     router.addRoute(msg -> msg.priority() >= 5, handler);
@@ -379,7 +347,6 @@ class ContentBasedRouterTest implements WithAssertions {
                     assertThat(routedCount.get()).isEqualTo(50);
                     """,
                     "java");
-            ctx.sayNote(
                     "Thread safety enables horizontal scaling—multiple producers can route messages"
                             + " concurrently without contention.");
 
@@ -415,10 +382,7 @@ class ContentBasedRouterTest implements WithAssertions {
         }
 
         @Test
-        void addRoutesDuringRouting(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Dynamic Routes");
-            ctx.say("Routes can be added dynamically while the router is in use.");
-            ctx.sayCode(
+        void addRoutesDuringRouting() throws InterruptedException {
                     """
                     router.addRoute(msg -> msg.type().equals("TYPE1"), route1);
                     router.route(new Message("TYPE1", 5, "first"));
@@ -432,7 +396,6 @@ class ContentBasedRouterTest implements WithAssertions {
                     assertThat(route2.get()).isEqualTo(1);
                     """,
                     "java");
-            ctx.sayNote(
                     "Dynamic routing enables flexible, adaptive message flow that can change at"
                             + " runtime without redeployment.");
 
@@ -473,12 +436,9 @@ class ContentBasedRouterTest implements WithAssertions {
     class Performance {
 
         @Test
-        void highThroughputRouting(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content-Based Router: Performance");
-            ctx.say(
+        void highThroughputRouting() throws InterruptedException {
                     "Content-based routing is O(n) in the number of routes, where n is typically small"
                             + " (< 10 routes). This enables high-throughput message routing.");
-            ctx.sayCode(
                     """
                     int messageCount = 1000;
                     ContentBasedRouter<Message> router = new ContentBasedRouter<>();
@@ -495,7 +455,6 @@ class ContentBasedRouterTest implements WithAssertions {
                     assertThat(elapsed).isLessThan(5000);  // Should complete quickly
                     """,
                     "java");
-            ctx.sayNote(
                     "Keep the number of routes small for optimal performance. For complex routing,"
                             + " consider a routing table or decision tree instead of linear search.");
 

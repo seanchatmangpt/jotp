@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.test;
 
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRegistry;
 import java.time.Duration;
@@ -34,11 +31,9 @@ import org.junit.jupiter.api.Timeout;
  *   <li>{@code registered()} returns snapshot of current names
  * </ol>
  */
-@DtrTest
 @Timeout(10)
 class ProcRegistryTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     sealed interface Msg permits Msg.Ping, Msg.Crash {
         record Ping() implements Msg {}
@@ -67,10 +62,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void register_whereisReturnsProc() throws InterruptedException {
-        ctx.sayNextSection("ProcRegistry: Name-Based Process Registration");
-        ctx.say(
                 "ProcRegistry provides name-based process discovery, equivalent to Erlang's whereis/1. Register a process with a name, then lookup by that name.");
-        ctx.sayCode(
                 """
             var proc = counter();
             ProcRegistry.register("my-counter", proc);
@@ -82,7 +74,6 @@ class ProcRegistryTest implements WithAssertions {
             // found.get() == proc
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             sequenceDiagram
                 participant C as Client
@@ -99,7 +90,6 @@ class ProcRegistryTest implements WithAssertions {
 
                 style R fill:#51cf66
             """);
-        ctx.sayNote(
                 "Registered names are global within the JVM. Use descriptive names like 'user-session-service' or 'order-processor'. Names must be unique.");
 
         var proc = counter();
@@ -109,7 +99,6 @@ class ProcRegistryTest implements WithAssertions {
 
         assertThat(found).isPresent().contains(proc);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Registered Name",
                         "my-counter",
@@ -122,10 +111,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void whereis_unknownName_returnsEmpty() {
-        ctx.sayNextSection("ProcRegistry: Unknown Name Lookup");
-        ctx.say(
                 "Looking up an unregistered name returns Optional.empty(). This is the safe API - no null checks needed.");
-        ctx.sayCode(
                 """
             var result = ProcRegistry.whereis("no-such-process");
 
@@ -133,14 +119,12 @@ class ProcRegistryTest implements WithAssertions {
             // No NullPointerException risk
             """,
                 "java");
-        ctx.sayNote(
                 "Optional return type forces explicit handling of missing processes. This is safer than returning null.");
 
         var result = ProcRegistry.whereis("no-such-process");
 
         assertThat(result).isEmpty();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Queried Name",
                         "no-such-process",
@@ -156,10 +140,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void register_duplicate_throws() throws InterruptedException {
-        ctx.sayNextSection("ProcRegistry: Duplicate Name Protection");
-        ctx.say(
                 "Registering a duplicate name throws IllegalStateException. This prevents accidental name collisions and ensures name uniqueness.");
-        ctx.sayCode(
                 """
             var a = counter();
             var b = counter();
@@ -172,7 +153,6 @@ class ProcRegistryTest implements WithAssertions {
                 .hasMessageContaining("shared-name");
             """,
                 "java");
-        ctx.sayWarning(
                 "Name conflicts indicate a configuration error. Two processes are trying to use the same name. Use unique names per process instance.");
 
         var a = counter();
@@ -183,7 +163,6 @@ class ProcRegistryTest implements WithAssertions {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("x");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "First Process",
                         "Registered as 'x'",
@@ -204,10 +183,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void autoDeregister_onCrash() {
-        ctx.sayNextSection("ProcRegistry: Auto-Deregistration on Crash");
-        ctx.say(
                 "When a registered process crashes, it's automatically removed from the registry. No manual cleanup needed.");
-        ctx.sayCode(
                 """
             var proc = counter();
             ProcRegistry.register("crasher", proc);
@@ -223,7 +199,6 @@ class ProcRegistryTest implements WithAssertions {
                 .until(() -> ProcRegistry.whereis("crasher").isEmpty());
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Registered: register(name, proc)
@@ -231,7 +206,6 @@ class ProcRegistryTest implements WithAssertions {
                 Crashing --> AutoDeregister: Registry detects death
                 AutoDeregister --> [*]: Name removed
             """);
-        ctx.sayNote(
                 "Auto-deregistration prevents stale references. A crashed process can't be looked up - the name is immediately available for reuse.");
 
         var proc = counter();
@@ -242,7 +216,6 @@ class ProcRegistryTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(3))
                 .until(() -> ProcRegistry.whereis("crasher").isEmpty());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial State",
                         "Registered",
@@ -260,10 +233,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void autoDeregister_onNormalStop() throws InterruptedException {
-        ctx.sayNextSection("ProcRegistry: Auto-Deregistration on Stop");
-        ctx.say(
                 "Graceful shutdown (stop()) also triggers auto-deregistration. The name is removed when the process terminates normally.");
-        ctx.sayCode(
                 """
             var proc = counter();
             ProcRegistry.register("stopper", proc);
@@ -276,7 +246,6 @@ class ProcRegistryTest implements WithAssertions {
                 .until(() -> ProcRegistry.whereis("stopper").isEmpty());
             """,
                 "java");
-        ctx.sayNote(
                 "Auto-deregistration works for any process termination: crash, stop, or system exit. The registry monitors process lifecycle automatically.");
 
         var proc = counter();
@@ -287,7 +256,6 @@ class ProcRegistryTest implements WithAssertions {
         await().atMost(Duration.ofSeconds(3))
                 .until(() -> ProcRegistry.whereis("stopper").isEmpty());
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Process Exit",
                         "Normal (stop())",
@@ -303,10 +271,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void unregister_removesName_processStillAlive() throws InterruptedException {
-        ctx.sayNextSection("ProcRegistry: Explicit Unregister");
-        ctx.say(
                 "unregister() removes the name from the registry but keeps the process running. Useful for dynamic name changes or temporary registration.");
-        ctx.sayCode(
                 """
             var proc = counter();
             ProcRegistry.register("temp-name", proc);
@@ -322,7 +287,6 @@ class ProcRegistryTest implements WithAssertions {
             // count == 1
             """,
                 "java");
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> Registered: register()
@@ -335,7 +299,6 @@ class ProcRegistryTest implements WithAssertions {
                     Can accept messages
                 end note
             """);
-        ctx.sayNote(
                 "unregister is for name management, not process control. Use stop() to terminate the process, unregister() just removes the name.");
 
         var proc = counter();
@@ -348,7 +311,6 @@ class ProcRegistryTest implements WithAssertions {
         var count = proc.ask(new Msg.Ping()).join();
         assertThat(count).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Name Status",
                         "Removed from registry",
@@ -367,10 +329,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void registered_returnsAllNames() throws InterruptedException {
-        ctx.sayNextSection("ProcRegistry: List All Registered Names");
-        ctx.say(
                 "registered() returns a snapshot of all currently registered names. Useful for introspection and debugging.");
-        ctx.sayCode(
                 """
             var a = counter();
             var b = counter();
@@ -385,7 +344,6 @@ class ProcRegistryTest implements WithAssertions {
             // names.contains("beta") == true
             """,
                 "java");
-        ctx.sayNote(
                 "The returned set is a snapshot - it won't change if processes are registered later. Call registered() again for the current state.");
 
         var a = counter();
@@ -397,7 +355,6 @@ class ProcRegistryTest implements WithAssertions {
 
         assertThat(names).contains("alpha", "beta");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Registered Names",
                         names.toString(),
@@ -416,10 +373,7 @@ class ProcRegistryTest implements WithAssertions {
 
     @Test
     void register_nameReusableAfterDeath() throws InterruptedException {
-        ctx.sayNextSection("ProcRegistry: Name Reuse After Process Death");
-        ctx.say(
                 "Once a process dies and its name is auto-deregistered, the name becomes available for reuse. New processes can register under the same name.");
-        ctx.sayCode(
                 """
             var first = counter();
             ProcRegistry.register("reusable", first);
@@ -440,7 +394,6 @@ class ProcRegistryTest implements WithAssertions {
             // found.get() == second
             """,
                 "java");
-        ctx.sayNote(
                 "Name reuse is intentional for service restarts. A new process instance can take over the same name after the previous one dies.");
 
         var first = counter();
@@ -454,7 +407,6 @@ class ProcRegistryTest implements WithAssertions {
         ProcRegistry.register("reusable", second);
         assertThat(ProcRegistry.<Integer, Msg>whereis("reusable")).isPresent().contains(second);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "First Process",
                         "Stopped and auto-deregistered",

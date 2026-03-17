@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
@@ -28,7 +26,6 @@ import org.junit.jupiter.api.Test;
  * <p>Tests the recipient list router pattern for broadcasting one message to N concurrent
  * recipients.
  */
-@DtrTest
 @DisplayName("Recipient List Router Pattern (EIP)")
 class RecipientListRouterTest implements WithAssertions {
 
@@ -157,12 +154,9 @@ class RecipientListRouterTest implements WithAssertions {
 
         @Test
         @DisplayName("broadcasts message to all recipients")
-        void broadcastsToAllRecipients(DtrContext ctx) {
-            ctx.sayNextSection("Recipient List Router Pattern");
-            ctx.say(
+        void broadcastsToAllRecipients() {
                     "The Recipient List pattern broadcasts a message to multiple recipients."
                             + " Each recipient receives the same message independently.");
-            ctx.sayCode(
                     """
                     RecipientListRouter<String> router = new RecipientListRouter<>();
                     router.addRecipient(ref1);
@@ -174,7 +168,6 @@ class RecipientListRouterTest implements WithAssertions {
                     assertThat(sent).isEqualTo(3);
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B[Recipient List Router]
@@ -182,7 +175,6 @@ class RecipientListRouterTest implements WithAssertions {
                         B --> D[Recipient 2]
                         B --> E[Recipient 3]
                     """);
-            ctx.sayNote(
                     "Use for event notification, audit logging, or any scenario where multiple"
                             + " services need to receive the same message.");
             List<String> messages1 = new ArrayList<>();
@@ -343,12 +335,9 @@ class RecipientListRouterTest implements WithAssertions {
 
         @Test
         @DisplayName("sends one message to multiple recipients concurrently")
-        void fanOutToMultipleRecipients(DtrContext ctx) {
-            ctx.sayNextSection("Recipient List: Fan-Out Scenario");
-            ctx.say(
+        void fanOutToMultipleRecipients() {
                     "Fan-out messaging sends one message to multiple services concurrently, enabling"
                             + " parallel processing of the same event.");
-            ctx.sayCode(
                     """
                     RecipientListRouter<String> router = new RecipientListRouter<>();
                     router.addRecipient(orderRef);

@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
@@ -34,7 +32,6 @@ import org.junit.jupiter.api.Test;
  * @see Application
  * @see ApplicationPhase
  */
-@DtrTest
 @DisplayName("Application: Lifecycle Orchestrator")
 class ApplicationTest {
 
@@ -57,9 +54,7 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Application startup sequence: INIT -> START -> RUNNING")
-    void testStartupSequence(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Application: OTP Application Lifecycle");
-        ctx.say(
+    void testStartupSequence() throws Exception {
                 """
                 Applications in JOTP mirror Erlang/OTP's application behavior - they are the top-level
                 containers for supervision trees and services. Each application follows a strict lifecycle:
@@ -151,8 +146,7 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Graceful shutdown stops services in reverse order")
-    void testGracefulShutdown(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testGracefulShutdown() throws Exception {
                 """
                 Graceful shutdown ensures services are stopped in the correct order, allowing
                 cleanup operations to complete before the application fully terminates. Shutdown
@@ -296,8 +290,7 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Phase transitions occur in correct order")
-    void testPhaseTransitions(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testPhaseTransitions() throws Exception {
                 """
                 Application phase transitions follow a deterministic sequence: INIT -> RUNNING -> STOPPED.
                 This mirrors Erlang/OTP's application controller where each phase has well-defined entry
@@ -333,8 +326,7 @@ class ApplicationTest {
 
     @Test
     @DisplayName("Supervisor integration: application can manage supervised children")
-    void testSupervisorIntegration(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testSupervisorIntegration() throws Exception {
                 """
                 Applications integrate with the Supervisor pattern to create fault-tolerant process trees.
                 The application registers supervisors and their children as services, enabling lookup

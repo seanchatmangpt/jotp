@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.dogfood.concurrency;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.List;
 import java.util.Map;
@@ -22,11 +19,9 @@ import org.junit.jupiter.api.Test;
  * — any failure cancels remaining tasks 3) Timeout support — cancel all tasks if deadline exceeded
  * 4) First-success racing — return when any task succeeds
  */
-@DtrTest
 @DisplayName("StructuredTaskScopePatterns - Java 26 Structured Concurrency")
 class StructuredTaskScopePatternsTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -36,13 +31,10 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
     @Test
     @DisplayName("runBoth returns pair when both tasks succeed")
     void runBoth_returnsPair() throws Exception {
-        ctx.sayNextSection("Structured Concurrency: runBoth Pattern");
-        ctx.say(
                 "StructuredTaskScope ensures that concurrent tasks complete as a unit. The runBoth"
                         + " pattern waits for two tasks to complete successfully and returns their results as a"
                         + " pair. If either task fails, the entire scope fails.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Pattern", "Purpose", "Error Handling", "Use Case"},
                     {
@@ -53,7 +45,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayCode(
                 """
             // Old approach: manual join with potential orphaned threads
             // Future<String> f1 = executor.submit(() -> task1());
@@ -75,7 +66,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
         assertThat(result.first()).isEqualTo("hello");
         assertThat(result.second()).isEqualTo(42);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "First Task Result",
                         result.first(),
@@ -86,7 +76,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                         "Resource Cleanup",
                         "Automatic"));
 
-        ctx.sayNote(
                 "StructuredTaskScope ensures that if the first task fails, the second is automatically"
                         + " cancelled. No more orphaned threads wasting resources.");
     }
@@ -94,13 +83,10 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
     @Test
     @DisplayName("runBoth throws when first task fails")
     void runBoth_throwsOnFirstFailure() {
-        ctx.sayNextSection("Error Propagation in Structured Concurrency");
-        ctx.say(
                 "When any task in a StructuredTaskScope fails, the entire scope is cancelled and"
                         + " remaining tasks receive interruption. This prevents wasted work on partially"
                         + " failed operations.");
 
-        ctx.sayCode(
                 """
             try {
                 var result = StructuredTaskScopePatterns.runBoth(
@@ -125,7 +111,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                                         () -> 42))
                 .isInstanceOf(Exception.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Error Propagation",
                         "Immediate",
@@ -136,7 +121,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                         "Resource Cleanup",
                         "Automatic"));
 
-        ctx.sayNote(
                 "StructuredTaskScope.join() throws if any task failed. The exception contains all"
                         + " aggregated failures, making debugging easier than manual Future.get() error"
                         + " handling.");
@@ -145,12 +129,9 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
     @Test
     @DisplayName("runBoth throws when second task fails")
     void runBoth_throwsOnSecondFailure() {
-        ctx.sayNextSection("Symmetric Error Handling");
-        ctx.say(
                 "Error handling is symmetric — it doesn't matter which task fails. StructuredTaskScope"
                         + " ensures all tasks are cancelled when any failure occurs.");
 
-        ctx.sayCode(
                 """
             // Second task fails, first task result is discarded
             assertThatThrownBy(() ->
@@ -173,7 +154,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                                         }))
                 .isInstanceOf(Exception.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "First Task",
                         "Completed (result discarded)",
@@ -184,7 +164,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                         "Cleanup",
                         "All tasks cancelled"));
 
-        ctx.sayNote(
                 "This 'fail-fast' behavior is crucial for resource management. When a database query"
                         + " fails, there's no point continuing to fetch related data — cancel everything and"
                         + " report the error.");
@@ -193,13 +172,10 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
     @Test
     @DisplayName("runAll returns triple when all tasks succeed")
     void runAll_returnsTriple() throws Exception {
-        ctx.sayNextSection("Scalable Structured Concurrency: runAll Pattern");
-        ctx.say(
                 "The runAll pattern extends runBoth to handle multiple concurrent tasks. It demonstrates"
                         + " how structured concurrency scales to any number of parallel operations while"
                         + " maintaining the same guarantees: all succeed or all fail together.");
 
-        ctx.sayCode(
                 """
             // Run three tasks concurrently, wait for all
             var result = StructuredTaskScopePatterns.runAll(
@@ -221,7 +197,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
         assertThat(result.second()).isEqualTo("b");
         assertThat(result.third()).isEqualTo("c");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Task 1 Result",
                         result.first(),
@@ -234,7 +209,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                         "Pattern",
                         "Extensible to N tasks"));
 
-        ctx.sayNote(
                 "In production, you'd use generic StructuredTaskScope to run any number of tasks. The"
                         + " runAll pattern here shows a typed triple for convenience. Consider using"
                         + " StructuredTaskScope.join() with a list of Subtasks for N-ary concurrency.");
@@ -243,13 +217,10 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
     @Test
     @DisplayName("raceForFirst returns a successful result")
     void raceForFirst_returnsFirstSuccessful() throws Exception {
-        ctx.sayNextSection("Competitive Concurrency: raceForFirst Pattern");
-        ctx.say(
                 "Sometimes you want the first successful result from multiple competing strategies."
                         + " The raceForFirst pattern uses ShutdownOnSuccess to return as soon as any task"
                         + " completes, cancelling the rest.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Scope Policy", "Completion", "Error Handling", "Use Case", "Cancellation"},
                     {
@@ -261,7 +232,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                     }
                 });
 
-        ctx.sayCode(
                 """
             // Race between slow and fast tasks
             List<Callable<String>> tasks = List.of(
@@ -290,7 +260,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
 
         assertThat(result).isIn("fast", "slow");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Winning Task",
                         result,
@@ -301,7 +270,6 @@ class StructuredTaskScopePatternsTest implements WithAssertions {
                         "Pattern",
                         "First-success wins"));
 
-        ctx.sayNote(
                 "This pattern is ideal for redundant services (multiple APIs, database replicas) where"
                         + " you want the fastest response. StructuredTaskScope ensures the slower tasks are"
                         + " cancelled to free resources.");

@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.examples.EcommerceOrderService;
 import java.time.Duration;
 import java.util.List;
@@ -31,7 +29,6 @@ import org.junit.jupiter.api.Timeout;
  * @see EventSourcingAuditLog
  * @see Supervisor
  */
-@DtrTest
 @DisplayName("Integration Tests: All JOTP Enterprise Patterns")
 @Timeout(value = 60)
 class PatternsIntegrationTest {
@@ -57,10 +54,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("CircuitBreaker + Supervisor: Circuit opens after max failures")
-    void testCircuitBreakerSupervisorInteraction(DtrContext ctx) {
-        ctx.say(
+    void testCircuitBreakerSupervisorInteraction() {
                 "Pattern Composition: CircuitBreaker + Supervisor interaction for fault isolation.");
-        ctx.say(
                 "When failures exceed Supervisor restart limit, CircuitBreaker opens to prevent cascade.");
         // Simulate repeated payment failures to trigger circuit breaker
         paymentService.setSimulateFailure(true);
@@ -78,10 +73,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("BulkheadIsolation: Rejects messages under degradation")
-    void testBulkheadIsolationDegradationHandling(DtrContext ctx) {
-        ctx.say(
+    void testBulkheadIsolationDegradationHandling() {
                 "BulkheadIsolation pattern prevents resource exhaustion by limiting concurrent operations.");
-        ctx.say("Under high load, bulkhead gracefully rejects requests to maintain stability.");
         // Simulate high load to trigger degradation
         for (int i = 0; i < 20; i++) {
             var result = inventoryService.reserve("SKU-001", 1);
@@ -102,10 +95,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("EventSourcing + Saga: Audit trail captures all state transitions")
-    void testEventSourcingAuditTrailWithSaga(DtrContext ctx) {
-        ctx.say(
+    void testEventSourcingAuditTrailWithSaga() {
                 "EventSourcing + Saga composition: All saga state transitions are logged to audit trail.");
-        ctx.say(
                 "This enables replay, debugging, and compliance requirements for distributed transactions.");
         var coordinator =
                 new EcommerceOrderService.OrderSagaCoordinator(
@@ -134,10 +125,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("All patterns: Multi-pattern coordination in order workflow")
-    void testMultiPatternOrderWorkflow(DtrContext ctx) {
-        ctx.say(
+    void testMultiPatternOrderWorkflow() {
                 "Full enterprise composition: CircuitBreaker + Bulkhead + EventSourcing + Saga working together.");
-        ctx.say("Order workflow demonstrates resilience through multiple fault tolerance layers.");
         // Reset to healthy state
         paymentService.setSimulateFailure(false);
 
@@ -180,10 +169,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("CircuitBreaker + BulkheadIsolation: Graceful degradation")
-    void testGracefulDegradationWithPatterns(DtrContext ctx) {
-        ctx.say(
+    void testGracefulDegradationWithPatterns() {
                 "Graceful degradation: When payment CircuitBreaker opens, saga compensates and returns meaningful error.");
-        ctx.say("BulkheadIsolation ensures the degradation doesn't cascade to other services.");
         // Trigger circuit breaker on payment service
         paymentService.setSimulateFailure(true);
 
@@ -226,10 +213,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("Saga Compensation: Failed saga compensates completed steps in reverse order")
-    void testSagaCompensationOrder(DtrContext ctx) {
-        ctx.say(
+    void testSagaCompensationOrder() {
                 "Saga compensation pattern: Completed steps are rolled back in reverse order (LIFO).");
-        ctx.say("This ensures that dependencies are unwound correctly when a step fails.");
         var coordinator =
                 new EcommerceOrderService.OrderSagaCoordinator(
                         paymentService,
@@ -274,10 +259,8 @@ class PatternsIntegrationTest {
 
     @Test
     @DisplayName("Circuit Breaker State Transitions: CLOSED → OPEN → HALF_OPEN → CLOSED")
-    void testCircuitBreakerStateTransitions(DtrContext ctx) {
-        ctx.say(
+    void testCircuitBreakerStateTransitions() {
                 "CircuitBreaker state machine: CLOSED (normal) → OPEN (failing) → HALF_OPEN (testing) → CLOSED.");
-        ctx.say(
                 "After failures exceed threshold, circuit opens. After timeout, it enters half-open to test recovery.");
         // Create isolated circuit breaker for testing
         var breaker =

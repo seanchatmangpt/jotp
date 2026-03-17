@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
@@ -35,7 +33,6 @@ import org.junit.jupiter.api.Test;
  *   <li>Fallback recovery on failure
  * </ul>
  */
-@DtrTest
 @DisplayName("Scatter-Gather Orchestration Pattern")
 class ScatterGatherTest {
 
@@ -71,13 +68,10 @@ class ScatterGatherTest {
 
     @Test
     @DisplayName("Basic scatter-gather: collect replies from all recipients")
-    void testBasicScatterGather(DtrContext ctx) {
-        ctx.sayNextSection("Scatter-Gather Pattern");
-        ctx.say(
+    void testBasicScatterGather() {
                 "The Scatter-Gather pattern broadcasts a message to multiple recipients and collects"
                         + " their responses. It's useful for parallel processing and aggregating results"
                         + " from multiple services.");
-        ctx.sayCode(
                 """
                 var scatterGather = new ScatterGather<EchoMessage, String, ServerState, EchoMessage>();
                 var result = scatterGather.scatterGather(
@@ -91,7 +85,6 @@ class ScatterGatherTest {
                 assertThat(okResult.value()).hasSize(3);  // All 3 recipients responded
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Scatter] --> B[Recipient 1]
@@ -102,7 +95,6 @@ class ScatterGatherTest {
                     D --> E
                     E --> F[Aggregated Result]
                 """);
-        ctx.sayNote(
                 "Use when you need to query multiple services in parallel, such as getting quotes"
                         + " from multiple vendors or validating against multiple rules.");
         // Arrange
@@ -147,12 +139,9 @@ class ScatterGatherTest {
 
     @Test
     @DisplayName("Scatter-gather timeout: fail-fast when any recipient times out")
-    void testScatterGatherTimeout(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Scatter-Gather: Timeout Handling");
-        ctx.say(
+    void testScatterGatherTimeout() throws InterruptedException {
                 "Scatter-gather operations fail-fast when any recipient times out, ensuring that slow"
                         + " services don't block the entire operation.");
-        ctx.sayCode(
                 """
                 var result = scatterGather.scatterGather(
                     message,
@@ -164,7 +153,6 @@ class ScatterGatherTest {
                 assertThat(result).isInstanceOf(Result.Err.class);
                 """,
                 "java");
-        ctx.sayNote(
                 "Choose timeout values carefully based on expected response times. Consider using"
                         + " fallback values for non-critical services.");
         // Arrange: create a slow recipient that doesn't respond quickly

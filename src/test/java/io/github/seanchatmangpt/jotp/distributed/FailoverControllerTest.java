@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import java.util.List;
@@ -18,11 +15,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Verifies automatic failover behavior with process migration and node health monitoring.
  */
-@DtrTest
 @DisplayName("FailoverController — OTP distributed failover semantics")
 class FailoverControllerTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private FailoverController failoverController;
     private GlobalProcRegistry registry;
@@ -55,9 +50,7 @@ class FailoverControllerTest {
 
     @Test
     @DisplayName("Should create failover controller")
-    void constructor_createsController(DtrContext ctx) {
-        ctx.say("FailoverController coordinates process migration across distributed nodes.");
-        ctx.say(
+    void constructor_createsController() {
                 "It integrates GlobalProcRegistry for process tracking and NodeDiscovery for health awareness.");
         assertThat(failoverController).isNotNull();
     }
@@ -86,11 +79,8 @@ class FailoverControllerTest {
 
     @Test
     @DisplayName("Should migrate processes on node down")
-    void handleNodeDown_migratesProcesses(DtrContext ctx) {
-        ctx.say("When a node fails, all registered processes must migrate to healthy nodes.");
-        ctx.say(
+    void handleNodeDown_migratesProcesses() {
                 "The controller iterates through failed-node's processes and reassigns them using transferGlobal().");
-        ctx.say("This implements OTP's distributed process supervision with automatic relocation.");
 
         // Register processes on failed-node
         Proc<String, String> proc1 = Proc.spawn("initial", (s, m) -> s);
@@ -111,10 +101,7 @@ class FailoverControllerTest {
 
     @Test
     @DisplayName("Should migrate specific process")
-    void migrateProcess_migratesToTargetNode(DtrContext ctx) {
-        ctx.say("Process migration transfers ownership from source node to target node.");
-        ctx.say("The registry updates the process's node association atomically.");
-        ctx.say("This enables manual rebalancing and targeted process relocation.");
+    void migrateProcess_migratesToTargetNode() {
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
 
@@ -139,10 +126,7 @@ class FailoverControllerTest {
 
     @Test
     @DisplayName("Should check if node can accept migrations")
-    void canAcceptMigrations_returnsTrueForHealthyNodes(DtrContext ctx) {
-        ctx.say("Only healthy nodes can accept migrated processes.");
-        ctx.say("Nodes marked DOWN or DEGRADED are excluded from failover targets.");
-        ctx.say("This prevents overloading already-troubled nodes during cluster stress.");
+    void canAcceptMigrations_returnsTrueForHealthyNodes() {
 
         discoveryBackend.storeNode(
                 NodeInfo.create("healthy-node", "localhost:8080")
@@ -201,10 +185,7 @@ class FailoverControllerTest {
 
     @Test
     @DisplayName("Should rebalance after node down")
-    void rebalanceAfterNodeDown_triggersMigration(DtrContext ctx) {
-        ctx.say("Rebalancing automatically redistributes processes after node failure.");
-        ctx.say("The controller selects the first available healthy node as migration target.");
-        ctx.say("This implements OTP's self-healing distributed process supervision.");
+    void rebalanceAfterNodeDown_triggersMigration() {
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
         registry.registerGlobal("my-proc", new ProcRef<>(proc), "failed-node");
@@ -222,10 +203,7 @@ class FailoverControllerTest {
 
     @Test
     @DisplayName("Should handle migration when no healthy nodes available")
-    void handleNodeDown_handlesNoHealthyNodes(DtrContext ctx) {
-        ctx.say("When no healthy nodes exist, migration cannot proceed.");
-        ctx.say("The controller returns 0 migrated processes, preserving process registry state.");
-        ctx.say("This represents a degraded cluster scenario requiring manual intervention.");
+    void handleNodeDown_handlesNoHealthyNodes() {
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
         registry.registerGlobal("my-proc", new ProcRef<>(proc), "failed-node");

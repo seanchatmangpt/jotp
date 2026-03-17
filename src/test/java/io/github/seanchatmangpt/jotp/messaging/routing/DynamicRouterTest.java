@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
@@ -28,7 +26,6 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Tests the dynamic router pattern for late-binding message routing using ProcRegistry.
  */
-@DtrTest
 @DisplayName("Dynamic Router Pattern (EIP)")
 class DynamicRouterTest implements WithAssertions {
 
@@ -83,12 +80,9 @@ class DynamicRouterTest implements WithAssertions {
 
         @Test
         @DisplayName("resolves destination at runtime based on message")
-        void resolvesDestinationAtRuntime(DtrContext ctx) {
-            ctx.sayNextSection("Dynamic Router Pattern");
-            ctx.say(
+        void resolvesDestinationAtRuntime() {
                     "The Dynamic Router resolves destinations at runtime based on message content."
                             + " Unlike content-based routing, destinations are looked up dynamically.");
-            ctx.sayCode(
                     """
                     DynamicRouter<String> router = new DynamicRouter<>(
                         msg -> {
@@ -99,7 +93,6 @@ class DynamicRouterTest implements WithAssertions {
                     );
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B{Dynamic Router}
@@ -107,7 +100,6 @@ class DynamicRouterTest implements WithAssertions {
                         B -->|resolve| D[payment-service]
                         B -->|resolve| E[default-service]
                     """);
-            ctx.sayNote(
                     "Use when destinations are determined at runtime, such as tenant-specific routing"
                             + " or service discovery-based routing.");
             List<String> resolvedDestinations = new ArrayList<>();
@@ -251,12 +243,9 @@ class DynamicRouterTest implements WithAssertions {
 
         @Test
         @DisplayName("successfully routes to registered process")
-        void successfullyRoutesToRegisteredProcess(DtrContext ctx) {
-            ctx.sayNextSection("Dynamic Router: ProcRegistry Integration");
-            ctx.say(
+        void successfullyRoutesToRegisteredProcess() {
                     "DynamicRouter integrates with ProcRegistry to route messages to registered"
                             + " processes by name.");
-            ctx.sayCode(
                     """
                     ProcRef<String, String> handlerRef = Proc.spawn(
                         "message-handler",

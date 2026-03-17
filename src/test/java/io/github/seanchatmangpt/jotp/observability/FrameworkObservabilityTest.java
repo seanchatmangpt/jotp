@@ -18,7 +18,6 @@ package io.github.seanchatmangpt.jotp.observability;
 
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcMonitor;
@@ -66,7 +65,6 @@ import org.junit.jupiter.api.Timeout;
  * @see FrameworkEventBus
  * @see FrameworkEvent
  */
-@DtrTest
 @DisplayName("Framework Observability: P0/P1/P2 event publishing and delivery")
 @Timeout(30)
 class FrameworkObservabilityTest implements WithAssertions {

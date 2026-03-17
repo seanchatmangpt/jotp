@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
@@ -34,7 +32,6 @@ import org.junit.jupiter.api.Test;
  *   <li>Error handling and exception propagation
  * </ul>
  */
-@DtrTest
 @DisplayName("Routing Slip Orchestration Pattern")
 class RoutingSlipTest {
 
@@ -80,13 +77,10 @@ class RoutingSlipTest {
 
     @Test
     @DisplayName("Create message with routing slip")
-    void testCreateMessageWithSlip(DtrContext ctx) {
-        ctx.sayNextSection("Routing Slip Pattern");
-        ctx.say(
+    void testCreateMessageWithSlip() {
                 "The Routing Slip pattern attaches a sequence of processing steps to a message. The"
                         + " slip travels with the message, allowing each processing node to forward to"
                         + " the next step in the sequence.");
-        ctx.sayCode(
                 """
                 var payload = new Payload("test", new ArrayList<>());
                 var message = RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
@@ -96,7 +90,6 @@ class RoutingSlipTest {
                 assertThat(message.isComplete()).isFalse();
                 """,
                 "java");
-        ctx.sayMermaid(
                 """
                 graph LR
                     A[Message with Slip] --> B[Hop 1]
@@ -104,7 +97,6 @@ class RoutingSlipTest {
                     C --> D[Hop 3]
                     D --> E[Complete]
                 """);
-        ctx.sayNote(
                 "Use when you need to route a message through a predetermined sequence of processing"
                         + " steps, such as order validation, payment processing, and fulfillment.");
         // Act
@@ -152,12 +144,9 @@ class RoutingSlipTest {
 
     @Test
     @DisplayName("Execute slip: fire-and-forget delivery to all hops")
-    void testExecuteSlip(DtrContext ctx) throws InterruptedException {
-        ctx.sayNextSection("Routing Slip: Fire-and-Forget Execution");
-        ctx.say(
+    void testExecuteSlip() throws InterruptedException {
                 "The routing slip can be executed asynchronously, delivering the message to each hop"
                         + " in sequence without waiting for responses.");
-        ctx.sayCode(
                 """
                 var payload = new Payload("flow", new ArrayList<>());
                 var message = RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
@@ -237,12 +226,9 @@ class RoutingSlipTest {
 
     @Test
     @DisplayName("Routing slip is immutable: modifications create new instances")
-    void testImmutability(DtrContext ctx) {
-        ctx.sayNextSection("Routing Slip: Immutability");
-        ctx.say(
+    void testImmutability() {
                 "Routing slips are immutable—advancing the slip creates a new instance, preserving"
                         + " the original for debugging or auditing.");
-        ctx.sayCode(
                 """
                 var original = RoutingSlip.withSlip(payload, hops.toArray(new ProcRef[0]));
                 var modified = RoutingSlip.popNext(original);
@@ -251,7 +237,6 @@ class RoutingSlipTest {
                 assertThat(modified.remainingHops()).isEqualTo(2);
                 """,
                 "java");
-        ctx.sayNote(
                 "Immutability ensures thread safety and enables reliable replay of message flows for"
                         + " debugging.");
         // Arrange

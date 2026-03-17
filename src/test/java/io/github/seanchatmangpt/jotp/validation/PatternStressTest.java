@@ -4,9 +4,6 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.CrashRecovery;
 import io.github.seanchatmangpt.jotp.Parallel;
 import io.github.seanchatmangpt.jotp.Proc;
@@ -41,10 +38,8 @@ import org.junit.jupiter.api.Timeout;
  * <p>All tests use virtual threads to match the project's concurrency model.
  */
 @DisplayName("Pattern Generator — Concurrency Stress Tests")
-@DtrTest
 class PatternStressTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private static final Random RNG = new Random(42);
 
@@ -56,8 +51,6 @@ class PatternStressTest {
     @Timeout(30)
     @DisplayName("Actor: 10K parallel tell()s — zero message loss")
     void actorStress_10kMessages_noLoss() throws Exception {
-        ctx.sayNextSection("Pattern Stress Test: Actor Concurrency");
-        ctx.say("Tests concurrent message delivery with zero message loss guarantee.");
 
         int messageCount = 10_000;
         var counter = new AtomicInteger(0);
@@ -84,7 +77,6 @@ class PatternStressTest {
         latch.await(10, SECONDS);
         actor.stop();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Pattern", "Senders", "Messages", "Delivered", "Loss"},
                     {
@@ -98,7 +90,6 @@ class PatternStressTest {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Pattern",
                         "Actor",
@@ -122,8 +113,6 @@ class PatternStressTest {
     @Timeout(30)
     @DisplayName("Supervisor: 100 crashes across 5 children — all restart successfully")
     void supervisorStress_cascadingCrash() throws Exception {
-        ctx.sayNextSection("Pattern Stress Test: Supervisor Crash Recovery");
-        ctx.say("Tests supervisor restart strategy with cascading crashes.");
 
         var restartCounts = new AtomicInteger[5];
         for (int i = 0; i < 5; i++) restartCounts[i] = new AtomicInteger(0);
@@ -176,7 +165,6 @@ class PatternStressTest {
         int totalRestarts = 0;
         for (var rc : restartCounts) totalRestarts += rc.get();
 
-        ctx.sayTable(
                 new String[][] {
                     {"Strategy", "Children", "Crashes Sent", "Restarts", "Supervisor Running"},
                     {
@@ -188,7 +176,6 @@ class PatternStressTest {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Pattern", "Supervisor",
                         "Status", supervisor.isRunning() ? "PASS" : "FAIL",

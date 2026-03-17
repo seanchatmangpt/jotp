@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.benchmark;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Result;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +30,6 @@ import org.openjdk.jmh.annotations.Warmup;
  *   <li>{@code try_catch_failure_propagation} — equivalent try-catch with exception
  * </ul>
  */
-@DtrTest
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @Fork(1)
@@ -42,7 +38,6 @@ import org.openjdk.jmh.annotations.Warmup;
 @State(Scope.Benchmark)
 public class ResultBenchmark {
 
-    @DtrContextField private DtrContext ctx;
 
     // =========================================================================
     // Success path: 5 transformations
@@ -144,11 +139,7 @@ public class ResultBenchmark {
     @Test
     @DisplayName("Benchmark: Result Railway Pattern Performance")
     void reportBenchmarkResults() {
-        ctx.sayNextSection("Benchmark: Result Railway Pattern Performance");
-        ctx.say("Measures Result railway pattern overhead vs equivalent try-catch chains.");
-        ctx.say("Thesis claim: Result railway chaining is <= 2x slower than try-catch.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Benchmark", "Path", "Description"},
                     {"result_chain_5maps", "Success", "5 chained map() calls"},
@@ -158,7 +149,6 @@ public class ResultBenchmark {
                     {"result_flatmap_chain", "Success", "3-step flatMap chain"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Unit",
                         "Nanoseconds (average time)",

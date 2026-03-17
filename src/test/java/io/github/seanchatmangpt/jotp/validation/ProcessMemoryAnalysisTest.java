@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.validation;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.util.ArrayList;
@@ -29,12 +26,10 @@ import org.junit.jupiter.api.Timeout;
  *   <li>No memory leaks or unexpected growth
  * </ul>
  */
-@DtrTest
 @DisplayName("Process Memory Analysis - ~1KB per Process")
 @Timeout(value = 300, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class ProcessMemoryAnalysisTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private long baselineHeapBytes = 0;
     private long peakHeapBytes = 0;
@@ -59,9 +54,6 @@ class ProcessMemoryAnalysisTest {
         var memoryBean = java.lang.management.ManagementFactory.getMemoryMXBean();
         long finalHeapBytes = memoryBean.getHeapMemoryUsage().getUsed();
 
-        ctx.say("");
-        ctx.say("Memory Summary:");
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "Baseline Heap",
                                 String.format("%.2f MB", baselineHeapBytes / (1024.0 * 1024.0)),
@@ -76,10 +68,6 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("100 processes: validate ~100 KB heap")
     void validate100Processes() throws Exception {
-        ctx.sayNextSection("100 Process Memory Analysis");
-        ctx.say("Validating memory footprint for 100 processes");
-        ctx.say("");
-        ctx.say("Expected: ~100-120 KB total (~1KB per process)");
 
         analyzeMemoryFootprint(100);
     }
@@ -87,10 +75,6 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("1K processes: validate ~1 MB heap")
     void validate1KProcesses() throws Exception {
-        ctx.sayNextSection("1K Process Memory Analysis");
-        ctx.say("Validating memory footprint for 1,000 processes");
-        ctx.say("");
-        ctx.say("Expected: ~1-1.2 MB total (~1KB per process)");
 
         analyzeMemoryFootprint(1_000);
     }
@@ -98,10 +82,6 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("10K processes: validate ~10 MB heap")
     void validate10KProcesses() throws Exception {
-        ctx.sayNextSection("10K Process Memory Analysis");
-        ctx.say("Validating memory footprint for 10,000 processes");
-        ctx.say("");
-        ctx.say("Expected: ~10-12 MB total (~1KB per process)");
 
         analyzeMemoryFootprint(10_000);
     }
@@ -109,12 +89,6 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("100K processes: validate ~100 MB heap")
     void validate100KProcesses() throws Exception {
-        ctx.sayNextSection("100K Process Memory Analysis");
-        ctx.say("Validating memory footprint for 100,000 processes");
-        ctx.say("");
-        ctx.say("Expected: ~80-120 MB total (~1KB per process)");
-        ctx.say("");
-        ctx.sayNote("This test demonstrates virtual thread scalability at scale.");
 
         analyzeMemoryFootprint(100_000);
     }
@@ -122,10 +96,6 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("Empty processes: baseline memory footprint")
     void validateEmptyProcesses() throws Exception {
-        ctx.sayNextSection("Empty Process Memory Analysis");
-        ctx.say("Validating memory footprint for 10,000 empty processes (no state, no messages)");
-        ctx.say("");
-        ctx.say("Expected: ~3.5-4.5 KB total (virtual thread + mailbox overhead only)");
 
         analyzeMemoryFootprint(10_000);
     }
@@ -133,18 +103,12 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("Processes with small state: measure state overhead")
     void validateProcessesWithSmallState() throws Exception {
-        ctx.sayNextSection("Process with Small State Memory Analysis");
-        ctx.say("Validating memory footprint for 10,000 processes with small state objects");
-        ctx.say("");
-        ctx.say("Expected: ~4-5 KB total (includes ~100-byte state object)");
 
         // Create processes with a small state object (record with a few fields)
         record SmallState(int counter, String name, boolean flag) {}
 
         List<Proc<SmallState, Integer>> processes = new ArrayList<>();
 
-        ctx.say("");
-        ctx.say("Phase 1: Creating processes with SmallState...");
 
         long createStart = System.nanoTime();
         for (int i = 0; i < 10_000; i++) {
@@ -171,9 +135,6 @@ class ProcessMemoryAnalysisTest {
         double bytesPerProcess = (double) heapGrowthBytes / 10_000;
         double kbPerProcess = bytesPerProcess / 1024.0;
 
-        ctx.say("");
-        ctx.say("Memory Footprint Results:");
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "Processes Created", "10,000",
                         "State Type", "SmallState (3 fields)",
@@ -192,9 +153,6 @@ class ProcessMemoryAnalysisTest {
             proc.stop();
         }
 
-        ctx.say("");
-        ctx.say("Analysis:");
-        ctx.sayNote(
                 "State object overhead: "
                         + String.format("%.2f KB", kbPerProcess - 3.89)
                         + " per process");
@@ -203,15 +161,9 @@ class ProcessMemoryAnalysisTest {
     @Test
     @DisplayName("Processes with mailbox messages: measure message overhead")
     void validateProcessesWithMailboxMessages() throws Exception {
-        ctx.sayNextSection("Process with Mailbox Messages Memory Analysis");
-        ctx.say("Validating memory footprint for 10,000 processes with messages in mailboxes");
-        ctx.say("");
-        ctx.say("Expected: ~5-7 KB total (includes 10 messages per process)");
 
         List<Proc<Integer, Integer>> processes = new ArrayList<>();
 
-        ctx.say("");
-        ctx.say("Phase 1: Creating processes and populating mailboxes...");
 
         long createStart = System.nanoTime();
         for (int i = 0; i < 10_000; i++) {
@@ -237,9 +189,6 @@ class ProcessMemoryAnalysisTest {
         double bytesPerProcess = (double) heapGrowthBytes / 10_000;
         double kbPerProcess = bytesPerProcess / 1024.0;
 
-        ctx.say("");
-        ctx.say("Memory Footprint Results:");
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "Processes Created", "10,000",
                         "Messages Per Process", "10",
@@ -259,20 +208,14 @@ class ProcessMemoryAnalysisTest {
             proc.stop();
         }
 
-        ctx.say("");
-        ctx.say("Analysis:");
         double messageOverhead = kbPerProcess - 3.89;
         double overheadPerMessage = messageOverhead / 10.0;
-        ctx.sayNote(
                 "Message overhead: "
                         + String.format("%.2f bytes", overheadPerMessage * 1024)
                         + " per message");
     }
 
     private void analyzeMemoryFootprint(int processCount) throws Exception {
-        ctx.say("");
-        ctx.say("Test Configuration:");
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "Target Processes", String.format("%,d", processCount),
                         "JVM Max Heap",
@@ -284,8 +227,6 @@ class ProcessMemoryAnalysisTest {
         List<Proc<Integer, Integer>> processes = new ArrayList<>();
 
         // Phase 1: Create processes
-        ctx.say("");
-        ctx.say("Phase 1: Creating processes...");
         long createStart = System.nanoTime();
 
         for (int i = 0; i < processCount; i++) {
@@ -301,7 +242,6 @@ class ProcessMemoryAnalysisTest {
             // Progress reporting for large counts
             if (processCount >= 10_000 && (i + 1) % 10_000 == 0) {
                 updatePeakHeap();
-                ctx.say(
                         String.format(
                                 "  Created %,d processes (%.1f%%)",
                                 (i + 1), (100.0 * (i + 1) / processCount)));
@@ -311,8 +251,6 @@ class ProcessMemoryAnalysisTest {
         long createElapsedMs = (System.nanoTime() - createStart) / 1_000_000;
 
         // Phase 2: Force GC to get stable measurement
-        ctx.say("");
-        ctx.say("Phase 2: Forcing GC to stabilize measurement...");
         long gcStart = System.nanoTime();
 
         System.gc();
@@ -322,8 +260,6 @@ class ProcessMemoryAnalysisTest {
         long gcElapsedMs = (System.nanoTime() - gcStart) / 1_000_000;
 
         // Phase 3: Measure memory
-        ctx.say("");
-        ctx.say("Phase 3: Measuring memory footprint...");
 
         var memoryBean = java.lang.management.ManagementFactory.getMemoryMXBean();
         long afterCreationHeap = memoryBean.getHeapMemoryUsage().getUsed();
@@ -339,8 +275,6 @@ class ProcessMemoryAnalysisTest {
         }
 
         // Phase 4: Cleanup
-        ctx.say("");
-        ctx.say("Phase 4: Cleaning up processes...");
         long cleanupStart = System.nanoTime();
 
         for (Proc<Integer, Integer> proc : processes) {
@@ -350,9 +284,6 @@ class ProcessMemoryAnalysisTest {
         long cleanupElapsedMs = (System.nanoTime() - cleanupStart) / 1_000_000;
 
         // Phase 5: Report results
-        ctx.say("");
-        ctx.say("Memory Footprint Results:");
-        ctx.sayKeyValue(
                 java.util.Map.of(
                         "Processes Created", String.format("%,d", processCount),
                         "Baseline Heap",
@@ -368,8 +299,6 @@ class ProcessMemoryAnalysisTest {
                         "Cleanup Time", String.format("%.2f sec", cleanupElapsedMs / 1000.0)));
 
         // Validate the ~1KB claim (with reasonable tolerance)
-        ctx.say("");
-        ctx.say("Validation:");
 
         assertThat(kbPerProcess)
                 .as(
@@ -380,14 +309,11 @@ class ProcessMemoryAnalysisTest {
                 .isLessThan(2.0);
 
         if (kbPerProcess >= 0.8 && kbPerProcess <= 1.2) {
-            ctx.sayKeyValue(
                     java.util.Map.of(
                             "Status", "PASS",
                             "Claim", "~1KB per process VALIDATED",
                             "Actual", String.format("%.2f KB/process", kbPerProcess)));
-            ctx.sayNote("Memory footprint is within expected range!");
         } else {
-            ctx.sayKeyValue(
                     java.util.Map.of(
                             "Status", "PASS (with tolerance)",
                             "Claim", "~1KB per process",

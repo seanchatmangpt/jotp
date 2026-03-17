@@ -13,13 +13,13 @@
 
     <groupId>io.github.seanchatmangpt.jotp</groupId>
     <artifactId>spring-boot-integration</artifactId>
-    <version>1.0</version>
+    <version>2026.1.0</version>
     <name>JOTP Spring Boot Integration</name>
     <description>Integration examples for using JOTP with Spring Boot applications</description>
 
     <properties>
         <java.version>26</java.version>
-        <jotp.version>1.0</jotp.version>
+        <jotp.version>2026.1.0</jotp.version>
     </properties>
 
     <dependencies>

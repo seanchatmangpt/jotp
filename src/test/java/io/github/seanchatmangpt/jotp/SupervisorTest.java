@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -51,7 +49,6 @@ import org.junit.jupiter.params.provider.EnumSource;
  * @see Proc
  * @see CrashRecovery
  */
-@DtrTest
 @DisplayName("Supervisor: Fault-Tolerant Supervision Tree")
 class SupervisorTest {
 
@@ -83,9 +80,7 @@ class SupervisorTest {
 
     @Test
     @DisplayName("ONE_FOR_ONE: Child crash restarts only that child")
-    void testOneForOneSingleChildCrash(DtrContext ctx) throws Exception {
-        ctx.sayNextSection("Supervisor: Fault-Tolerant Supervision Tree");
-        ctx.say(
+    void testOneForOneSingleChildCrash() throws Exception {
                 """
                 Supervisor implements hierarchical process supervision with configurable restart strategies.
                 ONE_FOR_ONE: Only the crashed child is restarted. Siblings are unaffected.
@@ -181,8 +176,7 @@ class SupervisorTest {
 
     @Test
     @DisplayName("ONE_FOR_ALL: Child crash restarts ALL children")
-    void testOneForAllCrashRestartsAll(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testOneForAllCrashRestartsAll() throws Exception {
                 """
                 ONE_FOR_ALL: When any child crashes, ALL children are restarted.
                 Best for tightly coupled services where partial state is invalid.
@@ -256,8 +250,7 @@ class SupervisorTest {
 
     @Test
     @DisplayName("REST_FOR_ONE: Crash restarts child and later children only")
-    void testRestForOneCrashRestartsFromPosition(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testRestForOneCrashRestartsFromPosition() throws Exception {
                 """
                 REST_FOR_ONE: The crashed child and all children started AFTER it are restarted.
                 Best for hierarchical dependencies where child-N depends on child-1 to child-N-1.
@@ -329,8 +322,7 @@ class SupervisorTest {
 
     @Test
     @DisplayName("Max restarts exceeded: Supervisor terminates itself")
-    void testMaxRestartsExceededTerminatesSupervisor(DtrContext ctx) throws Exception {
-        ctx.say(
+    void testMaxRestartsExceededTerminatesSupervisor() throws Exception {
                 """
                 Max restarts throttling prevents infinite restart loops.
                 If a child crashes more than maxRestarts times within the window duration,

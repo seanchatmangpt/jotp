@@ -16,9 +16,6 @@
 
 package io.github.seanchatmangpt.jotp.benchmark;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.observability.FrameworkEventBus;
 import java.time.Instant;
 import java.util.Map;
@@ -71,7 +68,6 @@ import org.openjdk.jmh.infra.Blackhole;
  * @see IdealEventBus
  * @see FrameworkEventBus
  */
-@DtrTest
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @Fork(3)
@@ -80,7 +76,6 @@ import org.openjdk.jmh.infra.Blackhole;
 @State(Scope.Benchmark)
 public class ZeroCostComparativeBenchmark {
 
-    @DtrContextField private DtrContext ctx;
 
     /**
      * Feature flag parameter: test both disabled and enabled states.
@@ -263,13 +258,9 @@ public class ZeroCostComparativeBenchmark {
     @Test
     @DisplayName("Benchmark: Zero-Cost Abstraction Comparative Analysis")
     void reportBenchmarkResults() {
-        ctx.sayNextSection("Benchmark: Zero-Cost Abstraction Comparative Analysis");
-        ctx.say(
                 "Measures the actual cost gap between theoretical ideal (single branch check) "
                         + "and JOTP FrameworkEventBus production implementation.");
-        ctx.say("Research Question: What is the overhead of production safety checks?");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Benchmark", "Expected (ns)", "Description"},
                     {"ideal_publish_disabled", "< 50", "Theoretical minimum - single branch, DCE"},
@@ -281,7 +272,6 @@ public class ZeroCostComparativeBenchmark {
                     {"baseline_empty", "< 5", "JMH framework overhead"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Feature Flag",
                         "observabilityEnabled (false/true)",

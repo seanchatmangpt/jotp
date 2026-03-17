@@ -18,9 +18,6 @@ package io.github.seanchatmangpt.jotp.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.util.Map;
 import java.util.UUID;
@@ -43,14 +40,12 @@ import org.junit.jupiter.api.Test;
  * ./mvnw test -Dtest=PayloadSizeThroughputBenchmark
  * }</pre>
  */
-@DtrTest
 @DisplayName("Payload Size Throughput Benchmark")
 class PayloadSizeThroughputBenchmark {
 
     private static final int WARMUP_ITERATIONS = 10_000;
     private static final int TEST_DURATION_MS = 3000;
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -84,9 +79,6 @@ class PayloadSizeThroughputBenchmark {
     @Test
     @DisplayName("Benchmark: Throughput vs Payload Size")
     void measureThroughputVsPayloadSize() throws Exception {
-        ctx.sayNextSection("Benchmark: Throughput vs Payload Size");
-        ctx.say("Measures message throughput at different payload sizes.");
-        ctx.say("Validates whether published benchmark numbers reflect real-world usage.");
 
         String[] sizeNames = {"Empty", "Small (24B)", "Medium (64B)", "Large (256B)"};
         TestMessage[] messages = {
@@ -111,7 +103,6 @@ class PayloadSizeThroughputBenchmark {
         }
 
         // Create results table
-        ctx.sayTable(
                 new String[][] {
                     {
                         "Payload Size",
@@ -144,7 +135,6 @@ class PayloadSizeThroughputBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Baseline (Empty)",
                         String.format("%.0f msg/sec", throughputs[0]),
@@ -159,7 +149,6 @@ class PayloadSizeThroughputBenchmark {
                         "Status",
                         throughputs[0] > 1_000_000 ? "PASS" : "FAIL"));
 
-        ctx.sayNote(
                 "Throughput degradation shows impact of payload size. "
                         + "Real-world applications (256B+ payloads) will see significantly lower throughput than baseline.");
 
@@ -173,7 +162,6 @@ class PayloadSizeThroughputBenchmark {
         double mediumDegradation = 100 - (throughputs[2] / throughputs[0]) * 100;
         double largeDegradation = 100 - (throughputs[3] / throughputs[0]) * 100;
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Key Finding",
                         "Payload size significantly impacts throughput",
@@ -194,9 +182,6 @@ class PayloadSizeThroughputBenchmark {
     @Test
     @DisplayName("Benchmark: String Message Throughput")
     void measureStringMessageThroughput() throws Exception {
-        ctx.sayNextSection("Benchmark: String Message Throughput");
-        ctx.say("Measures throughput with different String message sizes.");
-        ctx.say("Strings are the most common message type in JOTP benchmarks.");
 
         String[] messages = {
             "", // Empty: ~40 bytes
@@ -213,7 +198,6 @@ class PayloadSizeThroughputBenchmark {
             Thread.sleep(100);
         }
 
-        ctx.sayTable(
                 new String[][] {
                     {"String Size", "Est. Bytes", "Throughput (msg/sec)", "% of Baseline"},
                     {names[0], "~40", String.format("%.0f", throughputs[0]), "100%"},
@@ -237,7 +221,6 @@ class PayloadSizeThroughputBenchmark {
                     }
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Baseline (Empty String)",
                         String.format("%.0f msg/sec", throughputs[0]),
@@ -262,8 +245,6 @@ class PayloadSizeThroughputBenchmark {
     @Test
     @DisplayName("Benchmark: Real-World F1 Telemetry Simulation")
     void measureRealWorldF1Telemetry() throws Exception {
-        ctx.sayNextSection("Benchmark: Real-World F1 Telemetry Simulation");
-        ctx.say("Simulates realistic F1 telemetry message sizes and throughput.");
 
         // Simulated F1 telemetry messages
         String tickMessage = "{\"car\":1,\"speed\":320,\"rpm\":15000,\"gear\":8}"; // ~50 bytes
@@ -287,7 +268,6 @@ class PayloadSizeThroughputBenchmark {
         Thread.sleep(100);
         throughputs[2] = measureStringThroughput(batchMessage);
 
-        ctx.sayTable(
                 new String[][] {
                     {"Message Type", "Est. Size", "Throughput (msg/sec)", "Comparison"},
                     {"Tick", "~50 bytes", String.format("%.0f", throughputs[0]), "Baseline"},
@@ -326,9 +306,7 @@ class PayloadSizeThroughputBenchmark {
                 "At 600-byte batches",
                 String.format("%.0f", throughputs[2]) + " msg/sec (realistic)");
         results.put("Benchmark Realism", throughputs[1] < 5_000_000 ? "REALISTIC" : "OVERSTATED");
-        ctx.sayKeyValue(results);
 
-        ctx.sayNote(
                 "Real-world F1 telemetry at 150-byte frames achieves "
                         + String.format("%.0f", throughputs[1])
                         + " msg/sec. "

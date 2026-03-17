@@ -44,29 +44,24 @@ import java.util.function.Consumer;
 public final class PublishSubscribeChannel<M> {
 
     private final List<Consumer<M>> subscribers = new CopyOnWriteArrayList<>();
-    private final Proc<Void, List<Consumer<M>>> proc;
+    private final Proc<Void, M> proc;
 
     /** Creates a new publish-subscribe channel. */
     public PublishSubscribeChannel() {
         this.proc =
                 new Proc<>(
-                        new ArrayList<>(subscribers),
+                        null,
                         (state, msg) -> {
-                            // Create a new list to avoid concurrent modification
                             var currentSubscribers = new ArrayList<>(subscribers);
-                            var nextSubscribers = new ArrayList<Consumer<M>>();
-
                             for (var subscriber : currentSubscribers) {
                                 try {
                                     subscriber.accept(msg);
-                                    nextSubscribers.add(subscriber);
                                 } catch (Exception e) {
                                     // Crashing subscribers are removed (OTP fault isolation)
-                                    // Don't add them to nextSubscribers
+                                    subscribers.remove(subscriber);
                                 }
                             }
-
-                            return nextSubscribers;
+                            return state;
                         });
     }
 
@@ -76,7 +71,7 @@ public final class PublishSubscribeChannel<M> {
      * @param message the message to send
      */
     public void send(M message) {
-        proc.tell(List.of(message)); // Wrap in list as message
+        proc.tell(message);
     }
 
     /**

@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -18,11 +15,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Verifies static node discovery configuration with fixed cluster membership.
  */
-@DtrTest
 @DisplayName("StaticNodeDiscovery — OTP static cluster membership")
 class StaticNodeDiscoveryTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private StaticNodeDiscovery nodeDiscovery;
     private InMemoryNodeDiscoveryBackend backend;
@@ -59,11 +54,8 @@ class StaticNodeDiscoveryTest {
 
     @Test
     @DisplayName("Should register initial nodes on startup")
-    void constructor_registersInitialNodes(DtrContext ctx) {
-        ctx.say("StaticNodeDiscovery initializes with a fixed cluster topology.");
-        ctx.say(
+    void constructor_registersInitialNodes() {
                 "All configured nodes are registered immediately, avoiding dynamic discovery delays.");
-        ctx.say(
                 "This suits small clusters with stable membership like Erlang's .hosts.file pattern.");
 
         List<NodeInfo> nodes = backend.listNodes();
@@ -76,10 +68,7 @@ class StaticNodeDiscoveryTest {
 
     @Test
     @DisplayName("Should register new node successfully")
-    void registerNode_addsNodeToCluster(DtrContext ctx) {
-        ctx.say("Dynamic node registration enables cluster expansion without restart.");
-        ctx.say("New nodes receive HEALTHY status by default and participate in failover.");
-        ctx.say("This supports scaling out distributed OTP applications incrementally.");
+    void registerNode_addsNodeToCluster() {
 
         var result = nodeDiscovery.registerNode("node4", "localhost:8083");
 
@@ -111,10 +100,7 @@ class StaticNodeDiscoveryTest {
 
     @Test
     @DisplayName("Should update heartbeat timestamp")
-    void updateHeartbeat_updatesTimestamp(DtrContext ctx) {
-        ctx.say("Heartbeat timestamps track node liveness for failure detection.");
-        ctx.say("Nodes exceeding timeout thresholds are marked DOWN or DEGRADED.");
-        ctx.say("This implements OTP's distributed node health monitoring protocol.");
+    void updateHeartbeat_updatesTimestamp() {
 
         var before = backend.getNode("node1").get();
         var newTimestamp = java.time.Instant.now().plusSeconds(10);
@@ -128,10 +114,7 @@ class StaticNodeDiscoveryTest {
 
     @Test
     @DisplayName("Should remove node from cluster")
-    void removeNode_removesNodeFromCluster(DtrContext ctx) {
-        ctx.say("Node removal gracefully decommissions nodes from the cluster.");
-        ctx.say("Removed nodes are excluded from getHealthyNodes() and failover targeting.");
-        ctx.say("This supports planned maintenance and cluster shrinkage.");
+    void removeNode_removesNodeFromCluster() {
 
         backend.removeNode("node2");
 
@@ -149,11 +132,8 @@ class StaticNodeDiscoveryTest {
 
     @Test
     @DisplayName("Should support concurrent node registration")
-    void registerNode_handlesConcurrentRegistration(DtrContext ctx) throws InterruptedException {
-        ctx.say("Concurrent node registration must be thread-safe in distributed environments.");
-        ctx.say(
+    void registerNode_handlesConcurrentRegistration() throws InterruptedException {
                 "Multiple nodes may join simultaneously during cluster bootstrap or scaling events.");
-        ctx.say("The backend ensures atomic registration without race conditions.");
 
         var threads = new java.util.ArrayList<Thread>();
         var latch = new java.util.concurrent.CountDownLatch(10);
@@ -184,10 +164,7 @@ class StaticNodeDiscoveryTest {
 
     @Test
     @DisplayName("Should handle nodes with different hosts and ports")
-    void registerNode_handlesDifferentHostsAndPorts(DtrContext ctx) {
-        ctx.say("Node addresses use host:port format for TCP communication.");
-        ctx.say("Supports DNS names, IP addresses, and varying port configurations.");
-        ctx.say(
+    void registerNode_handlesDifferentHostsAndPorts() {
                 "This flexibility accommodates diverse network topologies in production deployments.");
 
         nodeDiscovery.registerNode("nodeA", "host1:8080");

@@ -3,7 +3,6 @@ package io.github.seanchatmangpt.jotp.messaging.construction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.Result;
 import java.util.Map;
@@ -20,7 +19,6 @@ import org.junit.jupiter.api.Timeout;
  * <p>ClaimCheck enables deferred loading and bandwidth optimization in distributed systems. This
  * test suite covers storage, retrieval, release, and error cases.
  */
-@DtrTest
 @Timeout(5)
 class ClaimCheckTest implements WithAssertions {
 

@@ -3,7 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,16 +33,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("creates successful result carrying a value")
-        void createsSuccessWithValue(DtrContext ctx) {
-            ctx.sayNextSection("Result: Railway-Oriented Error Handling");
-            ctx.say(
+        void createsSuccessWithValue() {
                     """
                     Result<T,E> is Java 26's implementation of Erlang's {ok, Value} | {error, Reason} pattern.
                     Instead of throwing exceptions that propagate invisibly, operations return a Result
                     that forces explicit handling of both success and failure cases.
                     """);
 
-            ctx.sayCode(
                     """
                 Result<String, Exception> result = Result.ok("hello");
 
@@ -60,7 +56,6 @@ class ResultTest implements WithAssertions {
             assertThat(result.isFailure()).isFalse();
             assertThat(result).isInstanceOf(Result.Ok.class);
 
-            ctx.sayTable(
                     new String[][] {
                         {"Method", "Returns", "Purpose"},
                         {"isSuccess()", "true", "Result is on success track"},
@@ -258,9 +253,7 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("transforms success value")
-        void transformsSuccessValue(DtrContext ctx) {
-            ctx.sayNextSection("Railway Operations: map() transforms the success track");
-            ctx.say(
+        void transformsSuccessValue() {
                     """
                     The map() function applies a transformation ONLY if the Result is on the success track.
                     If it's on the error track, map() short-circuits and returns the error unchanged.
@@ -268,7 +261,6 @@ class ResultTest implements WithAssertions {
                     when things go wrong.
                     """);
 
-            ctx.sayCode(
                     """
                 Result<Integer, String> result = Result.<Integer, String>ok(5)
                     .map(x -> x * 2);
@@ -332,16 +324,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("chains success to next result")
-        void chainsSuccess(DtrContext ctx) {
-            ctx.sayNextSection("Railway Operations: flatMap() chains fallible operations");
-            ctx.say(
+        void chainsSuccess() {
                     """
                     flatMap() chains operations that themselves return Results. This is how you build
                     pipelines where each step can fail. If any step returns an error, the entire
                     pipeline short-circuits — no further steps execute.
                     """);
 
-            ctx.sayCode(
                     """
                 Result<Integer, String> result = Result.<String, String>ok("42")
                     .flatMap(s -> {
@@ -424,16 +413,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("applies onSuccess for success")
-        void appliesSuccessBranch(DtrContext ctx) {
-            ctx.sayNextSection("Railway Operations: fold() eliminates the Result type");
-            ctx.say(
+        void appliesSuccessBranch() {
                     """
                     fold() is the "eliminator" for Result — it handles both cases and returns a single
                     type. This is how you exit the railway and get a concrete value. Think of it as
                     pattern matching that's guaranteed exhaustive.
                     """);
 
-            ctx.sayCode(
                     """
                 Result<String, Integer> result = Result.ok("hello");
                 int length = result.fold(
@@ -491,16 +477,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("validates and transforms number string")
-        void validateAndTransformNumber(DtrContext ctx) {
-            ctx.sayNextSection("Railway Chaining: Multi-step transformation pipeline");
-            ctx.say(
+        void validateAndTransformNumber() {
                     """
                     Railway-oriented programming eliminates nested if-statements. Each operation either
                     continues on the success track or short-circuits to the error track. The code reads
                     left-to-right like a story, with error handling woven through naturally.
                     """);
 
-            ctx.sayCode(
                     """
                 String result = Result.of(() -> "  42  ")
                     .map(String::strip)                    // "42"
@@ -514,7 +497,6 @@ class ResultTest implements WithAssertions {
                 """,
                     "java");
 
-            ctx.sayMermaid(
                     """
                     graph LR
                     A[Start: 42 ] --> B[strip: 42]
@@ -552,15 +534,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("short-circuits on validation failure")
-        void shortCircuitsOnValidationFailure(DtrContext ctx) {
-            ctx.say(
+        void shortCircuitsOnValidationFailure() {
                     """
                     When validation fails, flatMap() returns an error and all subsequent map() operations
                     are skipped. The error "falls through" to fold(), which handles it. No try-catch,
                     no null checks — the railway handles it automatically.
                     """);
 
-            ctx.sayCode(
                     """
                 String result = Result.of(() -> "  abc  ")
                     .map(String::strip)                    // "abc"
@@ -574,7 +554,6 @@ class ResultTest implements WithAssertions {
                 """,
                     "java");
 
-            ctx.sayNote(
                     "The map(n -> n * 2) step NEVER executes. Once on the error track, "
                             + "subsequent operations automatically short-circuit. This is the key benefit: "
                             + "you can't forget to handle errors.");
@@ -637,9 +616,7 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("applies action to success value")
-        void appliesActionToSuccess(DtrContext ctx) {
-            ctx.sayNextSection("Side Effects: peek() for logging and auditing");
-            ctx.say(
+        void appliesActionToSuccess() {
                     """
                     peek() applies a side-effect (logging, metrics, auditing) on the success track
                     without changing the Result. If on the error track, peek() does nothing — the error
@@ -647,7 +624,6 @@ class ResultTest implements WithAssertions {
                     observability.
                     """);
 
-            ctx.sayCode(
                     """
                 var log = new ArrayList<String>();
                 Result<String, String> result = Result.<String, String>ok("hello")
@@ -771,16 +747,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("does not apply handler to success")
-        void doesNotApplyHandlerToSuccess(DtrContext ctx) {
-            ctx.sayNextSection("Error Recovery: recover() handles failures gracefully");
-            ctx.say(
+        void doesNotApplyHandlerToSuccess() {
                     """
                     recover() is the error-track equivalent of flatMap(). It only applies when the
                     Result is an error, allowing you to transform failures into successes or provide
                     fallback values. On the success track, recover() is a no-op.
                     """);
 
-            ctx.sayCode(
                     """
                 Result<String, String> result = Result.<String, String>ok("value")
                     .recover(e -> Result.ok("recovered"));
@@ -929,16 +902,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("peek then recover on success")
-        void peekThenRecoverOnSuccess(DtrContext ctx) {
-            ctx.sayNextSection("Complete Pipeline: Combining all railway operations");
-            ctx.say(
+        void peekThenRecoverOnSuccess() {
                     """
                     A production pipeline combines map(), flatMap(), peek(), and recover() to handle
                     validation, transformation, side effects, and error recovery — all without a single
                     try-catch block. The railway pattern makes error handling explicit and composable.
                     """);
 
-            ctx.sayCode(
                     """
                 record Order(String id, int quantity) {}
 
@@ -953,7 +923,6 @@ class ResultTest implements WithAssertions {
                 """,
                     "java");
 
-            ctx.sayTable(
                     new String[][] {
                         {"Operation", "Track", "Purpose"},
                         {"map()", "Both", "Transforms success value, passes through errors"},
@@ -1045,16 +1014,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("Result makes error handling explicit and composable")
-        void explicitErrorHandling(DtrContext ctx) {
-            ctx.sayNextSection("Result vs Exceptions: Explicit Error Handling");
-            ctx.say(
+        void explicitErrorHandling() {
                     """
                     Exceptions are INVISIBLE in function signatures. You can't tell if a method
                     throws just by looking at its type. Result<T,E> makes error handling EXPLICIT —
                     the error type is part of the signature, forcing callers to handle both cases.
                     """);
 
-            ctx.sayCode(
                     """
                 // EXCEPTIONS: Error handling is implicit and invisible
                 public Order processOrder(String id) throws ValidationException, SQLException {
@@ -1075,7 +1041,6 @@ class ResultTest implements WithAssertions {
                 """,
                     "java");
 
-            ctx.sayTable(
                     new String[][] {
                         {"Aspect", "Exceptions", "Result<T,E>"},
                         {"Visibility", "Invisible (throws clause)", "Explicit in type signature"},
@@ -1090,7 +1055,6 @@ class ResultTest implements WithAssertions {
                         {"Functional style", "Breaks composition", "Natural for map/reduce"}
                     });
 
-            ctx.sayNote(
                     "Joe Armstrong: 'In Erlang, we don't throw exceptions across process boundaries. "
                             + "We return {ok, Value} or {error, Reason}. This forces the caller to handle "
                             + "both cases explicitly.' Result brings this philosophy to Java 26.");
@@ -1098,15 +1062,13 @@ class ResultTest implements WithAssertions {
 
         @Test
         @DisplayName("Result enables composition without nesting")
-        void compositionWithoutNesting(DtrContext ctx) {
-            ctx.say(
+        void compositionWithoutNesting() {
                     """
                     With exceptions, error handling creates deeply nested try-catch blocks. With Result,
                     you can chain operations flatly using map() and flatMap(). The error handling logic
                     is woven through naturally, without interrupting the happy path.
                     """);
 
-            ctx.sayCode(
                     """
                 // EXCEPTIONS: Nested try-catch pyramid of doom
                 try {
@@ -1137,7 +1099,6 @@ class ResultTest implements WithAssertions {
                 """,
                     "java");
 
-            ctx.sayNote(
                     "The Result version is not only flatter but also safer — you can't forget to "
                             + "handle any error case. The compiler ensures exhaustiveness through "
                             + "pattern matching.");

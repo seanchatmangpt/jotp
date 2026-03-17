@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messagepatterns.channel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -23,7 +21,6 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) channel patterns define how messages are transported
  * between endpoints, including point-to-point, publish-subscribe, and datatype channels.
  */
-@DtrTest
 @DisplayName("Channel Patterns")
 class ChannelPatternsTest implements WithAssertions {
 
@@ -38,11 +35,8 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("delivers message to single consumer")
-        void singleConsumer(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Point-to-Point Channel");
-            ctx.say(
+        void singleConsumer() throws InterruptedException {
                     "Delivers messages from a single sender to a single receiver. Each message is consumed by exactly one consumer, ensuring reliable delivery.");
-            ctx.sayCode(
                     """
                     var channel = PointToPoint.<String>create(msg -> {
                         received.set(msg);
@@ -51,13 +45,11 @@ class ChannelPatternsTest implements WithAssertions {
                     channel.send("Hello");
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Sender] -->|Message| B[P2P Channel]
                         B -->|Message| C[Receiver]
                     """);
-            ctx.sayNote(
                     "Use when you need exactly-once processing semantics, such as command messages or work queue distribution.");
 
             var latch = new CountDownLatch(1);
@@ -82,11 +74,8 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("broadcasts to all subscribers")
-        void broadcast(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Publish-Subscribe Channel");
-            ctx.say(
+        void broadcast() throws InterruptedException {
                     "Broadcasts messages to all subscribed consumers. Each subscriber receives a copy of every message, enabling fan-out notification patterns.");
-            ctx.sayCode(
                     """
                     var bus = new PublishSubscribe<String>();
                     bus.subscribe(received1::add);
@@ -94,7 +83,6 @@ class ChannelPatternsTest implements WithAssertions {
                     bus.publishSync("event-1");
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Publisher] -->|Message| B[Pub-Sub Channel]
@@ -102,7 +90,6 @@ class ChannelPatternsTest implements WithAssertions {
                         B -->|Copy 2| D[Subscriber 2]
                         B -->|Copy N| E[Subscriber N]
                     """);
-            ctx.sayNote(
                     "Use when multiple consumers need to receive the same message, such as event notifications, cache invalidation, or audit logging.");
 
             var bus = new PublishSubscribe<String>();
@@ -121,10 +108,7 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("unsubscribe stops delivery")
-        void unsubscribe(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Publish-Subscribe: Dynamic Subscription");
-            ctx.say("Subscribers can dynamically unsubscribe to stop receiving messages.");
-            ctx.sayCode(
+        void unsubscribe() throws InterruptedException {
                     """
                     bus.subscribe(sub);
                     bus.publishSync("before");
@@ -132,7 +116,6 @@ class ChannelPatternsTest implements WithAssertions {
                     bus.publishSync("after");
                     """,
                     "java");
-            ctx.sayNote(
                     "Dynamic subscription allows consumers to join and leave the channel at runtime without disrupting other subscribers.");
 
             var bus = new PublishSubscribe<String>();
@@ -157,11 +140,8 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("carries typed messages")
-        void typedMessages(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Datatype Channel");
-            ctx.say(
+        void typedMessages() throws InterruptedException {
                     "A strongly-typed channel that only accepts and delivers messages of a specific type, providing compile-time type safety.");
-            ctx.sayCode(
                     """
                     var channel = DatatypeChannel.create(ProductQuery.class, q -> {
                         received.set(q);
@@ -170,13 +150,11 @@ class ChannelPatternsTest implements WithAssertions {
                     channel.send(new ProductQuery("SKU-001"));
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Sender] -->|ProductQuery| B[Datatype Channel]
                         B -->|ProductQuery| C[Receiver]
                     """);
-            ctx.sayNote(
                     "Use when you want type-safe message passing with automatic validation at compile time.");
 
             var latch = new CountDownLatch(1);
@@ -204,17 +182,13 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("captures invalid messages with reasons")
-        void captures(DtrContext ctx) {
-            ctx.sayNextSection("Invalid Message Channel");
-            ctx.say(
+        void captures() {
                     "Captures messages that fail validation along with the reason for failure, enabling error analysis and retry logic.");
-            ctx.sayCode(
                     """
                     var channel = new InvalidMessageChannel<String>();
                     channel.reject("bad-msg", "missing required field");
                     """,
                     "java");
-            ctx.sayNote(
                     "Use for message validation and error handling. Invalid messages can be logged, analyzed, or sent to dead letter channels.");
 
             var channel = new InvalidMessageChannel<String>();
@@ -233,24 +207,19 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("captures undeliverable messages")
-        void captures(DtrContext ctx) {
-            ctx.sayNextSection("Dead Letter Channel");
-            ctx.say(
+        void captures() {
                     "Captures messages that cannot be delivered, such as when no consumer is registered or the destination is unavailable.");
-            ctx.sayCode(
                     """
                     var dl = new DeadLetter<String>();
                     dl.dead("lost-msg", "no consumer registered");
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Message] --> B{Can Deliver?}
                         B -->|No| C[Dead Letter Channel]
                         B -->|Yes| D[Consumer]
                     """);
-            ctx.sayNote(
                     "Essential for reliability. Dead letter channels preserve failed messages for inspection, retry, or manual intervention.");
 
             var dl = new DeadLetter<String>();
@@ -267,11 +236,8 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("acknowledge removes pending delivery")
-        void acknowledgeRemoves(DtrContext ctx) {
-            ctx.sayNextSection("Guaranteed Delivery");
-            ctx.say(
+        void acknowledgeRemoves() {
                     "Ensures reliable message delivery by tracking unacknowledged messages and supporting retry logic.");
-            ctx.sayCode(
                     """
                     var gd = new GuaranteedDelivery<String>(
                         msg -> counter.incrementAndGet(),
@@ -280,7 +246,6 @@ class ChannelPatternsTest implements WithAssertions {
                     gd.acknowledge(id);
                     """,
                     "java");
-            ctx.sayNote(
                     "Use when message loss is unacceptable, such as financial transactions or critical commands. Requires idempotent consumers.");
 
             var counter = new AtomicInteger(0);
@@ -298,16 +263,12 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("retry re-delivers unacknowledged messages")
-        void retryDelivers(DtrContext ctx) {
-            ctx.sayNextSection("Guaranteed Delivery: Retry Logic");
-            ctx.say("Unacknowledged messages can be retried to ensure eventual delivery.");
-            ctx.sayCode(
+        void retryDelivers() {
                     """
                     gd.send("order-1");
                     gd.retryPending();
                     """,
                     "java");
-            ctx.sayNote(
                     "Retry logic should be exponential backoff to avoid overwhelming the system during failures.");
 
             var counter = new AtomicInteger(0);
@@ -328,11 +289,8 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("dispatches commands and broadcasts notifications")
-        void commandsAndNotifications(DtrContext ctx) {
-            ctx.sayNextSection("Message Bus");
-            ctx.say(
+        void commandsAndNotifications() {
                     "A central messaging backbone that supports both point-to-point commands and publish-subscribe notifications.");
-            ctx.sayCode(
                     """
                     var bus = new MessageBus<String>();
                     bus.registerCommandHandler("buy", commandResult::set);
@@ -341,7 +299,6 @@ class ChannelPatternsTest implements WithAssertions {
                     int count = bus.broadcastNotification("executed", "AAPL-done");
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Command] --> B[Message Bus]
@@ -350,7 +307,6 @@ class ChannelPatternsTest implements WithAssertions {
                         B --> E[Notification Subscriber 1]
                         B --> F[Notification Subscriber 2]
                     """);
-            ctx.sayNote(
                     "Use as a central nervous system for application integration, decoupling senders from receivers while supporting both commands and events.");
 
             var bus = new MessageBus<String>();
@@ -376,11 +332,8 @@ class ChannelPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("translates and forwards messages")
-        void translates(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Messaging Bridge");
-            ctx.say(
+        void translates() throws InterruptedException {
                     "Connects two different messaging systems by translating message formats and forwarding messages between them.");
-            ctx.sayCode(
                     """
                     var bridge = MessagingBridge.create(
                         Integer.class, String.class,
@@ -389,14 +342,12 @@ class ChannelPatternsTest implements WithAssertions {
                     bridge.forward(42);
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[System A] -->|Integer| B[Messaging Bridge]
                     B -->|Translation|
                     B -->|String| C[System B]
                     """);
-            ctx.sayNote(
                     "Use when integrating heterogeneous systems that use different message formats or protocols.");
 
             var latch = new CountDownLatch(1);

@@ -3,8 +3,6 @@ package io.github.seanchatmangpt.jotp;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -47,7 +45,6 @@ import org.junit.jupiter.api.Test;
 @DisplayName("GenServer: OTP-style Request-Reply Server")
 class GenServerTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -96,10 +93,7 @@ class GenServerTest implements WithAssertions {
     @DisplayName("cast() delivers messages asynchronously")
     void testCastFireAndForget()
             throws InterruptedException, java.util.concurrent.ExecutionException {
-        ctx.sayNextSection("GenServer: Asynchronous Cast (Fire-and-Forget)");
-        ctx.say(
                 "cast() sends messages without waiting for a reply. The sender continues immediately; messages are processed asynchronously by the server.");
-        ctx.sayCode(
                 """
             var handler = new GenServer.Handler<Integer, CounterMsg>() {
                 @Override
@@ -176,7 +170,6 @@ class GenServerTest implements WithAssertions {
         var result = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
         assertThat(result).isEqualTo(1);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Initial State",
                         "0",
@@ -190,10 +183,7 @@ class GenServerTest implements WithAssertions {
     @Test
     @DisplayName("cast() maintains FIFO ordering")
     void testCastFifoOrdering() throws Exception {
-        ctx.sayNextSection("GenServer: FIFO Ordering Guarantee");
-        ctx.say(
                 "GenServer processes cast messages in FIFO order. Messages sent earlier are always processed before messages sent later.");
-        ctx.sayCode(
                 """
             var handler =
                 new GenServer.Handler<List<String>, StateMsg>() {
@@ -281,7 +271,6 @@ class GenServerTest implements WithAssertions {
         var result = server.<List<String>>call(new StateMsg.GetState(), CALL_TIMEOUT).get();
         assertThat(result).containsExactly("first", "second", "third");
 
-        ctx.sayKeyValue(
                 Map.of("Messages Sent", "3", "Ordering", "FIFO", "Result", result.toString()));
         server.stop();
     }
@@ -293,10 +282,7 @@ class GenServerTest implements WithAssertions {
     @Test
     @DisplayName("call() sends request and waits for reply")
     void testCallRequestReply() throws Exception {
-        ctx.sayNextSection("GenServer: Synchronous Request-Reply (call)");
-        ctx.say(
                 "call() sends a synchronous request and blocks until the server replies. The caller receives the response value from handleCall.");
-        ctx.sayCode(
                 """
             var handler = new GenServer.Handler<Integer, CounterMsg>() {
                 @Override
@@ -359,17 +345,13 @@ class GenServerTest implements WithAssertions {
         var reply = server.call(new CounterMsg.Get(), CALL_TIMEOUT).get();
         assertThat(reply).isEqualTo(42);
 
-        ctx.sayKeyValue(Map.of("Initial State", "42", "Reply Received", String.valueOf(reply)));
         server.stop();
     }
 
     @Test
     @DisplayName("call() returns the reply from handler")
     void testCallReplyContent() throws Exception {
-        ctx.sayNextSection("GenServer: Custom Reply Values");
-        ctx.say(
                 "handleCall returns a CallResult containing (nextState, reply). The reply value is sent back to the caller.");
-        ctx.sayCode(
                 """
             var handler = new GenServer.Handler<String, EchoMsg>() {
                 @Override
@@ -430,7 +412,6 @@ class GenServerTest implements WithAssertions {
         var reply = server.call(new EchoMsg.Echo("hello"), CALL_TIMEOUT).get();
         assertThat(reply).isEqualTo("echo:hello");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Input",
                         "hello",
@@ -496,12 +477,8 @@ class GenServerTest implements WithAssertions {
     @Test
     @DisplayName("call() respects timeout duration")
     void testCallTimeout() {
-        ctx.sayNextSection("GenServer: Call Timeout Protection");
-        ctx.say(
                 "call() accepts a timeout duration. If the server doesn't respond within the timeout, the call fails. This prevents indefinite blocking.");
-        ctx.sayWarning(
                 "Always use timeouts in production to prevent deadlocks. A server that crashes or hangs should not block callers forever.");
-        ctx.sayCode(
                 """
             var server = GenServer.start(0, slowHandler);
             var future = server.call(new CounterMsg.Get(), Duration.ofMillis(100));
@@ -545,7 +522,6 @@ class GenServerTest implements WithAssertions {
         var future = server.call(new CounterMsg.Get(), Duration.ofMillis(100));
         assertThatThrownBy(() -> future.get()).isInstanceOf(Exception.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Server Response Time",
                         "2000ms",
@@ -697,10 +673,7 @@ class GenServerTest implements WithAssertions {
     @Test
     @DisplayName("info() sends async notifications")
     void testInfoMessages() throws Exception {
-        ctx.sayNextSection("GenServer: Info Messages (Out-of-Band Notifications)");
-        ctx.say(
                 "info() sends out-of-band messages that don't expect a reply. Useful for timers, monitors, and external notifications.");
-        ctx.sayCode(
                 """
             var infoCount = new AtomicInteger(0);
 
@@ -777,7 +750,6 @@ class GenServerTest implements WithAssertions {
         // Wait for info processing
         await().atMost(AWAIT_TIMEOUT).untilAsserted(() -> assertThat(infoCount.get()).isEqualTo(3));
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Info Messages Sent",
                         "3",
@@ -901,10 +873,7 @@ class GenServerTest implements WithAssertions {
     @Test
     @DisplayName("stop() gracefully drains remaining messages")
     void testGracefulShutdown() throws Exception {
-        ctx.sayNextSection("GenServer: Graceful Shutdown");
-        ctx.say(
                 "stop() gracefully shuts down the server, draining all remaining messages from the mailbox before terminating.");
-        ctx.sayCode(
                 """
             var processedCount = new AtomicInteger(0);
 
@@ -991,7 +960,6 @@ class GenServerTest implements WithAssertions {
         // All messages should have been processed
         assertThat(processedCount.get()).isEqualTo(3);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Messages Queued",
                         "3",
@@ -1002,17 +970,13 @@ class GenServerTest implements WithAssertions {
     @Test
     @DisplayName("GenServer message types: call, cast, and info")
     void testAllMessageTypes() throws Exception {
-        ctx.sayNextSection("GenServer: Complete Message Type Overview");
-        ctx.say(
                 "GenServer supports three message types: call (sync request-reply), cast (async fire-and-forget), and info (out-of-band notifications).");
-        ctx.sayTable(
                 new String[][] {
                     {"Message Type", "Method", "Blocking", "Reply", "Use Case"},
                     {"Call", "call()", "Yes (with timeout)", "Yes", "Request-response pattern"},
                     {"Cast", "cast()", "No", "No", "Fire-and-forget updates"},
                     {"Info", "info()", "No", "No", "Timers, monitors, external events"}
                 });
-        ctx.sayCode(
                 """
             // Counter server demonstrating all three message types
             var handler = new GenServer.Handler<Integer, CounterMsg>() {
@@ -1097,7 +1061,6 @@ class GenServerTest implements WithAssertions {
 
         server.info("timer fired");
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Cast Messages",
                         "2 (Increment, Increment)",

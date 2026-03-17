@@ -2,7 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.channels;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.*;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.*;
@@ -28,7 +27,6 @@ import org.junit.jupiter.api.Test;
  *   <li>Type isolation and independence
  * </ul>
  */
-@DtrTest
 @DisplayName("Data Type Channel Pattern")
 class DataTypeChannelTest {
 

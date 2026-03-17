@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.enterprise.backpressure;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.time.Duration;
 import java.util.List;
@@ -23,7 +21,6 @@ import org.junit.jupiter.api.DisplayName;
 @DisplayName("Backpressure: Adaptive timeout-based flow control coordinator")
 class BackpressureTest implements WithAssertions {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -43,12 +40,9 @@ class BackpressureTest implements WithAssertions {
 
     @DisplayName("createWithValidConfig_returnsInstance: Backpressure.create returns non-null")
     void createWithValidConfig_returnsInstance() {
-        ctx.sayNextSection("Backpressure: Preventing System Overload");
-        ctx.say(
                 "Backpressure prevents cascading failures by regulating request rate when downstream"
                         + " services are slow or failing. It implements adaptive timeout adjustment and"
                         + " circuit breaker patterns to maintain system stability.");
-        ctx.sayCode(
                 """
             // Configure backpressure with adaptive timeout
             BackpressureConfig config = BackpressureConfig.builder("payment-service")
@@ -65,7 +59,6 @@ class BackpressureTest implements WithAssertions {
         var bp = Backpressure.create(defaultConfig());
         assertThat(bp).isNotNull();
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Service Name",
                         "test-service",
@@ -77,7 +70,6 @@ class BackpressureTest implements WithAssertions {
                         "95%",
                         "Window Size",
                         "100 requests"));
-        ctx.sayMermaid(
                 """
             stateDiagram-v2
                 [*] --> HEALTHY
@@ -92,12 +84,9 @@ class BackpressureTest implements WithAssertions {
     @DisplayName(
             "configBuilder_rejectsZeroInitialTimeout: Duration.ZERO throws IllegalArgumentException")
     void configBuilder_rejectsZeroInitialTimeout() {
-        ctx.sayNextSection("Configuration Validation: Preventing Misconfiguration");
-        ctx.say(
                 "Backpressure configurations enforce invariants at construction time. Zero initial"
                         + " timeout, max timeout less than initial, and invalid window sizes are rejected"
                         + " immediately.");
-        ctx.sayCode(
                 """
             // Invalid configuration - zero initial timeout
             assertThatThrownBy(() ->
@@ -121,17 +110,14 @@ class BackpressureTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayWarning(
                 "Zero initial timeout causes immediate failures. Always use initialTimeout ="
                         + " (expected p95 latency * 1.5) to allow for normal variance.");
     }
 
     @DisplayName("configBuilder_rejectsMaxTimeoutLessThanInitial: max < initial throws exception")
     void configBuilder_rejectsMaxTimeoutLessThanInitial() {
-        ctx.say(
                 "Max timeout must be greater than or equal to initial timeout. This prevents"
                         + " configuration errors where timeout can never increase.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 BackpressureConfig.builder("svc")
@@ -154,17 +140,14 @@ class BackpressureTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayWarning(
                 "Max timeout < initial timeout is logically invalid. Adaptive backpressure needs"
                         + " room to increase timeout during degradation.");
     }
 
     @DisplayName("configBuilder_rejectsInvalidWindowSize: windowSize=0 throws exception")
     void configBuilder_rejectsInvalidWindowSize() {
-        ctx.say(
                 "Window size determines how many recent requests are tracked for success rate"
                         + " calculation. Zero window size prevents state tracking.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 BackpressureConfig.builder("svc")
@@ -187,7 +170,6 @@ class BackpressureTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Recommended Window Size",
                         "50-200 requests",
@@ -199,10 +181,8 @@ class BackpressureTest implements WithAssertions {
 
     @DisplayName("configBuilder_rejectsInvalidSuccessRate: successRate > 1.0 throws exception")
     void configBuilder_rejectsInvalidSuccessRate() {
-        ctx.say(
                 "Success rate threshold must be between 0.0 and 1.0. Values above 1.0 represent"
                         + " impossible success rates.");
-        ctx.sayCode(
                 """
             assertThatThrownBy(() ->
                 BackpressureConfig.builder("svc")
@@ -225,7 +205,6 @@ class BackpressureTest implements WithAssertions {
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
 
-        ctx.sayTable(
                 List.of(
                         List.of("0.90", "Lenient - allows 10% failure"),
                         List.of("0.95", "Standard - allows 5% failure"),
@@ -237,11 +216,8 @@ class BackpressureTest implements WithAssertions {
 
     @DisplayName("execute_successfulTask_returnsSuccess: successful task produces Success variant")
     void execute_successfulTask_returnsSuccess() {
-        ctx.sayNextSection("Execution: Success Path");
-        ctx.say(
                 "When tasks complete within timeout, backpressure tracks success and returns"
                         + " Success variant. Success rate is updated for adaptive timeout adjustment.");
-        ctx.sayCode(
                 """
             var bp = Backpressure.create(config);
 
@@ -262,7 +238,6 @@ class BackpressureTest implements WithAssertions {
         assertThat(result).isInstanceOf(Backpressure.Result.Success.class);
         assertThat(((Backpressure.Result.Success<String>) result).value()).isEqualTo("hello");
 
-        ctx.sayTable(
                 List.of(
                         List.of("Result Type", "Success<String>"),
                         List.of("Value", "hello"),
@@ -275,12 +250,9 @@ class BackpressureTest implements WithAssertions {
     @DisplayName(
             "execute_failingTask_returnsFailure: BackpressureException produces Failure variant")
     void execute_failingTask_returnsFailure() {
-        ctx.sayNextSection("Execution: Backpressure Rejection");
-        ctx.say(
                 "When tasks throw BackpressureException, backpressure returns Failure variant."
                         + " This indicates the task recognized backpressure conditions and aborted"
                         + " proactively.");
-        ctx.sayCode(
                 """
             var bp = Backpressure.create(config);
 
@@ -306,7 +278,6 @@ class BackpressureTest implements WithAssertions {
 
         assertThat(result).isInstanceOf(Backpressure.Result.Failure.class);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Result Type", "Failure",
                         "Error", "BackpressureException: circuit open",
@@ -318,10 +289,8 @@ class BackpressureTest implements WithAssertions {
     @DisplayName(
             "execute_generalException_wrappedInFailure: RuntimeException produces Failure variant")
     void execute_generalException_wrappedInFailure() {
-        ctx.say(
                 "General exceptions are wrapped in BackpressureException and returned as Failure."
                         + " This provides consistent error handling regardless of exception type.");
-        ctx.sayCode(
                 """
             var bp = Backpressure.create(config);
 
@@ -348,7 +317,6 @@ class BackpressureTest implements WithAssertions {
 
         assertThat(result).isInstanceOf(Backpressure.Result.Failure.class);
 
-        ctx.sayWarning(
                 "All exceptions are treated as failures for backpressure purposes. Distinguish"
                         + " transient failures (retry) from permanent errors (abort) at application level.");
         bp.shutdown();
@@ -358,11 +326,8 @@ class BackpressureTest implements WithAssertions {
 
     @DisplayName("addListener_registeredSuccessfully: listener added without throwing")
     void addListener_registeredSuccessfully() {
-        ctx.sayNextSection("Observability: Status Change Listeners");
-        ctx.say(
                 "Backpressure emits events when state transitions occur (HEALTHY → WARNING → CIRCUIT_OPEN)."
                         + " Listeners receive callbacks for monitoring and alerting.");
-        ctx.sayCode(
                 """
             var bp = Backpressure.create(config);
 
@@ -379,7 +344,6 @@ class BackpressureTest implements WithAssertions {
 
         assertThatNoException().isThrownBy(() -> bp.addListener(listener));
 
-        ctx.sayTable(
                 List.of(
                         List.of("HEALTHY", "Normal operation"),
                         List.of("WARNING", "Degraded, adapting timeout"),
@@ -390,10 +354,8 @@ class BackpressureTest implements WithAssertions {
 
     @DisplayName("removeListener_removedSuccessfully: listener removed without throwing")
     void removeListener_removedSuccessfully() {
-        ctx.say(
                 "Listeners can be removed to stop receiving callbacks. Useful for cleanup or"
                         + " temporary monitoring.");
-        ctx.sayCode(
                 """
             var bp = Backpressure.create(config);
             Backpressure.BackpressureListener listener = (from, to) -> {};
@@ -409,7 +371,6 @@ class BackpressureTest implements WithAssertions {
         bp.addListener(listener);
         assertThatNoException().isThrownBy(() -> bp.removeListener(listener));
 
-        ctx.say(
                 "Listener removal is idempotent - removing a non-existent listener or removing twice"
                         + " are both safe operations.");
         bp.shutdown();
@@ -419,11 +380,8 @@ class BackpressureTest implements WithAssertions {
 
     @DisplayName("shutdown_doesNotThrow: calling shutdown does not throw")
     void shutdown_doesNotThrow() {
-        ctx.sayNextSection("Lifecycle: Graceful Shutdown");
-        ctx.say(
                 "Backpressure coordinators must be shutdown to release resources. Shutdown is"
                         + " idempotent and safe to call multiple times.");
-        ctx.sayCode(
                 """
             var bp = Backpressure.create(config);
             bp.shutdown();
@@ -433,7 +391,6 @@ class BackpressureTest implements WithAssertions {
         var bp = Backpressure.create(defaultConfig());
         assertThatNoException().isThrownBy(bp::shutdown);
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Resource Release",
                         "Process coordinator shutdown",

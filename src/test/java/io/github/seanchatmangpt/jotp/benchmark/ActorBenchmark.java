@@ -1,8 +1,5 @@
 package io.github.seanchatmangpt.jotp.benchmark;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.util.Map;
 import java.util.concurrent.LinkedTransferQueue;
@@ -36,7 +33,6 @@ import org.openjdk.jmh.annotations.Warmup;
  *   <li>{@code raw_queue_throughput} — baseline: raw LinkedTransferQueue enqueue rate
  * </ul>
  */
-@DtrTest
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @Fork(1)
@@ -45,7 +41,6 @@ import org.openjdk.jmh.annotations.Warmup;
 @State(Scope.Benchmark)
 public class ActorBenchmark {
 
-    @DtrContextField private DtrContext ctx;
 
     private Proc<Integer, Integer> countingActor;
     private Proc<Integer, Integer> echoActor;
@@ -108,12 +103,8 @@ public class ActorBenchmark {
     @Test
     @DisplayName("Benchmark: Actor Pattern Performance")
     void reportBenchmarkResults() {
-        ctx.sayNextSection("Benchmark: Actor Pattern Performance");
-        ctx.say(
                 "Measures Actor pattern overhead using JOTP Proc with virtual threads and LinkedTransferQueue mailbox.");
-        ctx.say("Thesis claim: Actor pattern has overhead <= 15% vs. raw LinkedTransferQueue.");
 
-        ctx.sayTable(
                 new String[][] {
                     {"Benchmark", "Type", "Description"},
                     {"raw_queue_throughput", "Baseline", "Raw LinkedTransferQueue enqueue rate"},
@@ -121,7 +112,6 @@ public class ActorBenchmark {
                     {"ask_latency", "Request-reply", "Actor ask() - blocks until response"}
                 });
 
-        ctx.sayKeyValue(
                 Map.of(
                         "Unit",
                         "Microseconds (average time)",

@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messaging.routing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.ProcessRegistry;
@@ -24,7 +22,6 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Tests real-world order processing scenarios with dynamic routing and fan-out messaging.
  */
-@DtrTest
 @DisplayName("Routing Patterns Integration Tests")
 class RoutingPatternsIT implements WithAssertions {
 
@@ -41,12 +38,9 @@ class RoutingPatternsIT implements WithAssertions {
 
         @Test
         @DisplayName("dynamic router routes order to correct service")
-        void dynamicRouterRoutesOrderCorrectly(DtrContext ctx) {
-            ctx.sayNextSection("Routing Patterns Integration");
-            ctx.say(
+        void dynamicRouterRoutesOrderCorrectly() {
                     "This integration test demonstrates combining DynamicRouter and RecipientListRouter"
                             + " for real-world order processing scenarios.");
-            ctx.sayCode(
                     """
                     DynamicRouter<String> router = new DynamicRouter<>(
                         msg -> msg.startsWith("order:") ? "order-processor" : "unknown"
@@ -57,7 +51,6 @@ class RoutingPatternsIT implements WithAssertions {
                     assertThat(routed).isTrue();
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Incoming Message] --> B{Dynamic Router}
@@ -65,7 +58,6 @@ class RoutingPatternsIT implements WithAssertions {
                         B -->|payment:| D[Payment Processor]
                         B -->|unknown| E[Default Handler]
                     """);
-            ctx.sayNote(
                     "Dynamic routers are ideal when destinations are determined at runtime based on"
                             + " message content or external configuration.");
             List<String> orderProcessorMessages = new CopyOnWriteArrayList<>();
@@ -141,12 +133,9 @@ class RoutingPatternsIT implements WithAssertions {
 
         @Test
         @DisplayName("broadcasts order events to audit, notification, and analytics")
-        void broadcastsOrderEventsToMultipleServices(DtrContext ctx) {
-            ctx.sayNextSection("Event Broadcasting with Recipient List");
-            ctx.say(
+        void broadcastsOrderEventsToMultipleServices() {
                     "The RecipientListRouter broadcasts events to multiple services simultaneously,"
                             + " enabling fan-out messaging patterns.");
-            ctx.sayCode(
                     """
                     RecipientListRouter<String> router = new RecipientListRouter<>();
                     router.addRecipient(auditRef);

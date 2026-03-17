@@ -220,8 +220,8 @@ make version
 Output:
 ```
 Name:    jotp
-Version: 1.0.0-Alpha
-Java:    openjdk version "21.0.10" 2024-01-16
+Version: 2026.1.0
+Java:    openjdk version "26-beta" 2026-03-17
 Maven:   Apache Maven Daemon 2.0.0-rc-3
 ```
 
@@ -492,7 +492,7 @@ Wrong Java version in use. Verify Java 26:
 
 ```bash
 make check-requirements
-java -version  # Should show 21.0.10 (OpenJDK 26)
+java -version  # Should show openjdk 26 (OpenJDK 26)
 ```
 
 ### "entr: command not found"

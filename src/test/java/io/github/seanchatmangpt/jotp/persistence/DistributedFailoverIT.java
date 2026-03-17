@@ -3,9 +3,6 @@ package io.github.seanchatmangpt.jotp.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.DurableState;
 import io.github.seanchatmangpt.jotp.PersistenceConfig;
@@ -33,12 +30,10 @@ import org.junit.jupiter.api.BeforeEach;
  * @see io.github.seanchatmangpt.jotp.distributed.GlobalRegistry
  * @see RocksDBGlobalRegistryBackend
  */
-@DtrTest
 class DistributedFailoverIT {
 
     private Path tempDir;
 
-    @DtrContextField private DtrContext ctx;
 
     private GlobalRegistryBackend backend;
     private List<GlobalRegistry> registries;
@@ -105,8 +100,7 @@ class DistributedFailoverIT {
     // ── Tests ───────────────────────────────────────────────────────────────────
 
     @org.junit.jupiter.api.Test
-    void shouldDetectNodeFailureAndMigrateProcess(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldDetectNodeFailureAndMigrateProcess() throws Exception {
                 """
                 Distributed systems must handle node failures gracefully by detecting
                 failed nodes and migrating processes to healthy nodes. This test demonstrates
@@ -122,7 +116,6 @@ class DistributedFailoverIT {
                 to discover registered processes and detect failures.
                 """);
 
-        ctx.say("Phase 1: Create two-node cluster - node-1 and node-2 with shared registry.");
 
         // Create two nodes
         var node1 = createRegistry("node-1");
@@ -131,7 +124,6 @@ class DistributedFailoverIT {
         var distRegistry1 = createDistributedRegistry(node1);
         var distRegistry2 = createDistributedRegistry(node2);
 
-        ctx.say(
                 """
                 Cluster setup:
                 - Node 1: node-1 ✓
@@ -139,7 +131,6 @@ class DistributedFailoverIT {
                 - Shared backend: RocksDB registry ✓
                 """);
 
-        ctx.say("Phase 2: Register process on node-1 - Process registered locally.");
 
         // Register process on node-1
         var processInfo =
@@ -148,7 +139,6 @@ class DistributedFailoverIT {
                         NodeId.of("node-1"),
                         Map.of("type", "counter", "initial", "0"));
 
-        ctx.sayCode(
                 "java",
                 """
         // Register process
@@ -161,7 +151,6 @@ class DistributedFailoverIT {
         await().atMost(Duration.ofSeconds(2))
                 .until(() -> distRegistry1.lookup("process-1").isPresent());
 
-        ctx.say(
                 """
                 Process registration:
                 - Process ID: process-1 ✓
@@ -169,12 +158,10 @@ class DistributedFailoverIT {
                 - Metadata: {type: counter, initial: 0} ✓
                 """);
 
-        ctx.say("Phase 3: Simulate node-1 failure - Close node-1 registry.");
 
         // Simulate node-1 failure
         distRegistry1.close();
 
-        ctx.sayCode(
                 "java",
                 """
         // Simulate node-1 failure
@@ -182,7 +169,6 @@ class DistributedFailoverIT {
         // Node-2 will detect failure via heartbeat timeout
         """);
 
-        ctx.say(
                 "Phase 4: Detect failure and migrate to node-2 - Node-2 detects node-1 failure and allows migration.");
 
         // Node-2 should detect failure and allow re-registration
@@ -201,7 +187,6 @@ class DistributedFailoverIT {
                         NodeId.of("node-2"),
                         Map.of("type", "counter", "initial", "0", "migrated", "true"));
 
-        ctx.sayCode(
                 "java",
                 """
         // Migrate process to healthy node
@@ -214,7 +199,6 @@ class DistributedFailoverIT {
         assertThat(migratedInfo.nodeId()).isEqualTo(NodeId.of("node-2"));
         assertThat(migratedInfo.metadata().get("migrated")).isEqualTo("true");
 
-        ctx.say(
                 """
                 Migration verification:
                 Process successfully migrated:
@@ -231,8 +215,7 @@ class DistributedFailoverIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldTransferStateBetweenNodesDuringFailover(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldTransferStateBetweenNodesDuringFailover() throws Exception {
                 """
                 State transfer during failover ensures that process state is preserved
                 when migrating between nodes. This test demonstrates:
@@ -248,7 +231,6 @@ class DistributedFailoverIT {
                 between nodes using RocksDB backend.
                 """);
 
-        ctx.say("Phase 1: Node-1 creates process with state - State persisted to disk.");
 
         // Node 1: Create process with state
         var node1 = createRegistry("node-1");
@@ -269,7 +251,6 @@ class DistributedFailoverIT {
                         .initialState(100)
                         .build();
 
-        ctx.sayCode(
                 "java",
                 """
         // Create durable state on node-1
@@ -290,7 +271,6 @@ class DistributedFailoverIT {
         durableState.recordEvent(new StateTransferTestEvent.Increment(25));
         durableState.saveCurrentState();
 
-        ctx.say(
                 """
                 State persistence:
                 - Initial state: 100 ✓
@@ -303,7 +283,6 @@ class DistributedFailoverIT {
         distRegistry1.register(
                 "process-state-1", NodeId.of("node-1"), Map.of("state", "175", "version", "1"));
 
-        ctx.say("Phase 2: Node-2 recovers after node-1 failure - State transfer in progress.");
 
         // Node 2: Recover after node-1 failure
         var node2 = createRegistry("node-2");
@@ -319,7 +298,6 @@ class DistributedFailoverIT {
 
         int recoveredValue = recoveredState.recover(() -> 0);
 
-        ctx.sayCode(
                 "java",
                 """
         // Recover state on node-2
@@ -336,7 +314,6 @@ class DistributedFailoverIT {
         // Verify state transfer
         assertThat(recoveredValue).isEqualTo(175);
 
-        ctx.say(
                 """
                 State transfer verification:
                 State transferred successfully:
@@ -355,7 +332,6 @@ class DistributedFailoverIT {
         assertThat(migratedInfo.metadata().get("state")).isEqualTo("175");
         assertThat(migratedInfo.nodeId()).isEqualTo(NodeId.of("node-2"));
 
-        ctx.say(
                 """
                 Failover complete:
                 Process failover with state transfer:
@@ -371,8 +347,7 @@ class DistributedFailoverIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleMultipleNodeFailures(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleMultipleNodeFailures() throws Exception {
                 """
                 Cascading failures occur when multiple nodes fail in quick succession.
                 The system must handle multiple failures and redistribute processes
@@ -386,7 +361,6 @@ class DistributedFailoverIT {
                 5. Verify all processes running on node-3
                 """);
 
-        ctx.say("Phase 1: Create 3-node cluster - Distribute processes across nodes.");
 
         // Create three nodes
         var node1 = createRegistry("node-1");
@@ -397,7 +371,6 @@ class DistributedFailoverIT {
         var distRegistry2 = createDistributedRegistry(node2);
         var distRegistry3 = createDistributedRegistry(node3);
 
-        ctx.sayCode(
                 "java",
                 """
         // Create 3-node cluster
@@ -422,7 +395,6 @@ class DistributedFailoverIT {
         await().atMost(Duration.ofSeconds(2))
                 .until(() -> distRegistry3.lookup("proc-3").isPresent());
 
-        ctx.say(
                 """
                 Initial process distribution:
                 - node-1: proc-1 ✓
@@ -430,13 +402,11 @@ class DistributedFailoverIT {
                 - node-3: proc-3 ✓
                 """);
 
-        ctx.say("Phase 2: Fail node-1 and node-2 - Cascading failure simulation.");
 
         // Fail node-1 and node-2
         distRegistry1.close();
         distRegistry2.close();
 
-        ctx.sayCode(
                 "java",
                 """
         // Cascading failure: nodes 1 and 2 fail
@@ -445,7 +415,6 @@ class DistributedFailoverIT {
         // Only node-3 remains healthy
         """);
 
-        ctx.say("Phase 3: Migrate processes to node-3 - Consolidate on remaining node.");
 
         // Node-3 should allow migration
         await().atMost(Duration.ofSeconds(5)).until(() -> distRegistry3.lookup("proc-1").isEmpty());
@@ -464,7 +433,6 @@ class DistributedFailoverIT {
 
         assertThat(migrated2.nodeId()).isEqualTo(NodeId.of("node-3"));
 
-        ctx.sayCode(
                 "java",
                 """
         // Migrate processes to healthy node
@@ -482,7 +450,6 @@ class DistributedFailoverIT {
         assertThat(distRegistry3.lookup("proc-2")).isPresent();
         assertThat(distRegistry3.lookup("proc-3")).isPresent();
 
-        ctx.say(
                 """
                 Cascading failure recovery:
                 All processes migrated to node-3:
@@ -500,8 +467,7 @@ class DistributedFailoverIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldRecoverRegistryAfterNodeCrash(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldRecoverRegistryAfterNodeCrash() throws Exception {
                 """
                 Registry recovery after node crash ensures that process registration
                 information is not lost when a node fails. The shared RocksDB backend
@@ -515,7 +481,6 @@ class DistributedFailoverIT {
                 5. Verify all processes accessible
                 """);
 
-        ctx.say("Phase 1: Node-1 registers 10 processes - Bulk registration.");
 
         // Node 1: Register processes
         var node1 = createRegistry("node-1");
@@ -526,7 +491,6 @@ class DistributedFailoverIT {
                     "proc-" + i, NodeId.of("node-1"), Map.of("index", String.valueOf(i)));
         }
 
-        ctx.sayCode(
                 "java",
                 """
         // Register 10 processes
@@ -550,20 +514,16 @@ class DistributedFailoverIT {
                             return count >= 10;
                         });
 
-        ctx.say("Process registration: 10 processes registered on node-1 ✓");
 
-        ctx.say("Phase 2: Node-1 crashes - Abrupt failure.");
 
         // Crash node-1
         distRegistry1.close();
 
-        ctx.say("Phase 3: Node-2 recovers registry - Load from shared backend.");
 
         // Node 2: Recover registry from shared backend
         var node2 = createRegistry("node-2");
         var distRegistry2 = createDistributedRegistry(node2);
 
-        ctx.sayCode(
                 "java",
                 """
         var node2 = createRegistry("node-2");
@@ -583,7 +543,6 @@ class DistributedFailoverIT {
         // Some processes might be discovered from backend
         assertThat(discoveredCount).isGreaterThanOrEqualTo(0);
 
-        ctx.say(
                 """
                 Registry discovery:
                 - Processes discovered from backend: %d/10
@@ -591,7 +550,6 @@ class DistributedFailoverIT {
                 """
                         .formatted(discoveredCount));
 
-        ctx.say("Phase 4: Re-register all processes on node-2 - Restore service.");
 
         // Re-register all processes on node-2
         for (int i = 0; i < 10; i++) {
@@ -601,7 +559,6 @@ class DistributedFailoverIT {
                     Map.of("index", String.valueOf(i), "recovered", "true"));
         }
 
-        ctx.sayCode(
                 "java",
                 """
         // Re-register processes
@@ -626,7 +583,6 @@ class DistributedFailoverIT {
                             return count >= 10;
                         });
 
-        ctx.say(
                 """
                 Registry recovery verification:
                 Registry recovered successfully:
@@ -642,8 +598,7 @@ class DistributedFailoverIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldMaintainConsistencyDuringCascadingFailures(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldMaintainConsistencyDuringCascadingFailures() throws Exception {
                 """
                 Maintaining consistency during cascading failures is critical for
                 distributed systems. This test simulates a cascading failure in a
@@ -657,7 +612,6 @@ class DistributedFailoverIT {
                 5. Verify load distribution and consistency
                 """);
 
-        ctx.say("Phase 1: Create 5-node cluster - Distribute 20 processes.");
 
         // Create cluster of 5 nodes
         List<GlobalRegistry> nodes = new ArrayList<>();
@@ -669,7 +623,6 @@ class DistributedFailoverIT {
             distRegistries.add(createDistributedRegistry(node));
         }
 
-        ctx.sayCode(
                 "java",
                 """
         // Create 5-node cluster
@@ -709,7 +662,6 @@ class DistributedFailoverIT {
                             return count >= 20;
                         });
 
-        ctx.say(
                 """
                 Initial distribution:
                 20 processes distributed across 5 nodes:
@@ -717,14 +669,12 @@ class DistributedFailoverIT {
                 - Total processes: 20 ✓
                 """);
 
-        ctx.say("Phase 2: Cascading failure - Nodes 1, 2, 3 fail simultaneously.");
 
         // Cascading failure: nodes 1, 2, 3 fail
         distRegistries.get(0).close();
         distRegistries.get(1).close();
         distRegistries.get(2).close();
 
-        ctx.sayCode(
                 "java",
                 """
         // Cascading failure: nodes 1, 2, 3 fail
@@ -734,7 +684,6 @@ class DistributedFailoverIT {
         // Remaining: node-4, node-5
         """);
 
-        ctx.say("Phase 3: Redistribute to remaining nodes - Nodes 4, 5 take over.");
 
         // Remaining nodes (4, 5) should redistribute load
         var node4 = distRegistries.get(3);
@@ -761,7 +710,6 @@ class DistributedFailoverIT {
             }
         }
 
-        ctx.sayCode(
                 "java",
                 """
         // Redistribute processes
@@ -781,7 +729,6 @@ class DistributedFailoverIT {
         assertThat(migratedTo4).isGreaterThan(0);
         assertThat(migratedTo5).isGreaterThan(0);
 
-        ctx.say(
                 """
                 Cascading failure recovery:
                 Successfully handled cascading failure:
@@ -800,8 +747,7 @@ class DistributedFailoverIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyDistributedProcessStateSynchronization(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldVerifyDistributedProcessStateSynchronization() throws Exception {
                 """
                 State synchronization across distributed nodes ensures that all nodes
                 see the same process state when accessing shared durable state. This test
@@ -816,7 +762,6 @@ class DistributedFailoverIT {
                 The shared RocksDB backend provides consistent state across all nodes.
                 """);
 
-        ctx.say("Phase 1: Create 3-node cluster - All nodes share state backend.");
 
         var node1 = createRegistry("node-1");
         var node2 = createRegistry("node-2");
@@ -834,7 +779,6 @@ class DistributedFailoverIT {
                         .syncWrites(true)
                         .build();
 
-        ctx.sayCode(
                 "java",
                 """
         // Create shared state
@@ -858,13 +802,11 @@ class DistributedFailoverIT {
                         .initialState(0)
                         .build();
 
-        ctx.say("Phase 2: Node-1 updates state - Initial state: 0 → 100");
 
         // Node-1: Update state
         state1.recordEvent(new StateTransferTestEvent.Increment(100));
         state1.saveCurrentState();
 
-        ctx.say(
                 """
                 Node-1 state update:
                 - Initial state: 0 ✓
@@ -873,7 +815,6 @@ class DistributedFailoverIT {
                 - Persisted to shared backend: ✓
                 """);
 
-        ctx.say("Phase 3: Node-2 reads state - Should see 100");
 
         // Node-2: Read state
         var state2 =
@@ -886,7 +827,6 @@ class DistributedFailoverIT {
         int node2Value = state2.recover(() -> 0);
         assertThat(node2Value).isEqualTo(100);
 
-        ctx.say(
                 """
                 Node-2 state synchronization:
                 - Recovered state: %d ✓
@@ -895,7 +835,6 @@ class DistributedFailoverIT {
                 """
                         .formatted(node2Value));
 
-        ctx.say("Phase 4: Node-3 reads state - Should also see 100");
 
         // Node-3: Update state
         var state3 =
@@ -908,7 +847,6 @@ class DistributedFailoverIT {
         int node3Value = state3.recover(() -> 0);
         assertThat(node3Value).isEqualTo(100);
 
-        ctx.say(
                 """
                 Node-3 state synchronization:
                 - Recovered state: %d ✓
@@ -917,12 +855,10 @@ class DistributedFailoverIT {
                 """
                         .formatted(node3Value));
 
-        ctx.say("Phase 5: Node-3 updates state - State: 100 → 150");
 
         state3.recordEvent(new StateTransferTestEvent.Increment(50));
         state3.saveCurrentState();
 
-        ctx.say(
                 """
                 Node-3 state update:
                 - Previous state: 100 ✓
@@ -931,7 +867,6 @@ class DistributedFailoverIT {
                 - Persisted to shared backend: ✓
                 """);
 
-        ctx.say("Phase 6: Verify consistency across all nodes - All nodes see 150");
 
         // Verify consistency across all nodes
         var finalState =
@@ -943,7 +878,6 @@ class DistributedFailoverIT {
 
         assertThat(finalState.recover(() -> 0)).isEqualTo(150);
 
-        ctx.sayCode(
                 "java",
                 """
         // Verify final state
@@ -957,7 +891,6 @@ class DistributedFailoverIT {
         assertThat(finalValue).isEqualTo(150);
         """);
 
-        ctx.say(
                 """
                 State synchronization verification:
                 Distributed state synchronization successful:

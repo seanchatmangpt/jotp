@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.stress;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,11 +17,9 @@ import org.junit.jupiter.api.Test;
  * <p><strong>DTR Documentation:</strong> This test class provides living documentation of JOTP's
  * competitive positioning. Run with DTR to see architecture tradeoff analysis.
  */
-@DtrTest
 @DisplayName("JOTP vs Industry Alternatives - Architectural Comparison")
 class ArchitecturalComparisonTest {
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -42,12 +37,7 @@ class ArchitecturalComparisonTest {
     @Test
     @DisplayName("Comparative Analysis: JOTP vs Akka vs Vert.x vs Loom vs ThreadPool")
     void compareArchitectures() {
-        ctx.sayNextSection("Architecture Comparison Analysis");
-        ctx.say("Comparing JOTP against industry-standard alternatives for message processing.");
-        ctx.say(
                 "Analysis dimensions: throughput, latency, resource consumption, cost, complexity.");
-        ctx.say("");
-        ctx.say("This helps architecture teams make data-driven technology decisions.");
         ArchitecturalTradeoffAnalysis analysis =
                 new ArchitecturalTradeoffAnalysis("Message Processing - 100K TPS Requirement");
 
@@ -144,12 +134,9 @@ class ArchitecturalComparisonTest {
 
         // ── EXECUTE ANALYSIS ───────────────────────────────────────────────
 
-        ctx.say("Architecture Comparison Results:");
-        ctx.say(analysis.executiveSummary());
 
         // ── SCENARIO ANALYSIS ──────────────────────────────────────────────
 
-        ctx.say("Scenario-Based Recommendations:");
 
         // Scenario 1: Ultra-low latency financial trading
         System.out.println("\nScenario 1: Financial Trading (p99 <5ms required, $any cost)");

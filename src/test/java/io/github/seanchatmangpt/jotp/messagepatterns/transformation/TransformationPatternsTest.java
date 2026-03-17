@@ -2,8 +2,6 @@ package io.github.seanchatmangpt.jotp.messagepatterns.transformation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +18,6 @@ import org.junit.jupiter.api.Test;
  * <p>Enterprise Integration Patterns (EIP) transformation patterns modify message content, format,
  * or structure to enable communication between incompatible systems.
  */
-@DtrTest
 @DisplayName("Transformation Patterns")
 class TransformationPatternsTest implements WithAssertions {
 
@@ -35,11 +32,8 @@ class TransformationPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("translates message format")
-        void translates(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Message Translator");
-            ctx.say(
+        void translates() throws InterruptedException {
                     "Converts messages from one format to another, enabling communication between systems with different data representations.");
-            ctx.sayCode(
                     """
                     var translator = new MessageTranslator<Integer, String>(
                         i -> "num:" + i,
@@ -47,14 +41,12 @@ class TransformationPatternsTest implements WithAssertions {
                     translator.translate(42);
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[System A] -->|Integer| B[Message Translator]
                         B -->|Translation|
                         B -->|String| C[System B]
                     """);
-            ctx.sayNote(
                     "Use when integrating legacy systems, external APIs, or services with incompatible message formats.");
 
             var latch = new CountDownLatch(1);
@@ -76,17 +68,13 @@ class TransformationPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("apply returns translation synchronously")
-        void syncApply(DtrContext ctx) throws Exception {
-            ctx.sayNextSection("Message Translator: Synchronous Translation");
-            ctx.say(
+        void syncApply() throws Exception {
                     "The apply method provides a synchronous way to translate messages without async channels.");
-            ctx.sayCode(
                     """
                     var translator = new MessageTranslator<Integer, String>(i -> "num:" + i, s -> {});
                     String result = translator.apply(7);
                     """,
                     "java");
-            ctx.sayNote(
                     "Synchronous translation is useful for request-reply patterns where immediate response is required.");
 
             var translator = new MessageTranslator<Integer, String>(i -> "num:" + i, s -> {});
@@ -109,11 +97,8 @@ class TransformationPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("filters message to essential fields")
-        void filters(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content Filter");
-            ctx.say(
+        void filters() throws InterruptedException {
                     "Removes unnecessary data from a message, keeping only the information required by the consumer. Reduces payload size and hides sensitive information.");
-            ctx.sayCode(
                     """
                     var filter = new ContentFilter<Full, Filtered>(
                         f -> new Filtered(f.name(), f.age()),
@@ -121,13 +106,11 @@ class TransformationPatternsTest implements WithAssertions {
                     filter.filter(new Full("Alice", "123-45-6789", "123 Main St", 30));
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Full Message] --> B[Content Filter]
                         B -->|remove fields| C[Filtered Message]
                     """);
-            ctx.sayNote(
                     "Use for data minimization, GDPR compliance, or when downstream systems only need specific fields.");
 
             var latch = new CountDownLatch(1);
@@ -161,11 +144,8 @@ class TransformationPatternsTest implements WithAssertions {
 
         @Test
         @DisplayName("enriches message with external data")
-        void enriches(DtrContext ctx) throws InterruptedException {
-            ctx.sayNextSection("Content Enricher");
-            ctx.say(
+        void enriches() throws InterruptedException {
                     "Augments a message with additional information from external sources, creating a richer message for downstream processing.");
-            ctx.sayCode(
                     """
                     var enricher = new ContentEnricher<Sparse, PatientDetails, Enriched>(
                         sparse -> new PatientDetails("Smith", "BlueCross"),
@@ -176,14 +156,12 @@ class TransformationPatternsTest implements WithAssertions {
                     enricher.enrich(new Sparse("P001", "2024-01-15"));
                     """,
                     "java");
-            ctx.sayMermaid(
                     """
                     graph LR
                         A[Sparse Message] --> B[Content Enricher]
                     C[External Data] --> B
                     B -->|enrich| D[Enriched Message]
                     """);
-            ctx.sayNote(
                     "Use when you need to add missing information from databases, external APIs, or reference data stores.");
 
             var latch = new CountDownLatch(1);

@@ -1,12 +1,9 @@
 package io.github.seanchatmangpt.jotp;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import org.assertj.core.api.WithAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@DtrTest
 class IdempotencyKeyTest implements WithAssertions {
 
     @BeforeEach
@@ -15,9 +12,7 @@ class IdempotencyKeyTest implements WithAssertions {
     }
 
     @Test
-    void generateCreatesNonNullKey(DtrContext ctx) {
-        ctx.sayNextSection("IdempotencyKey: Unique Message Identifiers");
-        ctx.say(
+    void generateCreatesNonNullKey() {
                 """
                 IdempotencyKey provides unique identifiers for idempotent message processing.
                 Each call to generate() creates a new UUID-based key that can be attached to messages.
@@ -29,8 +24,7 @@ class IdempotencyKeyTest implements WithAssertions {
     }
 
     @Test
-    void generateCreatesUniqueKeys(DtrContext ctx) {
-        ctx.say(
+    void generateCreatesUniqueKeys() {
                 """
                 Each generated IdempotencyKey is guaranteed to be unique.
                 This uniqueness is essential for correct deduplication - two different operations
@@ -65,8 +59,7 @@ class IdempotencyKeyTest implements WithAssertions {
     }
 
     @Test
-    void generateProducesUuidBasedKeys(DtrContext ctx) {
-        ctx.say(
+    void generateProducesUuidBasedKeys() {
                 """
                 IdempotencyKey uses UUID v4 format for generation: 8-4-4-4-12 hexadecimal characters.
                 UUIDs provide 122 bits of entropy, making collisions astronomically unlikely.

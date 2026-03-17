@@ -1,7 +1,5 @@
 package io.github.seanchatmangpt.jotp.doctest;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.Supervisor;
 import java.time.Duration;
@@ -22,7 +20,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
  *
  * <p>HTML output: {@code target/site/doctester/SupervisorDocIT.html}.
  */
-@DtrTest
 @ExtendWith(DocTestExtension.class)
 @Timeout(15)
 class SupervisorDocIT implements WithAssertions {
@@ -60,9 +57,7 @@ class SupervisorDocIT implements WithAssertions {
             "The ProcRef is stable across restarts — never hold a raw Proc reference "
                     + "when a supervisor is involved. Always use the ProcRef returned by supervise().")
     @Test
-    void oneForOne_restartsCrashedChild(DtrContext ctx) throws Exception {
-        ctx.say("ONE_FOR_ONE: only the crashed child is restarted, siblings unaffected");
-        ctx.say("ProcRef provides a stable handle that survives supervisor restarts");
+    void oneForOne_restartsCrashedChild() throws Exception {
 
         AtomicInteger restarts = new AtomicInteger();
         var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 5, Duration.ofSeconds(60));
@@ -88,7 +83,6 @@ class SupervisorDocIT implements WithAssertions {
         assertThat(state).isEqualTo(1); // fresh state from restart
         sup.shutdown();
 
-        ctx.say("Process restarted with fresh initial state - fault containment achieved");
     }
 
     // ── ONE_FOR_ALL ──────────────────────────────────────────────────────────────
@@ -99,9 +93,7 @@ class SupervisorDocIT implements WithAssertions {
                     + "Use when child processes have interdependencies and an inconsistent "
                     + "sibling group is worse than a clean group restart.")
     @Test
-    void oneForAll_restartsAllChildren(DtrContext ctx) throws Exception {
-        ctx.say("ONE_FOR_ALL: all children restart when any one crashes");
-        ctx.say("Use when children have interdependencies requiring consistent state");
+    void oneForAll_restartsAllChildren() throws Exception {
 
         var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ALL, 3, Duration.ofSeconds(60));
         ProcRef<Integer, String> w1 = sup.supervise("w1", 10, (s, m) -> s + 1);
@@ -136,7 +128,6 @@ class SupervisorDocIT implements WithAssertions {
                         });
         sup.shutdown();
 
-        ctx.say("All children restarted with fresh state - group consistency restored");
     }
 
     // ── REST_FOR_ONE ─────────────────────────────────────────────────────────────
@@ -187,9 +178,7 @@ class SupervisorDocIT implements WithAssertions {
                     + "gives up and terminates itself. This prevents infinite crash loops and "
                     + "escalates the failure up the supervision tree.")
     @Test
-    void restartIntensity_supervisorGivesUpAfterTooManyRestarts(DtrContext ctx) throws Exception {
-        ctx.say("Restart intensity prevents infinite crash loops");
-        ctx.say(
+    void restartIntensity_supervisorGivesUpAfterTooManyRestarts() throws Exception {
                 "MaxRestarts/Window pattern: if threshold exceeded, supervisor escalates by shutting down");
 
         var sup = new Supervisor(Supervisor.Strategy.ONE_FOR_ONE, 2, Duration.ofSeconds(5));
@@ -207,6 +196,5 @@ class SupervisorDocIT implements WithAssertions {
         // Supervisor has exceeded restart intensity — it shuts down
         assertThat(crashCount.get()).isGreaterThanOrEqualTo(2);
 
-        ctx.say("Supervisor gave up after max restarts - failure escalated up the tree");
     }
 }

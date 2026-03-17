@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.distributed;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import java.util.Map;
@@ -19,11 +16,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Verifies distributed process registry with cross-node registration and lookup.
  */
-@DtrTest
 @DisplayName("GlobalProcRegistry — OTP distributed process registry")
 class GlobalProcRegistryTest {
 
-    @DtrContextField private DtrContext ctx;
 
     private DefaultGlobalProcRegistry registry;
     private InMemoryGlobalRegistryBackend backend;
@@ -64,10 +59,7 @@ class GlobalProcRegistryTest {
 
     @Test
     @DisplayName("Should register process globally")
-    void registerGlobal_registersProcess(DtrContext ctx) {
-        ctx.say("Global process registration enables cross-node process lookup.");
-        ctx.say("Each registered process has a unique name and is associated with a node.");
-        ctx.say(
+    void registerGlobal_registersProcess() {
                 "This implements OTP's global process registry (like Erlang's global:register_name/2).");
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
@@ -109,10 +101,7 @@ class GlobalProcRegistryTest {
 
     @Test
     @DisplayName("Should unregister process")
-    void unregisterGlobal_removesProcess(DtrContext ctx) {
-        ctx.say("Unregistering removes the process from global discovery.");
-        ctx.say("Subsequent lookups return empty, freeing the name for reuse.");
-        ctx.say("This supports graceful process shutdown and name release.");
+    void unregisterGlobal_removesProcess() {
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
         ProcRef<String, String> procRef = new ProcRef<>(proc);
@@ -134,10 +123,7 @@ class GlobalProcRegistryTest {
 
     @Test
     @DisplayName("Should list all registered processes")
-    void listGlobal_returnsAllProcesses(DtrContext ctx) {
-        ctx.say("Listing all globally registered processes enables cluster introspection.");
-        ctx.say("Returns a map of process names to their GlobalProcRef metadata.");
-        ctx.say("This supports monitoring, debugging, and operational visibility.");
+    void listGlobal_returnsAllProcesses() {
 
         Proc<String, String> proc1 = Proc.spawn("initial", (s, m) -> s);
         Proc<String, String> proc2 = Proc.spawn("initial", (s, m) -> s);
@@ -171,10 +157,7 @@ class GlobalProcRegistryTest {
 
     @Test
     @DisplayName("Should register if absent atomically")
-    void registerGlobalIfAbsent_registersWhenNotPresent(DtrContext ctx) {
-        ctx.say("Atomic register-if-absent prevents race conditions in distributed registration.");
-        ctx.say("Returns true if registered, false if name already exists.");
-        ctx.say("This implements OTP's conflict-free distributed naming pattern.");
+    void registerGlobalIfAbsent_registersWhenNotPresent() {
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
         ProcRef<String, String> procRef = new ProcRef<>(proc);
@@ -204,10 +187,7 @@ class GlobalProcRegistryTest {
 
     @Test
     @DisplayName("Should throw on duplicate registration")
-    void registerGlobal_throwsOnDuplicate(DtrContext ctx) {
-        ctx.say("Duplicate registration throws IllegalStateException.");
-        ctx.say("This enforces global uniqueness constraints for process names.");
-        ctx.say("Prevents accidental name collisions in distributed deployments.");
+    void registerGlobal_throwsOnDuplicate() {
 
         Proc<String, String> proc1 = Proc.spawn("initial", (s, m) -> s);
         Proc<String, String> proc2 = Proc.spawn("initial", (s, m) -> s);
@@ -223,10 +203,7 @@ class GlobalProcRegistryTest {
 
     @Test
     @DisplayName("Should transfer global registration to another node")
-    void transferGlobal_movesRegistrationToNewNode(DtrContext ctx) {
-        ctx.say("Process transfer moves registration from one node to another.");
-        ctx.say("Used during failover and manual process migration.");
-        ctx.say("This implements OTP's distributed process relocation semantics.");
+    void transferGlobal_movesRegistrationToNewNode() {
 
         Proc<String, String> proc = Proc.spawn("initial", (s, m) -> s);
         ProcRef<String, String> procRef = new ProcRef<>(proc);

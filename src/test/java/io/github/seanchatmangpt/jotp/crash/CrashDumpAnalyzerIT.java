@@ -2,9 +2,6 @@ package io.github.seanchatmangpt.jotp.crash;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import io.github.seanchatmangpt.jotp.CrashDump;
 import io.github.seanchatmangpt.jotp.CrashDumpCollector;
@@ -30,14 +27,12 @@ import org.junit.jupiter.api.BeforeEach;
  * @see CrashDumpAnalyzer
  * @see RecoveryStrategy
  */
-@DtrTest
 class CrashDumpAnalyzerIT {
 
     private InMemoryBackend backend;
     private CrashDumpAnalyzer analyzer;
     private CrashDumpCollector collector;
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -55,8 +50,7 @@ class CrashDumpAnalyzerIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldAnalyzeCrashDumpAndSelectStrategy(DtrContext ctx) {
-        ctx.say(
+    void shouldAnalyzeCrashDumpAndSelectStrategy() {
                 """
             The CrashDumpAnalyzer is responsible for analyzing crash dumps and
             determining the optimal recovery strategy. It must correctly identify
@@ -67,7 +61,6 @@ class CrashDumpAnalyzerIT {
             to recovery strategy selection.
             """);
 
-        ctx.say(
                 """
             Phase 1: Create a realistic crash dump
 
@@ -75,7 +68,6 @@ class CrashDumpAnalyzerIT {
             processes in various states.
             """);
 
-        ctx.sayCode(
                 "java",
                 """
             // Create a dump simulating OOM crash
@@ -127,7 +119,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         metrics);
 
-        ctx.say(
                 """
             Phase 2: Analyze the crash dump
 
@@ -135,7 +126,6 @@ class CrashDumpAnalyzerIT {
             determine the appropriate recovery strategy.
             """);
 
-        ctx.sayCode(
                 "java",
                 """
             RecoveryStrategy strategy = analyzer.analyze(dump);
@@ -150,7 +140,6 @@ class CrashDumpAnalyzerIT {
         assertThat(strategy.type()).isEqualTo(RecoveryType.FULL_RESTART);
         assertThat(strategy.requiresFullRestart()).isTrue();
 
-        ctx.say(
                 """
             Phase 3: Verify consistency and get recommendations
 
@@ -158,7 +147,6 @@ class CrashDumpAnalyzerIT {
             recommendations to guide recovery decisions.
             """);
 
-        ctx.sayCode(
                 "java",
                 """
             ConsistencyReport report = analyzer.verifyConsistency(dump);
@@ -175,7 +163,6 @@ class CrashDumpAnalyzerIT {
         assertThat(recommendations).isNotEmpty();
         assertThat(recommendations.get(0).isHighPriority()).isTrue();
 
-        ctx.say(
                 """
             Analysis complete!
 
@@ -184,7 +171,6 @@ class CrashDumpAnalyzerIT {
             all processes, and recommendations are prioritized to guide recovery.
             """);
 
-        ctx.sayCode(
                 "output",
                 String.format(
                         """
@@ -211,15 +197,13 @@ class CrashDumpAnalyzerIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldDetectSelectiveRestartScenario(DtrContext ctx) {
-        ctx.say(
+    void shouldDetectSelectiveRestartScenario() {
                 """
             Not all crashes require full system restart. The analyzer must
             identify scenarios where selective restart is appropriate, such as
             isolated process failures or signal-based termination.
             """);
 
-        ctx.say(
                 """
             Create a crash dump with short JVM uptime (SIGKILL pattern)
             """);
@@ -238,7 +222,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         metrics);
 
-        ctx.sayCode(
                 "java",
                 """
             RecoveryStrategy strategy = analyzer.analyze(dump);
@@ -253,12 +236,10 @@ class CrashDumpAnalyzerIT {
         assertThat(strategy.type()).isEqualTo(RecoveryType.SELECTIVE_RESTART);
         assertThat(strategy.requiresFullRestart()).isFalse();
 
-        ctx.say("Selective restart is faster and less disruptive than full restart.");
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyConsistencyAcrossProcesses(DtrContext ctx) {
-        ctx.say(
+    void shouldVerifyConsistencyAcrossProcesses() {
                 """
             State consistency is critical for safe recovery. The analyzer
             must detect inconsistencies between crash dump state and persisted
@@ -309,7 +290,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         CrashDump.SystemMetrics.EMPTY);
 
-        ctx.sayCode(
                 "java",
                 """
             ConsistencyReport report = analyzer.verifyConsistency(dump);
@@ -326,12 +306,10 @@ class CrashDumpAnalyzerIT {
         assertThat(report.inconsistentProcesses()).contains("inconsistent-proc");
         assertThat(report.consistentProcesses()).contains("consistent-proc");
 
-        ctx.say("Consistency issues are reported with severity and recommendations.");
     }
 
     @org.junit.jupiter.api.Test
-    void shouldPrioritizeRecommendations(DtrContext ctx) {
-        ctx.say(
+    void shouldPrioritizeRecommendations() {
                 """
             Recovery recommendations must be prioritized by urgency and success
             probability. High-priority recommendations should appear first in
@@ -352,7 +330,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         metrics);
 
-        ctx.sayCode(
                 "java",
                 """
             List<Recommendation> recommendations = analyzer.getRecommendations(dump);
@@ -378,12 +355,10 @@ class CrashDumpAnalyzerIT {
         // First recommendation should be highest priority
         assertThat(recommendations.get(0).priority()).isGreaterThanOrEqualTo(7);
 
-        ctx.say("Prioritized recommendations help operators make quick recovery decisions.");
     }
 
     @org.junit.jupiter.api.Test
-    void shouldIdentifyPendingMessagesForReplay(DtrContext ctx) {
-        ctx.say(
+    void shouldIdentifyPendingMessagesForReplay() {
                 """
             Messages that were pending at crash time must be identified for
             replay during recovery. The analyzer extracts these messages from
@@ -424,7 +399,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         CrashDump.SystemMetrics.EMPTY);
 
-        ctx.sayCode(
                 "java",
                 """
             RecoveryStrategy strategy = analyzer.analyze(dump);
@@ -439,12 +413,10 @@ class CrashDumpAnalyzerIT {
         assertThat(strategy.involvesMessageReplay()).isTrue();
         assertThat(strategy.messagesToReplay()).hasSize(3);
 
-        ctx.say("Pending messages are extracted for replay during recovery.");
     }
 
     @org.junit.jupiter.api.Test
-    void shouldCalculateRecoveryComplexity(DtrContext ctx) {
-        ctx.say(
+    void shouldCalculateRecoveryComplexity() {
                 """
             Recovery complexity is calculated based on the number of processes,
             pending messages, supervisor tree depth, and consistency issues.
@@ -483,7 +455,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         CrashDump.SystemMetrics.EMPTY);
 
-        ctx.sayCode(
                 "java",
                 """
             RecoveryStrategy strategy = analyzer.analyze(dump);
@@ -500,15 +471,13 @@ class CrashDumpAnalyzerIT {
         assertThat(strategy.complexityScore()).isLessThanOrEqualTo(100);
         assertThat(strategy.summary()).contains("complexity");
 
-        ctx.say(
                 String.format(
                         "Complexity score: %d/100 (%s)",
                         strategy.complexityScore(), strategy.complexityLevel()));
     }
 
     @org.junit.jupiter.api.Test
-    void shouldEstimateRecoveryTime(DtrContext ctx) {
-        ctx.say(
+    void shouldEstimateRecoveryTime() {
                 """
             Recovery time estimation helps operators plan their response.
             The analyzer estimates time based on recovery type, process count,
@@ -542,7 +511,6 @@ class CrashDumpAnalyzerIT {
                         CrashDump.SupervisorTreeDump.EMPTY,
                         CrashDump.SystemMetrics.EMPTY);
 
-        ctx.sayCode(
                 "java",
                 """
             RecoveryStrategy strategy = analyzer.analyze(dump);
@@ -559,6 +527,5 @@ class CrashDumpAnalyzerIT {
         assertThat(strategy.estimatedTime()).isGreaterThan(java.time.Duration.ZERO);
         assertThat(strategy.estimatedTime()).isLessThan(java.time.Duration.ofHours(1));
 
-        ctx.say(String.format("Estimated recovery time: %s", strategy.estimatedTime()));
     }
 }

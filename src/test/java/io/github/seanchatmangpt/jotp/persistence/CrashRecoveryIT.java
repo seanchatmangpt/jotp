@@ -3,9 +3,6 @@ package io.github.seanchatmangpt.jotp.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.seanchatmangpt.dtr.junit5.DtrContext;
-import io.github.seanchatmangpt.dtr.junit5.DtrContextField;
-import io.github.seanchatmangpt.dtr.junit5.DtrTest;
 import io.github.seanchatmangpt.jotp.ApplicationController;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -40,12 +37,10 @@ import org.junit.jupiter.api.io.TempDir;
  * @see AtomicStateWriter
  * @see io.github.seanchatmangpt.jotp.DurableState
  */
-@DtrTest
 class CrashRecoveryIT {
 
     @TempDir Path tempDir;
 
-    @DtrContextField private DtrContext ctx;
 
     @BeforeEach
     void setUp() {
@@ -60,8 +55,7 @@ class CrashRecoveryIT {
     // ── Tests ───────────────────────────────────────────────────────────────────
 
     @org.junit.jupiter.api.Test
-    void shouldPersistAndRecoverStateAfterSimulatedCrash(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldPersistAndRecoverStateAfterSimulatedCrash() throws Exception {
                 """
                 Crash recovery is fundamental to building fault-tolerant distributed systems.
                 When a JVM crashes unexpectedly, we must ensure that critical application state
@@ -79,7 +73,6 @@ class CrashRecoveryIT {
 
         Path stateFile = tempDir.resolve("crash-test-1.dat");
 
-        ctx.say(
                 """
                 Phase 1: Write state and simulate crash
 
@@ -91,7 +84,6 @@ class CrashRecoveryIT {
         var writer1 = new TestAtomicStateWriter(stateFile);
         String state1 = "{\"counter\":42,\"version\":1}";
 
-        ctx.sayCode(
                 "java",
                 """
         // Write initial state to disk
@@ -106,7 +98,6 @@ class CrashRecoveryIT {
         assertThat(Files.exists(stateFile)).isTrue();
         assertThat(Files.readString(stateFile)).isEqualTo(state1);
 
-        ctx.say(
                 """
                 State verification:
                 - Main state file exists: %s
@@ -114,7 +105,6 @@ class CrashRecoveryIT {
                 """
                         .formatted(stateFile, state1));
 
-        ctx.say(
                 """
                 Phase 2: Simulate crash (close writer without cleanup)
 
@@ -123,7 +113,6 @@ class CrashRecoveryIT {
                 the writer instance and creating a new one, mimicking JVM restart.
                 """);
 
-        ctx.say(
                 """
                 Phase 3: Recover after crash (simulate JVM restart)
 
@@ -135,7 +124,6 @@ class CrashRecoveryIT {
         var writer2 = new TestAtomicStateWriter(stateFile);
         String recoveredState = Files.readString(stateFile);
 
-        ctx.sayCode(
                 "java",
                 """
         // Recover state after crash
@@ -148,7 +136,6 @@ class CrashRecoveryIT {
         // Verify state recovered
         assertThat(recoveredState).isEqualTo(state1);
 
-        ctx.say(
                 """
                 Recovery verification:
                 State recovered successfully after crash:
@@ -164,8 +151,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldRecoverFromBackupWhenMainFileIsCorrupted(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldRecoverFromBackupWhenMainFileIsCorrupted() throws Exception {
                 """
                 Backup-based recovery provides resilience against file corruption.
                 When writing state, AtomicStateWriter maintains a backup file that
@@ -181,12 +167,10 @@ class CrashRecoveryIT {
 
         Path stateFile = tempDir.resolve("corrupted-recovery.dat");
 
-        ctx.say("Phase 1: Write valid state - Creating initial state with backup file.");
 
         var writer1 = new TestAtomicStateWriter(stateFile);
         String validState = "{\"value\":100,\"status\":\"active\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         // Write state with automatic backup
@@ -203,7 +187,6 @@ class CrashRecoveryIT {
         Path backupFile = AtomicStateWriter.getBackupPath(stateFile);
         assertThat(Files.exists(backupFile)).isTrue();
 
-        ctx.say(
                 """
                 Backup verification:
                 - Main state file: %s ✓
@@ -212,7 +195,6 @@ class CrashRecoveryIT {
                 """
                         .formatted(stateFile, backupFile));
 
-        ctx.say(
                 """
                 Phase 2: Corrupt main file (simulate crash during write)
 
@@ -223,14 +205,12 @@ class CrashRecoveryIT {
 
         Files.writeString(stateFile, "CORRUPTED DATA!!!");
 
-        ctx.sayCode(
                 "java",
                 """
         // Simulate file corruption
         Files.writeString(stateFile, "CORRUPTED DATA!!!");
         """);
 
-        ctx.say(
                 """
                 Phase 3: Recover from backup
 
@@ -241,7 +221,6 @@ class CrashRecoveryIT {
         var writer2 = new TestAtomicStateWriter(stateFile);
         String recovered = writer2.recoverFromBackup();
 
-        ctx.sayCode(
                 "java",
                 """
         // Recover from backup file
@@ -254,7 +233,6 @@ class CrashRecoveryIT {
         assertThat(recovered).isEqualTo(validState);
         assertThat(Files.readString(stateFile)).isEqualTo(validState);
 
-        ctx.say(
                 """
                 Recovery verification:
                 State recovered from backup:
@@ -270,8 +248,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleMultipleCrashRecoveryCycles(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleMultipleCrashRecoveryCycles() throws Exception {
                 """
                 Production systems may experience multiple crashes over their lifetime.
                 We must ensure that crash recovery works correctly across multiple cycles,
@@ -284,12 +261,10 @@ class CrashRecoveryIT {
         Path stateFile = tempDir.resolve("multi-crash.dat");
         List<String> states = new ArrayList<>();
 
-        ctx.say("Cycle 1: Initial state - First crash-recovery cycle with initial state.");
 
         var writer1 = new TestAtomicStateWriter(stateFile);
         String state1 = "{\"cycle\":1,\"value\":\"initial\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -304,13 +279,10 @@ class CrashRecoveryIT {
         var writer2 = new TestAtomicStateWriter(stateFile);
         assertThat(Files.readString(stateFile)).isEqualTo(state1);
 
-        ctx.say("Cycle 1 recovery - State recovered: %s ✓".formatted(state1));
 
-        ctx.say("Cycle 2: Update state - Second crash-recovery cycle with updated state.");
 
         String state2 = "{\"cycle\":2,\"value\":\"updated\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         // Update state before crash
@@ -326,13 +298,10 @@ class CrashRecoveryIT {
         var writer3 = new TestAtomicStateWriter(stateFile);
         assertThat(Files.readString(stateFile)).isEqualTo(state2);
 
-        ctx.say("Cycle 2 recovery - State recovered: %s ✓".formatted(state2));
 
-        ctx.say("Cycle 3: Final state - Third crash-recovery cycle with final state.");
 
         String state3 = "{\"cycle\":3,\"value\":\"final\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         // Write final state
@@ -348,9 +317,7 @@ class CrashRecoveryIT {
         var writer4 = new TestAtomicStateWriter(stateFile);
         assertThat(Files.readString(stateFile)).isEqualTo(state3);
 
-        ctx.say("Cycle 3 recovery - State recovered: %s ✓".formatted(state3));
 
-        ctx.say(
                 """
                 Multi-cycle verification:
                 Successfully completed 3 crash-recovery cycles:
@@ -372,8 +339,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyAtomicWritePreventsPartialCorruption(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldVerifyAtomicWritePreventsPartialCorruption() throws Exception {
                 """
                 Atomic writes are critical for preventing partial state corruption.
                 When writing to disk, we must ensure that the file is either completely
@@ -393,7 +359,6 @@ class CrashRecoveryIT {
         var writer = new TestAtomicStateWriter(stateFile);
         String validState = "{\"data\":\"large-payload\",\"items\":[1,2,3,4,5]}";
 
-        ctx.sayCode(
                 "java",
                 """
         // Atomic write operation
@@ -411,7 +376,6 @@ class CrashRecoveryIT {
         assertThat(content).isEqualTo(validState);
         assertThat(content).startsWith("{").endsWith("}");
 
-        ctx.say(
                 """
                 Atomicity verification:
                 File content analysis:
@@ -428,7 +392,6 @@ class CrashRecoveryIT {
         // Verify JSON is valid (complete, not truncated)
         assertThat(content).contains("\"data\"").contains("\"items\"");
 
-        ctx.say(
                 """
                 Crash scenario analysis:
                 If JVM crashes during write:
@@ -441,8 +404,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleStateCorruptionWithBackupRecovery(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleStateCorruptionWithBackupRecovery() throws Exception {
                 """
                 State corruption can occur due to disk errors, power failures, or software bugs.
                 The backup mechanism provides a safety net for recovery from corrupted state.
@@ -457,12 +419,10 @@ class CrashRecoveryIT {
 
         Path stateFile = tempDir.resolve("corruption-test.dat");
 
-        ctx.say("Phase 1: Write initial state - Creating first version of state.");
 
         var writer1 = new TestAtomicStateWriter(stateFile);
         String initialState = "{\"counter\":0,\"status\":\"ok\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -472,12 +432,10 @@ class CrashRecoveryIT {
 
         writer1.writeState(initialState);
 
-        ctx.say("Phase 2: Update state - Creating second version (backup now holds v1).");
 
         var writer2 = new TestAtomicStateWriter(stateFile);
         String updatedState = "{\"counter\":1,\"status\":\"ok\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -493,7 +451,6 @@ class CrashRecoveryIT {
         assertThat(Files.exists(backupFile)).isTrue();
         assertThat(Files.readString(backupFile)).isEqualTo(initialState);
 
-        ctx.say(
                 """
                 Backup verification:
                 - Main file: %s
@@ -502,23 +459,19 @@ class CrashRecoveryIT {
                 """
                         .formatted(updatedState, initialState));
 
-        ctx.say("Phase 3: Corrupt main file - Simulating disk corruption or write error.");
 
         Files.writeString(stateFile, "CORRUPTED");
 
-        ctx.sayCode(
                 "java",
                 """
         // Simulate corruption
         Files.writeString(stateFile, "CORRUPTED");
         """);
 
-        ctx.say("Phase 4: Recover from backup - Restore last known-good state.");
 
         var writer3 = new TestAtomicStateWriter(stateFile);
         String recovered = writer3.recoverFromBackup();
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -530,7 +483,6 @@ class CrashRecoveryIT {
         assertThat(recovered).isEqualTo(initialState);
         assertThat(Files.readString(stateFile)).isEqualTo(initialState);
 
-        ctx.say(
                 """
                 Recovery verification:
                 Corruption recovery successful:
@@ -546,8 +498,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleEmptyStateFileOnFirstStart(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleEmptyStateFileOnFirstStart() throws Exception {
                 """
                 On first application start, no persistence files exist yet. We must handle
                 this gracefully and initialize state rather than attempting recovery.
@@ -562,9 +513,7 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("First start scenario - No state files exist yet.");
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -585,7 +534,6 @@ class CrashRecoveryIT {
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("No backup file found");
 
-        ctx.say(
                 """
                 First start handling:
                 Expected behavior on first start:
@@ -600,8 +548,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyStateConsistencyAcrossMultipleWrites(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldVerifyStateConsistencyAcrossMultipleWrites() throws Exception {
                 """
                 State consistency across multiple writes ensures that each write operation
                 correctly replaces the previous state without leaving inconsistent or
@@ -616,13 +563,11 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("Performing 10 sequential writes - Verifying consistency after each write.");
 
         // Perform multiple writes
         for (int i = 0; i < 10; i++) {
             String state = "{\"iteration\":" + i + ",\"value\":\"test-" + i + "\"}";
 
-            ctx.sayCode(
                     "java",
                     """
             String state = "{\"iteration\":%d,\"value\":\"test-%d\"}";
@@ -646,7 +591,6 @@ class CrashRecoveryIT {
         assertThat(finalContent).isEqualTo(writtenStates.get(9));
         assertThat(finalContent).contains("\"iteration\":9");
 
-        ctx.say(
                 """
                 Consistency verification:
                 All 10 writes completed successfully:
@@ -664,8 +608,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleSpecialCharactersInState(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleSpecialCharactersInState() throws Exception {
                 """
                 State may contain special characters including Unicode, escape sequences,
                 and quotes. The persistence layer must correctly handle and preserve these
@@ -676,7 +619,6 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("Testing special characters - Unicode, escape sequences, quotes.");
 
         // State with special characters
         String specialState =
@@ -684,7 +626,6 @@ class CrashRecoveryIT {
                         + "\"symbols\":\"\\t\\n\\r\","
                         + "\"quotes\":\"\\\"quoted\\\"\"}";
 
-        ctx.sayCode(
                 "java",
                 """
         String specialState =
@@ -700,7 +641,6 @@ class CrashRecoveryIT {
         String recovered = Files.readString(stateFile);
         assertThat(recovered).isEqualTo(specialState);
 
-        ctx.say(
                 """
                 Special character verification:
                 State with special characters persisted correctly:
@@ -715,8 +655,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleLargeStateFiles(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleLargeStateFiles() throws Exception {
                 """
                 Large state files (100KB+) test the persistence layer's ability to handle
                 substantial amounts of data efficiently and correctly. Large files are more
@@ -728,7 +667,6 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("Creating 100KB state file - Testing large file handling.");
 
         // Create large state (100KB)
         var largeState = new StringBuilder();
@@ -738,7 +676,6 @@ class CrashRecoveryIT {
         }
         largeState.append("\"}");
 
-        ctx.sayCode(
                 "java",
                 """
         var largeState = new StringBuilder();
@@ -758,7 +695,6 @@ class CrashRecoveryIT {
         String content = Files.readString(stateFile);
         assertThat(content).startsWith("{\"data\":\"").endsWith("\"}");
 
-        ctx.say(
                 """
                 Large file verification:
                 Large state file handled correctly:
@@ -774,8 +710,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldCleanUpTemporaryFilesOnFailure(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldCleanUpTemporaryFilesOnFailure() throws Exception {
                 """
                 Temporary files (.tmp) are created during atomic writes. If the write fails
                 or the process crashes, these temporary files must be cleaned up to prevent
@@ -786,12 +721,10 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("Testing temporary file cleanup - Verify no .tmp files remain.");
 
         // Write initial state
         writer.writeState("{\"initial\":true}");
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -811,7 +744,6 @@ class CrashRecoveryIT {
 
         assertThat(tempFiles).isEmpty();
 
-        ctx.say(
                 """
                 Cleanup verification:
                 Temporary file cleanup verified:
@@ -826,8 +758,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldVerifyBackupIsCreatedOnOverwrite(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldVerifyBackupIsCreatedOnOverwrite() throws Exception {
                 """
                 Backup creation on overwrite ensures that we always have the previous state
                 available for recovery. Every write operation (except the first) should
@@ -844,13 +775,11 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("Phase 1: Write initial state - First write (no backup created yet).");
 
         // Write initial state
         String state1 = "{\"version\":1,\"value\":\"first\"}";
         writer.writeState(state1);
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -859,13 +788,11 @@ class CrashRecoveryIT {
         // First write: no backup (no previous state)
         """);
 
-        ctx.say("Phase 2: Overwrite with new state - Second write (backup created).");
 
         // Overwrite with new state
         String state2 = "{\"version\":2,\"value\":\"second\"}";
         writer.writeState(state2);
 
-        ctx.sayCode(
                 "java",
                 """
         String state2 = "{\"version\":2,\"value\":\"second\"}";
@@ -881,7 +808,6 @@ class CrashRecoveryIT {
         // Verify main file has new state
         assertThat(Files.readString(stateFile)).isEqualTo(state2);
 
-        ctx.say(
                 """
                 Backup verification:
                 Backup correctly created on overwrite:
@@ -897,8 +823,7 @@ class CrashRecoveryIT {
     }
 
     @org.junit.jupiter.api.Test
-    void shouldHandleConcurrentWritesWithAtomicity(DtrContext ctx) throws Exception {
-        ctx.say(
+    void shouldHandleConcurrentWritesWithAtomicity() throws Exception {
                 """
                 Concurrent writes can lead to race conditions and data corruption if not
                 handled correctly. The atomic write pattern ensures that even with multiple
@@ -913,7 +838,6 @@ class CrashRecoveryIT {
 
         var writer = new TestAtomicStateWriter(stateFile);
 
-        ctx.say("Performing 5 sequential writes - Each write is atomic.");
 
         // Perform multiple writes
         for (int i = 0; i < 5; i++) {
@@ -921,7 +845,6 @@ class CrashRecoveryIT {
             writer.writeState(state);
         }
 
-        ctx.sayCode(
                 "java",
                 """
         var writer = new TestAtomicStateWriter(stateFile);
@@ -940,7 +863,6 @@ class CrashRecoveryIT {
         // Should be one of the written states
         assertThat(finalContent).contains("\"write\":");
 
-        ctx.say(
                 """
                 Atomicity verification:
                 Sequential writes completed atomically:
