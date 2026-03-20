@@ -12,6 +12,7 @@ import java.util.concurrent.TransferQueue;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Lightweight process with a virtual-thread mailbox — Java 26 equivalent of an Erlang process.
@@ -121,6 +122,34 @@ public final class Proc<S, M> {
      */
     public static <S, M> Proc<S, M> spawn(S initial, BiFunction<S, M, S> handler) {
         return new Proc<>(initial, handler);
+    }
+
+    /**
+     * Named spawn: creates a process, registers it in {@link ProcRegistry} under {@code name}, and
+     * returns a stable {@link ProcRef}.
+     *
+     * <p>Mirrors the Erlang idiom of spawning a named process that other nodes can discover via
+     * {@code whereis/1}. The supplier is called immediately to obtain the initial state.
+     *
+     * @param name the registry name for the new process
+     * @param initialSupplier supplier for the initial state
+     * @param handler {@code (state, message) -> nextState} — pure function, no side-effects
+     * @param <S> state type
+     * @param <M> message type
+     * @return a {@link ProcRef} pointing at the newly registered process
+     */
+    public static <S, M> ProcRef<S, M> spawn(
+            String name, Supplier<S> initialSupplier, BiFunction<S, M, S> handler) {
+        Proc<S, M> proc = new Proc<>(initialSupplier.get(), handler);
+        ProcRef<S, M> ref = new ProcRef<>(proc);
+        try {
+            ProcRegistry.register(name, proc);
+        } catch (IllegalStateException e) {
+            // Name already registered — replace with new process
+            ProcRegistry.unregister(name);
+            ProcRegistry.register(name, proc);
+        }
+        return ref;
     }
 
     /**

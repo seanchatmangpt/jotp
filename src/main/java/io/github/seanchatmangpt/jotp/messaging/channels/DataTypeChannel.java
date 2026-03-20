@@ -16,6 +16,7 @@
 
 package io.github.seanchatmangpt.jotp.messaging.channels;
 
+import io.github.seanchatmangpt.jotp.Proc;
 import io.github.seanchatmangpt.jotp.ProcRef;
 import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 /**
  * Data Type Channel - routes messages based on their runtime type.
@@ -35,11 +37,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * <pre>{@code
  * var channel = DataTypeChannel.create();
  *
- * var commandHandler = new ProcRef<CommandMsg>(commandProc);
- * var eventHandler = new ProcRef<EventMsg>(eventProc);
+ * var commandHandler = new ProcRef<>(commandProc);
+ * var eventHandler = new ProcRef<>(eventProc);
  *
- * DataTypeChannel.addRoute(channel, CommandMsg.class, commandHandler);
- * DataTypeChannel.addRoute(channel, EventMsg.class, eventHandler);
+ * DataTypeChannel.addRoute(channel, Message.CommandMsg.class, commandHandler);
+ * DataTypeChannel.addRoute(channel, Message.EventMsg.class, eventHandler);
  *
  * DataTypeChannel.dispatch(channel, myMessage);
  * }</pre>
@@ -67,30 +69,34 @@ public final class DataTypeChannel<M extends Message<?>> {
     }
 
     /**
-     * Adds a route for the given message type.
+     * Adds a route for the given message type on the given channel.
      *
+     * @param channel the channel to add the route to
      * @param messageType the message type class
      * @param handler the handler to receive messages of this type
+     * @param <M> the channel message type
      * @param <T> the specific message type
      */
-    @SuppressWarnings("unchecked")
-    public <T extends M> void addRoute(Class<T> messageType, ProcRef<?, T> handler) {
-        routes.put(messageType, handler);
-        dispatchCountByType.put(messageType, new AtomicLong(0));
+    public static <M extends Message<?>, T extends M> void addRoute(
+            DataTypeChannel<M> channel, Class<T> messageType, ProcRef<?, T> handler) {
+        channel.routes.put(messageType, handler);
+        channel.dispatchCountByType.putIfAbsent(messageType, new AtomicLong(0));
     }
 
     /**
-     * Dispatches a message to the appropriate handler based on its type.
+     * Dispatches a message to the appropriate handler based on its type on the given channel.
      *
+     * @param channel the channel to dispatch through
      * @param message the message to dispatch
+     * @param <M> the message type
      */
     @SuppressWarnings("unchecked")
-    public void dispatch(M message) {
-        totalDispatched.incrementAndGet();
-        var handler = routes.get(message.getClass());
+    public static <M extends Message<?>> void dispatch(DataTypeChannel<M> channel, M message) {
+        channel.totalDispatched.incrementAndGet();
+        var handler = channel.routes.get(message.getClass());
         if (handler != null) {
             ((ProcRef<?, M>) handler).tell(message);
-            var counter = dispatchCountByType.get(message.getClass());
+            var counter = channel.dispatchCountByType.get(message.getClass());
             if (counter != null) {
                 counter.incrementAndGet();
             }
@@ -110,8 +116,40 @@ public final class DataTypeChannel<M extends Message<?>> {
             dispatchCounts.put(entry.getKey(), entry.getValue().get());
         }
         var registeredTypes =
-                new ArrayList<>((java.util.Collection<Class<? extends Message<?>>>) (java.util.Collection<?>) channel.routes.keySet());
-        return new ChannelState(registeredTypes, channel.totalDispatched.get(), dispatchCounts);
+                new ArrayList<>(
+                        (java.util.Collection<Class<? extends Message<?>>>)
+                                (java.util.Collection<?>) channel.routes.keySet());
+        return new ChannelState(
+                registeredTypes, channel.totalDispatched.get(), dispatchCounts);
+    }
+
+    /**
+     * Creates a typed handler {@link Proc} that only invokes the given handler function when the
+     * received message matches {@code messageType}.
+     *
+     * <p>Messages that do not match the given type are silently ignored and the state is returned
+     * unchanged.
+     *
+     * @param messageType the message type this handler accepts
+     * @param handlerFactory a function from state to a message handler returning the next state
+     * @param initialState the initial state for the created process
+     * @param <S> the state type
+     * @param <T> the specific accepted message type
+     * @return a {@link Proc} that handles typed messages
+     */
+    @SuppressWarnings("unchecked")
+    public static <S, T extends Message<?>> Proc<S, Message<?>> createTypedHandler(
+            Class<T> messageType,
+            Function<S, Function<T, S>> handlerFactory,
+            S initialState) {
+        return new Proc<>(
+                initialState,
+                (state, msg) -> {
+                    if (messageType.isInstance(msg)) {
+                        return handlerFactory.apply(state).apply((T) msg);
+                    }
+                    return state;
+                });
     }
 
     /**
@@ -132,7 +170,6 @@ public final class DataTypeChannel<M extends Message<?>> {
          * @param messageType the message type to check
          * @return true if a route is registered, false otherwise
          */
-        @SuppressWarnings("unchecked")
         public boolean hasRoute(Class<?> messageType) {
             return registeredTypes.contains(messageType);
         }
@@ -144,6 +181,16 @@ public final class DataTypeChannel<M extends Message<?>> {
          */
         public long getTotalDispatched() {
             return totalDispatched;
+        }
+
+        /**
+         * Returns the number of messages dispatched for the given message type.
+         *
+         * @param messageType the message type to look up
+         * @return dispatch count for that type, or 0 if not tracked
+         */
+        public long getDispatchCount(Class<?> messageType) {
+            return dispatchCountByType.getOrDefault(messageType, 0L);
         }
     }
 
