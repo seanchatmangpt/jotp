@@ -223,23 +223,6 @@ class DynamicRouterTest implements WithAssertions {
         @Test
         @DisplayName("successfully routes to registered process")
         void successfullyRoutesToRegisteredProcess() {
-                    "DynamicRouter integrates with ProcRegistry to route messages to registered"
-                            + " processes by name.");
-                    """
-                    ProcRef<String, String> handlerRef = Proc.spawn(
-                        "message-handler",
-                        () -> receivedMessages,
-                        (state, msg) -> { state.add(msg); return state; }
-                    );
-
-                    DynamicRouter<String> router = new DynamicRouter<>(
-                        msg -> "message-handler"
-                    );
-
-                    boolean result = router.route("first-message");
-                    assertThat(result).isTrue();
-                    """,
-                    "java");
             List<String> receivedMessages = new ArrayList<>();
 
             // Create and register a simple message handler process
