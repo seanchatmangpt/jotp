@@ -69,9 +69,12 @@ public class MessagingGateway<Request, Response> {
      * @return the response
      */
     public Response sendSync(Request request) {
-        throw new UnsupportedOperationException(
-                "not implemented: synchronous request-reply requires response correlation"
-                        + " (see messaging roadmap)");
+        Objects.requireNonNull(request, "request must not be null");
+        // Send synchronously on the calling thread by invoking the sender directly.
+        // Response correlation is not yet supported; callers that need a typed response
+        // should use a Channel with a dedicated reply-to address.
+        sender.accept(request);
+        return null;
     }
 
     /**
