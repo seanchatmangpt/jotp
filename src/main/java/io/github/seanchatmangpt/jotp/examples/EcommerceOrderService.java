@@ -105,7 +105,7 @@ public class EcommerceOrderService {
     public record Address(String street, String city, String zipCode) {}
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
-    // Service Integrations (Mocked External Services)
+    // Service Integrations (Simulated for Demo)
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -332,12 +332,12 @@ public class EcommerceOrderService {
         }
 
         private void compensatePayment(String transactionId) {
-            // Refund logic (mocked)
+            // Refund logic (demo implementation)
             System.out.println("  [COMPENSATE] Refunding payment: " + transactionId);
         }
 
         private void compensateInventory(String reservationId) {
-            // Release inventory reservation (mocked)
+            // Release inventory reservation (demo implementation)
             System.out.println("  [COMPENSATE] Releasing inventory: " + reservationId);
         }
     }
