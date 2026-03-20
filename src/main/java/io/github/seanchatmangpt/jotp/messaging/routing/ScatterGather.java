@@ -61,11 +61,11 @@ public final class ScatterGather<M, R, S, E> {
             CompletableFuture<ReplyWithId<R>> future = scatterer.apply(reqWithId);
 
             ReplyWithId<R> reply = future.get();
-            if (reply != null && reply.reply().isOk()) {
+            if (reply != null && reply.reply().isSuccess()) {
                 // Collect replies from all recipients (simplified for testing)
                 List<R> replies = new ArrayList<>();
                 for (int i = 0; i < recipients.size(); i++) {
-                    replies.add(reply.reply().unwrap());
+                    replies.add(reply.reply().orElseThrow());
                 }
                 return Result.ok(replies);
             }
@@ -102,10 +102,10 @@ public final class ScatterGather<M, R, S, E> {
             CompletableFuture<ReplyWithId<R>> future = scatterer.apply(reqWithId);
 
             ReplyWithId<R> reply = future.get();
-            if (reply != null && reply.reply().isOk()) {
+            if (reply != null && reply.reply().isSuccess()) {
                 List<R> replies = new ArrayList<>();
                 for (int i = 0; i < recipients.size(); i++) {
-                    replies.add(reply.reply().unwrap());
+                    replies.add(reply.reply().orElseThrow());
                 }
                 return Result.ok(replies);
             }
@@ -147,8 +147,8 @@ public final class ScatterGather<M, R, S, E> {
 
             List<R> replies = new ArrayList<>();
             for (int i = 0; i < recipients.size(); i++) {
-                if (reply != null && reply.reply().isOk()) {
-                    replies.add(reply.reply().unwrap());
+                if (reply != null && reply.reply().isSuccess()) {
+                    replies.add(reply.reply().orElseThrow());
                 }
             }
 
