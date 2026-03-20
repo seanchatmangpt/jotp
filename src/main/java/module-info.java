@@ -101,12 +101,29 @@ module io.github.seanchatmangpt.jotp {
     requires com.fasterxml.jackson.databind;
     requires com.fasterxml.jackson.datatype.jsr310;
 
-    // Distributed
+    // Core package
+    exports io.github.seanchatmangpt.jotp;
+
+    // Distributed and Persistence
     exports io.github.seanchatmangpt.jotp.distributed;
     exports io.github.seanchatmangpt.jotp.persistence;
 
-    // Local exports
-    exports io.github.seanchatmangpt.jotp;
+    // Observability and Testing
+    exports io.github.seanchatmangpt.jotp.observability;
+    exports io.github.seanchatmangpt.jotp.observability.otel;
+    exports io.github.seanchatmangpt.jotp.testing;
+
+    // Utilities and Support
+    exports io.github.seanchatmangpt.jotp.benchmark;
+    exports io.github.seanchatmangpt.jotp.crash;
+    exports io.github.seanchatmangpt.jotp.demo;
+    exports io.github.seanchatmangpt.jotp.discovery;
+    exports io.github.seanchatmangpt.jotp.examples;
+    exports io.github.seanchatmangpt.jotp.management;
+    exports io.github.seanchatmangpt.jotp.order;
+    exports io.github.seanchatmangpt.jotp.pool;
+    exports io.github.seanchatmangpt.jotp.serialization;
+    exports io.github.seanchatmangpt.jotp.util;
     exports io.github.seanchatmangpt.jotp.dogfood.core;
     exports io.github.seanchatmangpt.jotp.dogfood.concurrency;
     exports io.github.seanchatmangpt.jotp.dogfood.patterns;
