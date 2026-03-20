@@ -3,16 +3,18 @@ package io.github.seanchatmangpt.jotp.dogfood.vision2030;
 import io.github.seanchatmangpt.jotp.Result;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Vision 2030 Executive Dashboard — a unified abstraction layer that ties all four Vision 2030
  * analysis engines together: {@link BlueOceanScorer}, {@link AdoptionPipelineEngine}, {@link
  * AgentMaturityScorer}, and {@link RoadmapPrioritizer}.
  *
- * <p>Runs all four assessments concurrently using Java 26's {@link StructuredTaskScope} with
- * fail-fast semantics (Armstrong: "If any process fails, fail fast"), then aggregates results into a
- * single {@link DashboardResult} with an executive summary.
+ * <p>Runs all four assessments concurrently using Java 26 virtual threads with fail-fast semantics
+ * (Armstrong: "If any process fails, fail fast"), then aggregates results into a single {@link
+ * DashboardResult} with an executive summary.
  *
  * <p>The dashboard maps a single {@link EnterpriseProfile} to each engine's specific input types,
  * builds sensible defaults for competitor profiles and roadmap items, and produces a one-stop
@@ -141,9 +143,11 @@ public final class Vision2030Dashboard {
      * Assess an enterprise using all four Vision 2030 engines concurrently with custom roadmap
      * items.
      *
-     * <p>Uses Java 26 {@link StructuredTaskScope} to run all four engines on virtual threads with
-     * fail-fast semantics. If any engine fails, the scope cancels remaining tasks and returns the
-     * first exception.
+     * <p>Uses Java 26 virtual threads via {@link Executors#newVirtualThreadPerTaskExecutor()} to run
+     * all four engines concurrently. Heterogeneous return types prevent use of {@code
+     * StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow()}, so the pattern from {@code
+     * ArmstrongAgiEngine} is used instead: {@link CompletableFuture#allOf} with a virtual-thread
+     * executor ensures fail-fast semantics while supporting different result types.
      *
      * @param profile the unified enterprise profile
      * @param roadmapItems the roadmap items to prioritize
@@ -155,21 +159,19 @@ public final class Vision2030Dashboard {
         Objects.requireNonNull(profile, "profile must not be null");
         Objects.requireNonNull(roadmapItems, "roadmapItems must not be null");
 
-        try (var scope =
-                StructuredTaskScope.open(
-                        StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow())) {
-
+        try (ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor()) {
             // Fork all four engines concurrently on virtual threads
-            var blueOceanTask =
-                    scope.fork(
+            var blueOceanFuture =
+                    CompletableFuture.supplyAsync(
                             () ->
                                     BlueOceanScorer.analyze(
                                                     buildJotpProfile(profile),
                                                     defaultCompetitors())
-                                            .orElseThrow());
+                                            .orElseThrow(),
+                            exec);
 
-            var adoptionTask =
-                    scope.fork(
+            var adoptionFuture =
+                    CompletableFuture.supplyAsync(
                             () ->
                                     AdoptionPipelineEngine.assess(
                                                     profile.name(),
@@ -178,25 +180,29 @@ public final class Vision2030Dashboard {
                                                     profile.hasSpringBoot(),
                                                     profile.microserviceCount(),
                                                     profile.currentSlaPercent())
-                                            .orElseThrow());
+                                            .orElseThrow(),
+                            exec);
 
-            var maturityTask =
-                    scope.fork(
+            var maturityFuture =
+                    CompletableFuture.supplyAsync(
                             () ->
                                     AgentMaturityScorer.assess(buildSystemProfile(profile))
-                                            .orElseThrow());
+                                            .orElseThrow(),
+                            exec);
 
-            var roadmapTask =
-                    scope.fork(
-                            () ->
-                                    RoadmapPrioritizer.prioritize(roadmapItems).orElseThrow());
+            var roadmapFuture =
+                    CompletableFuture.supplyAsync(
+                            () -> RoadmapPrioritizer.prioritize(roadmapItems).orElseThrow(), exec);
 
-            scope.join();
+            // Wait for all four to complete — fail-fast if any throws
+            CompletableFuture.allOf(
+                            blueOceanFuture, adoptionFuture, maturityFuture, roadmapFuture)
+                    .join();
 
-            var strategyResult = blueOceanTask.get();
-            var adoptionResult = adoptionTask.get();
-            var maturityResult = maturityTask.get();
-            var roadmapResult = roadmapTask.get();
+            var strategyResult = blueOceanFuture.join();
+            var adoptionResult = adoptionFuture.join();
+            var maturityResult = maturityFuture.join();
+            var roadmapResult = roadmapFuture.join();
 
             var summary =
                     buildExecutiveSummary(
