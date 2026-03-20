@@ -364,4 +364,30 @@ class RoutingSlipTest {
                 .as("Original payload should be unchanged")
                 .isEmpty();
     }
+
+    // Test helper fields
+    private List<ProcRef<ProcessState, Object>> hops;
+    private List<String> executionOrder;
+
+    // Test helper classes
+    record Payload(String data, List<String> history) {
+        public Payload(String data, List<String> history) {
+            this.data = data;
+            this.history = new ArrayList<>(history);
+        }
+
+        public Payload withEntry(String entry) {
+            var newHistory = new ArrayList<>(history);
+            newHistory.add(entry);
+            return new Payload(data, newHistory);
+        }
+    }
+
+    record ProcessState(String name, int count) {}
+
+    sealed interface TestMessage {
+        record Process(RoutingSlip.MessageWithSlip<Payload, ?> msg) implements TestMessage {}
+
+        record GetCount() implements TestMessage {}
+    }
 }
