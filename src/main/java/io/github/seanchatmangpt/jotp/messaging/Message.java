@@ -32,6 +32,7 @@ import java.util.UUID;
  *   <li>{@link CommandMsg} - Commands that request an action to be performed
  *   <li>{@link EventMsg} - Events that notify about something that happened
  *   <li>{@link QueryMsg} - Queries that request information
+ *   <li>{@link DocumentMsg} - Document messages carrying binary content
  *   <li>{@link ReplyMsg} - Replies to queries or commands
  * </ul>
  *
@@ -49,16 +50,19 @@ import java.util.UUID;
  *
  * // Pattern matching on message type
  * switch (msg) {
- *     case Message.CommandMsg(var type, var payload, _) -> handleCommand(type, payload);
- *     case Message.EventMsg(var type, var payload) -> handleEvent(type, payload);
- *     case Message.QueryMsg(var type, var payload) -> handleQuery(type, payload);
+ *     case Message.CommandMsg cmd -> handleCommand(cmd.commandType(), cmd.payload());
+ *     case Message.EventMsg evt -> handleEvent(evt.eventType(), evt.payload());
+ *     case Message.QueryMsg qry -> handleQuery(qry.type(), qry.payload());
+ *     case Message.DocumentMsg doc -> handleDoc(doc.documentType(), doc.payload());
+ *     case Message.ReplyMsg<?> rep -> handleReply(rep.type(), rep.payload());
  * }
  * }</pre>
  *
  * @param <P> the payload type associated with the message
  */
 public sealed interface Message<P>
-        permits Message.CommandMsg, Message.EventMsg, Message.QueryMsg, Message.ReplyMsg {
+        permits Message.CommandMsg, Message.EventMsg, Message.QueryMsg, Message.DocumentMsg,
+                Message.ReplyMsg {
 
     /** Returns the unique message ID. */
     UUID id();
@@ -74,6 +78,24 @@ public sealed interface Message<P>
 
     /** Returns additional metadata associated with the message. */
     Map<String, Object> metadata();
+
+    /**
+     * Returns the unique message ID. Alias for {@link #id()} for test convenience.
+     *
+     * @return the unique message UUID
+     */
+    default UUID messageId() {
+        return id();
+    }
+
+    /**
+     * Returns the creation time of this message in epoch milliseconds.
+     *
+     * @return epoch millis of {@link #timestamp()}
+     */
+    default long createdAt() {
+        return timestamp().toEpochMilli();
+    }
 
     /**
      * Command message - requests an action to be performed.
@@ -99,6 +121,15 @@ public sealed interface Message<P>
         }
 
         /**
+         * Returns the command type. Convenience alias for {@link #type()}.
+         *
+         * @return the command type string
+         */
+        public String commandType() {
+            return type();
+        }
+
+        /**
          * Creates a command message with the given type and payload.
          *
          * @param type the command type
@@ -120,13 +151,26 @@ public sealed interface Message<P>
      * @param payload the event payload data
      */
     record EventMsg(
-            UUID id, String type, String payload, Instant timestamp, Map<String, Object> metadata)
-            implements Message<String> {
+            UUID id,
+            String type,
+            Object payload,
+            Instant timestamp,
+            Map<String, Object> metadata)
+            implements Message<Object> {
 
         public EventMsg {
             if (id == null) id = UUID.randomUUID();
             if (timestamp == null) timestamp = Instant.now();
             if (metadata == null) metadata = Map.of();
+        }
+
+        /**
+         * Returns the event type. Convenience alias for {@link #type()}.
+         *
+         * @return the event type string
+         */
+        public String eventType() {
+            return type();
         }
 
         /**
@@ -136,7 +180,7 @@ public sealed interface Message<P>
          * @param payload the event payload
          * @return a new event message
          */
-        public static EventMsg of(String type, String payload) {
+        public static EventMsg of(String type, Object payload) {
             return new EventMsg(null, type, payload, null, null);
         }
     }
@@ -167,6 +211,55 @@ public sealed interface Message<P>
          */
         public static QueryMsg of(String type, Object payload) {
             return new QueryMsg(null, type, payload, null, null);
+        }
+    }
+
+    /**
+     * Document message - carries binary content with a named document type.
+     *
+     * <p>Used when messages carry structured binary payloads (PDFs, images, serialized data) rather
+     * than text or structured objects.
+     *
+     * @param content the binary content of the document
+     */
+    record DocumentMsg(
+            UUID id,
+            String type,
+            byte[] content,
+            Instant timestamp,
+            Map<String, Object> metadata)
+            implements Message<byte[]> {
+
+        public DocumentMsg {
+            if (id == null) id = UUID.randomUUID();
+            if (timestamp == null) timestamp = Instant.now();
+            if (metadata == null) metadata = Map.of();
+            if (content == null) content = new byte[0];
+        }
+
+        @Override
+        public byte[] payload() {
+            return content;
+        }
+
+        /**
+         * Returns the document type. Convenience alias for {@link #type()}.
+         *
+         * @return the document type string
+         */
+        public String documentType() {
+            return type();
+        }
+
+        /**
+         * Creates a document message with the given type and binary content.
+         *
+         * @param type the document type
+         * @param content the binary content
+         * @return a new document message
+         */
+        public static DocumentMsg of(String type, byte[] content) {
+            return new DocumentMsg(null, type, content, null, null);
         }
     }
 
@@ -222,10 +315,10 @@ public sealed interface Message<P>
      * Creates an event message.
      *
      * @param type the event type
-     * @param payload the event payload
+     * @param payload the event payload (any type)
      * @return a new event message
      */
-    static EventMsg event(String type, String payload) {
+    static EventMsg event(String type, Object payload) {
         return EventMsg.of(type, payload);
     }
 
@@ -238,5 +331,16 @@ public sealed interface Message<P>
      */
     static QueryMsg query(String type, Object payload) {
         return QueryMsg.of(type, payload);
+    }
+
+    /**
+     * Creates a document message.
+     *
+     * @param type the document type
+     * @param content the binary content
+     * @return a new document message
+     */
+    static DocumentMsg document(String type, byte[] content) {
+        return DocumentMsg.of(type, content);
     }
 }

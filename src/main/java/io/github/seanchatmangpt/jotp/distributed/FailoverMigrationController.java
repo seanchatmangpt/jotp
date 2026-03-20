@@ -300,7 +300,21 @@ public final class FailoverMigrationController {
    * @return the restored state, or null if not found
    */
   private Object loadProcessStateFromLog(String processName) {
-    throw new UnsupportedOperationException("Process state recovery not yet implemented. Failover will restart processes with initial state. To preserve state: implement eventLog.queryProcessState(processName) and deserialize last known state snapshot.");
+    // Scan the event log from the start to find the last snapshot for this process.
+    // Returns null when no snapshot is found; callers fall back to initial state.
+    long last = eventLog.lastSequence();
+    if (last < 0) {
+      return null;
+    }
+    List<LogMessage> entries = eventLog.getRange(0, last);
+    String prefix = "migration:" + processName;
+    Object latestState = null;
+    for (LogMessage entry : entries) {
+      if (entry.id().startsWith(prefix)) {
+        latestState = entry.content();
+      }
+    }
+    return latestState;
   }
 
   /**

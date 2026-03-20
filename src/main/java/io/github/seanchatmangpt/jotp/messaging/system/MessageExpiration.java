@@ -1,5 +1,6 @@
 package io.github.seanchatmangpt.jotp.messaging.system;
 
+import io.github.seanchatmangpt.jotp.messaging.Message;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -7,6 +8,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 /**
  * Message Expiration — TTL-based filtering for time-sensitive messages.
@@ -29,7 +31,14 @@ public final class MessageExpiration {
 
     private final ScheduledExecutorService scheduler;
 
+    private final long cleanupIntervalMs;
+
     private MessageExpiration(long cleanupIntervalMs) {
+        if (cleanupIntervalMs <= 0) {
+            throw new IllegalArgumentException(
+                    "cleanupIntervalMs must be positive, got: " + cleanupIntervalMs);
+        }
+        this.cleanupIntervalMs = cleanupIntervalMs;
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             var t = new Thread(r, "msg-expiration-cleaner");
             t.setDaemon(true);
@@ -42,7 +51,7 @@ public final class MessageExpiration {
     /**
      * Creates a new MessageExpiration manager.
      *
-     * @param cleanupIntervalMs background cleanup interval in milliseconds
+     * @param cleanupIntervalMs background cleanup interval in milliseconds (must be positive)
      * @return a new manager instance
      */
     public static MessageExpiration create(long cleanupIntervalMs) {
@@ -50,15 +59,39 @@ public final class MessageExpiration {
     }
 
     /**
+     * Returns the configured cleanup interval in milliseconds.
+     *
+     * @return cleanup interval in milliseconds
+     */
+    public long cleanupIntervalMs() {
+        return cleanupIntervalMs;
+    }
+
+    /**
      * Wraps a message with a TTL, recording the creation time.
      *
      * @param message the message to wrap
-     * @param ttlMs time-to-live in milliseconds
+     * @param ttlMs time-to-live in milliseconds (must be positive)
      * @param <M> the message type
      * @return an expiring wrapper around the message
      */
     public <M> ExpiringMessage<M> withExpiration(M message, long ttlMs) {
+        if (ttlMs <= 0) {
+            throw new IllegalArgumentException("ttlMs must be positive, got: " + ttlMs);
+        }
         return new ExpiringMessage<>(message, ttlMs, Instant.now());
+    }
+
+    /**
+     * Wraps a JOTP {@link Message} with a TTL, recording the creation time.
+     *
+     * @param message the JOTP message to wrap
+     * @param ttlMs time-to-live in milliseconds (must be positive)
+     * @param <P> the payload type
+     * @return an expiring wrapper around the message
+     */
+    public <P> ExpiringMessage<Message<P>> wrapMessage(Message<P> message, long ttlMs) {
+        return withExpiration(message, ttlMs);
     }
 
     /**
@@ -92,6 +125,17 @@ public final class MessageExpiration {
      */
     public <M> long timeUntilExpiration(ExpiringMessage<M> msg) {
         return msg.ttlMs() - ageMs(msg);
+    }
+
+    /**
+     * Filters a stream of expiring messages, removing expired ones and returning the valid stream.
+     *
+     * @param messages a stream of expiring messages
+     * @param <M> the message type
+     * @return a stream containing only non-expired messages
+     */
+    public <M> Stream<ExpiringMessage<M>> cleanupExpired(Stream<ExpiringMessage<M>> messages) {
+        return messages.filter(m -> !isExpired(m));
     }
 
     /**

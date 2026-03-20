@@ -38,6 +38,27 @@ package io.github.seanchatmangpt.jotp.serialization;
 public final class SerializationExample {
   private SerializationExample() {}
 
+  // ── Internal utilities ────────────────────────────────────────────────────
+
+  private static byte[] javaSerialize(Object message) throws SerializationException {
+    try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(baos)) {
+      oos.writeObject(message);
+      return baos.toByteArray();
+    } catch (java.io.IOException e) {
+      throw new SerializationException("Java serialization failed: " + e.getMessage(), e);
+    }
+  }
+
+  private static Object javaDeserialize(byte[] data) throws SerializationException {
+    try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(data);
+        java.io.ObjectInputStream ois = new java.io.ObjectInputStream(bais)) {
+      return ois.readObject();
+    } catch (java.io.IOException | ClassNotFoundException e) {
+      throw new SerializationException("Java deserialization failed: " + e.getMessage(), e);
+    }
+  }
+
   /**
    * Example: Using Jackson for human-readable JSON serialization.
    *
@@ -159,24 +180,27 @@ public final class SerializationExample {
    * <p>Shows how to implement a custom serializer (e.g., Kryo, FST).
    */
   public static class CustomKryoSerializer implements MessageSerializer {
-    // Private Kryo instance (not thread-safe, must be synchronized)
-    // private final Kryo kryo = new Kryo();
+    // Falls back to Java serialization when the Kryo library is not present.
+    // Replace the body of serialize/deserialize with Kryo calls once the
+    // dependency is available: kryo.writeClassAndObject(output, message).
 
     @Override
-    public byte[] serialize(Object message) throws SerializationException {
-      // Use kryo.writeClassAndObject(output, message);
-      throw new UnsupportedOperationException("Implement with Kryo library");
+    public synchronized byte[] serialize(Object message) throws SerializationException {
+      java.util.Objects.requireNonNull(message, "message must not be null");
+      return javaSerialize(message);
     }
 
     @Override
-    public Object deserialize(byte[] data, String messageType) throws SerializationException {
-      // Use kryo.readClassAndObject(input);
-      throw new UnsupportedOperationException("Implement with Kryo library");
+    public synchronized Object deserialize(byte[] data, String messageType)
+        throws SerializationException {
+      java.util.Objects.requireNonNull(data, "data must not be null");
+      java.util.Objects.requireNonNull(messageType, "messageType must not be null");
+      return javaDeserialize(data);
     }
 
     @Override
     public boolean supportsType(String messageType) {
-      // Kryo can serialize anything
+      // Java serialization can handle any Serializable type; Kryo handles all types.
       return true;
     }
 
