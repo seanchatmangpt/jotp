@@ -336,7 +336,7 @@ public final class LivingDocGenerator {
                 return cleanJavadoc(before.substring(start));
             }
         }
-        return null;
+        return null; // No preceding javadoc found at this position
     }
 
     private String extractJavadocFromFullMatch(String match) {
@@ -344,11 +344,11 @@ public final class LivingDocGenerator {
         if (jm.find()) {
             return cleanJavadoc(jm.group(0));
         }
-        return null;
+        return null; // No javadoc comment found in match
     }
 
     private String cleanJavadoc(String raw) {
-        if (raw == null) return null;
+        if (raw == null) return null; // Propagate absent javadoc
         return raw.replaceAll("/\\*\\*\\s*", "")
                 .replaceAll("\\s*\\*/", "")
                 .replaceAll("(?m)^\\s*\\*\\s?", "")

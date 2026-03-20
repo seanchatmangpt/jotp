@@ -477,7 +477,7 @@ public final class TurtleParser {
         if (start >= 0 && end > start) {
             return line.substring(start + 1, end);
         }
-        return null;
+        return null; // No quoted string value found in line
     }
 
     private static String extractPrimitiveValue(String line) {
@@ -488,7 +488,7 @@ public final class TurtleParser {
                 return part.replace("eip:", "").replaceAll("[;,.]$", "");
             }
         }
-        return null;
+        return null; // No eip: primitive found in line
     }
 
     private static String extractPatternRef(String line) {
@@ -499,7 +499,7 @@ public final class TurtleParser {
                 return part.replace("eip:", "").replaceAll("[;,.]$", "");
             }
         }
-        return null;
+        return null; // No eip: pattern reference found in line
     }
 
     private static int extractIntValue(String line) {

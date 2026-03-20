@@ -460,7 +460,7 @@ public final class GoNoGoEngine {
             }
             return new LineMatch(text, 1);
         }
-        return null;
+        return null; // Pattern not found in any line or full source
     }
 
     private static Verdict buildVerdict(

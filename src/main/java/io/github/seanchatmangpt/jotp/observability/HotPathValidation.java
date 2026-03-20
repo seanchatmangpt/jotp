@@ -206,7 +206,7 @@ public final class HotPathValidation {
             return matcher.group(1);
         }
 
-        return null;
+        return null; // Method not found in source — caller handles absent match
     }
 
     /** Extracts context around a match position for error reporting. */

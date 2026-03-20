@@ -128,7 +128,7 @@ public final class ReplicatedLog implements DistributedLog {
                 .exceptionally(
                         ex -> {
                             future.completeExceptionally(ex);
-                            return null;
+                            return null; // Required by CompletableFuture<Void>.exceptionally
                         });
     }
 
