@@ -503,4 +503,13 @@ class ScatterGatherTest {
             Thread.currentThread().interrupt();
         }
     }
+
+    // Test helper fields
+    private List<ProcRef<ServerState, EchoMessage>> recipients;
+    private List<Proc<ServerState, EchoMessage>> processes;
+
+    // Test helper classes
+    record EchoMessage(String requestId, String payload) {}
+
+    record ServerState(int echoCount) {}
 }
