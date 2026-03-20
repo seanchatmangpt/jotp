@@ -168,14 +168,11 @@
                         <!-- Stress Tests - performance benchmarks, not part of regular test suite (long-running, 1M+ VTs) -->
                         <exclude>io/github/seanchatmangpt/jotp/stress/**</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/test/AtlasOtpStressTest.java</exclude>
-                        <!-- Application.builder() API mismatch: test expects enterprise methods not yet in Application.java -->
-                        <exclude>io/github/seanchatmangpt/jotp/test/EnterpriseCompositionIT.java</exclude>
+                        <!-- Application.builder() API now implemented -->
                         <!-- Stress/breaking-point tests in patterns package (100K-1M ops, 180-300s timeouts) -->
                         <exclude>io/github/seanchatmangpt/jotp/test/patterns/AtlasAPIStressTest.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/test/patterns/ReactiveMessagingPatternStressTest.java</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/test/patterns/ReactiveMessagingBreakingPointTest.java</exclude>
-                        <!-- Depends on non-existent io.github.seanchatmangpt.jotp.reactive package -->
-                        <exclude>io/github/seanchatmangpt/jotp/test/patterns/ReactiveMessagingSystemPatternsTest.java</exclude>
                     </testExcludes>
                 </configuration>
             </plugin>

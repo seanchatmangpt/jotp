@@ -21,11 +21,18 @@ import java.util.Optional;
  * <p><b>Usage:</b>
  *
  * <pre>{@code
+ * // Builder pattern with explicit build()
  * ApplicationConfig config = ApplicationConfig.create()
  *     .environment("production")
  *     .set("kafka.bootstrap.servers", "kafka:9092")
  *     .set("kafka.consumer.group", "telemetry-processor")
- *     .set("health.check.interval", "5000");
+ *     .build();
+ *
+ * // Fluent pattern without build() — create() returns ApplicationConfig directly
+ * ApplicationConfig config = ApplicationConfig.create()
+ *     .environment("production")
+ *     .set("server.port", 8080)
+ *     .set("cache.enabled", true);
  *
  * String kafkaServers = config.getString("kafka.bootstrap.servers", "localhost:9092");
  * int healthInterval = config.getInt("health.check.interval", 5000);
@@ -36,14 +43,19 @@ import java.util.Optional;
 public final class ApplicationConfig {
 
     private final Map<String, String> values;
-    private final String environment;
+    private String environment;
 
     private ApplicationConfig(Map<String, String> values, String environment) {
-        this.values = Map.copyOf(values);
+        this.values = new HashMap<>(values);
         this.environment = environment;
     }
 
     // ── Factory methods ────────────────────────────────────────────────────────
+
+    /** Create an empty configuration (fluent builder — returns ApplicationConfig directly). */
+    public static ApplicationConfig create() {
+        return new ApplicationConfig(new HashMap<>(), "development");
+    }
 
     /** Create an empty configuration. */
     public static ApplicationConfig empty() {
@@ -60,9 +72,49 @@ public final class ApplicationConfig {
         return new ApplicationConfig(values, environment);
     }
 
-    /** Start building configuration. */
-    public static Builder create() {
-        return new Builder();
+    // ── Fluent builder methods (on ApplicationConfig itself) ───────────────────
+
+    /** Set the environment name (fluent). */
+    public ApplicationConfig environment(String env) {
+        this.environment = env;
+        return this;
+    }
+
+    /** Set a configuration value (fluent). */
+    public ApplicationConfig set(String key, String value) {
+        this.values.put(key, value);
+        return this;
+    }
+
+    /** Set an integer value (stored as string, fluent). */
+    public ApplicationConfig set(String key, int value) {
+        return set(key, String.valueOf(value));
+    }
+
+    /** Set a long value (stored as string, fluent). */
+    public ApplicationConfig set(String key, long value) {
+        return set(key, String.valueOf(value));
+    }
+
+    /** Set a boolean value (stored as string, fluent). */
+    public ApplicationConfig set(String key, boolean value) {
+        return set(key, String.valueOf(value));
+    }
+
+    /** Set a double value (stored as string, fluent). */
+    public ApplicationConfig set(String key, double value) {
+        return set(key, String.valueOf(value));
+    }
+
+    /** Merge all values from a map. */
+    public ApplicationConfig setAll(Map<String, String> values) {
+        this.values.putAll(values);
+        return this;
+    }
+
+    /** Terminal build (returns this, for compatibility with builder().build() pattern). */
+    public ApplicationConfig build() {
+        return this;
     }
 
     // ── Accessors ──────────────────────────────────────────────────────────────
@@ -143,7 +195,7 @@ public final class ApplicationConfig {
 
     /** Get a snapshot of all values (immutable). */
     public Map<String, String> asMap() {
-        return values;
+        return Map.copyOf(values);
     }
 
     /** Convert dotted key to environment variable format. */
@@ -167,63 +219,12 @@ public final class ApplicationConfig {
         return new ApplicationConfig(newValues, environment);
     }
 
-    // ── Builder ────────────────────────────────────────────────────────────────
-
-    /** Configuration builder. */
-    public static final class Builder {
-        private final Map<String, String> values = new HashMap<>();
-        private String environment = "development";
-
-        /** Set the environment name. */
-        public Builder environment(String env) {
-            this.environment = env;
-            return this;
+    /** Load configuration from properties. */
+    public ApplicationConfig fromProperties(java.util.Properties props) {
+        for (String key : props.stringPropertyNames()) {
+            values.put(key, props.getProperty(key));
         }
-
-        /** Set a configuration value. */
-        public Builder set(String key, String value) {
-            this.values.put(key, value);
-            return this;
-        }
-
-        /** Set an integer value (stored as string). */
-        public Builder set(String key, int value) {
-            return set(key, String.valueOf(value));
-        }
-
-        /** Set a long value (stored as string). */
-        public Builder set(String key, long value) {
-            return set(key, String.valueOf(value));
-        }
-
-        /** Set a boolean value (stored as string). */
-        public Builder set(String key, boolean value) {
-            return set(key, String.valueOf(value));
-        }
-
-        /** Set a double value (stored as string). */
-        public Builder set(String key, double value) {
-            return set(key, String.valueOf(value));
-        }
-
-        /** Merge all values from a map. */
-        public Builder setAll(Map<String, String> values) {
-            this.values.putAll(values);
-            return this;
-        }
-
-        /** Load configuration from properties file. */
-        public Builder fromProperties(java.util.Properties props) {
-            for (String key : props.stringPropertyNames()) {
-                values.put(key, props.getProperty(key));
-            }
-            return this;
-        }
-
-        /** Build the immutable configuration. */
-        public ApplicationConfig build() {
-            return new ApplicationConfig(values, environment);
-        }
+        return this;
     }
 
     @Override

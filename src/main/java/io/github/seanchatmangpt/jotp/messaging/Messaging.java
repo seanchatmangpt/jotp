@@ -159,11 +159,13 @@ public final class Messaging {
     // INNER IMPLEMENTATIONS
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    /** Basic message channel interface. */
-    public interface MessageChannel<M> extends Channel<M> {
-        /** Returns the current queue depth (number of pending messages). */
-        int queueDepth();
-    }
+    /**
+     * Basic message channel interface.
+     *
+     * @see io.github.seanchatmangpt.jotp.messaging.MessageChannel
+     */
+    public interface MessageChannel<M>
+            extends io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> {}
 
     /** Publish-subscribe channel interface. */
     public interface PublishSubscribeChannel<M> extends Channel<M> {

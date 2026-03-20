@@ -319,9 +319,8 @@ public final class HealthChecker implements Application.Infrastructure {
         return name;
     }
 
-    public boolean check() {
-        Map<String, CheckResult> results = checkAll();
-        return determineOverallStatus(results) != HealthStatus.UNHEALTHY;
+    public Status check() {
+        return checkStatus();
     }
 
     public Duration interval() {

@@ -150,6 +150,15 @@ public final class CircuitBreaker<R, V, E extends Exception> {
         HALF_OPEN
     }
 
+    /** Error type for simplified circuit breaker API. */
+    public sealed interface CircuitError permits CircuitError.Open, CircuitError.ExecutionFailed {
+        /** Circuit was open, request rejected without executing. */
+        record Open(String breakerName) implements CircuitError {}
+
+        /** Execution failed with an exception. */
+        record ExecutionFailed(String breakerName, Exception cause) implements CircuitError {}
+    }
+
     private final String name;
     private final int maxFailures;
     private final Duration window;
@@ -318,6 +327,24 @@ public final class CircuitBreaker<R, V, E extends Exception> {
     }
 
     /**
+     * Get the current state of the circuit (short alias).
+     *
+     * @return CLOSED, OPEN, or HALF_OPEN
+     */
+    public State state() {
+        // Check for automatic transition from OPEN to HALF_OPEN
+        synchronized (this) {
+            if (state == State.OPEN
+                    && openedTime != null
+                    && Instant.now().isAfter(openedTime.plus(halfOpenTimeout))) {
+                state = State.HALF_OPEN;
+                halfOpenProbeTime = Instant.now();
+            }
+        }
+        return state;
+    }
+
+    /**
      * Get the number of recorded failures in the current window.
      *
      * @return count of failures within the time window
@@ -351,6 +378,83 @@ public final class CircuitBreaker<R, V, E extends Exception> {
             lastFailureTime = null;
             openedTime = null;
             halfOpenProbeTime = null;
+        }
+    }
+
+    // ── Simplified execute API ─────────────────────────────────────────────────
+
+    /**
+     * Execute a supplier through the circuit breaker with simplified Result API.
+     *
+     * @param supplier the operation to execute
+     * @return Result.ok with the value on success, Result.err with CircuitError on failure
+     */
+    @SuppressWarnings("unchecked")
+    public <T> Result<T, CircuitError> execute(java.util.function.Supplier<T> supplier) {
+        CircuitBreakerResult<V, E> result =
+                execute(null, (Function<R, V>) _ -> (V) supplier.get());
+        return switch (result) {
+            case CircuitBreakerResult.Success<V, E>(var value) ->
+                    Result.ok((T) value);
+            case CircuitBreakerResult.Failure<V, E>(var error) ->
+                    Result.err(new CircuitError.ExecutionFailed(name, (Exception) error));
+            case CircuitBreakerResult.CircuitOpen<V, E> ignored ->
+                    Result.err(new CircuitError.Open(name));
+        };
+    }
+
+    // ── Builder API ─────────────────────────────────────────────────────────────
+
+    /**
+     * Create a circuit breaker builder.
+     *
+     * @param name circuit breaker name
+     * @return a new builder
+     */
+    public static SimpleBuilder builder(String name) {
+        return new SimpleBuilder(name);
+    }
+
+    /** Fluent builder for non-generic circuit breaker usage. */
+    public static final class SimpleBuilder {
+        private final String builderName;
+        private int failureThreshold = 5;
+        private Duration timeout = Duration.ofSeconds(60);
+        private Duration resetTimeout = Duration.ofSeconds(30);
+        private int halfOpenRequests = 1;
+
+        SimpleBuilder(String name) {
+            this.builderName = name;
+        }
+
+        /** Set the number of failures before the circuit opens. */
+        public SimpleBuilder failureThreshold(int threshold) {
+            this.failureThreshold = threshold;
+            return this;
+        }
+
+        /** Set the time window for counting failures. */
+        public SimpleBuilder timeout(Duration timeout) {
+            this.timeout = timeout;
+            return this;
+        }
+
+        /** Set the duration to wait before transitioning from OPEN to HALF_OPEN. */
+        public SimpleBuilder resetTimeout(Duration resetTimeout) {
+            this.resetTimeout = resetTimeout;
+            return this;
+        }
+
+        /** Set the number of requests allowed in HALF_OPEN state. */
+        public SimpleBuilder halfOpenRequests(int requests) {
+            this.halfOpenRequests = requests;
+            return this;
+        }
+
+        /** Build the circuit breaker. */
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public CircuitBreaker build() {
+            return new CircuitBreaker(builderName, failureThreshold, timeout, resetTimeout);
         }
     }
 

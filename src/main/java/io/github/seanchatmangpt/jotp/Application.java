@@ -1,8 +1,11 @@
 package io.github.seanchatmangpt.jotp;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -25,54 +28,23 @@ import java.util.function.Supplier;
  * <p><strong>Usage Example:</strong>
  *
  * <pre>{@code
- * record AppState(String name, int port) {}
- *
- * var app = Application.builder("my-app")
- *     .init(() -> new AppState("my-app", 8080))
- *     .service("http-server", createHttpServer())
- *     .service("worker", createWorker())
- *     .supervisor(new Supervisor(...))
- *     .stop(state -> System.out.println("Shutting down " + state.name()))
+ * Application app = Application.builder("my-app")
+ *     .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
+ *     .maxRestarts(5)
+ *     .restartWindow(Duration.ofMinutes(1))
+ *     .service("processor", () -> new ProcessorState(), this::handleMessage)
+ *     .infrastructure(messageBus)
+ *     .config(ApplicationConfig.create().environment("test").build())
  *     .build();
  *
- * CompletableFuture<AppState> startFuture = app.start();
- * AppState state = startFuture.join();
- *
- * // Later...
- * app.stop().join();
+ * app.start();
+ * Optional<ProcRef<State, Msg>> svc = app.service("processor");
+ * app.stop();
  * }</pre>
  *
- * <p><strong>Lifecycle Phases:</strong>
- *
- * <ol>
- *   <li><strong>INIT:</strong> Initialize application state and run init hooks (e.g., load config,
- *       setup databases)
- *   <li><strong>START:</strong> Start all services and supervisors in dependency order
- *   <li><strong>RUNNING:</strong> Application is stable; all processes are handling messages
- *   <li><strong>STOP:</strong> Gracefully shut down; stop services first, then supervisors, then
- *       run stop hooks
- * </ol>
- *
- * <p><strong>Service Lookup:</strong>
- *
- * <p>Services registered via {@link Builder#service(String, ProcRef)} can be looked up by name
- * during the RUNNING phase:
- *
- * <pre>{@code
- * Optional<ProcRef<?, ?>> httpServer = app.getService("http-server");
- * }</pre>
- *
- * <p><strong>Thread Safety:</strong>
- *
- * <p>The application state and service registry are immutable once the application transitions to
- * RUNNING. All phase transitions are serialized. Use {@link #getState()} to safely read the current
- * state.
- *
- * @param <S> application state type (recommended to be a record or sealed type for immutability)
  * @see Proc
  * @see ProcRef
  * @see Supervisor
- * @see ApplicationPhase
  */
 public final class Application<S> {
 
@@ -126,6 +98,20 @@ public final class Application<S> {
     private volatile ApplicationPhase phase = new ApplicationPhase.INIT();
     private volatile S state;
 
+    // Enterprise fields
+    private final Supervisor.Strategy supervisorStrategy;
+    private final int maxRestarts;
+    private final Duration restartWindow;
+    private final List<DeferredService<?, ?>> deferredServices;
+    private final List<Infrastructure> infrastructureComponents;
+    private final ApplicationConfig config;
+    private final List<HealthChecker> healthCheckers;
+    private volatile Supervisor rootSupervisor;
+    private final ConcurrentHashMap<String, ProcRef<?, ?>> startedServices =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Infrastructure> infrastructureMap =
+            new ConcurrentHashMap<>();
+
     private Application(
             String name,
             Supplier<S> initializer,
@@ -133,7 +119,14 @@ public final class Application<S> {
             List<ServiceEntry<?>> services,
             List<SupervisorEntry> supervisors,
             List<Runnable> initHooks,
-            List<Runnable> shutdownHooks) {
+            List<Runnable> shutdownHooks,
+            Supervisor.Strategy supervisorStrategy,
+            int maxRestarts,
+            Duration restartWindow,
+            List<DeferredService<?, ?>> deferredServices,
+            List<Infrastructure> infrastructureComponents,
+            ApplicationConfig config,
+            List<HealthChecker> healthCheckers) {
         this.name = name;
         this.initializer = initializer;
         this.stopper = stopper;
@@ -141,24 +134,37 @@ public final class Application<S> {
         this.supervisors.addAll(supervisors);
         this.initHooks.addAll(initHooks);
         this.shutdownHooks.addAll(shutdownHooks);
+        this.supervisorStrategy = supervisorStrategy;
+        this.maxRestarts = maxRestarts;
+        this.restartWindow = restartWindow;
+        this.deferredServices = deferredServices;
+        this.infrastructureComponents = infrastructureComponents;
+        this.config = config;
+        this.healthCheckers = healthCheckers;
+    }
+
+    // ── Enterprise lifecycle methods ─────────────────────────────────────────────
+
+    /** Get the application name. */
+    public String name() {
+        return name;
+    }
+
+    /** Check if the application has been started (and not yet stopped). */
+    public boolean isStarted() {
+        return phase instanceof ApplicationPhase.RUNNING;
+    }
+
+    /** Check if the application is currently running. */
+    public boolean isRunning() {
+        return phase instanceof ApplicationPhase.RUNNING;
     }
 
     /**
-     * Start the application: initialize state, start services and supervisors, transition to
-     * RUNNING.
+     * Start the application: create supervisor, start services, transition to RUNNING.
      *
-     * <p>This method:
-     *
-     * <ol>
-     *   <li>Transitions to INIT phase and runs all init hooks
-     *   <li>Transitions to START phase and starts all services
-     *   <li>Starts all supervisors
-     *   <li>Transitions to RUNNING phase
-     *   <li>Returns the application state
-     * </ol>
-     *
-     * @return a {@link CompletableFuture} that completes with the application state when startup is
-     *     complete
+     * <p>This creates a root supervisor with the configured strategy and starts all registered
+     * services under it. Infrastructure components are indexed for lookup.
      */
     public CompletableFuture<S> start() {
         return CompletableFuture.supplyAsync(
@@ -176,6 +182,26 @@ public final class Application<S> {
                         // START phase
                         phase = new ApplicationPhase.START();
 
+                        // Create root supervisor for deferred services
+                        if (!deferredServices.isEmpty()) {
+                            rootSupervisor =
+                                    Supervisor.create(
+                                            name + "-sup",
+                                            supervisorStrategy,
+                                            maxRestarts,
+                                            restartWindow);
+
+                            for (DeferredService<?, ?> ds : deferredServices) {
+                                ProcRef<?, ?> ref = startDeferredService(ds);
+                                startedServices.put(ds.name(), ref);
+                            }
+                        }
+
+                        // Index infrastructure components
+                        for (Infrastructure infra : infrastructureComponents) {
+                            infrastructureMap.put(infra.name(), infra);
+                        }
+
                         // Start supervisors (they manage their own children)
                         for (var supervisor : supervisors) {
                             // Supervisor is already running (started in builder), just track it
@@ -192,21 +218,20 @@ public final class Application<S> {
                 });
     }
 
+    /** Start the application synchronously (blocks until started). */
+    public void startSync() {
+        start().join();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private <SS, MM> ProcRef<SS, MM> startDeferredService(DeferredService<SS, MM> ds) {
+        return rootSupervisor.supervise(ds.name(), (SS) ds.stateFactory().get(), ds.handler());
+    }
+
     /**
-     * Stop the application: gracefully shut down all services and supervisors, then run cleanup
-     * hooks.
+     * Stop the application: gracefully shut down all services and supervisors.
      *
-     * <p>This method:
-     *
-     * <ol>
-     *   <li>Transitions to STOP phase
-     *   <li>Stops all services
-     *   <li>Shuts down all supervisors
-     *   <li>Runs all shutdown hooks
-     *   <li>Transitions to STOPPED phase
-     * </ol>
-     *
-     * @return a {@link CompletableFuture} that completes when shutdown is done
+     * <p>This method stops services, infrastructure, supervisors, and runs cleanup hooks.
      */
     public CompletableFuture<Void> stop() {
         return CompletableFuture.runAsync(
@@ -214,7 +239,34 @@ public final class Application<S> {
                     try {
                         phase = new ApplicationPhase.STOP();
 
-                        // Stop all services in reverse order
+                        // Stop all started services via supervisor
+                        if (rootSupervisor != null) {
+                            try {
+                                rootSupervisor.shutdown();
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        }
+
+                        // Stop infrastructure
+                        for (Infrastructure infra : infrastructureComponents) {
+                            try {
+                                infra.onStop(this);
+                            } catch (Exception e) {
+                                // Log but continue shutdown
+                            }
+                        }
+
+                        // Stop health checkers
+                        for (HealthChecker hc : healthCheckers) {
+                            try {
+                                hc.onStop(this);
+                            } catch (Exception e) {
+                                // Log but continue shutdown
+                            }
+                        }
+
+                        // Stop all legacy services in reverse order
                         List<ServiceEntry<?>> servicesCopy = new ArrayList<>(services);
                         Collections.reverse(servicesCopy);
                         for (var serviceEntry : servicesCopy) {
@@ -244,12 +296,20 @@ public final class Application<S> {
                             hook.run();
                         }
 
+                        startedServices.clear();
+                        infrastructureMap.clear();
+
                         phase = new ApplicationPhase.STOPPED(null);
                     } catch (Exception e) {
                         phase = new ApplicationPhase.STOPPED(e);
                         throw new RuntimeException("Application shutdown failed", e);
                     }
                 });
+    }
+
+    /** Stop the application synchronously (blocks until stopped). */
+    public void stopSync() {
+        stop().join();
     }
 
     /**
@@ -271,108 +331,168 @@ public final class Application<S> {
     }
 
     /**
-     * Lookup a named service by name.
+     * Lookup a named service by name (typed).
      *
      * @param serviceName the service name
-     * @return an {@link Optional} containing the {@link ProcRef} if found, or empty otherwise
+     * @return an {@link Optional} containing the typed {@link ProcRef} if found
      */
-    public Optional<ProcRef<?, ?>> getService(String serviceName) {
+    @SuppressWarnings("unchecked")
+    public <SS, MM> Optional<ProcRef<SS, MM>> service(String serviceName) {
+        ProcRef<?, ?> ref = startedServices.get(serviceName);
+        if (ref != null) {
+            return Optional.of((ProcRef<SS, MM>) ref);
+        }
+        // Fall back to legacy services
         for (var entry : services) {
             if (entry.name.equals(serviceName)) {
-                return Optional.of(entry.ref);
+                return Optional.of((ProcRef<SS, MM>) entry.ref);
             }
         }
         return Optional.empty();
     }
 
     /**
-     * Create a fluent builder for an application.
+     * Lookup a named service by name (untyped, for backward compatibility).
      *
-     * @param appName the application name
-     * @param <S> the application state type
-     * @return a new {@link Builder}
+     * @param serviceName the service name
+     * @return an {@link Optional} containing the {@link ProcRef} if found, or empty otherwise
      */
-    public static <S> Builder<S> builder(String appName) {
-        return new Builder<>(appName);
+    public Optional<ProcRef<?, ?>> getService(String serviceName) {
+        return service(serviceName);
     }
 
-    /** Fluent builder for {@link Application}. */
-    public static final class Builder<S> {
+    /**
+     * Lookup an infrastructure component by name.
+     *
+     * @param infraName the infrastructure component name
+     * @return an {@link Optional} containing the {@link Infrastructure} if found
+     */
+    public Optional<Infrastructure> infrastructure(String infraName) {
+        return Optional.ofNullable(infrastructureMap.get(infraName));
+    }
+
+    /**
+     * Get the application configuration.
+     *
+     * @return the configuration, or a default empty config
+     */
+    public ApplicationConfig config() {
+        return config != null ? config : ApplicationConfig.empty();
+    }
+
+    // ── Builder factory methods ─────────────────────────────────────────────────
+
+    /**
+     * Create a fluent builder for an application (non-generic enterprise mode).
+     *
+     * @param appName the application name
+     * @return a new {@link EnterpriseBuilder}
+     */
+    public static EnterpriseBuilder builder(String appName) {
+        return new EnterpriseBuilder(appName);
+    }
+
+    // ── Enterprise Builder ──────────────────────────────────────────────────────
+
+    /** Fluent builder for enterprise {@link Application} instances. */
+    public static final class EnterpriseBuilder {
         private final String name;
-        private Supplier<S> initializer = () -> null;
-        private Consumer<S> stopper = _ -> {};
-        private final List<ServiceEntry<?>> services = new ArrayList<>();
-        private final List<SupervisorEntry> supervisors = new ArrayList<>();
+        private Supervisor.Strategy strategy = Supervisor.Strategy.ONE_FOR_ONE;
+        private int maxRestarts = 5;
+        private Duration restartWindow = Duration.ofMinutes(1);
+        private final List<DeferredService<?, ?>> deferredServices = new ArrayList<>();
+        private final List<Infrastructure> infrastructureComponents = new ArrayList<>();
+        private ApplicationConfig config = ApplicationConfig.empty();
+        private final List<HealthChecker> healthCheckers = new ArrayList<>();
+        private final List<ServiceEntry<?>> legacyServices = new ArrayList<>();
+        private final List<SupervisorEntry> legacySupervisors = new ArrayList<>();
         private final List<Runnable> initHooks = new ArrayList<>();
         private final List<Runnable> shutdownHooks = new ArrayList<>();
 
-        Builder(String name) {
+        EnterpriseBuilder(String name) {
             this.name = name;
         }
 
-        /**
-         * Set the initialization supplier that creates the application state.
-         *
-         * @param initializer a supplier that returns the initial application state
-         * @return this builder
-         */
-        public Builder<S> init(Supplier<S> initializer) {
-            this.initializer = initializer;
+        /** Set the supervisor restart strategy. */
+        public EnterpriseBuilder supervisorStrategy(Supervisor.Strategy strategy) {
+            this.strategy = strategy;
+            return this;
+        }
+
+        /** Set maximum restarts before the supervisor gives up. */
+        public EnterpriseBuilder maxRestarts(int maxRestarts) {
+            this.maxRestarts = maxRestarts;
+            return this;
+        }
+
+        /** Set the restart window for counting restarts. */
+        public EnterpriseBuilder restartWindow(Duration window) {
+            this.restartWindow = window;
             return this;
         }
 
         /**
-         * Set the cleanup consumer that accepts the application state on shutdown.
+         * Register a service with a state factory and message handler.
          *
-         * @param stopper a consumer that handles shutdown logic (e.g., close databases)
+         * <p>The service will be started under the root supervisor when the application starts.
+         *
+         * @param serviceName unique service name
+         * @param stateFactory supplier creating the initial state
+         * @param handler message handler function
          * @return this builder
          */
-        public Builder<S> stop(Consumer<S> stopper) {
-            this.stopper = stopper;
+        public <SS, MM> EnterpriseBuilder service(
+                String serviceName,
+                Supplier<SS> stateFactory,
+                BiFunction<SS, MM, SS> handler) {
+            deferredServices.add(new DeferredService<>(serviceName, stateFactory, handler));
             return this;
         }
 
         /**
-         * Register a named service (process).
+         * Register a named service (already-created process reference).
          *
          * @param serviceName the service name for lookup
          * @param procRef the process reference
          * @return this builder
          */
-        public Builder<S> service(String serviceName, ProcRef<?, ?> procRef) {
-            services.add(new ServiceEntry<>(serviceName, procRef));
+        public EnterpriseBuilder service(String serviceName, ProcRef<?, ?> procRef) {
+            legacyServices.add(new ServiceEntry<>(serviceName, procRef));
             return this;
         }
 
-        /**
-         * Register a supervisor with its children.
-         *
-         * @param supervisor the supervisor instance
-         * @return this builder
-         */
-        public Builder<S> supervisor(Supervisor supervisor) {
-            supervisors.add(new SupervisorEntry(supervisor));
+        /** Register an infrastructure component (message bus, event store, etc.). */
+        public EnterpriseBuilder infrastructure(Infrastructure infra) {
+            infrastructureComponents.add(infra);
             return this;
         }
 
-        /**
-         * Add an initialization hook (runs during INIT phase before services start).
-         *
-         * @param hook a runnable to execute during initialization
-         * @return this builder
-         */
-        public Builder<S> addInitHook(Runnable hook) {
+        /** Set the application configuration. */
+        public EnterpriseBuilder config(ApplicationConfig config) {
+            this.config = config;
+            return this;
+        }
+
+        /** Register a health checker. */
+        public EnterpriseBuilder healthCheck(HealthChecker healthChecker) {
+            healthCheckers.add(healthChecker);
+            return this;
+        }
+
+        /** Register a supervisor. */
+        public EnterpriseBuilder supervisor(Supervisor supervisor) {
+            legacySupervisors.add(new SupervisorEntry(supervisor));
+            return this;
+        }
+
+        /** Add an initialization hook. */
+        public EnterpriseBuilder addInitHook(Runnable hook) {
             initHooks.add(hook);
             return this;
         }
 
-        /**
-         * Add a shutdown hook (runs during STOP phase after services stop).
-         *
-         * @param hook a runnable to execute during shutdown
-         * @return this builder
-         */
-        public Builder<S> addShutdownHook(Runnable hook) {
+        /** Add a shutdown hook. */
+        public EnterpriseBuilder addShutdownHook(Runnable hook) {
             shutdownHooks.add(hook);
             return this;
         }
@@ -380,13 +500,33 @@ public final class Application<S> {
         /**
          * Build the application instance.
          *
-         * @return a new {@link Application} with the configured services, supervisors, and hooks
+         * @return a new {@link Application} configured with the builder settings
          */
-        public Application<S> build() {
+        @SuppressWarnings("unchecked")
+        public Application<Void> build() {
             return new Application<>(
-                    name, initializer, stopper, services, supervisors, initHooks, shutdownHooks);
+                    name,
+                    () -> null,
+                    _ -> {},
+                    legacyServices,
+                    legacySupervisors,
+                    initHooks,
+                    shutdownHooks,
+                    strategy,
+                    maxRestarts,
+                    restartWindow,
+                    deferredServices,
+                    infrastructureComponents,
+                    config,
+                    healthCheckers);
         }
     }
+
+    // ── Deferred service record ─────────────────────────────────────────────────
+
+    /** A service definition that will be started when the application starts. */
+    private record DeferredService<S, M>(
+            String name, Supplier<S> stateFactory, BiFunction<S, M, S> handler) {}
 
     /** Internal entry for named services. */
     private static final class ServiceEntry<M> {

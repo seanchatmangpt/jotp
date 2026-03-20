@@ -144,6 +144,15 @@ public final class ApiGateway {
             return this;
         }
 
+        /** Route any HTTP method for the given pattern. */
+        public Builder route(
+                String pattern, Function<Request, CompletableFuture<Response>> handler) {
+            for (Method m : Method.values()) {
+                routes.add(new Route(pattern, m, handler));
+            }
+            return this;
+        }
+
         public Builder authenticator(Function<Request, AuthResult> a) {
             this.authenticator = a;
             return this;

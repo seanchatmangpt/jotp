@@ -17,6 +17,9 @@
 package io.github.seanchatmangpt.jotp.messaging.endpoints;
 
 import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.messaging.Channel;
+import java.time.Duration;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -34,12 +37,12 @@ public class MessagingGateway<Request, Response> {
     private final Consumer<Request> sender;
 
     /**
-     * Creates a new messaging gateway.
+     * Creates a new messaging gateway backed by a consumer.
      *
      * @param sender the function to send requests
      */
     public MessagingGateway(Consumer<Request> sender) {
-        this.sender = sender;
+        this.sender = Objects.requireNonNull(sender, "sender must not be null");
         this.proc =
                 new Proc<>(
                         null,
@@ -47,6 +50,16 @@ public class MessagingGateway<Request, Response> {
                             sender.accept(req);
                             return state;
                         });
+    }
+
+    /**
+     * Creates a new messaging gateway backed by a channel for request-reply.
+     *
+     * @param channel the channel to send requests to
+     * @param timeout the timeout for synchronous requests
+     */
+    public MessagingGateway(Channel<Request> channel, Duration timeout) {
+        this(channel::send);
     }
 
     /**
@@ -62,11 +75,24 @@ public class MessagingGateway<Request, Response> {
     }
 
     /**
-     * Sends a request asynchronously.
+     * Sends a request asynchronously via the underlying proc mailbox.
      *
      * @param request the request to send
      */
     public void send(Request request) {
+        proc.tell(request);
+    }
+
+    /**
+     * Sends a request asynchronously. Alias for {@link #send(Object)} that validates the input.
+     *
+     * @param request the request to send
+     * @throws IllegalArgumentException if the request is null
+     */
+    public void sendAsync(Request request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request must not be null");
+        }
         proc.tell(request);
     }
 

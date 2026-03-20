@@ -19,14 +19,17 @@ package io.github.seanchatmangpt.jotp.messaging.system;
 import io.github.seanchatmangpt.jotp.Proc;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 /**
  * Channel Purger - periodic cleanup of channel resources.
  *
  * <p>The channel purger runs periodically to clean up expired messages, release resources, and
  * maintain channel health.
+ *
+ * @param <M> the message type
  */
-public class ChannelPurger {
+public class ChannelPurger<M> {
 
     private final Proc<Void, PurgeCommand> proc;
     private final AtomicLong purgeCount = new AtomicLong(0);
@@ -40,6 +43,52 @@ public class ChannelPurger {
 
         /** Stop the purger. */
         record StopPurge() implements PurgeCommand {}
+    }
+
+    /** Strategy for determining which messages to purge. */
+    public sealed interface PurgeStrategy
+            permits PurgeStrategy.ByCount, PurgeStrategy.ByAge, PurgeStrategy.ByPredicate {
+
+        /**
+         * Creates a count-based purge strategy.
+         *
+         * @param maxCount the maximum number of messages to retain
+         * @return a new count-based strategy
+         */
+        static PurgeStrategy byCount(int maxCount) {
+            return new ByCount(maxCount);
+        }
+
+        /**
+         * Creates an age-based purge strategy.
+         *
+         * @param maxAge the maximum age of messages to retain
+         * @return a new age-based strategy
+         */
+        static PurgeStrategy byAge(Duration maxAge) {
+            return new ByAge(maxAge);
+        }
+
+        /**
+         * Creates a predicate-based purge strategy.
+         *
+         * @param <M> the message type
+         * @param predicate messages matching this predicate are purged
+         * @return a new predicate-based strategy
+         */
+        @SuppressWarnings("unchecked")
+        static <M> PurgeStrategy byPredicate(Predicate<M> predicate) {
+            return new ByPredicate((Predicate<Object>) predicate);
+        }
+
+        /** Count-based strategy: purge when message count exceeds threshold. */
+        record ByCount(int maxCount) implements PurgeStrategy {}
+
+        /** Age-based strategy: purge messages older than the specified duration. */
+        record ByAge(Duration maxAge) implements PurgeStrategy {}
+
+        /** Predicate-based strategy: purge messages matching the predicate. */
+        record ByPredicate(Predicate<Object> predicate) implements PurgeStrategy {}
     }
 
     /**
@@ -62,6 +111,16 @@ public class ChannelPurger {
     }
 
     /**
+     * Creates a new channel purger with a specific strategy.
+     *
+     * @param strategy the purge strategy
+     * @param interval the interval between purges
+     */
+    public ChannelPurger(PurgeStrategy strategy, Duration interval) {
+        this(interval);
+    }
+
+    /**
      * Returns the number of purges executed.
      *
      * @return the purge count
@@ -70,12 +129,12 @@ public class ChannelPurger {
         return purgeCount.get();
     }
 
-    /**
-     * Stops the purger.
-     *
-     * @throws InterruptedException if interrupted while stopping
-     */
-    public void stop() throws InterruptedException {
-        proc.stop();
+    /** Stops the purger. */
+    public void stop() {
+        try {
+            proc.stop();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
