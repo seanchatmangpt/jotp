@@ -193,9 +193,9 @@ public final class ScatterGather<M, R, S, E> {
             try {
                 ReplyWithId<R> reply = future.get();
                 List<R> replies = new ArrayList<>();
-                if (reply != null && reply.reply().isOk()) {
+                if (reply != null && reply.reply().isSuccess()) {
                     for (int i = 0; i < recipients.size(); i++) {
-                        replies.add(reply.reply().unwrap());
+                        replies.add(reply.reply().orElseThrow());
                     }
                 }
                 A aggregated = aggregator.apply(requestId, replies);
