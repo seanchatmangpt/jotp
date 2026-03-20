@@ -117,6 +117,7 @@ module io.github.seanchatmangpt.jotp {
     exports io.github.seanchatmangpt.jotp.dogfood.innovation;
     exports io.github.seanchatmangpt.jotp.dogfood.messaging;
     exports io.github.seanchatmangpt.jotp.dogfood.mclaren;
+    exports io.github.seanchatmangpt.jotp.dogfood.vision2030;
 
     // Enterprise Patterns
     exports io.github.seanchatmangpt.jotp.enterprise.circuitbreaker;
