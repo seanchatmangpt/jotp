@@ -33,7 +33,6 @@ import java.util.UUID;
  *   <li>{@link EventMsg} - Events that notify about something that happened
  *   <li>{@link QueryMsg} - Queries that request information
  *   <li>{@link DocumentMsg} - Document messages carrying binary content
- *   <li>{@link ReplyMsg} - Replies to queries or commands
  * </ul>
  *
  * <h3>Usage:</h3>
@@ -48,21 +47,19 @@ import java.util.UUID;
  * // Create a query message
  * var qry = Message.query("FindById", 42);
  *
- * // Pattern matching on message type
+ * // Exhaustive pattern matching over all four message variants
  * switch (msg) {
  *     case Message.CommandMsg cmd -> handleCommand(cmd.commandType(), cmd.payload());
  *     case Message.EventMsg evt -> handleEvent(evt.eventType(), evt.payload());
  *     case Message.QueryMsg qry -> handleQuery(qry.type(), qry.payload());
  *     case Message.DocumentMsg doc -> handleDoc(doc.documentType(), doc.payload());
- *     case Message.ReplyMsg<?> rep -> handleReply(rep.type(), rep.payload());
  * }
  * }</pre>
  *
  * @param <P> the payload type associated with the message
  */
 public sealed interface Message<P>
-        permits Message.CommandMsg, Message.EventMsg, Message.QueryMsg, Message.DocumentMsg,
-                Message.ReplyMsg {
+        permits Message.CommandMsg, Message.EventMsg, Message.QueryMsg, Message.DocumentMsg {
 
     /** Returns the unique message ID. */
     UUID id();
@@ -260,40 +257,6 @@ public sealed interface Message<P>
          */
         public static DocumentMsg of(String type, byte[] content) {
             return new DocumentMsg(null, type, content, null, null);
-        }
-    }
-
-    /**
-     * Reply message - response to a query or command.
-     *
-     * @param payload the reply payload data
-     * @param <P> the payload type
-     */
-    record ReplyMsg<P>(
-            UUID id,
-            UUID inReplyTo,
-            String type,
-            P payload,
-            Instant timestamp,
-            Map<String, Object> metadata)
-            implements Message<P> {
-
-        public ReplyMsg {
-            if (id == null) id = UUID.randomUUID();
-            if (timestamp == null) timestamp = Instant.now();
-            if (metadata == null) metadata = Map.of();
-        }
-
-        /**
-         * Creates a reply message.
-         *
-         * @param inReplyTo the original message ID being replied to
-         * @param type the reply type
-         * @param payload the reply payload
-         * @return a new reply message
-         */
-        public static <P> ReplyMsg<P> of(UUID inReplyTo, String type, P payload) {
-            return new ReplyMsg<>(null, inReplyTo, type, payload, null, null);
         }
     }
 

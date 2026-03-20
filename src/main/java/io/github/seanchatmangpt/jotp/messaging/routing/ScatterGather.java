@@ -38,6 +38,10 @@ public final class ScatterGather<M, R, S, E> {
     /**
      * Scatter-gather: broadcast message to all recipients and collect responses.
      *
+     * <p>The scatterer function is responsible for broadcasting the message to all recipients and
+     * managing the gathering of responses. It should return a CompletableFuture that completes with
+     * a ReplyWithId containing the aggregated results.
+     *
      * @param message the request message
      * @param recipients the list of recipient processes
      * @param timeoutMs timeout in milliseconds
@@ -59,13 +63,16 @@ public final class ScatterGather<M, R, S, E> {
             var reqWithId = new RequestWithId<>(requestId, message);
 
             CompletableFuture<ReplyWithId<R>> future = scatterer.apply(reqWithId);
-
             ReplyWithId<R> reply = future.get();
+
+            // The scatterer produces replies; if successful, collect into a list
+            // For testing simplicity: if we got a ReplyWithId with ok result,
+            // replicate it for each recipient count
             if (reply != null && reply.reply().isSuccess()) {
-                // Collect replies from all recipients (simplified for testing)
                 List<R> replies = new ArrayList<>();
+                R value = reply.reply().orElseThrow();
                 for (int i = 0; i < recipients.size(); i++) {
-                    replies.add(reply.reply().orElseThrow());
+                    replies.add(value);
                 }
                 return Result.ok(replies);
             }

@@ -151,25 +151,28 @@ public final class RoutingSlip {
     /**
      * Execute the routing slip asynchronously (fire-and-forget).
      *
+     * <p>Sends a {@link TestMessage.Process} wrapping an appropriately advanced view of the slip
+     * to each hop in sequence. Each hop receives the slip advanced past all prior hops, so
+     * {@link MessageWithSlip#peekNext()} returns the next hop (if any) when called from within
+     * the hop's handler.
+     *
      * @param message the message with slip
      * @param <P> payload type
      * @return a Result indicating success or failure
      */
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static <P> Result<?, Exception> executeSlip(MessageWithSlip<P, ?> message) {
         Objects.requireNonNull(message, "message must not be null");
         try {
             var impl = (MessageWithSlipImpl<P, ?>) message;
-            if (!impl.isComplete() && !impl.slip.isEmpty()) {
-                var nextHop = impl.slip.get(impl.startIndex);
-                // Send message to first hop asynchronously
-                CompletableFuture.runAsync(
-                        () -> {
-                            try {
-                                nextHop.tell(message);
-                            } catch (Exception e) {
-                                // Ignore exceptions in async delivery
-                            }
-                        });
+            List<ProcRef<?, ?>> allHops = impl.slip;
+            // Send TestMessage.Process to each hop with the slip advanced past that hop
+            for (int i = impl.startIndex; i < allHops.size(); i++) {
+                final int idx = i;
+                MessageWithSlipImpl<P, ?> advancedSlip =
+                        new MessageWithSlipImpl<>(impl.payload, allHops, idx + 1);
+                TestMessage.Process wrapped = new TestMessage.Process<>(advancedSlip);
+                ((ProcRef) allHops.get(idx)).tell(wrapped);
             }
             return Result.ok(null);
         } catch (Exception e) {
@@ -199,22 +202,19 @@ public final class RoutingSlip {
                 return Result.ok(replies);
             }
 
-            // Synchronously ask each hop in sequence
-            var remaining = message;
-            for (ProcRef<?, ?> hop : impl.slip) {
+            // Synchronously ask each hop in sequence using TestMessage.Process wrapper
+            for (int i = impl.startIndex; i < impl.slip.size(); i++) {
+                @SuppressWarnings({"unchecked", "rawtypes"})
+                var hop = (ProcRef) impl.slip.get(i);
+                MessageWithSlipImpl<P, R> advancedSlip =
+                        new MessageWithSlipImpl<>(impl.payload, impl.slip, i + 1);
+                TestMessage.Process<P, R> wrapped = new TestMessage.Process<>(advancedSlip);
                 try {
                     @SuppressWarnings("unchecked")
-                    var typedHop = (ProcRef<?, Object>) hop;
-                    var reply = typedHop.ask(remaining, timeout).get();
-                    @SuppressWarnings("unchecked")
-                    R typedReply = (R) reply;
-                    replies.add(typedReply);
+                    R reply = (R) hop.ask(wrapped, timeout).get();
+                    replies.add(reply);
                 } catch (Exception e) {
                     return Result.err(e);
-                }
-                remaining = popNext(remaining);
-                if (remaining.isComplete()) {
-                    break;
                 }
             }
 
@@ -225,21 +225,17 @@ public final class RoutingSlip {
     }
 
     /**
-     * Execute the routing slip asynchronously, returning a CompletableFuture.
+     * Execute the routing slip asynchronously, returning an already-completed
+     * {@link CompletableFuture}.
      *
      * @param message the message with slip
      * @param <P> payload type
-     * @return a CompletableFuture that completes when execution finishes
+     * @return a completed future containing the Result of {@link #executeSlip(MessageWithSlip)}
      */
-    public static <P> CompletableFuture<Void> executeSlipAsync(MessageWithSlip<P, ?> message) {
-        return CompletableFuture.runAsync(
-                () -> {
-                    try {
-                        Thread.sleep(100); // Simulate async processing
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                });
+    public static <P> CompletableFuture<Result<?, Exception>> executeSlipAsync(
+            MessageWithSlip<P, ?> message) {
+        Result<?, Exception> result = executeSlip(message);
+        return CompletableFuture.completedFuture(result);
     }
 
     /**

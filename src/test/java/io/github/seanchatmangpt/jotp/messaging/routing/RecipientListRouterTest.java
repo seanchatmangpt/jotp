@@ -155,28 +155,6 @@ class RecipientListRouterTest implements WithAssertions {
         @Test
         @DisplayName("broadcasts message to all recipients")
         void broadcastsToAllRecipients() {
-                    "The Recipient List pattern broadcasts a message to multiple recipients."
-                            + " Each recipient receives the same message independently.");
-                    """
-                    RecipientListRouter<String> router = new RecipientListRouter<>();
-                    router.addRecipient(ref1);
-                    router.addRecipient(ref2);
-                    router.addRecipient(ref3);
-
-                    int sent = router.broadcastMessage("broadcast-message");
-
-                    assertThat(sent).isEqualTo(3);
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Message] --> B[Recipient List Router]
-                        B --> C[Recipient 1]
-                        B --> D[Recipient 2]
-                        B --> E[Recipient 3]
-                    """);
-                    "Use for event notification, audit logging, or any scenario where multiple"
-                            + " services need to receive the same message.");
             List<String> messages1 = new ArrayList<>();
             List<String> messages2 = new ArrayList<>();
             List<String> messages3 = new ArrayList<>();
@@ -336,20 +314,6 @@ class RecipientListRouterTest implements WithAssertions {
         @Test
         @DisplayName("sends one message to multiple recipients concurrently")
         void fanOutToMultipleRecipients() {
-                    "Fan-out messaging sends one message to multiple services concurrently, enabling"
-                            + " parallel processing of the same event.");
-                    """
-                    RecipientListRouter<String> router = new RecipientListRouter<>();
-                    router.addRecipient(orderRef);
-                    router.addRecipient(notificationRef);
-                    router.addRecipient(auditRef);
-
-                    String orderEvent = "OrderCreated(id=12345, amount=99.99)";
-                    int recipientCount = router.broadcastMessage(orderEvent);
-
-                    assertThat(recipientCount).isEqualTo(3);
-                    """,
-                    "java");
             List<String> orderServiceMessages = new ArrayList<>();
             List<String> notificationServiceMessages = new ArrayList<>();
             List<String> auditServiceMessages = new ArrayList<>();
