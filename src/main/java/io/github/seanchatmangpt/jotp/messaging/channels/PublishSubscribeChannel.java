@@ -17,8 +17,6 @@
 package io.github.seanchatmangpt.jotp.messaging.channels;
 
 import io.github.seanchatmangpt.jotp.Proc;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
@@ -28,22 +26,25 @@ import java.util.function.Consumer;
  * <p>This pattern implements a one-to-many messaging pattern where each message is delivered to all
  * registered subscribers. It's useful for broadcast scenarios and event notification systems.
  *
+ * <p>Subscriber exceptions are isolated: a failing subscriber does not prevent other subscribers
+ * from receiving the message.
+ *
  * <h3>Usage:</h3>
  *
  * <pre>{@code
- * var channel = new PublishSubscribeChannel<String>();
+ * var channel = PublishSubscribeChannel.create();
  * channel.subscribe(msg -> System.out.println("A: " + msg));
  * channel.subscribe(msg -> System.out.println("B: " + msg));
  *
- * channel.sendSync("Hello"); // Both subscribers receive this
- * channel.stop();
+ * channel.publish(message);        // async fan-out
+ * int n = channel.publishSync(m); // sync fan-out, returns subscriber count
  * }</pre>
  *
  * @param <M> the message type
  */
 public final class PublishSubscribeChannel<M> {
 
-    private final List<Consumer<M>> subscribers = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<Consumer<M>> subscribers = new CopyOnWriteArrayList<>();
     private final Proc<Void, M> proc;
 
     /** Creates a new publish-subscribe channel. */
@@ -52,13 +53,11 @@ public final class PublishSubscribeChannel<M> {
                 new Proc<>(
                         null,
                         (state, msg) -> {
-                            var currentSubscribers = new ArrayList<>(subscribers);
-                            for (var subscriber : currentSubscribers) {
+                            for (var subscriber : subscribers) {
                                 try {
                                     subscriber.accept(msg);
-                                } catch (Exception e) {
-                                    // Crashing subscribers are removed (OTP fault isolation)
-                                    subscribers.remove(subscriber);
+                                } catch (Exception ignored) {
+                                    // Crashing subscribers are isolated per OTP fault-tolerance
                                 }
                             }
                             return state;
@@ -66,47 +65,86 @@ public final class PublishSubscribeChannel<M> {
     }
 
     /**
-     * Sends a message to this channel asynchronously.
+     * Creates a new publish-subscribe channel using the static factory pattern.
      *
-     * @param message the message to send
+     * @param <M> the message type
+     * @return a new channel instance
      */
-    public void send(M message) {
+    public static <M> PublishSubscribeChannel<M> create() {
+        return new PublishSubscribeChannel<>();
+    }
+
+    /**
+     * Subscribes a consumer to receive messages from this channel asynchronously.
+     *
+     * <p>The returned handle is the same consumer reference and can be passed to
+     * {@link #unsubscribe} to remove the subscription.
+     *
+     * @param consumer the consumer to receive messages
+     * @return the subscription handle (the consumer itself)
+     */
+    public Consumer<M> subscribe(Consumer<M> consumer) {
+        subscribers.add(consumer);
+        return consumer;
+    }
+
+    /**
+     * Unsubscribes a previously subscribed consumer.
+     *
+     * @param handle the subscription handle returned by {@link #subscribe}
+     */
+    public void unsubscribe(Consumer<M> handle) {
+        subscribers.remove(handle);
+    }
+
+    /**
+     * Publishes a message to all subscribers asynchronously via the internal virtual-thread
+     * process.
+     *
+     * @param message the message to publish
+     */
+    public void publish(M message) {
         proc.tell(message);
     }
 
     /**
-     * Sends a message to this channel synchronously (blocking until sent).
+     * Publishes a message to all currently subscribed consumers synchronously on the calling
+     * thread. Exceptions thrown by individual subscribers are caught and ignored so that all
+     * subscribers receive the message regardless of each other's behaviour.
+     *
+     * @param message the message to publish
+     * @return the number of subscribers that were notified
+     */
+    public int publishSync(M message) {
+        var snapshot = subscribers;
+        int notified = 0;
+        for (var subscriber : snapshot) {
+            try {
+                subscriber.accept(message);
+                notified++;
+            } catch (Exception ignored) {
+                // Subscriber exception isolation
+            }
+        }
+        return notified;
+    }
+
+    /**
+     * Sends a message to this channel asynchronously. Alias for {@link #publish(Object)}.
+     *
+     * @param message the message to send
+     */
+    public void send(M message) {
+        publish(message);
+    }
+
+    /**
+     * Sends a message to this channel synchronously. Alias for {@link #publishSync(Object)}.
      *
      * @param message the message to send
      */
     public void sendSync(M message) {
-        // Send to each subscriber directly for synchronous delivery
-        for (var subscriber : subscribers) {
-            try {
-                subscriber.accept(message);
-            } catch (Exception e) {
-                // Crashing subscribers are removed
-                subscribers.remove(subscriber);
-            }
-        }
-    }
-
-    /**
-     * Subscribes a consumer to receive messages from this channel.
-     *
-     * @param consumer the consumer to receive messages
-     */
-    public void subscribe(Consumer<M> consumer) {
-        subscribers.add(consumer);
-    }
-
-    /**
-     * Unsubscribes a consumer from this channel.
-     *
-     * @param consumer the consumer to unsubscribe
-     */
-    public void unsubscribe(Consumer<M> consumer) {
-        subscribers.remove(consumer);
+        publishSync(message);
     }
 
     /**

@@ -142,7 +142,9 @@ module io.github.seanchatmangpt.jotp {
     // Messaging Framework
     exports io.github.seanchatmangpt.jotp.messaging;
     exports io.github.seanchatmangpt.jotp.messaging.channels;
+    exports io.github.seanchatmangpt.jotp.messaging.construction;
     exports io.github.seanchatmangpt.jotp.messaging.endpoints;
+    exports io.github.seanchatmangpt.jotp.messaging.routing;
     exports io.github.seanchatmangpt.jotp.messaging.system;
     exports io.github.seanchatmangpt.jotp.messaging.transformation;
 }
