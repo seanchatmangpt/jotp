@@ -176,147 +176,143 @@ public final class Application<S> {
      * services under it. Infrastructure components are indexed for lookup.
      */
     public CompletableFuture<S> start() {
-        return CompletableFuture.supplyAsync(
-                () -> {
-                    try {
-                        // INIT phase
-                        phase = new ApplicationPhase.INIT();
-                        for (var hook : initHooks) {
-                            hook.run();
-                        }
+        try {
+            // INIT phase
+            phase = new ApplicationPhase.INIT();
+            for (var hook : initHooks) {
+                hook.run();
+            }
 
-                        // Initialize state
-                        state = initializer.get();
+            // Initialize state
+            state = initializer.get();
 
-                        // START phase
-                        phase = new ApplicationPhase.START();
+            // START phase
+            phase = new ApplicationPhase.START();
 
-                        // Create root supervisor for deferred services
-                        if (deferredServices != null && !deferredServices.isEmpty()) {
-                            rootSupervisor =
-                                    Supervisor.create(
-                                            name + "-sup",
-                                            supervisorStrategy != null
-                                                    ? supervisorStrategy
-                                                    : Supervisor.Strategy.ONE_FOR_ONE,
-                                            maxRestarts > 0 ? maxRestarts : 5,
-                                            restartWindow != null
-                                                    ? restartWindow
-                                                    : Duration.ofMinutes(1));
+            // Create root supervisor for deferred services
+            if (deferredServices != null && !deferredServices.isEmpty()) {
+                rootSupervisor =
+                        Supervisor.create(
+                                name + "-sup",
+                                supervisorStrategy != null
+                                        ? supervisorStrategy
+                                        : Supervisor.Strategy.ONE_FOR_ONE,
+                                maxRestarts > 0 ? maxRestarts : 5,
+                                restartWindow != null ? restartWindow : Duration.ofMinutes(1));
 
-                            for (DeferredService<?, ?> ds : deferredServices) {
-                                ProcRef<?, ?> ref = startDeferredService(ds);
-                                startedServices.put(ds.name(), ref);
-                            }
-                        }
+                for (DeferredService<?, ?> ds : deferredServices) {
+                    ProcRef<?, ?> ref = startDeferredService(ds);
+                    startedServices.put(ds.name(), ref);
+                }
+            }
 
-                        // Index infrastructure components
-                        if (infrastructureComponents != null) {
-                            for (Infrastructure infra : infrastructureComponents) {
-                                infrastructureMap.put(infra.name(), infra);
-                            }
-                        }
+            // Index infrastructure components
+            if (infrastructureComponents != null) {
+                for (Infrastructure infra : infrastructureComponents) {
+                    infrastructureMap.put(infra.name(), infra);
+                }
+            }
 
-                        // Start supervisors (they manage their own children)
-                        for (var supervisor : supervisors) {
-                            // Supervisor is already running, just track it
-                        }
+            // Start supervisors (they manage their own children)
+            for (var supervisor : supervisors) {
+                // Supervisor is already running, just track it
+            }
 
-                        // Transition to RUNNING
-                        phase = new ApplicationPhase.RUNNING();
+            // Transition to RUNNING
+            phase = new ApplicationPhase.RUNNING();
 
-                        return state;
-                    } catch (Exception e) {
-                        phase = new ApplicationPhase.STOPPED(e);
-                        throw new RuntimeException("Application startup failed", e);
-                    }
-                });
+            return CompletableFuture.completedFuture(state);
+        } catch (Exception e) {
+            phase = new ApplicationPhase.STOPPED(e);
+            return CompletableFuture.failedFuture(
+                    new RuntimeException("Application startup failed", e));
+        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private <SS, MM> ProcRef<SS, MM> startDeferredService(DeferredService<SS, MM> ds) {
-        return rootSupervisor.supervise(ds.name(), (SS) ds.stateFactory().get(), ds.handler());
+    private ProcRef<?, ?> startDeferredService(DeferredService ds) {
+        Object initialState = ds.stateFactory().get();
+        return rootSupervisor.supervise(ds.name(), initialState, ds.handler());
     }
 
     /**
      * Stop the application: gracefully shut down all services and supervisors.
      */
     public CompletableFuture<Void> stop() {
-        return CompletableFuture.runAsync(
-                () -> {
+        try {
+            phase = new ApplicationPhase.STOP();
+
+            // Stop all started services via supervisor
+            if (rootSupervisor != null) {
+                try {
+                    rootSupervisor.shutdown();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // Stop infrastructure
+            if (infrastructureComponents != null) {
+                for (Infrastructure infra : infrastructureComponents) {
                     try {
-                        phase = new ApplicationPhase.STOP();
-
-                        // Stop all started services via supervisor
-                        if (rootSupervisor != null) {
-                            try {
-                                rootSupervisor.shutdown();
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-
-                        // Stop infrastructure
-                        if (infrastructureComponents != null) {
-                            for (Infrastructure infra : infrastructureComponents) {
-                                try {
-                                    infra.onStop(this);
-                                } catch (Exception e) {
-                                    // Log but continue shutdown
-                                }
-                            }
-                        }
-
-                        // Stop health checkers
-                        if (healthCheckers != null) {
-                            for (HealthChecker hc : healthCheckers) {
-                                try {
-                                    hc.onStop(this);
-                                } catch (Exception e) {
-                                    // Log but continue shutdown
-                                }
-                            }
-                        }
-
-                        // Stop all legacy services in reverse order
-                        List<ServiceEntry<?>> servicesCopy = new ArrayList<>(services);
-                        Collections.reverse(servicesCopy);
-                        for (var serviceEntry : servicesCopy) {
-                            try {
-                                serviceEntry.ref.stop();
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-
-                        // Shutdown all supervisors in reverse order
-                        List<SupervisorEntry> supervisorsCopy = new ArrayList<>(supervisors);
-                        Collections.reverse(supervisorsCopy);
-                        for (var supervisorEntry : supervisorsCopy) {
-                            try {
-                                supervisorEntry.supervisor.shutdown();
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-
-                        // Run shutdown hooks
-                        if (stopper != null && state != null) {
-                            stopper.accept(state);
-                        }
-                        for (var hook : shutdownHooks) {
-                            hook.run();
-                        }
-
-                        startedServices.clear();
-                        infrastructureMap.clear();
-
-                        phase = new ApplicationPhase.STOPPED(null);
+                        infra.onStop(this);
                     } catch (Exception e) {
-                        phase = new ApplicationPhase.STOPPED(e);
-                        throw new RuntimeException("Application shutdown failed", e);
+                        // Log but continue shutdown
                     }
-                });
+                }
+            }
+
+            // Stop health checkers
+            if (healthCheckers != null) {
+                for (HealthChecker hc : healthCheckers) {
+                    try {
+                        hc.onStop(this);
+                    } catch (Exception e) {
+                        // Log but continue shutdown
+                    }
+                }
+            }
+
+            // Stop all legacy services in reverse order
+            List<ServiceEntry<?>> servicesCopy = new ArrayList<>(services);
+            Collections.reverse(servicesCopy);
+            for (var serviceEntry : servicesCopy) {
+                try {
+                    serviceEntry.ref.stop();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // Shutdown all supervisors in reverse order
+            List<SupervisorEntry> supervisorsCopy = new ArrayList<>(supervisors);
+            Collections.reverse(supervisorsCopy);
+            for (var supervisorEntry : supervisorsCopy) {
+                try {
+                    supervisorEntry.supervisor.shutdown();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // Run shutdown hooks
+            if (stopper != null && state != null) {
+                stopper.accept(state);
+            }
+            for (var hook : shutdownHooks) {
+                hook.run();
+            }
+
+            startedServices.clear();
+            infrastructureMap.clear();
+
+            phase = new ApplicationPhase.STOPPED(null);
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            phase = new ApplicationPhase.STOPPED(e);
+            return CompletableFuture.failedFuture(
+                    new RuntimeException("Application shutdown failed", e));
+        }
     }
 
     /**
