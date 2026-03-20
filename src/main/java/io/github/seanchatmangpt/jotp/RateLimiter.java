@@ -66,6 +66,10 @@ public interface RateLimiter {
         return new SlidingWindow(maxRequests, window);
     }
 
+    static <K> PerClient<K> perClient(int rate) {
+        return new PerClient<>(key -> tokenBucket(rate, rate));
+    }
+
     final class TokenBucket implements RateLimiter {
         private final long capacity;
         private final double refillRate;
@@ -177,6 +181,7 @@ public interface RateLimiter {
     final class PerClient<K> implements RateLimiter {
         private final Function<K, RateLimiter> factory;
         private final ConcurrentHashMap<K, RateLimiter> limiters = new ConcurrentHashMap<>();
+        private static final Object DEFAULT_KEY = new Object();
 
         PerClient(Function<K, RateLimiter> factory) {
             this.factory = factory;
@@ -192,12 +197,16 @@ public interface RateLimiter {
 
         @Override
         public boolean tryAcquire() {
-            throw new UnsupportedOperationException("Use tryAcquire(clientKey)");
+            @SuppressWarnings("unchecked")
+            K key = (K) DEFAULT_KEY;
+            return tryAcquire(key);
         }
 
         @Override
         public boolean tryAcquire(int permits) {
-            throw new UnsupportedOperationException("Use tryAcquire(clientKey, permits)");
+            @SuppressWarnings("unchecked")
+            K key = (K) DEFAULT_KEY;
+            return tryAcquire(key, permits);
         }
 
         @Override

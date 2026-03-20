@@ -39,27 +39,6 @@ class RoutingPatternsIT implements WithAssertions {
         @Test
         @DisplayName("dynamic router routes order to correct service")
         void dynamicRouterRoutesOrderCorrectly() {
-                    "This integration test demonstrates combining DynamicRouter and RecipientListRouter"
-                            + " for real-world order processing scenarios.");
-                    """
-                    DynamicRouter<String> router = new DynamicRouter<>(
-                        msg -> msg.startsWith("order:") ? "order-processor" : "unknown"
-                    );
-
-                    boolean routed = router.route("order:ORD-123|amount:99.99");
-
-                    assertThat(routed).isTrue();
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Incoming Message] --> B{Dynamic Router}
-                        B -->|order:| C[Order Processor]
-                        B -->|payment:| D[Payment Processor]
-                        B -->|unknown| E[Default Handler]
-                    """);
-                    "Dynamic routers are ideal when destinations are determined at runtime based on"
-                            + " message content or external configuration.");
             List<String> orderProcessorMessages = new CopyOnWriteArrayList<>();
 
             ProcRef<String, String> orderProcessorRef =
@@ -134,19 +113,6 @@ class RoutingPatternsIT implements WithAssertions {
         @Test
         @DisplayName("broadcasts order events to audit, notification, and analytics")
         void broadcastsOrderEventsToMultipleServices() {
-                    "The RecipientListRouter broadcasts events to multiple services simultaneously,"
-                            + " enabling fan-out messaging patterns.");
-                    """
-                    RecipientListRouter<String> router = new RecipientListRouter<>();
-                    router.addRecipient(auditRef);
-                    router.addRecipient(notificationRef);
-                    router.addRecipient(analyticsRef);
-
-                    int recipients = router.broadcastMessage("OrderCreated(id=ORD-999)");
-
-                    assertThat(recipients).isEqualTo(3);
-                    """,
-                    "java");
             List<String> auditLog = new CopyOnWriteArrayList<>();
             List<String> notifications = new CopyOnWriteArrayList<>();
             List<String> analytics = new CopyOnWriteArrayList<>();
