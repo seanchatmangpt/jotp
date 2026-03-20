@@ -81,27 +81,6 @@ class DynamicRouterTest implements WithAssertions {
         @Test
         @DisplayName("resolves destination at runtime based on message")
         void resolvesDestinationAtRuntime() {
-                    "The Dynamic Router resolves destinations at runtime based on message content."
-                            + " Unlike content-based routing, destinations are looked up dynamically.");
-                    """
-                    DynamicRouter<String> router = new DynamicRouter<>(
-                        msg -> {
-                            if (msg.startsWith("order:")) return "order-service";
-                            if (msg.startsWith("payment:")) return "payment-service";
-                            return "default-service";
-                        }
-                    );
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Message] --> B{Dynamic Router}
-                        B -->|resolve| C[order-service]
-                        B -->|resolve| D[payment-service]
-                        B -->|resolve| E[default-service]
-                    """);
-                    "Use when destinations are determined at runtime, such as tenant-specific routing"
-                            + " or service discovery-based routing.");
             List<String> resolvedDestinations = new ArrayList<>();
             DynamicRouter<String> router =
                     new DynamicRouter<>(
