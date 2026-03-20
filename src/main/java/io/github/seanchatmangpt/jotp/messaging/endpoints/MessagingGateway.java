@@ -56,8 +56,9 @@ public class MessagingGateway<Request, Response> {
      * @return the response
      */
     public Response sendSync(Request request) {
-        sender.accept(request);
-        return null; // In a real implementation, this would wait for a response
+        throw new UnsupportedOperationException(
+                "not implemented: synchronous request-reply requires response correlation"
+                        + " (see messaging roadmap)");
     }
 
     /**

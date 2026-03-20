@@ -36,14 +36,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("unique IDs do not collide")
         void uniqueIds() {
-                    "Uniquely identifies related messages, enabling request-reply correlation and distributed transaction tracking.");
-                    """
-                    var id1 = CorrelationIdentifier.create();
-                    var id2 = CorrelationIdentifier.create();
-                    assertThat(id1.matches(id2)).isFalse();
-                    """,
-                    "java");
-                    "Essential for async messaging where requests and responses are decoupled in time.");
 
             var id1 = CorrelationIdentifier.create();
             var id2 = CorrelationIdentifier.create();
@@ -53,12 +45,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("same ID matches itself")
         void sameIdMatches() {
-                    """
-                    var id = CorrelationIdentifier.create();
-                    var copy = CorrelationIdentifier.of(id.id());
-                    assertThat(id.matches(copy)).isTrue();
-                    """,
-                    "java");
 
             var id = CorrelationIdentifier.create();
             var copy = CorrelationIdentifier.of(id.id());
@@ -76,13 +62,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("message with long TTL is not expired")
         void notExpired() {
-                    "Messages carry their own expiration time, allowing systems to discard stale messages automatically.");
-                    """
-                    var order = new TestOrder("o1", Instant.now(), Duration.ofHours(1));
-                    assertThat(order.isExpired()).isFalse();
-                    """,
-                    "java");
-                    "Use for time-sensitive data like quotes, offers, or cache invalidation notifications.");
 
             var order = new TestOrder("o1", Instant.now(), Duration.ofHours(1));
             assertThat(order.isExpired()).isFalse();
@@ -91,11 +70,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("message with zero TTL is expired")
         void expired() {
-                    """
-                    var order = new TestOrder("o1", Instant.now().minusSeconds(1), Duration.ZERO);
-                    assertThat(order.isExpired()).isTrue();
-                    """,
-                    "java");
 
             var order = new TestOrder("o1", Instant.now().minusSeconds(1), Duration.ZERO);
             assertThat(order.isExpired()).isTrue();
@@ -104,13 +78,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("expiresAt returns correct instant")
         void expiresAt() {
-                    """
-                    var now = Instant.now();
-                    var ttl = Duration.ofMinutes(5);
-                    var order = new TestOrder("o1", now, ttl);
-                    assertThat(order.expiresAt()).isEqualTo(now.plus(ttl));
-                    """,
-                    "java");
 
             var now = Instant.now();
             var ttl = Duration.ofMinutes(5);
@@ -126,15 +93,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("empty metadata has no entries")
         void empty() {
-                    "Immutable audit trail that tracks message processing history through multiple systems.");
-                    """
-                    var metadata = MessageMetadata.empty();
-                    assertThat(metadata.size()).isZero();
-                    var metadata2 = metadata.addEntry("OrderService", "validated", "Router", "business rules");
-                    assertThat(metadata2.size()).isEqualTo(1);
-                    """,
-                    "java");
-                    "Use for debugging, compliance, and understanding message flow through distributed systems.");
 
             var metadata = MessageMetadata.empty();
             assertThat(metadata.size()).isZero();
@@ -144,13 +102,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("addEntry accumulates audit trail")
         void accumulates() {
-                    "Each entry records who processed the message, what action was taken, and why.");
-                    """
-                    var metadata = MessageMetadata.empty()
-                        .addEntry("OrderService", "validated", "Router", "business rules")
-                        .addEntry("InventoryService", "reserved", "StockMgr", "allocated");
-                    """,
-                    "java");
 
             var metadata =
                     MessageMetadata.empty()
@@ -165,13 +116,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("metadata is immutable")
         void immutable() {
-                    """
-                    var m1 = MessageMetadata.empty();
-                    var m2 = m1.addEntry("A", "B", "C", "D");
-                    assertThat(m1.size()).isZero();
-                    assertThat(m2.size()).isEqualTo(1);
-                    """,
-                    "java");
 
             var m1 = MessageMetadata.empty();
             var m2 = m1.addEntry("A", "B", "C", "D");
@@ -189,14 +133,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("wraps and unwraps payload")
         void wrapUnwrap() {
-                    "Encapsulates a message with metadata headers, providing a standardized container for message transport.");
-                    """
-                    var envelope = EnvelopeWrapper.wrap(payload, Map.of("content-type", "json"));
-                    Payload unwrapped = envelope.unwrap();
-                    String contentType = envelope.header("content-type");
-                    """,
-                    "java");
-                    "Use for adding cross-cutting concerns like authentication, tracing, or routing information to messages.");
 
             var payload = new Payload("test");
             var envelope = EnvelopeWrapper.wrap(payload, Map.of("content-type", "json"));
@@ -210,11 +146,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("withHeader adds header without mutating")
         void withHeader() {
-                    """
-                    var envelope = EnvelopeWrapper.wrap(new Payload("x"));
-                    var updated = envelope.withHeader("auth", "token123");
-                    """,
-                    "java");
 
             var envelope = EnvelopeWrapper.wrap(new Payload("x"));
             var updated = envelope.withHeader("auth", "token123");
@@ -231,23 +162,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("check-in and check-out round trips")
         void roundTrip() {
-                    "Stores large message payloads externally and passes only a token through the messaging system, reducing channel load.");
-                    """
-                    var store = new ClaimCheck<String>();
-                    var token = store.checkIn("large-payload");
-                    Optional<String> claimed = store.claim(token);
-                    Optional<String> checkedOut = store.checkOut(token);
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Large Payload] --> B[Claim Check]
-                        B -->|Token| C[Messaging Channel]
-                        C -->|Token| D[Consumer]
-                        D -->|Token| B
-                        B -->|Payload| D
-                    """);
-                    "Use for large messages (files, documents) that would otherwise overwhelm the messaging system.");
 
             var store = new ClaimCheck<String>();
             var token = store.checkIn("large-payload");
@@ -261,13 +175,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("claim without checkout preserves item")
         void claimPreserves() {
-                    "Claim returns the item without removing it; checkout removes it from storage.");
-                    """
-                    var store = new ClaimCheck<String>();
-                    var token = store.checkIn("data");
-                    store.claim(token); // still in storage
-                    """,
-                    "java");
 
             var store = new ClaimCheck<String>();
             var token = store.checkIn("data");
@@ -279,12 +186,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("checkout unknown token returns empty")
         void unknownToken() {
-                    """
-                    var store = new ClaimCheck<String>();
-                    Optional<String> result = store.checkOut(ClaimCheck.CheckToken.create());
-                    assertThat(result).isEmpty();
-                    """,
-                    "java");
 
             var store = new ClaimCheck<String>();
             assertThat(store.checkOut(ClaimCheck.CheckToken.create())).isEmpty();
@@ -302,22 +203,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("request returns reply synchronously")
         void syncRequest() throws InterruptedException {
-                    "Synchronous communication pattern where a client sends a request and blocks until receiving a reply.");
-                    """
-                    var server = RequestReply.server("", (state, msg) ->
-                        switch (msg) {
-                            case Echo e -> "RE: " + e.text();
-                            default -> "";
-                        });
-                    String reply = server.request(new Echo("Hello"), Duration.ofSeconds(2));
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Client] -->|Request| B[Server]
-                        B -->|Reply| A
-                    """);
-                    "Use for query operations or when immediate response is required. Avoid for long-running operations.");
 
             var server =
                     RequestReply.server(
@@ -345,18 +230,6 @@ class ConstructionPatternsTest implements WithAssertions {
         @Test
         @DisplayName("return address wraps message with reply-to")
         void wrapsMessage() throws InterruptedException {
-                    "Encapsulates the destination for reply messages, enabling bidirectional communication over asynchronous channels.");
-                    """
-                    var client = new Proc<String, String>(null, (state, msg) -> {
-                        received.set(msg);
-                        latch.countDown();
-                        return msg;
-                    });
-                    var returnAddr = ReturnAddress.of("Hello", client);
-                    returnAddr.reply("RE: Hello");
-                    """,
-                    "java");
-                    "Essential for async request-reply over message channels where the reply destination must be explicitly specified.");
 
             var latch = new CountDownLatch(1);
             var received = new AtomicReference<String>();

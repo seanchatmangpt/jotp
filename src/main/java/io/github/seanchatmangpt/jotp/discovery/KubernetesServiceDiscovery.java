@@ -317,7 +317,7 @@ public final class KubernetesServiceDiscovery implements ServiceDiscoveryProvide
         new javax.net.ssl.X509TrustManager() {
           public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
           public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
-          public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
+          public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
         }
       }, new java.security.SecureRandom());
       return sc;

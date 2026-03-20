@@ -44,7 +44,7 @@ public final class DefaultGlobalRegistry implements GlobalRegistry {
     public ProcessInfo register(String name, NodeId nodeId, Map<String, String> metadata) {
         ensureOpen();
         // Register without a ProcRef (for distributed coordination)
-        var globalRef = new GlobalProcRef(name, null, nodeId.name(), 0, java.time.Instant.now());
+        delegate.registerGlobal(name, null, nodeId.name());
         // Store metadata for later retrieval
         metadataStore.put(name, metadata);
         return ProcessInfo.withoutRef(name, nodeId, metadata);

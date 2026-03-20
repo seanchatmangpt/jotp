@@ -49,8 +49,6 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(1)
     @DisplayName("Application: should build and start application with services")
     void applicationShouldBuildAndStart() throws Exception {
-                "Application.builder() creates a composed application with supervisor, services, and infrastructure.");
-                "Services are Proc instances registered by name, discoverable via app.service(name).");
         // Create infrastructure
         var messageBus = MessageBus.create("test-bus");
         var eventStore = EventStore.create("test-events");
@@ -130,7 +128,6 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(3)
     @DisplayName("ServiceRegistry: should register and discover services")
     void serviceRegistryShouldRegisterAndDiscover() throws Exception {
-                "ServiceRegistry provides service discovery with metadata (version, tags, properties).");
         ServiceRegistry.reset();
 
         // Create and register a service
@@ -242,7 +239,6 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(6)
     @DisplayName("CircuitBreaker: should open and close circuit based on failures")
     void circuitBreakerShouldOpenAndClose() throws Exception {
-                "CircuitBreaker state machine: CLOSED -> OPEN (after failure threshold) -> HALF_OPEN (after timeout) -> CLOSED.");
         CircuitBreaker breaker =
                 CircuitBreaker.builder("test-breaker")
                         .failureThreshold(3)
@@ -746,7 +742,6 @@ class EnterpriseCompositionIT implements WithAssertions {
     @Order(100)
     @DisplayName("Full Application: should compose and run complete telemetry application")
     void fullApplicationShouldComposeAndRun() throws Exception {
-                "Full enterprise composition: Application + MessageBus + EventStore + MetricsCollector + HealthChecker.");
         // Infrastructure
         MessageBus messageBus = MessageBus.create("telemetry-bus");
         EventStore eventStore = EventStore.create("telemetry-events");

@@ -33,21 +33,6 @@ class TransformationPatternsTest implements WithAssertions {
         @Test
         @DisplayName("translates message format")
         void translates() throws InterruptedException {
-                    "Converts messages from one format to another, enabling communication between systems with different data representations.");
-                    """
-                    var translator = new MessageTranslator<Integer, String>(
-                        i -> "num:" + i,
-                        s -> { result.set(s); latch.countDown(); });
-                    translator.translate(42);
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[System A] -->|Integer| B[Message Translator]
-                        B -->|Translation|
-                        B -->|String| C[System B]
-                    """);
-                    "Use when integrating legacy systems, external APIs, or services with incompatible message formats.");
 
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<String>();
@@ -69,13 +54,6 @@ class TransformationPatternsTest implements WithAssertions {
         @Test
         @DisplayName("apply returns translation synchronously")
         void syncApply() throws Exception {
-                    "The apply method provides a synchronous way to translate messages without async channels.");
-                    """
-                    var translator = new MessageTranslator<Integer, String>(i -> "num:" + i, s -> {});
-                    String result = translator.apply(7);
-                    """,
-                    "java");
-                    "Synchronous translation is useful for request-reply patterns where immediate response is required.");
 
             var translator = new MessageTranslator<Integer, String>(i -> "num:" + i, s -> {});
             assertThat(translator.apply(7)).isEqualTo("num:7");
@@ -98,20 +76,6 @@ class TransformationPatternsTest implements WithAssertions {
         @Test
         @DisplayName("filters message to essential fields")
         void filters() throws InterruptedException {
-                    "Removes unnecessary data from a message, keeping only the information required by the consumer. Reduces payload size and hides sensitive information.");
-                    """
-                    var filter = new ContentFilter<Full, Filtered>(
-                        f -> new Filtered(f.name(), f.age()),
-                        r -> { result.set(r); latch.countDown(); });
-                    filter.filter(new Full("Alice", "123-45-6789", "123 Main St", 30));
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Full Message] --> B[Content Filter]
-                        B -->|remove fields| C[Filtered Message]
-                    """);
-                    "Use for data minimization, GDPR compliance, or when downstream systems only need specific fields.");
 
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<Filtered>();
@@ -145,24 +109,6 @@ class TransformationPatternsTest implements WithAssertions {
         @Test
         @DisplayName("enriches message with external data")
         void enriches() throws InterruptedException {
-                    "Augments a message with additional information from external sources, creating a richer message for downstream processing.");
-                    """
-                    var enricher = new ContentEnricher<Sparse, PatientDetails, Enriched>(
-                        sparse -> new PatientDetails("Smith", "BlueCross"),
-                        (sparse, details) -> new Enriched(
-                            sparse.patientId(), sparse.date(),
-                            details.lastName(), details.carrier()),
-                        r -> { result.set(r); latch.countDown(); });
-                    enricher.enrich(new Sparse("P001", "2024-01-15"));
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Sparse Message] --> B[Content Enricher]
-                    C[External Data] --> B
-                    B -->|enrich| D[Enriched Message]
-                    """);
-                    "Use when you need to add missing information from databases, external APIs, or reference data stores.");
 
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<Enriched>();

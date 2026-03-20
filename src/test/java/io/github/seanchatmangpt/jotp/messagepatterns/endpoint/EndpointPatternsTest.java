@@ -34,25 +34,6 @@ class EndpointPatternsTest implements WithAssertions {
         @Test
         @DisplayName("distributes work across workers")
         void distributesWork() throws InterruptedException {
-                    "Multiple consumers compete for messages on the same channel, enabling parallel processing and load distribution.");
-                    """
-                    var pool = new CompetingConsumer<String>(3, msg -> {
-                        processed.incrementAndGet();
-                        latch.countDown();
-                    });
-                    for (int i = 0; i < 10; i++) {
-                        pool.submit("work-" + i);
-                    }
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Channel] -->|Message 1| B[Worker 1]
-                        A -->|Message 2| C[Worker 2]
-                        A -->|Message 3| D[Worker 3]
-                        A -->|Message N| E[Worker N]
-                    """);
-                    "Use for horizontal scaling. Add more workers to increase throughput. Each message is processed by exactly one worker.");
 
             var latch = new CountDownLatch(10);
             var processed = new AtomicInteger(0);
@@ -83,23 +64,6 @@ class EndpointPatternsTest implements WithAssertions {
         @Test
         @DisplayName("routes messages to matching consumers")
         void selectiveRouting() throws InterruptedException {
-                    "Routes messages to different handlers based on type or content, enabling specialized processing within a single consumer.");
-                    """
-                    var consumer = SelectiveConsumer.<Object>builder()
-                        .accept(msg -> msg instanceof String, stringHandler)
-                        .accept(msg -> msg instanceof Integer, intHandler)
-                        .reject(rejectHandler)
-                        .build();
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Message] --> B{Selective Consumer}
-                        B -->|String| C[String Handler]
-                        B -->|Integer| D[Int Handler]
-                        B -->|Other| E[Reject Handler]
-                    """);
-                    "Use when a single consumer needs to handle different message types with specialized logic, reducing the number of channels needed.");
 
             var strings = new CopyOnWriteArrayList<Object>();
             var numbers = new CopyOnWriteArrayList<Object>();
@@ -149,23 +113,6 @@ class EndpointPatternsTest implements WithAssertions {
         @Test
         @DisplayName("processes each message only once")
         void deduplicates() throws InterruptedException {
-                    "Ensures that duplicate messages are not processed multiple times by tracking message IDs and ignoring duplicates.");
-                    """
-                    var receiver = new IdempotentReceiver<Transaction, String>(
-                        Transaction::txId,
-                        tx -> { processed.add(tx.txId()); latch.countDown(); });
-                    receiver.send(new Transaction("tx-1", 100.0));
-                    receiver.send(new Transaction("tx-1", 100.0)); // duplicate
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Message] --> B{Seen Before?}
-                        B -->|Yes| C[Discard]
-                        B -->|No| D[Process]
-                        D --> E[Track ID]
-                    """);
-                    "Critical for at-least-once delivery semantics where duplicates may occur due to retries or network issues.");
 
             var latch = new CountDownLatch(2);
             var processed = new CopyOnWriteArrayList<String>();

@@ -35,25 +35,6 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("processes message through filter chain")
         void filterChain() throws InterruptedException {
-                    "Processes messages through a chain of independent filters, each performing a single transformation. Filters are connected by pipes (channels).");
-                    """
-                    var pipeline = PipesAndFilters.<String>builder()
-                        .filter("decrypt", s -> s.replace("(encrypted)", ""))
-                        .filter("authenticate", s -> s.replace("(cert)", ""))
-                        .filter("trim", String::trim)
-                        .endpoint(s -> { result.set(s); latch.countDown(); })
-                        .build();
-                    pipeline.process("(encrypted) Hello World (cert) ");
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Input] --> B[Filter 1: decrypt]
-                        B --> C[Filter 2: authenticate]
-                        C --> D[Filter 3: trim]
-                        D --> E[Output]
-                    """);
-                    "Use for complex message processing workflows where each step is independent and composable.");
 
             var latch = new CountDownLatch(1);
             var result = new AtomicReference<String>();
@@ -84,21 +65,6 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("taps messages without affecting primary flow")
         void tapMessages() throws InterruptedException {
-                    "Inspects messages passing through a channel without affecting the primary message flow, enabling monitoring and auditing.");
-                    """
-                    var wireTap = new WireTap<String>(
-                        msg -> { primary.set(msg); latch.countDown(); },
-                        tapped::add);
-                    wireTap.send("message-1");
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Message] --> B[Wire Tap]
-                        B -->|Original| C[Primary Consumer]
-                        B -->|Copy| D[Tapped Consumer]
-                    """);
-                    "Use for audit logging, monitoring, analytics, or testing without disrupting production message flow.");
 
             var latch = new CountDownLatch(1);
             var tapped = new CopyOnWriteArrayList<String>();
@@ -122,13 +88,6 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("deactivated tap does not receive messages")
         void deactivatedTap() throws InterruptedException {
-                    """
-                    var wireTap = new WireTap<String>(msg -> latch.countDown(), tapped::add);
-                    wireTap.deactivate();
-                    wireTap.send("message-1");
-                    """,
-                    "java");
-                    "Dynamic control allows temporary monitoring without code changes or redeployment.");
 
             var latch = new CountDownLatch(1);
             var tapped = new CopyOnWriteArrayList<String>();
@@ -154,25 +113,6 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("tracks and routes replies to requesters")
         void tracksReplies() throws Exception {
-                    "Acts as an intermediary that tracks pending requests and routes replies back to the appropriate requesters, decoupling request and reply timing.");
-                    """
-                    var proxy = new SmartProxy<Request, Reply>(
-                        Request::id, Reply::id, serviceReceived::add);
-                    var corrId = CorrelationIdentifier.create();
-                    proxy.sendRequest(new Request(corrId, "lookup"), replyResult::set);
-                    boolean matched = proxy.deliverReply(new Reply(corrId, "found"));
-                    """,
-                    "java");
-                    """
-                    graph LR
-                        A[Requester 1] -->|Request| B[Smart Proxy]
-                        C[Requester 2] -->|Request| B
-                        B -->|Forwarded| D[Service]
-                        D -->|Reply| B
-                        B -->|Route| A
-                        B -->|Route| C
-                    """);
-                    "Essential for async request-reply patterns where multiple requesters share the same reply channel.");
 
             var serviceReceived = new CopyOnWriteArrayList<Request>();
             var proxy =
@@ -217,21 +157,6 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("commit persists state changes")
         void commit() throws InterruptedException {
-                    "Applies events to tentative state, then commits to persist changes. Provides transactional semantics for event-driven state management.");
-                    """
-                    var actor = new TransactionalActor<OrderState, OrderEvent>(
-                        OrderState.empty(),
-                        (state, event) -> switch (event) {
-                            case OrderStarted e -> new OrderState(e.customerId(), state.total(), false);
-                            case ItemAdded e -> new OrderState(state.customerId(), state.total() + e.price(), false);
-                            case OrderPlaced e -> new OrderState(state.customerId(), state.total(), true);
-                        });
-                    actor.apply(new OrderStarted("C001"));
-                    actor.apply(new ItemAdded(29.99));
-                    actor.commit();
-                    """,
-                    "java");
-                    "Use for event sourcing and CQRS where state changes must be atomic and consistent.");
 
             var actor =
                     new TransactionalActor<OrderState, OrderEvent>(
@@ -265,15 +190,6 @@ class ManagementPatternsTest implements WithAssertions {
         @Test
         @DisplayName("rollback reverts to last committed state")
         void rollback() throws InterruptedException {
-                    "Uncommitted changes can be rolled back, reverting to the last committed state.");
-                    """
-                    actor.apply(new OrderStarted("C001"));
-                    actor.commit();
-                    actor.apply(new ItemAdded(99.99));
-                    actor.rollback();
-                    """,
-                    "java");
-                    "Rollback is essential for error handling and compensation in distributed transactions.");
 
             var actor =
                     new TransactionalActor<OrderState, OrderEvent>(
