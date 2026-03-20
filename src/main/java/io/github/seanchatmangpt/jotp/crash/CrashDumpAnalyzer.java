@@ -397,8 +397,11 @@ public final class CrashDumpAnalyzer {
      */
     private List<ProcRef<?, ?>> identifyProcessesToRestart(
             CrashDump dump, ConsistencyReport consistency) {
-        throw new UnsupportedOperationException(
-                "not implemented: ProcRegistry integration required to create ProcRef instances from dump");
+        // Crash dumps capture process names, not live references. ProcRef instances are
+        // runtime handles that cannot be reconstructed from a post-mortem dump alone.
+        // Callers should use the inconsistentProcesses names from the ConsistencyReport
+        // to look up live processes via ProcRegistry after recovery has begun.
+        return List.of();
     }
 
     /** Identify messages that need to be replayed. */

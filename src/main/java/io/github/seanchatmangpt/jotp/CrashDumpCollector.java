@@ -642,7 +642,7 @@ public final class CrashDumpCollector {
     }
 
     private String escapeJson(String s) {
-        if (s == null) throw new UnsupportedOperationException("escapeJson called with null; callers must provide non-null or handle null upstack");
+        if (s == null) return "";
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
