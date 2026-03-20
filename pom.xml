@@ -163,8 +163,7 @@
                     <excludes>
                     </excludes>
                     <testExcludes>
-                        <!-- Messaging tests reference unimplemented factory methods in Messaging.java -->
-                        <exclude>io/github/seanchatmangpt/jotp/messaging/**</exclude>
+                        <!-- Messaging test exclusion removed: factory methods now implemented -->
                         <!-- Stress Tests - performance benchmarks, not part of regular test suite (long-running, 1M+ VTs) -->
                         <exclude>io/github/seanchatmangpt/jotp/stress/**</exclude>
                         <exclude>io/github/seanchatmangpt/jotp/test/AtlasOtpStressTest.java</exclude>

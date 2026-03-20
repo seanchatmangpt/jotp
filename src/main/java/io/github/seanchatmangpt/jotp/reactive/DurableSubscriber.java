@@ -43,19 +43,19 @@ public final class DurableSubscriber<T> implements MessageChannel<T>, AutoClosea
     private void deliveryLoop() {
         while (running) {
             try {
-                T msg = mailbox.take();
-                // Wait until not paused before delivering
-                while (paused.get() && running) {
-                    // Put the message back and wait
-                    mailbox.putFirst(msg);
-                    synchronized (paused) {
-                        while (paused.get() && running) {
-                            paused.wait(50);
-                        }
+                // Wait until not paused before taking the next message
+                synchronized (paused) {
+                    while (paused.get() && running) {
+                        paused.wait(50);
                     }
-                    if (!running) return;
-                    msg = mailbox.take();
                 }
+                if (!running) return;
+
+                T msg = mailbox.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS);
+                if (msg == null) continue;
+
+                // Re-check pause state: if paused between poll and here, still deliver
+                // (message was already dequeued, so it must be delivered)
                 try {
                     handler.accept(msg);
                 } catch (Exception e) {

@@ -138,4 +138,11 @@ module io.github.seanchatmangpt.jotp {
 
     // Reactive Messaging System Patterns
     exports io.github.seanchatmangpt.jotp.reactive;
+
+    // Messaging Framework
+    exports io.github.seanchatmangpt.jotp.messaging;
+    exports io.github.seanchatmangpt.jotp.messaging.channels;
+    exports io.github.seanchatmangpt.jotp.messaging.endpoints;
+    exports io.github.seanchatmangpt.jotp.messaging.system;
+    exports io.github.seanchatmangpt.jotp.messaging.transformation;
 }

@@ -17,10 +17,21 @@
 package io.github.seanchatmangpt.jotp.messaging;
 
 import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.messagepatterns.construction.CorrelationIdentifier;
+import io.github.seanchatmangpt.jotp.messagepatterns.management.SmartProxy;
+import io.github.seanchatmangpt.jotp.messagepatterns.transformation.ContentFilter;
+import io.github.seanchatmangpt.jotp.messaging.endpoints.MessagingGateway;
+import io.github.seanchatmangpt.jotp.messaging.endpoints.MessagingMapper;
+import io.github.seanchatmangpt.jotp.messaging.system.ChannelPurger;
+import io.github.seanchatmangpt.jotp.messaging.transformation.Normalizer;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -131,8 +142,8 @@ public final class Messaging {
      * @param <M> the message type
      * @return a new control bus
      */
-    public static <M> ControlBus<M> controlBus() {
-        return new ControlBusImpl<>();
+    public static <M> io.github.seanchatmangpt.jotp.messaging.system.ControlBus<M> controlBus() {
+        return new io.github.seanchatmangpt.jotp.messaging.system.ControlBus<>();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -143,20 +154,289 @@ public final class Messaging {
      * Creates a detour that conditionally routes messages to a detour channel.
      *
      * @param <M> the message type
-     * @param predicate the predicate to determine if a message should be detoured
+     * @param condition the predicate to determine if a message should be detoured
      * @param detourChannel the channel for detoured messages
      * @param primaryChannel the primary channel for non-detoured messages
      * @return a new detour
+     * @throws IllegalArgumentException if any argument is null
      */
-    public static <M> Detour<M> detour(
-            Predicate<M> predicate,
-            MessageChannel<M> detourChannel,
-            MessageChannel<M> primaryChannel) {
-        return new DetourImpl<>(predicate, detourChannel, primaryChannel);
+    public static <M> io.github.seanchatmangpt.jotp.messaging.system.Detour<M> detour(
+            Predicate<M> condition,
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> detourChannel,
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> primaryChannel) {
+        if (condition == null) {
+            throw new IllegalArgumentException("condition must not be null");
+        }
+        if (detourChannel == null) {
+            throw new IllegalArgumentException("detour channel must not be null");
+        }
+        if (primaryChannel == null) {
+            throw new IllegalArgumentException("primary channel must not be null");
+        }
+        // Wrap top-level MessageChannel as Messaging.MessageChannel for the system Detour
+        Messaging.MessageChannel<M> dc = asInnerChannel(detourChannel);
+        Messaging.MessageChannel<M> pc = asInnerChannel(primaryChannel);
+        return new io.github.seanchatmangpt.jotp.messaging.system.Detour<>(condition, dc, pc);
+    }
+
+    /**
+     * Adapts a top-level {@link io.github.seanchatmangpt.jotp.messaging.MessageChannel} to the
+     * inner {@link Messaging.MessageChannel} type, or returns it directly if it already implements
+     * the inner type.
+     */
+    @SuppressWarnings("unchecked")
+    private static <M> Messaging.MessageChannel<M> asInnerChannel(
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> channel) {
+        if (channel instanceof Messaging.MessageChannel<M> inner) {
+            return inner;
+        }
+        // Wrap in a delegating adapter
+        return new Messaging.MessageChannel<>() {
+            @Override
+            public int queueDepth() {
+                return channel.queueDepth();
+            }
+
+            @Override
+            public void send(M message) {
+                channel.send(message);
+            }
+
+            @Override
+            public void sendSync(M message) {
+                channel.sendSync(message);
+            }
+
+            @Override
+            public void subscribe(Consumer<M> consumer) {
+                channel.subscribe(consumer);
+            }
+
+            @Override
+            public void unsubscribe(Consumer<M> consumer) {
+                channel.unsubscribe(consumer);
+            }
+
+            @Override
+            public void stop() throws InterruptedException {
+                channel.stop();
+            }
+        };
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // INNER IMPLEMENTATIONS
+    // CHANNEL PURGER
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a channel purger with a custom strategy and interval.
+     *
+     * @param <M> the message type
+     * @param channel the channel to purge
+     * @param strategy the purge strategy
+     * @param interval the interval between purge runs
+     * @return a new channel purger
+     */
+    public static <M> ChannelPurger<M> channelPurger(
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> channel,
+            ChannelPurger.PurgeStrategy strategy,
+            Duration interval) {
+        return new ChannelPurger<>(strategy, interval);
+    }
+
+    /**
+     * Creates an age-based channel purger that removes messages older than the specified age.
+     *
+     * @param <M> the message type
+     * @param channel the channel to purge
+     * @param maxAge the maximum age of messages to retain
+     * @param interval the interval between purge runs
+     * @return a new channel purger
+     */
+    public static <M> ChannelPurger<M> channelPurgerByAge(
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> channel,
+            Duration maxAge,
+            Duration interval) {
+        return new ChannelPurger<>(ChannelPurger.PurgeStrategy.byAge(maxAge), interval);
+    }
+
+    /**
+     * Creates a count-based channel purger that removes messages when count exceeds the threshold.
+     *
+     * @param <M> the message type
+     * @param channel the channel to purge
+     * @param maxCount the maximum number of messages to retain
+     * @param interval the interval between purge runs
+     * @return a new channel purger
+     */
+    public static <M> ChannelPurger<M> channelPurgerByCount(
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> channel,
+            int maxCount,
+            Duration interval) {
+        return new ChannelPurger<>(ChannelPurger.PurgeStrategy.byCount(maxCount), interval);
+    }
+
+    /**
+     * Creates a predicate-based channel purger that removes messages matching the predicate.
+     *
+     * @param <M> the message type
+     * @param channel the channel to purge
+     * @param predicate messages matching this predicate are purged
+     * @param interval the interval between purge runs
+     * @return a new channel purger
+     */
+    public static <M> ChannelPurger<M> channelPurgerByPredicate(
+            io.github.seanchatmangpt.jotp.messaging.MessageChannel<M> channel,
+            Predicate<M> predicate,
+            Duration interval) {
+        return new ChannelPurger<>(ChannelPurger.PurgeStrategy.byPredicate(predicate), interval);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // TEST MESSAGE
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a test message with the given type and fields.
+     *
+     * @param <M> the message type (used for type inference at call site)
+     * @param type the message type name
+     * @param fields the fields to populate in the test message
+     * @return a new test message
+     */
+    public static <M> TestMessage testMessage(String type, Map<String, Object> fields) {
+        return new TestMessage(type, new LinkedHashMap<>(fields));
+    }
+
+    /**
+     * Creates an empty test message with the given type.
+     *
+     * @param <M> the message type (used for type inference at call site)
+     * @param type the message type name
+     * @return a new test message with no fields
+     */
+    public static <M> TestMessage testMessage(String type) {
+        return new TestMessage(type, Map.of());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // CANONICAL MODEL (NORMALIZER)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a normalizer that converts between different message formats and a canonical model.
+     *
+     * @return a new normalizer for canonical model transformations
+     */
+    public static Normalizer<String, Message<?>> canonicalModel() {
+        return new Normalizer<>(raw -> Message.event("CANONICAL", raw));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SMART PROXY
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a smart proxy that tracks request-reply exchanges using correlation identifiers.
+     *
+     * @param <REQ> the request type
+     * @param <REP> the reply type
+     * @param requestIdExtractor extracts correlation ID from requests
+     * @param replyIdExtractor extracts correlation ID from replies
+     * @param serviceProvider the downstream service consumer
+     * @return a new smart proxy
+     */
+    public static <REQ, REP> SmartProxy<REQ, REP> smartProxy(
+            Function<REQ, CorrelationIdentifier> requestIdExtractor,
+            Function<REP, CorrelationIdentifier> replyIdExtractor,
+            Consumer<REQ> serviceProvider) {
+        return new SmartProxy<>(requestIdExtractor, replyIdExtractor, serviceProvider);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // MESSAGING GATEWAY
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a request-reply messaging gateway backed by a channel.
+     *
+     * @param <M> the message type
+     * @param channel the channel to send requests to
+     * @param timeout the timeout for synchronous request-reply
+     * @return a new messaging gateway
+     */
+    public static <M> MessagingGateway<M, M> gateway(Channel<M> channel, Duration timeout) {
+        return new MessagingGateway<>(channel, timeout);
+    }
+
+    /**
+     * Creates a one-way (fire-and-forget) messaging gateway.
+     *
+     * @param <M> the message type
+     * @param consumer the consumer to send messages to
+     * @return a new messaging gateway
+     */
+    public static <M> MessagingGateway<M, Void> gateway(Consumer<M> consumer) {
+        return new MessagingGateway<>(consumer);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // MESSAGING MAPPER
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a messaging mapper that transforms messages and forwards them downstream.
+     *
+     * @param <From> the source message type
+     * @param <To> the target message type
+     * @param mapperFn the mapping function
+     * @param downstream the channel to forward mapped messages to
+     * @return a new messaging mapper
+     */
+    public static <From, To> MessagingMapper<From, To> mapper(
+            Function<From, To> mapperFn, Channel<To> downstream) {
+        Objects.requireNonNull(mapperFn, "mapper function must not be null");
+        Objects.requireNonNull(downstream, "downstream channel must not be null");
+        return new MessagingMapper<>(mapperFn, downstream);
+    }
+
+    /**
+     * Creates a messaging mapper with an error channel for handling mapping failures.
+     *
+     * @param <From> the source message type
+     * @param <To> the target message type
+     * @param mapperFn the mapping function
+     * @param downstream the channel to forward mapped messages to
+     * @param errorChannel the channel to route unmappable messages to
+     * @return a new messaging mapper
+     */
+    public static <From, To> MessagingMapper<From, To> mapper(
+            Function<From, To> mapperFn, Channel<To> downstream, Channel<From> errorChannel) {
+        Objects.requireNonNull(mapperFn, "mapper function must not be null");
+        Objects.requireNonNull(downstream, "downstream channel must not be null");
+        return new MessagingMapper<>(mapperFn, downstream, errorChannel);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // CONTENT FILTER
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a content filter that strips unnecessary fields from messages.
+     *
+     * @param <A> the unfiltered (large) message type
+     * @param <B> the filtered (lean) message type
+     * @param filterFn the function that extracts essential fields
+     * @param destination the consumer to receive filtered messages
+     * @return a new content filter
+     */
+    public static <A, B> ContentFilter<A, B> contentFilter(
+            Function<A, B> filterFn, Consumer<B> destination) {
+        return new ContentFilter<>(filterFn, destination);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // INNER INTERFACES
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -222,33 +502,6 @@ public final class Messaging {
                 if (timestamp == null) timestamp = Instant.now();
             }
         }
-    }
-
-    /** Control bus interface. */
-    public interface ControlBus<M> {
-        /** Registers a process with the control bus. */
-        void register(String name, Proc<?, M> process);
-
-        /** Unregisters a process from the control bus. */
-        void unregister(String name);
-
-        /** Lists all registered process names. */
-        List<String> listProcesses();
-
-        /** Returns statistics for all registered processes. */
-        Map<String, ProcessStats> getStats();
-
-        /** Process statistics. */
-        record ProcessStats(String name, long messagesProcessed, double avgProcessingTime) {}
-    }
-
-    /** Detour interface. */
-    public interface Detour<M> extends Channel<M> {
-        /** Returns the number of messages detoured. */
-        long detourCount();
-
-        /** Returns the number of messages sent to primary. */
-        long primaryCount();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -420,8 +673,10 @@ public final class Messaging {
             for (var type : routes.keySet()) {
                 dispatchCounts.put(type, totalDispatched.get());
             }
-            var registeredTypes = new java.util.ArrayList<>(
-                    (java.util.Collection<Class<? extends Message<?>>>) (java.util.Collection<?>) routes.keySet());
+            var registeredTypes =
+                    new java.util.ArrayList<>(
+                            (java.util.Collection<Class<? extends Message<?>>>)
+                                    (java.util.Collection<?>) routes.keySet());
             return new ChannelState(registeredTypes, totalDispatched.get(), dispatchCounts);
         }
     }
@@ -473,96 +728,6 @@ public final class Messaging {
         @Override
         public void stop() throws InterruptedException {
             messages.clear();
-        }
-    }
-
-    private static final class ControlBusImpl<M> implements ControlBus<M> {
-        private final Map<String, Proc<?, M>> processes =
-                new java.util.concurrent.ConcurrentHashMap<>();
-
-        @Override
-        public void register(String name, Proc<?, M> process) {
-            processes.put(name, process);
-        }
-
-        @Override
-        public void unregister(String name) {
-            processes.remove(name);
-        }
-
-        @Override
-        public List<String> listProcesses() {
-            return List.copyOf(processes.keySet());
-        }
-
-        @Override
-        public Map<String, ProcessStats> getStats() {
-            var stats = new java.util.HashMap<String, ProcessStats>();
-            for (var entry : processes.entrySet()) {
-                stats.put(entry.getKey(), new ProcessStats(entry.getKey(), 0, 0.0));
-            }
-            return stats;
-        }
-    }
-
-    private static final class DetourImpl<M> implements Detour<M> {
-        private final Predicate<M> predicate;
-        private final MessageChannel<M> detourChannel;
-        private final MessageChannel<M> primaryChannel;
-        private final java.util.concurrent.atomic.AtomicLong detourCount =
-                new java.util.concurrent.atomic.AtomicLong(0);
-        private final java.util.concurrent.atomic.AtomicLong primaryCount =
-                new java.util.concurrent.atomic.AtomicLong(0);
-
-        DetourImpl(
-                Predicate<M> predicate,
-                MessageChannel<M> detourChannel,
-                MessageChannel<M> primaryChannel) {
-            this.predicate = predicate;
-            this.detourChannel = detourChannel;
-            this.primaryChannel = primaryChannel;
-        }
-
-        @Override
-        public void send(M message) {
-            if (predicate.test(message)) {
-                detourCount.incrementAndGet();
-                detourChannel.send(message);
-            } else {
-                primaryCount.incrementAndGet();
-                primaryChannel.send(message);
-            }
-        }
-
-        @Override
-        public void sendSync(M message) {
-            send(message);
-        }
-
-        @Override
-        public void subscribe(Consumer<M> consumer) {
-            throw new UnsupportedOperationException("Detour channels don't have subscribers");
-        }
-
-        @Override
-        public void unsubscribe(Consumer<M> consumer) {
-            throw new UnsupportedOperationException("Detour channels don't have subscribers");
-        }
-
-        @Override
-        public long detourCount() {
-            return detourCount.get();
-        }
-
-        @Override
-        public long primaryCount() {
-            return primaryCount.get();
-        }
-
-        @Override
-        public void stop() throws InterruptedException {
-            detourChannel.stop();
-            primaryChannel.stop();
         }
     }
 }

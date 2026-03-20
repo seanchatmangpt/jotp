@@ -28,6 +28,7 @@ import java.util.function.Supplier;
  * <p><strong>Usage Example:</strong>
  *
  * <pre>{@code
+ * // Enterprise mode (non-generic)
  * Application app = Application.builder("my-app")
  *     .supervisorStrategy(Supervisor.Strategy.ONE_FOR_ONE)
  *     .maxRestarts(5)
@@ -40,8 +41,16 @@ import java.util.function.Supplier;
  * app.start();
  * Optional<ProcRef<State, Msg>> svc = app.service("processor");
  * app.stop();
+ *
+ * // Legacy mode (generic)
+ * Application<AppState> app = Application.<AppState>builder("my-app")
+ *     .init(() -> new AppState("my-app", 8080))
+ *     .service("http-server", ref)
+ *     .stop(state -> System.out.println("Shutting down"))
+ *     .build();
  * }</pre>
  *
+ * @param <S> application state type (recommended to be a record or sealed type for immutability)
  * @see Proc
  * @see ProcRef
  * @see Supervisor
@@ -183,13 +192,17 @@ public final class Application<S> {
                         phase = new ApplicationPhase.START();
 
                         // Create root supervisor for deferred services
-                        if (!deferredServices.isEmpty()) {
+                        if (deferredServices != null && !deferredServices.isEmpty()) {
                             rootSupervisor =
                                     Supervisor.create(
                                             name + "-sup",
-                                            supervisorStrategy,
-                                            maxRestarts,
-                                            restartWindow);
+                                            supervisorStrategy != null
+                                                    ? supervisorStrategy
+                                                    : Supervisor.Strategy.ONE_FOR_ONE,
+                                            maxRestarts > 0 ? maxRestarts : 5,
+                                            restartWindow != null
+                                                    ? restartWindow
+                                                    : Duration.ofMinutes(1));
 
                             for (DeferredService<?, ?> ds : deferredServices) {
                                 ProcRef<?, ?> ref = startDeferredService(ds);
@@ -198,13 +211,15 @@ public final class Application<S> {
                         }
 
                         // Index infrastructure components
-                        for (Infrastructure infra : infrastructureComponents) {
-                            infrastructureMap.put(infra.name(), infra);
+                        if (infrastructureComponents != null) {
+                            for (Infrastructure infra : infrastructureComponents) {
+                                infrastructureMap.put(infra.name(), infra);
+                            }
                         }
 
                         // Start supervisors (they manage their own children)
                         for (var supervisor : supervisors) {
-                            // Supervisor is already running (started in builder), just track it
+                            // Supervisor is already running, just track it
                         }
 
                         // Transition to RUNNING
@@ -218,11 +233,6 @@ public final class Application<S> {
                 });
     }
 
-    /** Start the application synchronously (blocks until started). */
-    public void startSync() {
-        start().join();
-    }
-
     @SuppressWarnings({"unchecked", "rawtypes"})
     private <SS, MM> ProcRef<SS, MM> startDeferredService(DeferredService<SS, MM> ds) {
         return rootSupervisor.supervise(ds.name(), (SS) ds.stateFactory().get(), ds.handler());
@@ -230,8 +240,6 @@ public final class Application<S> {
 
     /**
      * Stop the application: gracefully shut down all services and supervisors.
-     *
-     * <p>This method stops services, infrastructure, supervisors, and runs cleanup hooks.
      */
     public CompletableFuture<Void> stop() {
         return CompletableFuture.runAsync(
@@ -249,20 +257,24 @@ public final class Application<S> {
                         }
 
                         // Stop infrastructure
-                        for (Infrastructure infra : infrastructureComponents) {
-                            try {
-                                infra.onStop(this);
-                            } catch (Exception e) {
-                                // Log but continue shutdown
+                        if (infrastructureComponents != null) {
+                            for (Infrastructure infra : infrastructureComponents) {
+                                try {
+                                    infra.onStop(this);
+                                } catch (Exception e) {
+                                    // Log but continue shutdown
+                                }
                             }
                         }
 
                         // Stop health checkers
-                        for (HealthChecker hc : healthCheckers) {
-                            try {
-                                hc.onStop(this);
-                            } catch (Exception e) {
-                                // Log but continue shutdown
+                        if (healthCheckers != null) {
+                            for (HealthChecker hc : healthCheckers) {
+                                try {
+                                    hc.onStop(this);
+                                } catch (Exception e) {
+                                    // Log but continue shutdown
+                                }
                             }
                         }
 
@@ -305,11 +317,6 @@ public final class Application<S> {
                         throw new RuntimeException("Application shutdown failed", e);
                     }
                 });
-    }
-
-    /** Stop the application synchronously (blocks until stopped). */
-    public void stopSync() {
-        stop().join();
     }
 
     /**
@@ -380,72 +387,67 @@ public final class Application<S> {
         return config != null ? config : ApplicationConfig.empty();
     }
 
-    // ── Builder factory methods ─────────────────────────────────────────────────
+    // ── Builder factory method ──────────────────────────────────────────────────
 
     /**
-     * Create a fluent builder for an application (non-generic enterprise mode).
+     * Create a fluent builder for an application.
+     *
+     * <p>Supports both enterprise mode (non-generic with supervisor configuration) and legacy mode
+     * (generic with init/stop callbacks). The type parameter {@code S} defaults to {@code Void} for
+     * enterprise usage and can be specified explicitly for legacy usage.
      *
      * @param appName the application name
-     * @return a new {@link EnterpriseBuilder}
+     * @param <S> the application state type
+     * @return a new {@link Builder}
      */
-    public static EnterpriseBuilder builder(String appName) {
-        return new EnterpriseBuilder(appName);
+    public static <S> Builder<S> builder(String appName) {
+        return new Builder<>(appName);
     }
 
-    // ── Enterprise Builder ──────────────────────────────────────────────────────
+    // ── Builder ─────────────────────────────────────────────────────────────────
 
-    /** Fluent builder for enterprise {@link Application} instances. */
-    public static final class EnterpriseBuilder {
+    /** Fluent builder for {@link Application}. */
+    public static final class Builder<S> {
         private final String name;
+        private Supplier<S> initializer = () -> null;
+        private Consumer<S> stopper = _ -> {};
+        private final List<ServiceEntry<?>> services = new ArrayList<>();
+        private final List<SupervisorEntry> supervisors = new ArrayList<>();
+        private final List<Runnable> initHooks = new ArrayList<>();
+        private final List<Runnable> shutdownHooks = new ArrayList<>();
         private Supervisor.Strategy strategy = Supervisor.Strategy.ONE_FOR_ONE;
         private int maxRestarts = 5;
         private Duration restartWindow = Duration.ofMinutes(1);
         private final List<DeferredService<?, ?>> deferredServices = new ArrayList<>();
         private final List<Infrastructure> infrastructureComponents = new ArrayList<>();
-        private ApplicationConfig config = ApplicationConfig.empty();
+        private ApplicationConfig config;
         private final List<HealthChecker> healthCheckers = new ArrayList<>();
-        private final List<ServiceEntry<?>> legacyServices = new ArrayList<>();
-        private final List<SupervisorEntry> legacySupervisors = new ArrayList<>();
-        private final List<Runnable> initHooks = new ArrayList<>();
-        private final List<Runnable> shutdownHooks = new ArrayList<>();
 
-        EnterpriseBuilder(String name) {
+        Builder(String name) {
             this.name = name;
         }
 
-        /** Set the supervisor restart strategy. */
-        public EnterpriseBuilder supervisorStrategy(Supervisor.Strategy strategy) {
-            this.strategy = strategy;
-            return this;
-        }
+        // ── Legacy builder methods ──────────────────────────────────────────
 
-        /** Set maximum restarts before the supervisor gives up. */
-        public EnterpriseBuilder maxRestarts(int maxRestarts) {
-            this.maxRestarts = maxRestarts;
-            return this;
-        }
-
-        /** Set the restart window for counting restarts. */
-        public EnterpriseBuilder restartWindow(Duration window) {
-            this.restartWindow = window;
+        /**
+         * Set the initialization supplier that creates the application state.
+         *
+         * @param initializer a supplier that returns the initial application state
+         * @return this builder
+         */
+        public Builder<S> init(Supplier<S> initializer) {
+            this.initializer = initializer;
             return this;
         }
 
         /**
-         * Register a service with a state factory and message handler.
+         * Set the cleanup consumer that accepts the application state on shutdown.
          *
-         * <p>The service will be started under the root supervisor when the application starts.
-         *
-         * @param serviceName unique service name
-         * @param stateFactory supplier creating the initial state
-         * @param handler message handler function
+         * @param stopper a consumer that handles shutdown logic (e.g., close databases)
          * @return this builder
          */
-        public <SS, MM> EnterpriseBuilder service(
-                String serviceName,
-                Supplier<SS> stateFactory,
-                BiFunction<SS, MM, SS> handler) {
-            deferredServices.add(new DeferredService<>(serviceName, stateFactory, handler));
+        public Builder<S> stop(Consumer<S> stopper) {
+            this.stopper = stopper;
             return this;
         }
 
@@ -456,60 +458,111 @@ public final class Application<S> {
          * @param procRef the process reference
          * @return this builder
          */
-        public EnterpriseBuilder service(String serviceName, ProcRef<?, ?> procRef) {
-            legacyServices.add(new ServiceEntry<>(serviceName, procRef));
+        public Builder<S> service(String serviceName, ProcRef<?, ?> procRef) {
+            services.add(new ServiceEntry<>(serviceName, procRef));
+            return this;
+        }
+
+        /**
+         * Register a supervisor with its children.
+         *
+         * @param supervisor the supervisor instance
+         * @return this builder
+         */
+        public Builder<S> supervisor(Supervisor supervisor) {
+            supervisors.add(new SupervisorEntry(supervisor));
+            return this;
+        }
+
+        /**
+         * Add an initialization hook (runs during INIT phase before services start).
+         *
+         * @param hook a runnable to execute during initialization
+         * @return this builder
+         */
+        public Builder<S> addInitHook(Runnable hook) {
+            initHooks.add(hook);
+            return this;
+        }
+
+        /**
+         * Add a shutdown hook (runs during STOP phase after services stop).
+         *
+         * @param hook a runnable to execute during shutdown
+         * @return this builder
+         */
+        public Builder<S> addShutdownHook(Runnable hook) {
+            shutdownHooks.add(hook);
+            return this;
+        }
+
+        // ── Enterprise builder methods ──────────────────────────────────────
+
+        /** Set the supervisor restart strategy. */
+        public Builder<S> supervisorStrategy(Supervisor.Strategy strategy) {
+            this.strategy = strategy;
+            return this;
+        }
+
+        /** Set maximum restarts before the supervisor gives up. */
+        public Builder<S> maxRestarts(int maxRestarts) {
+            this.maxRestarts = maxRestarts;
+            return this;
+        }
+
+        /** Set the restart window for counting restarts. */
+        public Builder<S> restartWindow(Duration window) {
+            this.restartWindow = window;
+            return this;
+        }
+
+        /**
+         * Register a service with a state factory and message handler. The service will be started
+         * under the root supervisor when the application starts.
+         *
+         * @param serviceName unique service name
+         * @param stateFactory supplier creating the initial state
+         * @param handler message handler function
+         * @return this builder
+         */
+        public <SS, MM> Builder<S> service(
+                String serviceName,
+                Supplier<SS> stateFactory,
+                BiFunction<SS, MM, SS> handler) {
+            deferredServices.add(new DeferredService<>(serviceName, stateFactory, handler));
             return this;
         }
 
         /** Register an infrastructure component (message bus, event store, etc.). */
-        public EnterpriseBuilder infrastructure(Infrastructure infra) {
+        public Builder<S> infrastructure(Infrastructure infra) {
             infrastructureComponents.add(infra);
             return this;
         }
 
         /** Set the application configuration. */
-        public EnterpriseBuilder config(ApplicationConfig config) {
+        public Builder<S> config(ApplicationConfig config) {
             this.config = config;
             return this;
         }
 
         /** Register a health checker. */
-        public EnterpriseBuilder healthCheck(HealthChecker healthChecker) {
+        public Builder<S> healthCheck(HealthChecker healthChecker) {
             healthCheckers.add(healthChecker);
-            return this;
-        }
-
-        /** Register a supervisor. */
-        public EnterpriseBuilder supervisor(Supervisor supervisor) {
-            legacySupervisors.add(new SupervisorEntry(supervisor));
-            return this;
-        }
-
-        /** Add an initialization hook. */
-        public EnterpriseBuilder addInitHook(Runnable hook) {
-            initHooks.add(hook);
-            return this;
-        }
-
-        /** Add a shutdown hook. */
-        public EnterpriseBuilder addShutdownHook(Runnable hook) {
-            shutdownHooks.add(hook);
             return this;
         }
 
         /**
          * Build the application instance.
          *
-         * @return a new {@link Application} configured with the builder settings
+         * @return a new {@link Application} with the configured services, supervisors, and hooks
          */
-        @SuppressWarnings("unchecked")
-        public Application<Void> build() {
+        public Application<S> build() {
             return new Application<>(
                     name,
-                    () -> null,
-                    _ -> {},
-                    legacyServices,
-                    legacySupervisors,
+                    initializer,
+                    stopper,
+                    services,
+                    supervisors,
                     initHooks,
                     shutdownHooks,
                     strategy,
@@ -522,11 +575,11 @@ public final class Application<S> {
         }
     }
 
-    // ── Deferred service record ─────────────────────────────────────────────────
+    // ── Internal types ──────────────────────────────────────────────────────────
 
     /** A service definition that will be started when the application starts. */
-    private record DeferredService<S, M>(
-            String name, Supplier<S> stateFactory, BiFunction<S, M, S> handler) {}
+    private record DeferredService<SS, MM>(
+            String name, Supplier<SS> stateFactory, BiFunction<SS, MM, SS> handler) {}
 
     /** Internal entry for named services. */
     private static final class ServiceEntry<M> {

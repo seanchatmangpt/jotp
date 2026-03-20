@@ -16,7 +16,7 @@
 
 package io.github.seanchatmangpt.jotp.messaging.system;
 
-import io.github.seanchatmangpt.jotp.messaging.Messaging;
+import io.github.seanchatmangpt.jotp.messaging.Channel;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
@@ -32,8 +32,8 @@ import java.util.function.Predicate;
 public class Detour<M> {
 
     private final Predicate<M> predicate;
-    private final Messaging.MessageChannel<M> detourChannel;
-    private final Messaging.MessageChannel<M> primaryChannel;
+    private final Channel<M> detourChannel;
+    private final Channel<M> primaryChannel;
     private final AtomicLong detourCount = new AtomicLong(0);
     private final AtomicLong primaryCount = new AtomicLong(0);
 
@@ -44,10 +44,7 @@ public class Detour<M> {
      * @param detourChannel the channel for detoured messages
      * @param primaryChannel the primary channel for non-detoured messages
      */
-    public Detour(
-            Predicate<M> predicate,
-            Messaging.MessageChannel<M> detourChannel,
-            Messaging.MessageChannel<M> primaryChannel) {
+    public Detour(Predicate<M> predicate, Channel<M> detourChannel, Channel<M> primaryChannel) {
         this.predicate = predicate;
         this.detourChannel = detourChannel;
         this.primaryChannel = primaryChannel;
