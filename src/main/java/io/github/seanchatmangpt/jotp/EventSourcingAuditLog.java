@@ -291,10 +291,14 @@ public final class EventSourcingAuditLog<S, E, D> {
             // Parsing stub; in production use a full JSON deserializer
             try {
                 var parts = line.split("\\|", 3);
-                if (parts.length < 3) return null;
+                if (parts.length < 3) {
+                    System.err.println("[AuditLog] Malformed entry (expected 3 parts): " + line);
+                    return null;
+                }
                 // Return placeholder for testing
                 return new Replay<>(Instant.parse(parts[0]), parts[1], Instant.parse(parts[0]));
             } catch (Exception e) {
+                System.err.println("[AuditLog] Failed to deserialize entry: " + e.getMessage());
                 return null;
             }
         }

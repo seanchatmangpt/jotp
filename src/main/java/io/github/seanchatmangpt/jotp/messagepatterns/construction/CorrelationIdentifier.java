@@ -25,6 +25,25 @@ import java.util.UUID;
  */
 public record CorrelationIdentifier(UUID id) {
 
+    /**
+     * Creates a correlation identifier from a string. If the string is a valid UUID, it is parsed
+     * directly; otherwise, it is used to generate a deterministic UUID via {@link
+     * UUID#nameUUIDFromBytes}.
+     *
+     * @param stringId the string identifier
+     */
+    public CorrelationIdentifier(String stringId) {
+        this(parseOrDerive(stringId));
+    }
+
+    private static UUID parseOrDerive(String stringId) {
+        try {
+            return UUID.fromString(stringId);
+        } catch (IllegalArgumentException e) {
+            return UUID.nameUUIDFromBytes(stringId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
     /** Creates a new unique correlation identifier. */
     public static CorrelationIdentifier create() {
         return new CorrelationIdentifier(UUID.randomUUID());

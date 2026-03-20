@@ -17,6 +17,7 @@
 package io.github.seanchatmangpt.jotp.messaging.system;
 
 import io.github.seanchatmangpt.jotp.Proc;
+import io.github.seanchatmangpt.jotp.messaging.Channel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ControlBus<M> {
 
-    private final Map<String, Proc<?, M>> processes = new ConcurrentHashMap<>();
+    private final Map<String, Object> processes = new ConcurrentHashMap<>();
     private final Map<String, ProcessStatistics> statistics = new ConcurrentHashMap<>();
 
     /** Creates a new control bus. */
@@ -46,6 +47,17 @@ public class ControlBus<M> {
      */
     public void register(String name, Proc<?, M> process) {
         processes.put(name, process);
+        statistics.put(name, new ProcessStatistics(name, 0, 0.0));
+    }
+
+    /**
+     * Registers a channel with the control bus.
+     *
+     * @param name the channel name
+     * @param channel the channel to register
+     */
+    public void register(String name, Channel<M> channel) {
+        processes.put(name, channel);
         statistics.put(name, new ProcessStatistics(name, 0, 0.0));
     }
 

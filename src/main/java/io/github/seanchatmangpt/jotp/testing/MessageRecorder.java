@@ -480,7 +480,8 @@ public final class MessageRecorder implements AutoCloseable {
 
       return new Recording(recordedAt, appVersion, messages, crashes, checksum);
     } catch (Exception e) {
-      return null;
+      System.err.println("[MessageRecorder] Failed to parse recording: " + e.getMessage());
+      return new Recording(Instant.now(), "", List.of(), List.of(), "");
     }
   }
 

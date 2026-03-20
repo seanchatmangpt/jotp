@@ -497,7 +497,12 @@ public final class DistributedNode {
             writer.println(command);
             return reader.readLine();
         } catch (IOException e) {
-            return null;
+            System.err.println(
+                    "[DistributedNode] Failed to send command to "
+                            + target
+                            + ": "
+                            + e.getMessage());
+            return null; // Documented: returns null when node is unreachable
         }
     }
 }

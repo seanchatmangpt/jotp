@@ -414,7 +414,9 @@ public final class DurableState<S> {
             field.setAccessible(true);
             return (Path) field.get(writer);
         } catch (Exception e) {
-            return null;
+            System.err.println(
+                    "[DurableState] Failed to get snapshot file via reflection: " + e.getMessage());
+            return null; // Documented: returns null if not available
         }
     }
 

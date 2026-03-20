@@ -261,7 +261,7 @@ public final class BulkheadIsolation<F, M> {
         }
 
         if (workers.isEmpty()) {
-            return null;
+            return null; // Caller handles null → Send.Rejected(FAILED)
         }
 
         // Load-balance: find worker with smallest queue
