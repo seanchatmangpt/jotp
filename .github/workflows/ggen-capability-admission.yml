@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  materialize-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+      - name: Publish source capsule
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotp-source-${{ github.sha }}
+          path: .
+          include-hidden-files: true
+          retention-days: 1
+
   capability-admission:
     runs-on: ubuntu-latest
     steps:
