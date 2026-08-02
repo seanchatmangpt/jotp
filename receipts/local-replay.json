@@ -1,0 +1,44 @@
+{
+  "inputs": {
+    "config": {
+      "path": "ggen.toml",
+      "sha256": "3b8f1a57a0486736321e7ff7d70779c20c59a64cb94db6c1b16bdd601741e380"
+    },
+    "ggenBase": "8351af4c5bbbf60bd99ab8417752a1762c6ea4e3",
+    "legacy": {
+      "ggenLegacyBase": "70e599a599fedb7c62c965377cc2f80df1fa01ec",
+      "path": "legacy/jotp-observable-contracts.json",
+      "sha256": "12dcf75b5874bed077d3487d4b8606594cc3c1a5a01aa91d3d318475b2be65dc"
+    },
+    "ontology": {
+      "path": "ontology/jotp-capabilities.ttl",
+      "sha256": "891ef022f56d1d6a3419b85a7da147f455fdb60ea7e94a3873ada5dd6ad466fe"
+    }
+  },
+  "outputs": {
+    "src/main/java/io/github/seanchatmangpt/jotp/JotpCapabilities.java": "b075c0084d779bb30b5d24d2302b5574510c9a19bf53a6f42dc2d7fe5ad2ecb8"
+  },
+  "schema": "jotp-local-replay-receipt/v1",
+  "scope": "capability-admission projection only",
+  "standing": "ALIVE",
+  "subject": {
+    "base": "41d2716af7b7bec272b2df5e36d0781ddb7a2df5",
+    "capabilityCount": 30,
+    "repository": "seanchatmangpt/jotp"
+  },
+  "verification": {
+    "commands": [
+      "python3 tools/manufacture_capabilities.py (twice)",
+      "diff -u first.sha256 second.sha256",
+      "javac JotpCapabilities.java",
+      "java io.github.seanchatmangpt.jotp.JotpCapabilities"
+    ],
+    "javaProbe": "SUBJECT_ALIVE capabilities=30 gaps=4",
+    "negativeControls": [
+      "ONTOLOGY_STANDING_REFUSED",
+      "DUPLICATE_OUTPUT_OWNER_REFUSED",
+      "LEGACY_CONTRACT_CLOSURE_REFUSED"
+    ],
+    "projectionReplay": "REPLAY_MATCH"
+  }
+}
