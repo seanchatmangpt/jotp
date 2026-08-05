@@ -1,0 +1,55 @@
+{
+  "schema": "ggen-legacy-observable-contracts/v1",
+  "subject": {
+    "repository": "seanchatmangpt/jotp",
+    "base": "41d2716af7b7bec272b2df5e36d0781ddb7a2df5"
+  },
+  "ggenLegacyCorpus": {
+    "repository": "seanchatmangpt/ggen-legacy",
+    "base": "70e599a599fedb7c62c965377cc2f80df1fa01ec",
+    "role": "archaeology, observable-contract admission, equivalence, replay, retirement fencing"
+  },
+  "observations": [
+    {
+      "id": "otp-core-15",
+      "kind": "public-api",
+      "contract": "Fifteen OTP primitives remain individually named and discoverable.",
+      "admission": "PARTIAL_ALIVE",
+      "falsifier": "Any generated catalog omits or duplicates a core primitive."
+    },
+    {
+      "id": "supervisor-strategies",
+      "kind": "behavior",
+      "contract": "Supervisor preserves ONE_FOR_ONE, ONE_FOR_ALL, and REST_FOR_ONE strategy identities.",
+      "admission": "PARTIAL_ALIVE",
+      "falsifier": "A strategy identity disappears or is silently aliased."
+    },
+    {
+      "id": "typed-refusal",
+      "kind": "failure-contract",
+      "contract": "Unimplemented failover state recovery is exposed as a typed runtime refusal, never as null or fabricated state.",
+      "admission": "ALIVE",
+      "falsifier": "loadProcessStateFromLog returns null, empty state, or an invented success."
+    },
+    {
+      "id": "excluded-families",
+      "kind": "build-boundary",
+      "contract": "Messaging, message-pattern, and pool families remain explicitly unsupported while Maven excludes their tests.",
+      "admission": "ALIVE",
+      "falsifier": "The capability ledger marks an excluded family ALIVE."
+    },
+    {
+      "id": "generation-ownership",
+      "kind": "manufacturing",
+      "contract": "Each generated path has exactly one ggen rule owner and is reproduced byte-identically.",
+      "admission": "ALIVE",
+      "falsifier": "Duplicate output ownership or replay drift."
+    }
+  ],
+  "exclusions": [
+    "No external production deployment standing is claimed.",
+    "No complete distributed failover recovery is claimed.",
+    "No messaging, message-pattern, or connection-pool ALIVE claim is admitted.",
+    "No benchmark or throughput claim is manufactured by this estate."
+  ]
+}

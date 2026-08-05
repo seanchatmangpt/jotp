@@ -1,0 +1,70 @@
+name: ggen capability admission
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  materialize-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+      - name: Publish source capsule
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotp-source-${{ github.sha }}
+          path: .
+          include-hidden-files: true
+          retention-days: 1
+
+  capability-admission:
+    runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: ""
+      SCCACHE_DISABLE: "1"
+    steps:
+      - name: Checkout JOTP
+        uses: actions/checkout@v4
+
+      - name: Checkout exact ggen engine
+        uses: actions/checkout@v4
+        with:
+          repository: seanchatmangpt/ggen
+          ref: 8351af4c5bbbf60bd99ab8417752a1762c6ea4e3
+          path: .tools/ggen
+
+      - name: Checkout exact ggen-legacy corpus
+        uses: actions/checkout@v4
+        with:
+          repository: seanchatmangpt/ggen-legacy
+          ref: 70e599a599fedb7c62c965377cc2f80df1fa01ec
+          path: .tools/ggen-legacy
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python verifier dependencies
+        run: python3 -m pip install --disable-pip-version-check rdflib==7.1.4 Jinja2==3.1.6
+
+      - name: Build exact ggen CLI
+        working-directory: .tools/ggen
+        run: cargo build --release -p ggen-cli-lib --bin ggen
+
+      - name: Execute official ggen projection
+        run: .tools/ggen/target/release/ggen sync run
+
+      - name: Verify generated runtime is committed
+        run: git diff --exit-code -- src/main/java/io/github/seanchatmangpt/jotp/JotpCapabilities.java
+
+      - name: Independent replay and negative controls
+        run: tools/verify_capability_estate.sh
+
+      - name: Verify ggen-legacy identity and authority
+        run: |
+          test "$(git -C .tools/ggen-legacy rev-parse HEAD)" = "70e599a599fedb7c62c965377cc2f80df1fa01ec"
+          python3 .tools/ggen-legacy/scripts/verify_docs.py --strict

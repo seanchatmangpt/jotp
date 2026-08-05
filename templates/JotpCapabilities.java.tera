@@ -1,0 +1,116 @@
+package io.github.seanchatmangpt.jotp;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * Ontology-generated capability admission catalog.
+ *
+ * <p>Do not edit this projection. Edit {@code ontology/jotp-capabilities.ttl} and run
+ * {@code ggen sync run}.
+ */
+public final class JotpCapabilities {
+    public enum Standing {
+        UNKNOWN,
+        PARTIAL_ALIVE,
+        ALIVE,
+        BLOCKED,
+        BUILD_BROKEN,
+        UNSUPPORTED
+    }
+
+    public record Capability(
+            int ordinal,
+            String id,
+            String javaSymbol,
+            String domain,
+            Standing standing,
+            String evidence,
+            String sourcePath,
+            String testPath,
+            String legacyContract,
+            String reason) {}
+
+    private static final String DATA =
+            """
+{% for row in results %}            {{ row["ordinal"] }}|{{ row["id"] }}|{{ row["javaSymbol"] }}|{{ row["domain"] }}|{{ row["standing"] }}|{{ row["evidence"] }}|{{ row["sourcePath"] }}|{{ row["testPath"] }}|{{ row["legacyContract"] }}|{{ row["reason"] }}
+{% endfor %}            """;
+
+    private static final List<Capability> ALL =
+            DATA.lines().map(JotpCapabilities::parse).toList();
+
+    private static final Map<String, Capability> BY_ID =
+            ALL.stream()
+                    .collect(Collectors.toUnmodifiableMap(Capability::id, Function.identity()));
+
+    private JotpCapabilities() {}
+
+    private static Capability parse(String line) {
+        var fields = line.split("\\|", -1);
+        if (fields.length != 10) {
+            throw new IllegalStateException("CAPABILITY_ROW_REFUSED:" + line);
+        }
+        return new Capability(
+                Integer.parseInt(fields[0]),
+                fields[1],
+                fields[2],
+                fields[3],
+                Standing.valueOf(fields[4]),
+                fields[5],
+                fields[6],
+                fields[7],
+                fields[8],
+                fields[9]);
+    }
+
+    public static List<Capability> all() {
+        return ALL;
+    }
+
+    public static Optional<Capability> byId(String id) {
+        return Optional.ofNullable(BY_ID.get(id));
+    }
+
+    public static List<Capability> gaps() {
+        return ALL.stream()
+                .filter(
+                        capability ->
+                                switch (capability.standing()) {
+                                    case BLOCKED, BUILD_BROKEN, UNSUPPORTED -> true;
+                                    default -> false;
+                                })
+                .toList();
+    }
+
+    public static boolean admitsAlive(String id) {
+        return byId(id)
+                .map(capability -> capability.standing() == Standing.ALIVE)
+                .orElse(false);
+    }
+
+    public static void main(String[] args) {
+        if (ALL.size() != {{ results | length }}) {
+            throw new AssertionError("CAPABILITY_COUNT_MISMATCH:" + ALL.size());
+        }
+        if (BY_ID.size() != ALL.size()) {
+            throw new AssertionError("DUPLICATE_CAPABILITY_ID");
+        }
+        var expectedGaps =
+                List.of(
+                        "failover-state-recovery",
+                        "messaging-system",
+                        "message-patterns",
+                        "connection-pool");
+        var actualGaps = gaps().stream().map(Capability::id).toList();
+        if (!actualGaps.equals(expectedGaps)) {
+            throw new AssertionError("GAP_SET_MISMATCH:" + actualGaps);
+        }
+        if (!admitsAlive("capability-admission")) {
+            throw new AssertionError("GENERATED_ADMISSION_NOT_ALIVE");
+        }
+        System.out.println("SUBJECT_ALIVE capabilities=" + ALL.size() + " gaps=" + actualGaps.size());
+    }
+}

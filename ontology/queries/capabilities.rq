@@ -1,0 +1,16 @@
+PREFIX cap: <https://jotp.dev/ontology/capability#>
+SELECT ?ordinal ?id ?javaSymbol ?domain ?standing ?evidence ?sourcePath ?testPath ?legacyContract ?reason
+WHERE {
+  ?capability a cap:Capability ;
+      cap:ordinal ?ordinal ;
+      cap:id ?id ;
+      cap:javaSymbol ?javaSymbol ;
+      cap:domain ?domain ;
+      cap:standing ?standing ;
+      cap:evidence ?evidence ;
+      cap:sourcePath ?sourcePath ;
+      cap:testPath ?testPath ;
+      cap:legacyContract ?legacyContract ;
+      cap:reason ?reason .
+}
+ORDER BY ?ordinal
