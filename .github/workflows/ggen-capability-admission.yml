@@ -24,6 +24,9 @@ jobs:
 
   capability-admission:
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: ""
+      SCCACHE_DISABLE: "1"
     steps:
       - name: Checkout JOTP
         uses: actions/checkout@v4
